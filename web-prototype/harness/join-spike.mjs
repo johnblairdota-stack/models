@@ -38,6 +38,21 @@ const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' �
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /**
+ * 🚨 A PAGE WITH A SYNTAX ERROR SERVES A CHEERFUL 200 AND RENDERS A BLANK SCREEN. There is no
+ * bundler in front of these files and no test runner behind them, so the only thing between a
+ * stray bracket and a silent television is this: parse the inline script the way a browser
+ * would. It does not RUN — `new Function` compiles and throws on bad syntax without touching a
+ * DOM that does not exist here.
+ */
+function parses(html) {
+  const m = html.match(/<script>([\s\S]*?)<\/script>/);
+  if (!m) return { ok: false, why: 'no inline script found' };
+  try { new Function(m[1]); return { ok: true, bytes: m[1].length }; }
+  catch (e) { return { ok: false, why: e.message }; }
+}
+
+
+/**
  * One browser, near enough. Node 22's global `WebSocket` masks its frames exactly as a browser
  * does, which is the half of RFC6455 a hand-rolled test client usually gets wrong.
  */
@@ -95,6 +110,13 @@ await sleep(120);
     /id="seats"/.test(tvHtml) && /id="code"/.test(tvHtml)
     && /id="go"/.test(phoneHtml) && /localStorage/.test(phoneHtml),
     'tv: seats+code · phone: join button + token store');
+
+  const tvJs = parses(tvHtml), phJs = parses(phoneHtml);
+  t('P1b · both inline scripts parse — a blank television is a 200, not a 500',
+    tvJs.ok && phJs.ok, tvJs.ok && phJs.ok ? `tv ${tvJs.bytes}B · phone ${phJs.bytes}B of script`
+      : `tv: ${tvJs.why || 'ok'} · phone: ${phJs.why || 'ok'}`);
+  t('P1b control · the same check rejects a script that does not parse',
+    parses('<script>function (</script>').ok === false);
 
   // 🚨 STATIC LEAK CHECK. The television's markup must not contain the word at all — not a field,
   // not a debug line, not a commented-out one somebody re-enables at 1am.

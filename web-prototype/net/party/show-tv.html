@@ -1,0 +1,304 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RUN ROBOT RUN — Prime Time</title>
+<!--
+  📺 THE TELEVISION. Six of eight players are watching this and nothing else, so under D1 it is
+  not polish — it is the mode's primary interface.
+
+  🚨 THE TV IS A PURE OBSERVER OF STATE AND A REPORTER OF NOTHING ELSE. It renders the frame the
+  server projected for it and computes no game truth of its own. Anything derived here would drift
+  from the phones the moment a frame was dropped, and a lobby that disagrees with itself in front
+  of eight people is worse than a blank screen. The one exception is the countdown, which is
+  interpolated from `clock.endsAt` — a number every frame already carries — so the ring can move
+  at 60fps without a packet per second.
+
+  🚨 NOTHING ON THIS PAGE KNOWS AN ALIGNMENT, AND THERE IS NO PLACE TO PUT ONE. The server never
+  sends it before the Reunion (`players[].alignment` has no matrix row), so the circle draws who is
+  out and never why. That is bible P6, silent death, arriving as an absence rather than a promise.
+
+  Every size is a couch size: read from three metres, by someone holding a drink.
+-->
+<style>
+  :root{
+    --ink:#f2f4f8; --dim:#8b93a3; --bg:#0b0d12; --panel:#141821; --edge:#232937;
+    --live:#4cc27a; --gone:#e4483a; --warn:#e0b23c; --crew:#e0b23c;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);height:100vh;overflow:hidden;
+       font:400 16px/1.4 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;
+       display:grid;grid-template-rows:auto 1fr auto;gap:clamp(8px,1.4vh,20px);padding:clamp(14px,2vw,32px)}
+
+  header{display:flex;align-items:center;justify-content:space-between;gap:20px}
+  .ep{font:600 clamp(13px,1.3vw,20px)/1 ui-sans-serif;letter-spacing:.26em;color:var(--dim);text-transform:uppercase}
+  .phase{font:700 clamp(22px,3.4vw,56px)/1 ui-sans-serif;letter-spacing:.08em;text-transform:uppercase}
+  .timer{display:flex;align-items:center;gap:14px}
+  .timer b{font:700 clamp(24px,3.4vw,56px)/1 ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}
+  .ring{width:clamp(40px,4vw,72px);height:clamp(40px,4vw,72px);transform:rotate(-90deg)}
+  .ring circle{fill:none;stroke-width:7}
+  .ring .bg{stroke:var(--edge)}
+  .ring .fg{stroke:var(--warn);stroke-linecap:round;transition:stroke-dashoffset .25s linear}
+  .low .fg{stroke:var(--gone)}
+
+  main{position:relative;min-height:0}
+  #circle{position:absolute;inset:0}
+  .seat{position:absolute;transform:translate(-50%,-50%);text-align:center;width:clamp(110px,13vw,210px)}
+  .seat .dot{width:clamp(26px,3vw,54px);height:clamp(26px,3vw,54px);border-radius:50%;margin:0 auto clamp(4px,.6vh,10px);
+             display:grid;place-items:center;font:700 clamp(12px,1.2vw,20px)/1 ui-sans-serif;color:#0b0d12}
+  .seat .nm{font:600 clamp(14px,1.5vw,26px)/1.1 ui-sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .seat .tag{font:600 clamp(9px,.85vw,14px)/1.3 ui-sans-serif;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);min-height:1.3em}
+  .seat .claim{font:400 clamp(10px,1vw,16px)/1.3 ui-sans-serif;color:var(--dim);font-style:italic;
+               white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .seat.crew .tag{color:var(--crew)}
+  .seat.out{opacity:.34}
+  .seat.out .nm{text-decoration:line-through}
+  .seat .voted{color:var(--live)}
+
+  /* the middle of the circle: whatever the phase needs said */
+  .stage{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;
+         width:min(46%,640px);display:flex;flex-direction:column;gap:clamp(6px,1vh,14px)}
+  .stage .big{font:700 clamp(20px,2.6vw,44px)/1.1 ui-sans-serif;letter-spacing:.02em}
+  .stage .sub{font:400 clamp(12px,1.2vw,20px)/1.4 ui-sans-serif;color:var(--dim)}
+  .stage .call{font:700 clamp(28px,4vw,68px)/1 ui-monospace,Menlo,monospace;letter-spacing:.1em}
+  .clear{color:var(--live)} .hold{color:var(--warn)} .bad{color:var(--gone)}
+
+  footer{display:flex;align-items:center;justify-content:space-between;gap:20px;
+         font:600 clamp(11px,1.05vw,17px)/1 ui-sans-serif;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+  footer b{color:var(--ink)}
+  .pips{display:inline-flex;gap:6px;vertical-align:middle;margin-left:.6em}
+  .pip{width:clamp(9px,.9vw,15px);height:clamp(9px,.9vw,15px);border-radius:3px;background:var(--edge)}
+  .pip.on{background:var(--live)}
+
+  /* the lobby */
+  .lobby{position:absolute;inset:0;display:grid;grid-template-rows:auto 1fr;gap:clamp(14px,2vh,30px);
+         background:var(--bg)}
+  .call2{display:grid;grid-template-columns:1fr auto;gap:clamp(16px,2vw,36px);align-items:center;
+         background:var(--panel);border:1px solid var(--edge);border-radius:18px;padding:clamp(16px,2.2vw,36px)}
+  .label{color:var(--dim);font-size:clamp(11px,1vw,15px);letter-spacing:.28em;text-transform:uppercase;margin-bottom:.5em}
+  .url{font:600 clamp(26px,4.6vw,72px)/1 ui-monospace,Menlo,monospace;word-break:break-all}
+  .code{font:700 clamp(40px,6vw,104px)/1 ui-monospace,Menlo,monospace;color:var(--warn);letter-spacing:.1em}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(9px,1.1vw,18px)}
+  .slot{background:var(--panel);border:1px solid var(--edge);border-radius:14px;padding:clamp(10px,1.2vw,20px);
+        display:flex;align-items:center;gap:.6em;font:600 clamp(15px,1.8vw,30px)/1 ui-sans-serif;min-height:clamp(64px,10vh,120px)}
+  .slot.empty{opacity:.32;border-style:dashed;color:var(--dim);font-weight:400}
+  .slot .sw{width:clamp(16px,1.6vw,28px);height:clamp(16px,1.6vw,28px);border-radius:50%;flex:none}
+  .hint{text-align:center;color:var(--dim);font:600 clamp(12px,1.3vw,22px)/1 ui-sans-serif;letter-spacing:.2em;text-transform:uppercase}
+  .hint kbd{background:var(--panel);border:1px solid var(--edge);border-radius:6px;padding:.25em .6em;color:var(--ink)}
+  .hide{display:none!important}
+
+  /* the reunion */
+  .roll{display:grid;grid-template-columns:repeat(2,1fr);gap:clamp(8px,1vh,16px);text-align:left;
+        max-height:70vh;overflow:auto}
+  .row{display:flex;align-items:baseline;gap:.6em;background:var(--panel);border:1px solid var(--edge);
+       border-radius:10px;padding:clamp(8px,1vh,14px) clamp(10px,1vw,18px);font-size:clamp(12px,1.2vw,20px)}
+  .row .who{font-weight:700;min-width:6em}
+  .row .was{color:var(--warn)}
+  .row .al{margin-left:auto;font-size:.8em;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+</style>
+
+<header>
+  <div><div class="ep" id="ep">Prime Time</div><div class="phase" id="phase">Lobby</div></div>
+  <div class="timer" id="timer">
+    <svg class="ring" viewBox="0 0 100 100"><circle class="bg" cx="50" cy="50" r="42"/><circle class="fg" id="arc" cx="50" cy="50" r="42"/></svg>
+    <b id="clock">—</b>
+  </div>
+</header>
+
+<main>
+  <div id="circle"></div>
+  <div class="stage" id="stage"></div>
+
+  <div class="lobby" id="lobby">
+    <div class="call2">
+      <div><div class="label">On your phone, open</div><div class="url" id="url">…</div></div>
+      <div><div class="label">Room</div><div class="code" id="code">····</div></div>
+    </div>
+    <div>
+      <div class="grid" id="slots"></div>
+      <div class="hint" style="margin-top:clamp(12px,2vh,26px)" id="startHint">Waiting for phones</div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <span>Cameras <b id="cams">0/0</b><span class="pips" id="campips"></span></span>
+  <span>Incidents <b id="alarms">0</b></span>
+  <span id="crewline">—</span>
+  <span id="net">connecting…</span>
+</footer>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  const R = 42, C = 2 * Math.PI * R;
+
+  let frame = null, seats = [], code = '', joinUrl = '', started = false, special = null;
+
+  // ---------------------------------------------------------------- the circle
+  function drawCircle() {
+    const box = $('circle');
+    const players = (frame && frame.players) || [];
+    if (!players.length) { box.innerHTML = ''; return; }
+    const w = box.clientWidth, h = box.clientHeight;
+    const rx = w * 0.36, ry = h * 0.34, cx = w / 2, cy = h / 2;
+    const colourOf = (seat) => (seats.find((s) => s.seat === seat) || {}).colour || '#8b93a3';
+
+    box.innerHTML = players.map((p, i) => {
+      const a = (i / players.length) * Math.PI * 2 - Math.PI / 2;
+      const x = cx + Math.cos(a) * rx, y = cy + Math.sin(a) * ry;
+      const isRunner = frame.pair && frame.pair.runner === p.id;
+      const isGuide = frame.pair && frame.pair.guide === p.id;
+      // 🚨 HOW SOMEBODY LEFT, NEVER WHAT THEY WERE. `taken` says the Hunter; otherwise the table
+      // swung the hammer. Neither says a word about alignment, because nothing here has one.
+      const tag = !p.alive ? (p.taken ? '✖ taken' : '⚒ evicted')
+        : isRunner ? '▶ runner' : isGuide ? '◉ guide'
+        : votedTag(p.id);
+      const cls = 'seat' + (p.alive ? '' : ' out') + ((isRunner || isGuide) ? ' crew' : '');
+      return '<div class="' + cls + '" style="left:' + x + 'px;top:' + y + 'px">'
+        + '<div class="dot" style="background:' + colourOf(p.seat) + '">' + (p.seat + 1) + '</div>'
+        + '<div class="nm">' + esc(p.name) + '</div>'
+        + '<div class="tag">' + tag + '</div>'
+        + '<div class="claim">' + (p.claim ? '“' + esc(p.claim) + '”' : '') + '</div>'
+        + '</div>';
+    }).join('');
+  }
+
+  /**
+   * ⚠️ THE TV SHOWS THAT A PHONE HAS ACTED, NEVER WHAT IT DID. During CASTING and VOTE the useful
+   * thing on screen is who the table is still waiting for. The choice itself is not on this frame
+   * at all — `you.acted` is self-audience and the tally is withheld until the phase closes — so
+   * there is nothing here to leak even by accident.
+   */
+  function votedTag(id) {
+    if (!frame) return '';
+    if (frame.phase === 'VOTE' || frame.phase === 'CASTING') return '';
+    const nom = (frame.nominations || []).find((n) => n.target === id);
+    return nom ? '<span class="bad">◆ on the block</span>' : '';
+  }
+
+  // ---------------------------------------------------------------- the middle
+  const STAGE = {
+    PREMIERE: () => big('Check your phone.', 'Your card is private. Read it, then put the phone face down.'),
+    CASTING: () => big('Who runs, and who guides?',
+      'The ' + wing() + ' wing. Two taps each — argue about the job, not the person.'),
+    EXPEDITION: () => {
+      const c = frame.call || {};
+      if (!c.said) return big('Into the ' + wing() + '.', nameOf(frame.pair && frame.pair.guide) + ' is watching the cameras.');
+      return '<div class="sub">' + esc(nameOf(c.by)) + ' called</div>'
+        + '<div class="call ' + (c.said === 'CLEAR' ? 'clear' : 'hold') + '">' + esc(c.said) + '</div>'
+        + '<div class="sub">' + esc(nameOf(frame.pair && frame.pair.runner)) + ' decides.</div>';
+    },
+    RECAP: () => {
+      const o = (frame.expedition || {}).outcome;
+      if (o === 'taken') return big('<span class="bad">Taken.</span>', 'The terminal stays dark.');
+      if (o === 'lit') return big('<span class="clear">Camera live.</span>', 'One more room on the map.');
+      if (o === 'held') return big('They held.', 'Safe, and no closer to seeing the house.');
+      return big('…', '');
+    },
+    DEBRIEF: () => big('Talk.', 'Out loud, to the room. The phones are for voting.'),
+    RECKONING: () => {
+      const n = frame.nominations || [];
+      if (!n.length) return big('Nominate, or don\'t.', 'Once each. Three stand at most, and every one buys the table fifteen seconds.');
+      return '<div class="big">On the block</div>' + n.map((x) =>
+        '<div class="sub"><b>' + esc(nameOf(x.target)) + '</b> — put up by ' + esc(nameOf(x.nominator)) + '</div>').join('');
+    },
+    VOTE: () => big('Vote.', 'More than half the living, or nobody swings. Abstaining protects them.'),
+    EXECUTION: () => {
+      const ex = frame.tally && frame.tally.executed;
+      return big('<span class="bad">' + esc(nameOf(ex)) + '</span>', 'The sledgehammer. Nobody says what they were.');
+    },
+    VERDICT: () => big(status(), (frame.cameras || {}).unlocked + ' cameras live · ' + (frame.incident || {}).alarms + ' incidents'),
+    REUNION: () => reunionStage(),
+  };
+
+  const big = (a, b) => '<div class="big">' + a + '</div><div class="sub">' + esc(b) + '</div>';
+  const wing = () => ((frame.expedition || {}).room || '—');
+  const nameOf = (id) => { const p = ((frame && frame.players) || []).find((x) => x.id === id); return p ? p.name : '—'; };
+  const status = () => {
+    const c = frame.cameras || {};
+    return c.unlocked >= c.needed ? 'The season is made.' : 'Still shooting.';
+  };
+
+  function reunionStage() {
+    if (!special) return big('The Reunion', 'Roll call coming up.');
+    return '<div class="big">' + esc(special.outcome || 'The Reunion') + '</div>'
+      + '<div class="roll">' + special.rollCall.map((p) =>
+        '<div class="row"><span class="who">' + esc(nameOf(p.id) === '—' ? p.id : nameOf(p.id)) + '</span>'
+        + '<span class="was">' + esc(p.role) + '</span>'
+        + (p.believedTheyWere && p.believedTheyWere !== p.role
+            ? '<span class="sub">believed ' + esc(p.believedTheyWere) + '</span>' : '')
+        + '<span class="al">' + esc(p.alignment) + '</span></div>').join('') + '</div>';
+  }
+
+  // ---------------------------------------------------------------- the clock
+  function paintClock() {
+    if (!frame || !frame.clock) return;
+    const total = frame.clock.seconds || 1;
+    const left = Math.max(0, (frame.clock.endsAt - Date.now()) / 1000);
+    $('clock').textContent = Math.ceil(left) + 's';
+    $('arc').style.strokeDasharray = C;
+    $('arc').style.strokeDashoffset = C * (1 - left / total);
+    $('timer').className = 'timer' + (left <= 10 ? ' low' : '');
+  }
+
+  function render() {
+    if (!frame) return;
+    $('lobby').classList.toggle('hide', started);
+    $('ep').textContent = frame.phase === 'REUNION' ? 'The Reunion' : 'Episode ' + frame.episode;
+    $('phase').textContent = frame.phase;
+    $('stage').innerHTML = (STAGE[frame.phase] || (() => ''))();
+    const c = frame.cameras || {};
+    $('cams').textContent = (c.unlocked || 0) + '/' + (c.needed || 0);
+    $('campips').innerHTML = Array.from({ length: c.needed || 0 },
+      (_, i) => '<span class="pip' + (i < c.unlocked ? ' on' : '') + '"></span>').join('');
+    $('alarms').textContent = (frame.incident || {}).alarms || 0;
+    $('crewline').textContent = frame.pair && frame.pair.runner
+      ? nameOf(frame.pair.runner) + ' runs · ' + nameOf(frame.pair.guide) + ' guides' : '—';
+    drawCircle();
+    paintClock();
+  }
+
+  function renderLobby() {
+    $('url').textContent = joinUrl.replace(/^https?:\/\//, '');
+    $('code').textContent = (code || '····').toUpperCase();
+    $('slots').innerHTML = Array.from({ length: 8 }, (_, i) => {
+      const s = seats.find((x) => x.seat === i);
+      return s
+        ? '<div class="slot"><span class="sw" style="background:' + s.colour + '"></span>' + esc(s.name) + '</div>'
+        : '<div class="slot empty">seat ' + (i + 1) + '</div>';
+    }).join('');
+    const n = seats.filter((s) => s.live).length;
+    $('startHint').innerHTML = n >= 4
+      ? 'Press <kbd>space</kbd> to roll — ' + n + ' phones seated'
+      : n + ' of 4 needed';
+  }
+
+  // ---------------------------------------------------------------- the wire
+  let ws;
+  function connect() {
+    ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/?role=tv');
+    ws.onopen = () => { $('net').textContent = 'live'; };
+    ws.onmessage = (e) => {
+      const m = JSON.parse(e.data);
+      if (m.t === 'hello') { code = m.code; joinUrl = m.url; renderLobby(); }
+      if (m.t === 'roster') { seats = m.players; started = m.started; renderLobby(); if (started) render(); }
+      if (m.t === 'state') { frame = m.frame; started = true; render(); }
+      if (m.t === 'reunion') { special = { ...m.special, outcome: m.outcome }; render(); }
+      if (m.t === 'notice' && !m.ok) { $('startHint').textContent = m.why; }
+    };
+    ws.onclose = () => { $('net').textContent = 'reconnecting…'; setTimeout(connect, 1000); };
+  }
+
+  // The machine driving the television has a keyboard; the television does not. Space rolls, S
+  // skips a phase the room has plainly finished with.
+  addEventListener('keydown', (e) => {
+    if (e.code === 'Space') { e.preventDefault(); ws && ws.send(JSON.stringify({ t: 'start' })); }
+    if (e.key === 's' || e.key === 'S') ws && ws.send(JSON.stringify({ t: 'skip' }));
+  });
+  addEventListener('resize', () => { if (started) drawCircle(); });
+  setInterval(paintClock, 100);
+  renderLobby();
+  connect();
+})();
+</script>

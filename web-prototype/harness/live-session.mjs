@@ -339,6 +339,27 @@ const R = play({ taps: engaged });
     'coverage and the blind strip, compounded');
 }
 
+// ---------------------------------------------------------------- L13 · the wing comes first
+{
+  // 🚨 §2: *"the task and the wing are announced BEFORE anyone is picked."* Without this, casting
+  // is a popularity contest — and it WAS, until a browser render showed the phone asking who
+  // should go "into the house". Every CASTING frame must already name the wing.
+  const castingFrames = R.tape.get('tv').filter((f) => f.phase === PHASE.CASTING);
+  t('L13 · the wing is on screen before a single vote is cast',
+    castingFrames.length > 0 && castingFrames.every((f) => f.expedition && ROOMS.includes(f.expedition.room)),
+    `${castingFrames.length} casting frames, all naming a wing`);
+  t('L13b · and it is the wing the expedition actually goes to, not a different one',
+    R.tape.get('tv').filter((f) => f.phase === PHASE.EXPEDITION)
+      .every((f) => f.expedition && ROOMS.includes(f.expedition.room)),
+    'announced at casting, unchanged at departure');
+
+  const announced = R.s.log.all().filter((e) => e.type === 'expedition.announced');
+  const begun = R.s.log.all().filter((e) => e.type === 'expedition.begun');
+  t('L13c control · every announcement is followed by a departure to the SAME room',
+    announced.length === begun.length && announced.every((a, i) => a.data.room === begun[i].data.room),
+    `${announced.length} announced, ${begun.length} departed, rooms matched`);
+}
+
 // ---------------------------------------------------------------- L10 · you.acted is yours alone
 {
   let bad = null;

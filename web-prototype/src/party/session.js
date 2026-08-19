@@ -168,20 +168,22 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
     return { hunter: sight.seen, room: sight.seen ? hunterRoom : null, marks };
   }
 
-  function broadcast() {
-    for (const sock of sockets) {
-      const ctx = {
-        playerId: sock.playerId, alignment: sock.alignment, isTV: sock.isTV,
-        seatRole: sock.seatRole, ownerId: sock.playerId,
-      };
-      const { frame, unrowed } = project(fullFor(sock), ctx);
-      // ⚠️ AN UNROWED FIELD IS A BUG THAT MUST BE LOUD IN DEVELOPMENT. Deny-by-default already
-      // dropped it, so nothing leaked — but silence here is how a field stays unrowed for six
-      // months and its author never states an audience. `entitle.js`'s header: the rot is the point.
-      if (unrowed.length) state.unrowed = [...new Set([...(state.unrowed || []), ...unrowed])];
-      send(sock.id, frame);
-    }
+  const ctxFor = (sock) => ({
+    playerId: sock.playerId, alignment: sock.alignment, isTV: sock.isTV,
+    seatRole: sock.seatRole, ownerId: sock.playerId,
+  });
+
+  /** Send one socket the frame it is entitled to right now. The only place `send` is called. */
+  function pushTo(sock) {
+    const { frame, unrowed } = project(fullFor(sock), ctxFor(sock));
+    // ⚠️ AN UNROWED FIELD IS A BUG THAT MUST BE LOUD IN DEVELOPMENT. Deny-by-default already
+    // dropped it, so nothing leaked — but silence here is how a field stays unrowed for six
+    // months and its author never states an audience. `entitle.js`'s header: the rot is the point.
+    if (unrowed.length) state.unrowed = [...new Set([...(state.unrowed || []), ...unrowed])];
+    send(sock.id, frame);
   }
+
+  function broadcast() { for (const sock of sockets) pushTo(sock); }
 
   // ---------------------------------------------------------------- the clock
   function enter(phase, seconds, now) {
@@ -200,11 +202,23 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
    * tap to end has stalled the party; every `onExit` below resolves from whatever it has.
    */
   const onEnter = {
+    /**
+     * 🚨 THE WING IS ANNOUNCED BEFORE ANYONE IS CAST, AND THAT IS §2's RULE RATHER THAN A DETAIL:
+     * *"the task and the wing are announced BEFORE anyone is picked, so casting is an argument
+     * about a specific job rather than a popularity contest."* Setting it on entry to EXPEDITION
+     * instead — which is where it was until a browser render showed the phone asking who should
+     * go "into the house" — turns every casting debate into a personality contest.
+     */
+    [PHASE.CASTING]: () => {
+      state.expedition = { room: ROOMS[hash(worldSeed, 'target', state.episode) % ROOMS.length], outcome: null };
+      state.call = { by: null, said: null };
+      record(makeEvent('expedition.announced', VIS.PUBLIC, { room: state.expedition.room, episode: state.episode }));
+    },
     [PHASE.EXPEDITION]: () => {
-      // Seeded per episode so a replay of the same match is the same match.
+      // Seeded per episode so a replay of the same match is the same match. The Hunter is placed
+      // only now — the wing is public from CASTING, but where the Hunter stands never is.
       hunterRoom = ROOMS[hash(worldSeed, 'hunter', state.episode) % ROOMS.length];
-      const target = ROOMS[hash(worldSeed, 'target', state.episode) % ROOMS.length];
-      state.expedition = { room: target, outcome: null };
+      const target = state.expedition.room;
       state.call = { by: state.pair.guide, said: null };
       record(makeEvent('expedition.begun', VIS.PUBLIC, {
         runner: state.pair.runner, guide: state.pair.guide, room: target, episode: state.episode,
@@ -478,6 +492,20 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
   return {
     sockets, deal, log, state,
     replayFor: (sock) => log.replayFor({ playerId: sock.playerId, alignment: sock.alignment, isTV: sock.isTV }),
+
+    /**
+     * Re-send the current frame to one socket, or to all of them.
+     *
+     * 🚨 THIS IS A RE-PROJECTION, NOT A SNAPSHOT, AND THE DIFFERENCE IS THE WHOLE GAME. A phone
+     * that reconnects mid-episode is handed exactly what a phone that never left would be holding
+     * — same `project()`, same ctx, same matrix. `net/server.mjs` L335-336 hands a joiner every
+     * peer's state instead, which is the bug this signature exists to make hard to write.
+     */
+    refresh(socketId = null) {
+      if (socketId == null) return broadcast();
+      const sock = sockets.find((s) => s.id === socketId);
+      if (sock) pushTo(sock);
+    },
     socketFor: (playerId) => socketOf.get(playerId),
     input,
 
