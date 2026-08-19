@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Run Robot Run — browser multiplayer survival horror prototype (Three.js)",
+  "description": "Run Robot Run \u2014 browser multiplayer survival horror prototype (Three.js)",
   "scripts": {
     "dev": "vite --port 5178 --strictPort",
     "build": "node harness/lint-glsl.mjs && vite build",
@@ -11,7 +11,11 @@
     "lint:glsl": "node harness/lint-glsl.mjs",
     "preview": "vite preview --port 5179 --strictPort",
     "shot": "node harness/shoot.mjs",
-    "server": "node net/server.mjs"
+    "server": "node net/server.mjs",
+    "gate:role-deal": "node harness/role-deal.mjs",
+    "gate:party-anon": "node harness/party-anon.mjs",
+    "gate:party-isolation": "node harness/party-isolation.mjs",
+    "gates:party": "node harness/role-deal.mjs && node harness/party-anon.mjs && node harness/party-isolation.mjs"
   },
   "dependencies": {
     "three": "^0.180.0",
