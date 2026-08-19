@@ -167,7 +167,7 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     for (const id of [runner.id, guide.id]) {
       state.history[id].expeditions++; state.history[id].lastEp = state.episode;
     }
-    record(makeEvent('cast.ballot', VIS.PUBLIC, { runner: runner.id, guide: guide.id, tiebreaks: cast.tiebreaks }));
+    record(makeEvent('cast.ballot', VIS.PUBLIC, { episode: state.episode, runner: runner.id, guide: guide.id, tiebreaks: cast.tiebreaks }));
     for (const s of sockets) {
       s.seatRole = s.playerId === runner.id ? 'runner' : s.playerId === guide.id ? 'guide' : null;
     }
@@ -176,10 +176,23 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     // off, so this is what makes the roll call complete without a second reveal pipeline.
     if (state.episode === 1) {
       record(makeEvent('cast.deal', VIS.SEALED, {
-        seats: deal.seats.map((s) => ({ id: s.id, role: s.role, alignment: s.alignment })),
+        // `cover` is here so the Reunion can say "and you believed you were the Camera Op all
+        // game" without a second source. Sealed with everything else until then.
+        seats: deal.seats.map((s) => ({ id: s.id, role: s.role, alignment: s.alignment, cover: s.cover ?? null })),
       }));
       for (const s of deal.seats) {
-        record({ ...makeEvent('role.card', VIS.SELF, { role: s.role }), for: s.id });
+        // 🚨 THE ROLE CARD SHOWS WHAT THE PLAYER BELIEVES, NOT WHAT IS TRUE, AND THIS LINE READ
+        // `s.role` UNTIL `reunion-truth` U2 CAUGHT IT.
+        //
+        // The state channel had it right — `viewFor` has always sent the cover — and the event
+        // channel sent ground truth, so the Glitched's own phone received a card reading
+        // "glitched". The one card whose entire text is *"you are not told this"* was telling
+        // them, on episode one, in writing. Two channels is exactly the shape of bug that
+        // invites: one of them was correct the whole time.
+        //
+        // It is derived from `viewFor` now rather than restated, so there is one answer to
+        // "what does this player believe they are".
+        record({ ...makeEvent('role.card', VIS.SELF, { role: viewFor(deal, s.id).you.role }), for: s.id });
         if (s.alignment === EVIL) {
           record({
             ...makeEvent('production.panel', VIS.EVIL, {
@@ -195,6 +208,12 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     // One miss and one alarm, so party-anon A0's arm has a failure of each kind to look at.
     record(makeEvent('task.miss', VIS.PUBLIC, { kind: 'call', room: 'east', phaseTick: state.tick, loudness: 0.62 }));
     record(makeEvent('panel.alarm', VIS.PUBLIC, { kind: 'panel', room: 'east', phaseTick: state.tick, loudness: 1.25 }));
+    // 🚨 ATTRIBUTION EXISTS FROM THE FIRST EPISODE AND IS SEALED UNTIL THE REUNION. The public
+    // record is a COUNT (T5, `incident.alarms`); `causedBy` lives here, in the same stream,
+    // visible to nobody. This is the one-mechanism claim paying off: the Reunion needs no second
+    // source for "Loudest Robot", and the live filter needs no special case to withhold it.
+    record(makeEvent('noise.emitted', VIS.SEALED, { causedBy: runner.id, loud: 1.25, room: 'east' }));
+    record(makeEvent('noise.emitted', VIS.SEALED, { causedBy: guide.id, loud: 0.62, room: 'east' }));
     state.incident.alarms += 2;
     state.cameras.unlocked += 1;
     broadcast();
@@ -213,6 +232,14 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       }
     }
 
+    // Claims are published from a phone at any time; the stub sets one per episode so the roll
+    // call has a `finalClaim` to put beside the truth.
+    for (const p of state.players.filter((x) => x.alive)) {
+      const claim = deal.seats.find((s) => s.id === p.id).cover ?? 'contestant';
+      p.claim = claim;
+      record(makeEvent('player.claim_set', VIS.PUBLIC, { id: p.id, claim }));
+    }
+
     setPhase('RECAP');
     setPhase('DEBRIEF');
 
@@ -229,6 +256,11 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       setPhase('VOTE');
       const ballotBox = votes || Object.fromEntries(living.map((id) => [id, NO_ONE]));
       const result = tallyVote({ living, nominations: state.nominations }, ballotBox);
+      // §4: the full vote record is AIRED, attributed. Who you voted for is the cheapest
+      // deduction fuel in the game and hiding it would buy nothing.
+      for (const [voter, choice] of Object.entries(ballotBox)) {
+        record(makeEvent('vote.cast', VIS.PUBLIC, { voter, choice }));
+      }
       record(makeEvent('vote.tallied', VIS.PUBLIC, { counts: result.counts, executed: result.executed }));
 
       if (result.executed) {

@@ -70,7 +70,7 @@ function capture(leak) {
     room.playEpisode({ hunterRoom: 'cellar' });
     // Episode two takes the runner, so I7 has a death to assert about.
     room.playEpisode({ hunterRoom: 'gallery', takeRunner: true });
-    runs.push({ seed, tape, truth: room.truth(), sockets: room.sockets.map((s) => ({ ...s })) });
+    runs.push({ seed, tape, truth: room.truth(), log: room.log.all(), sockets: room.sockets.map((s) => ({ ...s })) });
   }
   return runs;
 }
@@ -81,7 +81,7 @@ function capture(leak) {
  */
 function suite(runs) {
   const d = {};
-  const ok = { I1: true, I2: true, I3: true, I4: true, I4b: true, I5: true, I6: true, I7: true, I8: true };
+  const ok = { I1: true, I2: true, I3: true, I3b: true, I4: true, I4b: true, I5: true, I6: true, I7: true, I8: true };
 
   for (const run of runs) {
     const seatOf = new Map(run.truth.seats.map((s) => [s.id, s]));
@@ -124,6 +124,11 @@ function suite(runs) {
           // cast.js). Exempt it for THAT socket only — every other socket carrying it is still
           // a leak, and `p` must still be the holder's own `you.role`.
           if (mine && mine.cover && v === mine.cover && p.startsWith('you.role')) continue;
+          // ⚠️ A PUBLISHED CLAIM IS A ROLE NAME ON A PUBLIC NAMEPLATE, AND THAT IS PILLAR P9
+          // WORKING RATHER THAN A LEAK. The exemption is scoped to the `claim` field alone, and
+          // I3b below stops it becoming a hole: every claim a socket sees must have been
+          // PUBLISHED by a public event, so a claim can never be inferred from ground truth.
+          if (p.endsWith('.claim')) continue;
           for (const other of run.truth.seats) {
             if (mine && other.id === mine.id) continue;
             if (teammates.some((tm) => tm.id === other.id)) continue;   // I6's one exception
@@ -135,6 +140,19 @@ function suite(runs) {
             ok.I3 = false; d.I3 = d.I3 || `${sock.id} · frame ${fi} · ${p} = "evil" on a good socket`;
           }
         }
+        // ---- I3b every claim on the wire was published, never inferred
+        if (Array.isArray(f.players)) {
+          for (const pl of f.players) {
+            if (pl.claim == null) continue;
+            const published = run.log.some((e) => e.type === 'player.claim_set'
+              && e.vis === 'PUBLIC' && e.data.id === pl.id && e.data.claim === pl.claim);
+            if (!published) {
+              ok.I3b = false;
+              d.I3b = d.I3b || `${sock.id} · frame ${fi} · ${pl.id}'s claim "${pl.claim}" was never published`;
+            }
+          }
+        }
+
         // ---- I4b players[] is in seat order, on every socket
         if (Array.isArray(f.players)) {
           const seats = f.players.map((p) => p.seat);
@@ -221,6 +239,8 @@ function suite(runs) {
               // catches it — so nothing goes unwatched, it is only watched by the right check.
               const scan = { ...fr[i] };
               if (scan.you) scan.you = { ...scan.you, role: undefined };
+              // Claims are public by design — see I3's note. Strip them here for the same reason.
+              if (Array.isArray(scan.players)) scan.players = scan.players.map((p) => ({ ...p, claim: undefined }));
               const blob = JSON.stringify(scan);
               if (blob.includes(`"${seat.alignment}"`) && !(mine && mine.alignment === seat.alignment)) {
                 ok.I7 = false; d.I7 = d.I7 || `${sock.id} frame ${i} carries the taken player's alignment`;
@@ -295,6 +315,8 @@ const R = suite(runs);
 t('I1 · every key path on every frame has a matrix row', R.I1, R.detail.I1 || 'deny-by-default holds');
 t('I2 · no key path reaches a socket its row does not entitle', R.I2, R.detail.I2 || `${SEEDS.length} seeds clean`);
 t('I3 · semantic sweep — no ground-truth value in a non-entitled transcript', R.I3, R.detail.I3 || 'no foreign role or alignment observed');
+t('I3b · every claim on the wire was published by its owner, never inferred', R.I3b,
+  R.detail.I3b || 'the claim exemption cannot be used to smuggle a role name');
 t('I4 · equally-entitled sockets are byte-identical (self-audience stripped)', R.I4, R.detail.I4 || 'shape parity holds');
 t('I4b · players[] is in seat order, never alignment order', R.I4b, R.detail.I4b || 'ordering carries no signal');
 t('I5 · identical frame counts across equally-entitled sockets', R.I5, R.detail.I5 || 'cardinality parity holds');
@@ -326,7 +348,7 @@ t('I8 · the flyover reaches one phone and never the TV', R.I8, R.detail.I8 || '
  */
 if (LEAK === 0) {
   const expect = { 1: ['I3', 'I7'], 2: ['I1'], 3: ['I4b'], 4: ['I2', 'I8'] };
-  const names = ['I1', 'I2', 'I3', 'I4', 'I4b', 'I5', 'I6', 'I7', 'I8'];
+  const names = ['I1', 'I2', 'I3', 'I3b', 'I4', 'I4b', 'I5', 'I6', 'I7', 'I8'];
   for (const n of [1, 2, 3, 4]) {
     const L = suite(capture(n));
     const red = names.filter((k) => !L[k]);
