@@ -10,7 +10,7 @@ Spec for the browser phone controller. Companion to [`web-prototype/docs/design/
 
 **D-P1 — The runner's phone is a controller, not a viewport. The first-person view lives on the TV.**
 
-`party-loop.md`'s build list says *"Phone first-person + touch."* I am specifying the touch and moving the pixels, for five reasons, and naming the measurement that would overturn me.
+**RATIFIED BY JOHN 2026-08-19 as bible D13.** This was written as a flagged deviation; it is now the decision, and it overrides `party-loop.md`'s build-list line *"Phone first-person + touch."* The five reasons and the overturning measurement are kept below because the measurement still stands.
 
 1. **Boot cost.** `player.js` documents a **30–60 s shader compile** on desktop. The Expedition is **90 s**. A phone joining by QR with no install and no warm cache cannot pay that, and a mid-range Android in Safari/Chrome pays more.
 2. **Draw budget.** The budget is **≤625 calls** and it is a *single-player desktop* budget; audit risk **A1** already flags eight customised robots against it. Adding an eighth renderer on the weakest hardware in the room is not a tuning problem, it is a different program.

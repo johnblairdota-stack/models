@@ -1,7 +1,7 @@
 # Run Robot Run — Social Deception Mode
 
 **Working title: "PRIME TIME"**
-Design plan v0.4 — twelve decisions locked, reconciled against the prototype
+Design plan v0.5 — thirteen decisions locked, reconciled against the prototype
 
 > One line: *Eight robots on a reality TV show. The producers want a body count. You talk in the room, you act on your phone, and the edit is lying to you.*
 
@@ -21,6 +21,7 @@ Design plan v0.4 — twelve decisions locked, reconciled against the prototype
 | D10 | **The hammer is automated.** *(resolves C3)* | `doorway-pick.js` opens a walkable channel in 3 blows. Player-aimed sledge is not the party verb. **P3 is rewritten below** — the lying guide replaces mistimed smashing as evil's main deniable lever. |
 | D11 | **Networking is Cloudflare PartyKit.** | 8 phones + 1 TV per room, QR join. The existing `client.js`/`server.mjs` pair is a reference for the *authority model*, not the transport. |
 | D12 | **The party mode does not reuse `run.js`'s WINDDOWN/DETONATION.** | The bomb timer stays survival-mode only. The aimed-dig survival slice still ships as its own mode and remains the art/physics bed. |
+| D13 | **The runner's first-person view lives on the TV. The phone is a controller, never a viewport.** | **This overrides `party-loop.md`'s "Phone first-person + touch"** — the one place D8's deference is deliberately set aside, on John's call. See §5.7 for what it changes. |
 
 ### Superseded by the audit
 
@@ -347,6 +348,27 @@ Three semi-independent results, all announced publicly:
 That last one is the deduction fuel. Everyone knows *how many* things went wrong. Nobody knows which were malice.
 
 ---
+
+### 5.7 What D13 changes
+
+Putting the runner's view on the TV is cheap technically and expensive conceptually. Both halves are worth stating.
+
+**What it buys.** No shader compile on a cold phone (`player.js` documents 30–60s on *desktop*, against a 90s Expedition). No second renderer on the worst hardware in the room. The ≤625 draw-call budget stays a desktop budget. Motion sickness — a bobbing corridor 30cm from the face — disappears as a category. And the phone client stops being a 3D client: the runner's phone is a thumbstick, the guide's phone is a 2D map. That is a large scope reduction on the piece the audit called a from-scratch build.
+
+**It also makes the room a room.** Eight people watching one person stare into their own phone is the failure this pivot exists to avoid. Under D13 *everyone including the runner* is looking at the same screen.
+
+**What it costs — and this is the real consequence.** The runner has no private view. Everyone sees what the runner sees, and the guide's calls are spoken out loud, so everyone hears those too. **The only unwitnessed thing left in the entire game is the guide's map.** The deduction reduces to one question: *was the guide's call consistent with what their map could have shown?*
+
+That is unusually legible for a first-time player, which is a real accessibility win. But it is narrow, and it puts the whole game on one player per round.
+
+**Two consequences that need designing, not noting:**
+
+1. **The guide is now the seat evil wants**, and everyone knows it. Casting becomes a referendum on one pick. Expect that to be readable, and expect good players to start refusing to hand the guide's chair to anyone twice.
+2. **An evil *runner* has almost nothing to do** — every action they take is on television. This is a real hole, and the fix is already in the control scheme: the **throttle detent** (STILL / CREEP / WALK / RUN, with the noise ring drawn around the stick) is the runner's dual-use verb. Choosing RUN while the Hunter is close is loud, visible, and *completely deniable as panic*. P3 survives D13 through the throttle, not the hammer.
+
+**What makes the guide's lie survivable at all is S3's camera gating.** If the guide's map showed everything, the room could reason backwards from the map to the lie perfectly. Because coverage is partial and **nobody but the guide knows how much they could see**, the honest mistake and the lie stay indistinguishable. D13 makes the camera-coverage gate load-bearing twice over.
+
+**What would overturn D13:** at M1b, measure cold boot-to-playable of a stripped runner scene on the worst phone in the test matrix. Under **8 seconds**, phone-rendered first person returns as a v2 A/B. Above it, D13 is permanent.
 
 ## 6. The Hunter and the attribution problem
 

@@ -116,7 +116,7 @@ Three things I had specced as separate systems collapse into one. Design the env
 
 ## 7. Open — needs John
 
-1. **Runner view: phone or TV?** The phone-UX spec put first-person on the TV and made the phone a controller (30–60s shader compile against a 90s Expedition; 625 calls is a desktop budget). `party-loop.md` asks for phone first-person. Consequence: on TV, the guide becomes the *only* player with private information — which sharpens the guide's lie but removes the runner's testimony.
+1. ~~Runner view: phone or TV?~~ **DECIDED — TV. The phone is a controller (D13).** It overrides `party-loop.md`'s "Phone first-person + touch". New work it creates: the guide is now the *only* player with private information, so casting becomes a referendum on one seat; and an evil **runner** needs a lever, which is the **throttle detent** — choosing RUN near the Hunter is loud, on camera, and completely deniable as panic. P3 survives D13 through the throttle, not the hammer. Overturned only if a stripped runner scene boots in under 8s on the worst phone in the matrix.
 2. **Six players.** Flagged independently by two agents: 33% evil, parity two deaths away, one reachable body per round.
 3. **The draw-call budget is already breached** — the flyover alone measures **644 against 625** (`game.js:2708`, `:826`) on desktop, before a phone connects. Decide whether the budget moves or the flyover does.
 4. **Second-screen threshold needs re-deriving.** The bible's ">1 of 5 looking away" is stale under a pair — it is now 6 of 8 spectating. Derive it at the first session rather than inheriting it.
