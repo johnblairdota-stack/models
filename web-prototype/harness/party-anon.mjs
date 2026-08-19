@@ -138,7 +138,7 @@ function findPositional(payload, crewSize) {
 }
 
 // ---------------------------------------------------------------- A5 · the TV caption sweep
-skipped('A5 caption sweep', 'needs the TV DOM; no Broadcast Director exists yet (audit §2). Browser arm lands with M4b');
+skipped('A5 caption sweep', 'the Director exists (src/party/director.js) but has no renderer adapter, so there are no DOM captions to sweep. Browser arm lands with the shot solvers');
 
 // ---------------------------------------------------------------- A6 · the scanner's own arm
 {

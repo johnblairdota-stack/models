@@ -69,6 +69,13 @@ export const NOISE_KIND = {
   decoy: 'decoy',
   /** the hunter's own work on a door, so the AI can be made deaf to itself */
   door: 'door',
+  /**
+   * an electrical short — the party mode's Tally failing. Added rather than reusing `dig`
+   * because the audio layer would otherwise play a hammer for a camera shorting out. Purely
+   * additive: `kind` is read in exactly two places in this file, an ignore-list test (L177) and
+   * a per-kind census (L198), and nothing anywhere switches on it exhaustively.
+   */
+  short: 'short',
 };
 
 /**

@@ -6,19 +6,13 @@
  * `harness/task-deck.mjs` checks it rather than trusting a prose table.
  *
  * ---------------------------------------------------------------------------------------------
- * 🚨 THREE TASKS NEED ENGINE WORK THAT DOES NOT EXIST, AND IT IS DECLARED HERE RATHER THAN
- * DISCOVERED IN A PLAYTEST.
+ * ✅ ALL FIVE NOW SATISFY T4. The three that did not are built — see `src/party/noiseplan.js`.
  * ---------------------------------------------------------------------------------------------
- * T4 says failure must be audible. Today the noise bus carries **placed events only**
- * (`src/game/noise.js:14-22`), and only two callers emit (`views/game.js:1432`, `:1546`). So:
- *
- *   · **Wall Call** — only the stage CROSSING emits `BREACH_NOISE.panel`. Two blows that do not
- *     cross a stage are silent, which means a *failed* breach is inaudible. Needs a per-blow emit.
- *   · **Manifest** — furniture destruction emits nothing at all. Needs a per-prop emit.
- *   · **Tally** — the short has no sound. Needs an emit on the miss.
- *
- * Each carries `built: false` below, and `task-deck` T4 reports them as gaps rather than passing
- * them. A task whose failure is silent is a task where a saboteur pays nothing.
+ * T4 says failure must be audible, and until 2026-08-19 the bus carried **placed events only**
+ * (`noise.js:14-22`) with just two callers emitting, so a failed breach, a smashed antique and a
+ * shorted camera were all silent. `noiseplan.js` closes it by subscribing to two hooks that
+ * already existed and were unassigned — `WeaponSystem.onWallHit` and `FurnProp.onBreak` — so no
+ * owned file was edited and the survival mode is byte-identical.
  *
  * No THREE, no DOM.
  */
@@ -59,7 +53,7 @@ export const TASKS = [
     runner: ['firstPerson', 'faceChoice', 'automatedSledge'],
     guide: ['flyover', 'whatIsBehindEachFace'],
     lie: 'which of two identical dark faces',
-    contract: { T1: true, T2: true, T3: true, T4: PENDING, T5: true, T6: true },
+    contract: { T1: true, T2: true, T3: true, T4: true, T5: true, T6: true },
     // 3 blows at the shipped sledge cadence.
     /**
      * 🚨 A WRONG FACE IS EXACTLY AS LOUD AS A RIGHT ONE, AND THAT IS THE POINT. The first model
@@ -69,7 +63,7 @@ export const TASKS = [
      * do not cross; the peak is the breach either way. Identical noise is what makes the guide's
      * lie deniable — if a mistake were quieter, the room could hear the difference.
      */
-    noise: { successPeak: BREACH_NOISE.panel, failurePeak: BREACH_NOISE.panel, perBlow: 0.6, source: 'per-blow emit', built: false },
+    noise: { successPeak: BREACH_NOISE.panel, failurePeak: BREACH_NOISE.panel, perBlow: 0.6, source: 'per-blow emit (noiseplan.js)', built: true },
     numbers: { honestError: null, medianSeconds: 3 * WEAPON_COOLDOWN.sledge, measured: false },
   },
   {
@@ -77,8 +71,8 @@ export const TASKS = [
     runner: ['firstPerson', 'furnitureSmashing'],
     guide: ['threeObjectNames', 'flyoverPositions'],
     lie: 'which object name was said',
-    contract: { T1: true, T2: true, T3: true, T4: PENDING, T5: true, T6: true },
-    noise: { successPeak: 0.9, failurePeak: 0.9, perBlow: 0.9, source: 'per-prop emit', built: false },
+    contract: { T1: true, T2: true, T3: true, T4: true, T5: true, T6: true },
+    noise: { successPeak: 0.9, failurePeak: 0.9, perBlow: 0.9, source: 'per-prop emit (noiseplan.js)', built: true },
     numbers: { honestError: null, medianSeconds: null, measured: false },
   },
   {
@@ -86,8 +80,8 @@ export const TASKS = [
     runner: ['interactHold'],
     guide: ['armControl'],
     lie: 'being 0.4 s late',
-    contract: { T1: true, T2: true, T3: true, T4: PENDING, T5: true, T6: true },
-    noise: { successPeak: 0.3, failurePeak: 1.4, source: 'emit on short', built: false },
+    contract: { T1: true, T2: true, T3: true, T4: true, T5: true, T6: true },
+    noise: { successPeak: 0.3, failurePeak: 1.4, source: 'emit on short (noiseplan.js)', built: true },
     numbers: { honestError: null, medianSeconds: null, measured: false },
     /**
      * 🚨 T5 IS AT ITS MOST FRAGILE HERE AND THE CREW SIZE IS WHY. With a pair, ANY per-player
