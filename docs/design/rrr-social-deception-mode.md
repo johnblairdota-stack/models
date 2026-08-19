@@ -1,0 +1,601 @@
+# Run Robot Run — Social Deception Mode
+
+**Working title: "PRIME TIME"**
+Design plan v0.1 — draft for review
+
+> One line: *Eight robots on a reality TV show. The producers want a body count. You talk in the room, you act on your phone, and the edit is lying to you.*
+
+---
+
+## 0. Contents
+
+1. [What the research says](#1-what-the-research-says)
+2. [Why our setup is structurally different](#2-why-our-setup-is-structurally-different)
+3. [Design pillars](#3-design-pillars)
+4. [The round loop](#4-the-round-loop)
+5. [The Expedition](#5-the-expedition)
+6. [The Hunter and the attribution problem](#6-the-hunter-and-the-attribution-problem)
+7. [Roles](#7-roles)
+8. [Player-count scaling](#8-player-count-scaling)
+9. [Nomination, vote, execution](#9-nomination-vote-execution)
+10. [Death, ghosts, and the chat](#10-death-ghosts-and-the-chat)
+11. [Win conditions](#11-win-conditions)
+12. [Onboarding and accessibility](#12-onboarding-and-accessibility)
+13. [Risk register](#13-risk-register)
+14. [Build plan (vertical slices)](#14-build-plan-vertical-slices)
+15. [Technical architecture](#15-technical-architecture)
+16. [Verification plan](#16-verification-plan)
+17. [Open questions](#17-open-questions)
+
+---
+
+## 1. What the research says
+
+I looked at how the genre actually works — the tabletop canon (Werewolf/Mafia, The Resistance: Avalon, Secret Hitler, Blood on the Clocktower), the real-time videogame branch (Among Us, Dread Hunger, Unfortunate Spacemen, Deceit, Project Winter), and the second-screen party-game branch (Jackbox). Six findings matter for us.
+
+### 1.1 The information funnel is the game
+
+The consensus design frame: at game start the "funnel" of possible worlds is wide; every event narrows it until it collapses on the truth. Good design tunes **how fast** it narrows. Too fast and evil is obvious; too slow and good players are guessing at random and disengage. The single most cited failure mode is a game where the traitor's misdeeds are either unmistakable or invisible — there is no middle.
+
+The corollary that most amateur designs miss: **every event in the game should have at least two plausible explanations.** If an event has exactly one explanation, it isn't deduction, it's a reveal.
+
+### 1.2 One third is too many, one quarter is right
+
+Werewolf convention lands on 25–30% evil. Blood on the Clocktower's Trouble Brewing at 8 players is 5 Townsfolk + 1 Outsider + 1 Minion + 1 Demon — i.e. **2 evil of 8**. Our scaling should sit in that band (§8).
+
+### 1.3 Player elimination is the genre's oldest wound, and BotC's answer is the best one
+
+Werewolf kills you in round one and you watch for 40 minutes. The known fixes are: give players resources to survive (Bang!, Coup), make it one round (One Night Ultimate Werewolf), split into concurrent halves (Two Rooms and a Boom), remove elimination (Avalon, Secret Hitler), or **keep the dead in the game as ghosts** (Blood on the Clocktower — dead players talk freely all game and keep one vote for the rest of the game). BotC's is the strongest because it preserves the social layer, which is the entire product.
+
+We need an answer to this on day one, not as a patch. Mine is in §10 and it's the piece of this design I'm most confident about.
+
+### 1.4 The Storyteller is what makes BotC feel like theatre
+
+BotC's Storyteller can't win or lose, but makes real decisions and "massages the play experience" — they choose which of several legal outcomes happens, hand out false information to drunk/poisoned players, and pace the drama. That deliberate, authored fuzziness is what stops information roles from being oracles.
+
+We don't have a human Storyteller. **We have something better: a broadcast.** See §2.
+
+### 1.5 Among Us proved the point of tasks — and it isn't the tasks
+
+Tasks in Among Us are not fun. They exist to (a) put players in known places at known times so alibis exist, (b) give a clock, (c) create *visual tasks* — actions that can't be faked, which are the only hard proof in the game. The lesson isn't "make tasks", it's **make tasks that manufacture testimony**. If a task can be done alone and silently, it generates nothing.
+
+### 1.6 Real-time sabotage lives or dies on delayed effects
+
+Dread Hunger is the sharpest example: its best traitor plays are poisoning food and dumping coal — actions whose consequences surface **later, elsewhere, to someone else**. Temporal and spatial separation between cause and effect is what destroys attribution. Unfortunate Spacemen adds proximity chat so eavesdropping and isolation are player-driven. Both games' traitors are told the same thing: be patient, the obvious kill loses you the game.
+
+### 1.7 Jackbox's constraint list
+
+Phones can't do a joystick or twelve buttons — but they can show **each player something only they can see**, which is exactly what a hidden-role game needs. No app install, room code on the TV, and content is the product. Also: winning is secondary, making the room laugh is the actual objective.
+
+**Sources**
+- [Social Deduction Game Design Fundamentals — BKGameDesign](https://bkgamedesign.medium.com/social-deduction-game-design-fundamentals-a4cbae378005)
+- [Designing Games with Hidden Roles — MINIFINITI](https://minifiniti.com/blogs/game-talk/designing-games-hidden-roles) · [Role Assignment in Social Deduction Games](https://minifiniti.com/blogs/game-talk/role-assignment-in-social-deduction-games/)
+- [On Games, Part 2: Social Deduction Games — The Ugly Monster](https://medium.com/theuglymonster/on-games-part-2-social-deduction-games-cf4212740a92)
+- [Blood on the Clocktower — Wikipedia](https://en.wikipedia.org/wiki/Blood_on_the_Clocktower) · [Storyteller Advice — BotC Wiki](https://wiki.bloodontheclocktower.com/Storyteller_Advice) · [Josh Humphriss review](https://joshhumphriss.com/articles/botcreview) · [Player Elimination review](https://playerelimination.com/2023/01/12/the-not-so-secret-society-a-blood-on-the-clocktower-review/)
+- [Visual tasks — Among Us Wiki](https://among-us.fandom.com/wiki/Visual_tasks) · [The UX of Among Us — UX Collective](https://uxdesign.cc/from-tasks-to-tricks-the-ux-of-among-us-d469b45dba22)
+- [Dread Hunger — Wikipedia](https://en.wikipedia.org/wiki/Dread_Hunger)
+- [Unfortunate Spacemen — Steam](https://store.steampowered.com/app/408900/Unfortunate_Spacemen/) · [TV Tropes](https://tvtropes.org/pmwiki/pmwiki.php/VideoGame/UnfortunateSpacemen)
+- [These Design Principles Made Jackbox a Party Game Phenomenon — Built In Chicago](https://www.builtinchicago.org/articles/jackbox-games-design-party-pack)
+- [Suggested Werewolf Setups by Player Count — werewolv.es](https://werewolv.es/setups)
+
+---
+
+## 2. Why our setup is structurally different
+
+Every digital social deception game to date puts the whole game on each player's own screen. Among Us players share a world but never a viewpoint. That has a cost: **all information is telemetry**. You saw it or you didn't, and arguing about it is arguing about who is lying about a fact the game already computed.
+
+We have three surfaces, not one:
+
+| Surface | Holds | Property |
+|---|---|---|
+| **The TV** | The broadcast | Public, shared, **authored, and deniable** |
+| **The phones** | Private role info, private actions | Secret, per-player, asymmetric |
+| **The room** | Human speech, faces, tone | Unmediated, un-loggable, the actual game |
+
+The thing nobody else has: **the TV is not a window, it's an edit.** A reality TV show is by definition a partial, sequenced, manipulated account of what happened. That gives us, diegetically and for free, the exact authored fuzziness that BotC needs a human Storyteller to provide.
+
+**The Showrunner (our AI director) is the Storyteller.** It decides what airs, what gets cut away from, what gets "censored for legal reasons", which camera was on, and what the chat says. Nobody has to explain why the game is withholding information — of course it is, it's television.
+
+Three concrete consequences:
+
+1. **We can show a fact to some players and not others, in public, without anyone feeling cheated.** ("We cut to the confessional right as the alarm went off.")
+2. **We can lie on the big screen.** A glitched feed, a mis-attributed caption, a replay that's been trimmed. Players learn to distrust the screen itself — a texture no other game in the genre has.
+3. **Downtime becomes content.** Players not in the mission aren't waiting, they're watching TV together in a room, which is the thing they came over to do anyway.
+
+The design below is deliberately a fusion of three proven skeletons rather than a novel one:
+**Avalon's team-proposal + hidden mission outcome** (the deduction engine) × **Among Us's live sabotage** (the set piece) × **BotC's roles, silent deaths and ghosts** (the texture), wrapped in **Jackbox's delivery model**.
+
+---
+
+## 3. Design pillars
+
+**P1 — The broadcast is the Storyteller.** All authored ambiguity is justified as editing. The Showrunner never lies about *outcomes* (a lock opened or it didn't), only about *causes and attribution*.
+
+**P2 — Testimony over telemetry.** The game shows what happened; players must explain *why*. After an Expedition, crew phones go dark: no logs, no replay, no notes. What you remember and can convince the room of is the only record.
+
+**P3 — Every verb is dual-use.** There is no evil button. Evil players use the same actions good players need, at worse moments. Smashing a wall is how you get around the mansion — and it's how you get someone killed.
+
+**P4 — Cause and effect are separated.** The strongest sabotages are set up now and land 40 seconds later somewhere else. (Dread Hunger's lesson.)
+
+**P5 — The world is noisy on its own.** The Hunter investigates empty rooms. Good players' honest mistakes look identical to sabotage. If every incident traced to a player, we'd have no game.
+
+**P6 — Nothing is ever confirmed.** Deaths never reveal alignment. The only feedback is the Verdict (§11) and lock progress. The funnel narrows, but never collapses until the game ends.
+
+**P7 — Death is a promotion, not an exit.** Dead players become the audience — and the audience has power (§10).
+
+**P8 — One line per role.** If a role can't be read aloud in one breath, it isn't in v1.
+
+**P9 — Public claims are physical.** Every robot has a nameplate on the table in front of their chair, on TV, showing whatever role they're currently claiming. Set from your phone, changeable at any time. Newcomers can see the whole social state at a glance without holding it in their head. (Paper hats optional and encouraged.)
+
+**P10 — Atmosphere never breaks.** No menus, no "Round 3 of 5". It's ad breaks, sponsor stings, confessional cams, lower thirds, and chat.
+
+---
+
+## 4. The round loop
+
+No day/night. The show is always live; good and evil can act from their phones at any time. Structure comes from **the shooting schedule**, not from a clock the game turns off.
+
+An episode (= one round) is roughly 7–9 minutes:
+
+### 4.1 CASTING — 45s
+The **Episode Lead** (rotates each round) picks the **Crew** — 3 players — to go into the mansion. TV shows the picks as a casting montage with headshots. Any player may spend their one-per-game **VETO** to force a re-pick.
+
+*Why:* team composition is the highest-value information in Avalon and it costs nothing to compute. Who you send, and who you refuse to send, is a public statement about who you trust.
+
+### 4.2 THE EXPEDITION — 120s
+The three Crew members control their robots. Everyone else is the **Control Room** (§5.4). The Hunter is live. Objective: open one lock on the Exit Vault. See §5.
+
+### 4.3 THE DEBRIEF — 150s
+Crew return to their chairs. The show airs a **Recap Reel**: 20–30 seconds of deliberately partial footage, plus the hard outcome (lock opened / not, who died). Then people **talk in the room**. Phones are dark for the Crew. This is the game.
+
+### 4.4 CHAT — runs continuously, spikes here
+The stream chat delivers **tips**: 5 statements, of which the game states exactly how many are true (e.g. "3 of these 5 are true"). Everyone sees them. See §10.3.
+
+### 4.5 THE VOTE — up to 120s
+Nominate → vote → counter-nominations under a timer → execution by sledgehammer. See §9.
+
+### 4.6 THE VERDICT — 30s
+The Showrunner announces exactly one of: **RENEWED** (play on) / **CANCELLED** (evil wins) / **SEASON FINALE** (good wins). No alignment reveal for anyone who died.
+
+---
+
+## 5. The Expedition
+
+### 5.1 The objective arc
+
+The mansion's **Exit Vault** is sealed by **N locks** (N = 3 for a 4-round game). Each successful Expedition opens one. Good wins by opening all locks *and* surviving the finale, or by executing all evil (§11).
+
+Each Expedition, the Security Panel and the Junction spawn in **different wings**, connected by destructible walls and furniture — so the destruction tech is load-bearing: it's how you make a shortcut, and it's how you make noise.
+
+### 5.2 The core minigame: the BREAKER SEQUENCE
+
+This is the mechanic I'd build first, because it does four jobs at once.
+
+- The **Panel** (Crew member A) shows three empty slots and a keypad of eight symbols.
+- The **Junction** (Crew member B), in another wing, is the only place the correct three symbols are displayed — **on B's phone**, rendered as degraded, glitchy, low-contrast VHS static.
+- B has to **say the symbols out loud, in the real room**, so A can enter them.
+- A third Crew member (C) is free: break walls to shorten the route, or watch for the Hunter.
+
+Three correct entries → lock opens. A wrong entry → the panel **buzzes loudly** → the Hunter's attention spikes on that room.
+
+Why this is the right mechanic:
+
+| It does | How |
+|---|---|
+| Forces real speech | The only channel between Junction and Panel is a human voice in the room |
+| Manufactures testimony | Everyone in the room *hears* the call-out, so there's a public record to argue about later |
+| Gives evil a deniable lie | B calls a wrong symbol on purpose. But the render is genuinely hard to read — good players get it wrong too. **The lie and the honest mistake are the same event.** |
+| Makes destruction matter | The route between stations is walls |
+
+The degraded render is the whole trick. Tune its legibility until the honest error rate sits around 15–25% per symbol. That baseline noise is what buys evil its cover, and it's directly the "obfuscate the traitor's misdeeds through honest mistakes" principle from §1.1.
+
+### 5.3 Secondary sabotage verbs (all dual-use, all deniable)
+
+| Verb | Legitimate use | Sabotage use | Deniability |
+|---|---|---|---|
+| **Smash a wall** | Make a shortcut | Make noise while a teammate is exposed | "It was a shortcut." Timing is the only tell |
+| **Call a symbol** | Complete the sequence | Call it wrong | Render is genuinely ambiguous |
+| **Rig a fixture** (delayed) | — | A chandelier/TV/vase that collapses 30–60s later | You were three rooms away when it went off (**P4**) |
+| **Decline to intervene** | You were busy | Let a teammate get grabbed | "I was mid-entry, I couldn't get there" |
+| **Spend a Producer Favour** | Good spend theirs on shields/cams | Spike the chat, which spikes the Hunter | Favours are spent anonymously |
+| **Hold a door / block a route** | Crowd control | Trap a teammate in the Hunter's path | Robots are clumsy |
+
+**Rule: the game never displays "X sabotaged Y."** Not in the recap, not in the post-game — see [Q11](#17-open-questions).
+
+### 5.4 The Control Room — what the other five players do
+
+Non-Crew players are not idle. Each gets, on their phone:
+
+- **A SPY CAM.** Pick one wing; get 15 seconds of a top-down blip map of it. Blips are unlabelled. You see *movement*, not identity. You now have private, partial, arguable information — **so non-Crew have testimony to give too, and evil non-Crew can lie about it.**
+- **The reaction bar** (CLAP / BOO / SUS / SHOCK) — drives crowd audio and the seated robots' body language on the TV.
+- **Chat access** — post to the stream chat.
+- **One CUTAWAY token per game** — force the TV camera onto a robot of your choice for 10 seconds. Public, dramatic, and a real strategic lever both ways.
+
+This matters enormously for pacing: no one in the room is ever watching without something to do, and everyone comes out of the Expedition with something to say.
+
+### 5.5 Expedition outcomes
+
+Three semi-independent results, all announced publicly:
+
+- **LOCK:** opened / not opened
+- **CASUALTY:** who died (never *why*, never their alignment)
+- **INCIDENT COUNT:** "3 alarms this episode" — a number, with no attribution
+
+That last one is the deduction fuel. Everyone knows *how many* things went wrong. Nobody knows which were malice.
+
+---
+
+## 6. The Hunter and the attribution problem
+
+This is the hardest part of the brief and it deserves its own section.
+
+**The problem:** if the Hunter only ever comes when an evil player summons it, the Hunter *is* a floodlight pointed at the traitor. If it comes at random, it's noise and nobody can deduce anything. We need a middle where a Hunter incident is *evidence* but never *proof*.
+
+### 6.1 The Attention model
+
+The Hunter has an **attention score** per room, decaying over time. It moves toward the highest score. Sources:
+
+| Source | Weight | Who controls it |
+|---|---|---|
+| Wall smashing | High | Any Crew member, constantly, legitimately |
+| Panel buzz (wrong symbol) | High | Whoever is calling out |
+| Rigged fixture collapse | High | Evil, 30–60s earlier |
+| Chat spike | Medium | Anyone spending a Favour, anonymously |
+| Robot sprinting | Low | Everyone does it |
+| **Idle curiosity** | Low, **random** | Nobody |
+
+That last row is mandatory and non-negotiable. The Hunter **wanders and investigates empty rooms on its own schedule**. Baseline false positives are what make an incident ambiguous. Target: **roughly 40–50% of Hunter arrivals should have no evil cause at all.**
+
+### 6.2 Make noise physical and public
+
+On the TV, every noise emits a visible expanding ring from its source, with a lower-third caption ("*[LOUD CRASH — EAST WING]*"). The whole room sees that a noise happened, and roughly where. Nobody sees *who*. This is the single best legibility win available: the effect is public, the cause is private.
+
+### 6.3 Kills are slow, and rescuable
+
+`CALM → ALERT → HUNTING → CHASE → GRAB → (3s) → KILL`
+
+During the GRAB window, **any other player anywhere in the mansion can smash something to pull the Hunter off.** That means:
+
+- Good players can heroically save each other — a genuinely thrilling, TV-worthy moment
+- Evil can *fail to* save someone, or "try" too late, or be conveniently mid-sequence
+- Saving someone costs you: you just made a loud noise in *your* room
+
+That last point is the good design. Every rescue is a sacrifice with a visible price, and every non-rescue has an excuse.
+
+### 6.4 The Hunter as the star
+
+Framing-wise the Hunter isn't a monster, it's the show's celebrity antagonist — it gets a lower-third name card, an entrance sting, and the chat loses its mind when it appears. Keeps P10 intact and makes the scariest part of the game funny.
+
+---
+
+## 7. Roles
+
+### 7.1 Scope recommendation
+
+**Yes to roles, but one tight script for v1.** Blood on the Clocktower's depth comes from 100+ roles and a human Storyteller adjudicating their interactions — that is years of work and the wrong first target. Ship one script of ~10 roles, all one-liners, all readable off a nameplate. Design the data model so scripts are content, not code, and the door to more stays open.
+
+### 7.2 The constraint: no night phase
+
+Every role must work without night orders. That leaves exactly three shapes:
+
+- **Passive/continuous** — you get a ping when a condition fires
+- **Once-per-game** — spend it whenever you like, from your phone
+- **Expedition-conditional** — only works if you're on the Crew
+
+That constraint is a gift: it forces roles to be simple, and it means role abilities are decisions made *under social pressure in real time*, which is more dramatic than a night action.
+
+### 7.3 Starter script — "SEASON ONE"
+
+**CAST (good, informed)**
+
+| Role | One line |
+|---|---|
+| **Contestant** | You have no special ability. You're just here to win. |
+| **Camera Op** | Each episode, learn how many Crew were close to the Hunter. |
+| **Sound Guy** | Each episode, learn which *wing* the loudest noise came from. |
+| **Editor** | Once per game, force the broadcast to replay 10 seconds of **raw, unedited** footage of a moment you choose. |
+| **Fan Favourite** | Once per game, make one chat tip **guaranteed true**. |
+| **Stunt Double** | The first time the Hunter kills you, your double dies instead. |
+
+**CAST (good, but a liability — the Outsider slot)**
+
+| Role | One line |
+|---|---|
+| **Glitched** | You think you're another role. Your information is false. *(You are not told this.)* |
+| **Klutz** | Everything you smash is twice as loud. |
+
+The Outsider slot is essential, not flavour: it's the reason no information role can be trusted at face value, and it's the reason "you looked suspicious" isn't proof. Without it, info roles are oracles and the game solves itself.
+
+**PRODUCTION (evil)**
+
+| Role | One line |
+|---|---|
+| **The Producer** *(demon-equivalent)* | Once per episode, spike the Hunter's attention on any room, from your phone. |
+| **The Fixer** *(minion)* | You know who The Producer is. You can rig a fixture to collapse later. |
+| **The Plant** *(minion, 7–8p)* | You know the other Production members. You register as good to every Cast information role. |
+
+Note how each evil ability is a **deniable-by-construction** version of something the world does anyway (§6.1): attention spikes happen naturally, fixtures collapse in a decaying mansion, and info roles are already unreliable because of the Glitched.
+
+### 7.4 Claims and nameplates
+
+Your **true role** is private, on your phone, always. Your **claim** is public, on the nameplate in front of your chair on the TV, set and changed from your phone at any time. Default claim is blank ("*undeclared*"), which is itself a statement.
+
+This is a major accessibility win: a first-time player can read the entire social state off the screen instead of tracking it in their head. It also makes the classic hidden-role moves — hard claim, soft claim, counter-claim, bus — legible to people who've never heard those words.
+
+---
+
+## 8. Player-count scaling
+
+Following the BotC/Werewolf convention of ~25% evil (§1.2):
+
+| Players | Cast | Outsider | Minion | Producer | Evil % | Locks to win | Crew size |
+|---|---|---|---|---|---|---|---|
+| 4 | 3 | 0 | 0 | 1 | 25% | 2 | 2 |
+| 5 | 3 | 1 | 0 | 1 | 20% | 2 | 2 |
+| 6 | 4 | 1 | 0 | 1 | 17% | 3 | 3 |
+| 7 | 4 | 1 | 1 | 1 | 29% | 3 | 3 |
+| 8 | 5 | 1 | 1 | 1 | 25% | 3 | 3 |
+
+Notes:
+- 6 players is the awkward count (1 evil feels thin, 2 feels brutal). Compensate by making the Expedition harder rather than adding a second traitor.
+- Below 6, consider this a tutorial/warm-up configuration rather than the real game.
+- Outsider count should eventually be a *range* the Showrunner picks from (BotC style) so evil can bluff "there must be a Glitched" without anyone able to disprove it.
+
+---
+
+## 9. Nomination, vote, execution
+
+Adopting BotC's proven vote structure, because it's tight and it prevents the chaos spiral:
+
+1. **Nomination.** Any living player may nominate **once per episode**, and may be nominated **once per episode**. On the TV, the nominator's robot stands up and points. Attributed, public, permanent.
+2. **The pitch.** 20 seconds for the nominator, 20 for the accused. Confessional-cam framing on the TV.
+3. **The vote.** All living players vote from their phone. Ghosts have one vote for the rest of the game (§10). Threshold: **more than half of living players** — below that, nothing happens.
+4. **Counter-nomination window.** A visible timer; anyone who hasn't used their nomination may go. The TV keeps a running leaderboard of vote counts.
+5. **Execution.** Highest vote count above threshold dies. **Tie = nobody dies.** The nominator picks up the sledgehammer and smashes the accused apart, in full cinematic glory.
+6. **No reveal.** The nameplate is turned face-down. Nothing about their alignment is shown, ever.
+
+Making the *nominator* swing the hammer is a deliberate social cost: accusing is not free, and the game visually charges you for it. It also means evil bussing a partner has to physically do it on TV, which is great content.
+
+---
+
+## 10. Death, ghosts, and the chat
+
+This is my strongest recommendation in the document.
+
+### 10.1 The dead become the audience
+
+When you die, your robot is dragged off, and you're **promoted to a verified viewer**. On your phone you get a chat handle and an avatar. You:
+
+- Keep **one vote** for the rest of the game, usable once (straight from BotC)
+- **Can post into the stream chat** — which is on the TV, which everyone reads
+- Keep talking out loud in the room, because you're sitting right there
+
+### 10.2 Why this is the right answer
+
+The dead-player problem is the genre's oldest wound (§1.3). Every other solution makes the dead *harmless*. This one makes them **powerful but unattributable** — because their messages are mixed in with the Showrunner's generated chatter, and nobody knows which lines in the chat came from a dead human.
+
+That gives us, for free:
+- Dead players stay engaged and mischievous
+- A dead evil player can keep working for their team from beyond the grave
+- The chat is no longer decoration — it's a live channel of half-trustworthy information
+- Executing someone becomes a real trade-off: you might be handing a traitor a megaphone
+
+### 10.3 Chat tips
+
+Each episode the chat posts **five tips** with a stated truth count: *"3 of these 5 are true."*
+
+```
+xX_boltface_Xx      : the one in the yellow hat went upstairs alone
+mansionfan1994      : nobody touched the east panel
+DEFINITELY_A_ROBOT  : the crash was on purpose
+tvlover             : two people were together the whole time
+b0ne5aw             : the lead is lying about the veto
+```
+
+The stated truth count is what turns this from noise into a puzzle — and it's the thing that gives a player with no role and no expedition something concrete to argue about, which is a huge accessibility lever (§12).
+
+The **Fan Favourite** can lock one tip as true. The dead can inject tips. Living players can spend a Favour to buy one extra tip. Evil can spend a Favour to spike the chat and pull the Hunter.
+
+---
+
+## 11. Win conditions
+
+**Good (the Cast) wins if:**
+- All Production members are dead, **or**
+- All N locks are open *and* the Cast survives the Finale Expedition
+
+**Evil (Production) wins if:**
+- Living evil ≥ living good (parity), **or**
+- The locks are not all open by the end of the final episode
+
+Two win paths for good is deliberate: it means good must decide each round whether to spend it hunting traitors or opening locks, and evil must decide whether to stall or to kill. That tension is the strategic spine, and it's what stops the game collapsing into pure accusation.
+
+The **Verdict** (§4.6) is the only feedback loop. "RENEWED" tells good that evil is still alive — which is real information, delivered without revealing anything about the person they just destroyed.
+
+---
+
+## 12. Onboarding and accessibility
+
+- **The lobby is the tutorial.** Free-roam smashing while waiting teaches move + smash with zero instruction. Non-negotiable — it's already the plan and it's correct.
+- **Everything a player must know is on the TV.** Nameplates (claims), lock progress, incident count, who's alive, whose turn to nominate.
+- **One-line roles** (P8), pushed to the phone as a card you can re-read at any time.
+- **A player with no role and no expedition still has:** a spy cam, a reaction bar, chat tips with a stated truth count, a veto, a cutaway, a nomination, and a vote. Nobody is ever a spectator.
+- **A "first time?" toggle** in the lobby that puts an extra hint line on your phone each phase ("*you can nominate — it's free, and it makes people talk*").
+- **Colour-blind safety:** robots must be distinguishable by silhouette/accessory, not just colour. The Breaker symbols must not be colour-coded.
+- **The degraded symbol render must be degraded by noise, not by contrast** — otherwise it's an accessibility trap rather than a design feature.
+- **Reading load:** chat tips need a large-type mode on the TV. Five lines of small text across a lounge is a real failure mode.
+
+---
+
+## 13. Risk register
+
+| # | Risk | Severity | Mitigation |
+|---|---|---|---|
+| R1 | **Attribution collapses** — the Hunter always traces to evil, or never does | Fatal | Tune baseline idle-curiosity rate; instrument "% of Hunter arrivals with no evil cause"; target 40–50% |
+| R2 | **The Expedition is a spectator sport** for 5 of 8 players | Fatal | Control Room powers (§5.4); keep Expedition ≤120s |
+| R3 | **Nobody talks** — the video game eats the party game | High | Phones dark during Debrief; Breaker Sequence forces speech; short mission, long debrief |
+| R4 | **Good has no traction** because deaths never reveal | High | Lock progress + Verdict + incident count are the compensating signals. Playtest good win rate ≥45% |
+| R5 | **Round length creep** — 5 rounds × 9 min = too long | Medium | Hard timers on every phase; target 25–40 min total |
+| R6 | Phone joins fail on someone's carrier/wifi | Medium | Local network fallback, short room codes, aggressive reconnect-by-token |
+| R7 | Roles are too complex for a games night | Medium | One-line rule; ship a "no roles" quick mode |
+| R8 | Motion sickness / control frustration on phone | Medium | Simple stick + two buttons; test on small screens early |
+| R9 | Evil feels helpless in a 6-player game with 1 traitor | Medium | Scale Expedition difficulty, not traitor count |
+| R10 | The chat is unreadable across a lounge | Low | Large-type mode, cap to 5 tips, slow the scroll during debrief |
+
+---
+
+## 14. Build plan (vertical slices)
+
+Each milestone should be independently playable and independently fun. **Do not build in this order if the paper prototype hasn't happened yet.**
+
+### M0 — PAPER PROTOTYPE (no code)
+Index cards, a phone timer, and one of you as a human Showrunner narrating expedition outcomes. Test the *social* loop only: casting → outcome → debrief → vote → verdict, with silent deaths. **This is the highest-value thing you can do this week** and it de-risks R1, R3, R4 and R7 before a line of game code exists.
+
+### M1 — LOBBY + TOY
+QR/room code, up to 8 phone joins, name + colour + accessory, free-roam mansion, smash walls and furniture. Verify: 8 real phones on real wifi, in the actual lounge.
+
+### M2 — THE CIRCLE
+Entrances, cinematics, 8 chairs, nameplates, hype/banter reaction bar. No game rules yet. Should already be funny.
+
+### M3 — SOCIAL LOOP, NO MANSION
+Full round structure with the Expedition **stubbed to a dice roll**. Casting, nominate, vote, sledgehammer execution, verdict, silent deaths. This is a complete, playable social deception game and the point at which you find out if the design works.
+
+### M4 — THE EXPEDITION
+Breaker Sequence, Panel + Junction spawning, the Hunter, attention model, rescues.
+
+### M5 — ROLES
+Season One script, claims/nameplates, phone role cards.
+
+### M6 — THE AUDIENCE
+Ghost promotion, chat, tips with truth counts, Favours, cutaways, spy cams.
+
+### M7 — BALANCE
+Headless simulation at scale, telemetry, tuning passes.
+
+---
+
+## 15. Technical architecture
+
+Sketch, to be firmed up once §17 is answered.
+
+```
+        ┌──────────────────────────────┐
+        │  TV CLIENT  (host PC, HDMI)  │   authoritative sim
+        │  render + audio + Showrunner │   seeded RNG, event log
+        └──────────────┬───────────────┘
+                       │ WebSocket (LAN, wss on host)
+        ┌──────────────┴───────────────┐
+        │      ROOM  ( 4-8 phones )    │   thin clients
+        │  join by QR / 4-letter code  │   no install, browser only
+        └──────────────────────────────┘
+```
+
+**Key decisions to lock early:**
+
+- **Authority lives on the host PC**, not on phones. Phones send intents, never state. Non-negotiable for a hidden-role game — a client that knows other players' roles is a client that leaks them.
+- **Phones never receive information their player shouldn't have.** Filter server-side, per socket. Test this explicitly (§16, V12).
+- **Seeded, deterministic simulation.** One RNG seed per match, all randomness drawn from it, every input timestamped and logged. This gives us free replay, free bug reproduction, and the headless balance sim in M7. Worth the discipline cost many times over.
+- **Every state change is an event** in an append-only log. The recap reel, the Editor's raw-footage replay, and the post-game summary are all just queries over that log.
+- **Reconnect by token** in localStorage. Someone's phone will lock. It will happen every session.
+- **Phase machine is explicit and serialisable**: `LOBBY → SEATING → CASTING → EXPEDITION → DEBRIEF → NOMINATION → VOTE → EXECUTION → VERDICT → (CASTING | GAME_OVER)`. Every transition guarded, every phase with a hard timeout.
+
+---
+
+## 16. Verification plan
+
+The user asked specifically what we need to build to *know* each part works. Answer: a layered harness, built alongside the features rather than after.
+
+### 16.1 Test layers
+
+| Layer | Tool | What it proves |
+|---|---|---|
+| **Unit** | vitest/jest | Vote maths, role assignment tables, win-condition checks, attention scoring |
+| **Simulation (headless)** | Custom bot runner over the deterministic core | Balance. Thousands of games, no rendering |
+| **Integration** | Fake phone clients on the real socket | Protocol, info-leak isolation, reconnects |
+| **End-to-end** | Playwright — 1 TV page + 8 phone contexts | The real thing, scripted |
+| **Chaos/soak** | Playwright + fault injection | Disconnects, mid-round joins, backgrounded phones |
+| **Human playtest** | Your lounge, 8 people, a stopwatch | Everything that matters |
+
+### 16.2 Per-mechanic verification
+
+| # | Mechanic | "Working" means | Automated check | Playtest check |
+|---|---|---|---|---|
+| V1 | Lobby join | 8 phones join in <30s, names/skins persist | E2E: 8 contexts join, assert roster | Do it on the actual lounge wifi |
+| V2 | Movement/smash | Reaches a target room, destroys walls, ~60fps | Bot pathing test; perf budget assertion | "Did anyone need instructions?" |
+| V3 | Seating/intro | All 8 seated, no soft-lock if a phone drops mid-cinematic | E2E with a forced disconnect | Is it funny the second time? |
+| V4 | Role assignment | Distribution matches §8 exactly for every count | Unit: 10k assignments per count, assert exact composition | — |
+| V5 | Casting/veto | Lead picks 3; veto forces re-pick; one veto per player per game | Unit + E2E | Does the pick spark argument? |
+| V6 | Breaker Sequence | Sequence completes with correct calls; buzzes on wrong | Integration: scripted correct/incorrect runs | **Measure honest error rate — target 15–25%/symbol** |
+| V7 | Hunter attention | Moves to highest-scoring room; decays; wanders when idle | Unit on scoring; sim asserting movement distribution | Does it feel fair or arbitrary? |
+| V8 | **Attribution balance** | 40–50% of Hunter arrivals have no evil cause | **Sim: 1000 games, log `hunter_arrival` with `causedByEvil` flag, assert band** | Post-round survey: "who caused that?" — accuracy should sit near 50–65%, not 95% |
+| V9 | Rescue window | Any player's noise pulls the Hunter off during GRAB | Integration: scripted grab + remote smash | Does saving someone feel heroic? |
+| V10 | Silent death | No client ever receives the alignment of a dead player | **Integration: assert no socket payload contains a dead player's role** | Does anyone feel cheated by it? |
+| V11 | Vote maths | >50% threshold, one nom + one nom-against per player, tie = no death, ghost vote spends once | Unit: exhaustive table of vote scenarios | Is 120s enough? |
+| V12 | **Info isolation** | No phone receives data its player isn't entitled to | **Integration: full transcript capture per socket, assert against an entitlement matrix.** Run in CI on every commit | — |
+| V13 | Chat tips | Exactly the stated number are true; Fan Favourite lock works | Unit: generator invariant test, 10k draws | Can people read them from the couch? |
+| V14 | Ghost/audience | Dead players post; messages indistinguishable from generated | Integration on the mixing function | Do the dead stay engaged? |
+| V15 | Win conditions | All paths fire correctly and exactly once | Unit: state-table coverage | — |
+| V16 | Reconnect | Phone locks/reloads mid-round, returns with correct private state | Chaos: kill and restore each socket in every phase | Someone will background their phone. Test it |
+| V17 | Full loop | 8-player game runs start to finish, no soft-locks | E2E soak: 100 scripted games with random inputs | 3 sessions with real humans |
+
+### 16.3 The balance simulator (build this at M3, not M7)
+
+The single highest-leverage piece of tooling. A headless runner that plays complete games with scripted bot policies (naive-good, cautious-good, patient-evil, aggressive-evil) and reports:
+
+- Good win rate by player count — **target 45–55%**
+- Average rounds to conclusion
+- % of executions that hit an evil player — **target 40–60%** (below 35% = good is guessing; above 70% = evil is transparent)
+- Hunter arrivals by cause (V8)
+- Breaker honest-error rate (V6)
+
+Bots can't model the social layer, so this doesn't validate whether the *game* is fun — it validates that the mechanical scaffolding isn't already broken before you put humans in front of it.
+
+### 16.4 The Director's Cut debug overlay
+
+A hotkey on the TV client that reveals true roles, live Hunter attention heatmap, every noise event with its source, and each player's private info feed. Plus **export match log to JSON**. You will not be able to debug this game without it, and you'll use it in every playtest post-mortem.
+
+### 16.5 Playtest instrumentation
+
+Cheap to add, disproportionately useful:
+
+- Wall-clock time per phase (are we hitting 25–40 min?)
+- **Speaking-time distribution** — the loudest player shouldn't own >35% of the debrief. If they do, the design isn't giving quiet players enough to say
+- Post-round one-tap survey on the phone: *"Do you know who caused that?"* Yes/No/Guessing — this is the most direct measurement of R1 that exists
+- Post-game: *"Was that fun?"* and *"Did you understand your role?"*
+
+---
+
+## 17. Open questions
+
+Beyond the four I'm asking directly, these need answers before v0.2:
+
+**Structure**
+1. Total session target — a tight 20 minutes, or a proper 40-minute event?
+2. How many rounds/episodes, and is it fixed or does it end when a win condition fires?
+3. Does the Episode Lead rotate, get elected, or get chosen by the previous Lead?
+4. Is there an approval vote on the Crew (Avalon-style), or does the Lead just pick?
+
+**The Expedition**
+5. Is the Breaker Sequence the only minigame in v1, or do we need 2–3 for variety by round 3?
+6. Should the Crew be able to see each other's positions on their phones, or is even that too much telemetry?
+7. Can a Crew member refuse to go / abandon the mission mid-round?
+8. What happens if a Crew member dies mid-Expedition — do the remaining two carry on?
+
+**Evil**
+9. Do evil players know each other from the start? (Recommend: yes for minions, and that's already in §7.3 — but confirm.)
+10. Can evil win by opening locks too, or are they strictly obstructive?
+11. **Should the post-game reveal everything?** Strong opinion: yes, a full "reunion special" with the true edit is the payoff that makes the whole silent-death design worth it — and it's the moment everyone shouts. But it does mean the game is only fully satisfying if you finish it.
+12. Should evil have a kill that isn't the Hunter, or is the Hunter the only lethal force?
+
+**Presentation**
+13. Is the chat fully generated, or do you want a curated writing pass? (§1.7 — for Jackbox, content *is* the product.)
+14. Is there any voice/audio through the phones, or is the room the only audio channel?
+15. Do we want confessional cams — a player privately records a 5-second reaction that airs later, possibly out of context? (Very on-theme, very cheap deception surface.)
+16. Should the show have sponsors/ad breaks as a pacing device between rounds?
+
+**Scope**
+17. Does this share a codebase with the existing Run Robot Run mode, or fork?
+18. What's the target device floor — a five-year-old Android in a browser?
+19. Local network only, or does it need to work with someone joining remotely?
+20. Is there any persistence — profiles, stats, a "season" across multiple games?
+
