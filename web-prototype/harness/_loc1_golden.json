@@ -1,0 +1,1413 @@
+{
+ "WALL_T": 0.3,
+ "DOOR_H": 2.72,
+ "PANEL_W": 2.08,
+ "PANEL_H": 2.68,
+ "PANEL_CY": 1.34,
+ "SPACES": [
+  {
+   "id": "gallery",
+   "name": "THE LONG GALLERY",
+   "x0": -13.6,
+   "x1": 13.6,
+   "z0": -31,
+   "z1": -24.3,
+   "storey": 5.6,
+   "floor": "floor",
+   "wall": "wall",
+   "pilasters": "both",
+   "order": "gallery",
+   "lights": {
+    "key": {
+     "pos": [
+      11.6,
+      4.05,
+      -30.55
+     ],
+     "at": [
+      1.2,
+      0,
+      -26.2
+     ],
+     "color": 14477567,
+     "intensity": 265,
+     "angle": 0.3,
+     "penumbra": 0.45,
+     "dist": 34,
+     "decay": 1.25
+    },
+    "warm": [
+     {
+      "pos": [
+       9.6,
+       2.7,
+       -25.3
+      ],
+      "color": 16757361,
+      "intensity": 24,
+      "dist": 16,
+      "decay": 1.6
+     },
+     {
+      "pos": [
+       -7.8,
+       2.7,
+       -30.05
+      ],
+      "color": 16757361,
+      "intensity": 22,
+      "dist": 16,
+      "decay": 1.6
+     }
+    ],
+    "cool": {
+     "pos": [
+      -8.6,
+      1.9,
+      -23.2
+     ],
+     "color": 11062516,
+     "intensity": 42,
+     "dist": 10
+    },
+    "up": 3817290
+   },
+   "lightsBox": {
+    "key": {
+     "pos": [
+      -8.6,
+      5,
+      -25.2
+     ],
+     "at": [
+      4,
+      0.9,
+      -28.4
+     ],
+     "color": 16768180,
+     "intensity": 300,
+     "angle": 0.88,
+     "penumbra": 0.68,
+     "dist": 40,
+     "decay": 1.35
+    },
+    "warm": [
+     {
+      "pos": [
+       2,
+       3.9,
+       -28.6
+      ],
+      "color": 16757361,
+      "intensity": 26,
+      "dist": 18
+     },
+     {
+      "pos": [
+       11,
+       3.6,
+       -27
+      ],
+      "color": 16757361,
+      "intensity": 22,
+      "dist": 16
+     }
+    ],
+    "cool": {
+     "pos": [
+      -8.6,
+      1.9,
+      -23.2
+     ],
+     "color": 11062516,
+     "intensity": 46,
+     "dist": 10
+    }
+   }
+  },
+  {
+   "id": "study_w",
+   "name": "THE WEST STUDY",
+   "x0": -13.6,
+   "x1": -2,
+   "z0": -24,
+   "z1": -8.6,
+   "storey": 4.8,
+   "floor": "floor",
+   "wall": "wall",
+   "order": "study",
+   "lights": {
+    "key": {
+     "pos": [
+      -6.5,
+      4.1,
+      -9.7
+     ],
+     "at": [
+      -5.85,
+      2.2,
+      -23.55
+     ],
+     "color": 16773344,
+     "intensity": 560,
+     "angle": 0.34,
+     "penumbra": 0.55,
+     "dist": 26,
+     "decay": 1.5
+    },
+    "warm": [
+     {
+      "pos": [
+       -11,
+       2.6,
+       -12.2
+      ],
+      "color": 16765096,
+      "intensity": 34,
+      "dist": 20,
+      "decay": 1.34
+     },
+     {
+      "pos": [
+       -12.4,
+       2.05,
+       -14.75
+      ],
+      "color": 9417694,
+      "intensity": 44,
+      "dist": 18,
+      "decay": 1.45
+     }
+    ],
+    "cool": {
+     "pos": [
+      -8.6,
+      1.9,
+      -25.1
+     ],
+     "color": 11062516,
+     "intensity": 46,
+     "dist": 10
+    },
+    "up": 5858170
+   },
+   "lightsBox": {
+    "key": {
+     "pos": [
+      -6,
+      4.5,
+      -13
+     ],
+     "at": [
+      -8.6,
+      0.7,
+      -20
+     ],
+     "color": 16768180,
+     "intensity": 215,
+     "angle": 0.86,
+     "penumbra": 0.66,
+     "dist": 30,
+     "decay": 1.5
+    },
+    "warm": [
+     {
+      "pos": [
+       -11.6,
+       3.5,
+       -12.4
+      ],
+      "color": 16757361,
+      "intensity": 18,
+      "dist": 13
+     },
+     {
+      "pos": [
+       -4.4,
+       3.4,
+       -21.6
+      ],
+      "color": 7311294,
+      "intensity": 40,
+      "dist": 20
+     }
+    ],
+    "cool": {
+     "pos": [
+      -8.6,
+      1.9,
+      -25.1
+     ],
+     "color": 11062516,
+     "intensity": 46,
+     "dist": 10
+    }
+   }
+  },
+  {
+   "id": "service",
+   "name": "THE SERVICE PASSAGE",
+   "x0": -1.7,
+   "x1": 1.7,
+   "z0": -24,
+   "z1": -8.6,
+   "storey": 4.8,
+   "floor": "floor",
+   "wall": "wall",
+   "pilasters": "none",
+   "lights": {
+    "key": {
+     "pos": [
+      0,
+      4.4,
+      -22.4
+     ],
+     "at": [
+      0,
+      1.75,
+      -11
+     ],
+     "color": 14673652,
+     "intensity": 240,
+     "angle": 0.4,
+     "penumbra": 0.8,
+     "dist": 30,
+     "decay": 1.35
+    },
+    "warm": [
+     {
+      "pos": [
+       0,
+       3.3,
+       -19.4
+      ],
+      "color": 16763024,
+      "intensity": 13,
+      "dist": 14,
+      "decay": 1.55
+     },
+     {
+      "pos": [
+       0,
+       3.3,
+       -12.6
+      ],
+      "color": 16763024,
+      "intensity": 13,
+      "dist": 14,
+      "decay": 1.55
+     }
+    ],
+    "cool": {
+     "pos": [
+      0,
+      1.9,
+      -7.4
+     ],
+     "color": 11062516,
+     "intensity": 46,
+     "dist": 10
+    }
+   }
+  },
+  {
+   "id": "study_e",
+   "name": "THE EAST STUDY",
+   "x0": 2,
+   "x1": 13.6,
+   "z0": -24,
+   "z1": -8.6,
+   "storey": 4.8,
+   "floor": "floor",
+   "wall": "wall",
+   "order": "study",
+   "lights": {
+    "key": {
+     "pos": [
+      7.1,
+      4.1,
+      -9.7
+     ],
+     "at": [
+      7.8,
+      2.2,
+      -23.55
+     ],
+     "color": 16773344,
+     "intensity": 560,
+     "angle": 0.34,
+     "penumbra": 0.55,
+     "dist": 26,
+     "decay": 1.5
+    },
+    "warm": [
+     {
+      "pos": [
+       5,
+       2.55,
+       -12.6
+      ],
+      "color": 16765096,
+      "intensity": 34,
+      "dist": 20,
+      "decay": 1.34
+     },
+     {
+      "pos": [
+       12.4,
+       2.05,
+       -14.75
+      ],
+      "color": 9417694,
+      "intensity": 44,
+      "dist": 18,
+      "decay": 1.45
+     }
+    ],
+    "cool": {
+     "pos": [
+      8.6,
+      1.9,
+      -7.55
+     ],
+     "color": 11062516,
+     "intensity": 46,
+     "dist": 10
+    },
+    "up": 5858170
+   },
+   "lightsBox": {
+    "key": {
+     "pos": [
+      6,
+      4.5,
+      -13
+     ],
+     "at": [
+      8.6,
+      0.7,
+      -20
+     ],
+     "color": 16768180,
+     "intensity": 215,
+     "angle": 0.86,
+     "penumbra": 0.66,
+     "dist": 30,
+     "decay": 1.5
+    },
+    "warm": [
+     {
+      "pos": [
+       11.6,
+       3.5,
+       -12.4
+      ],
+      "color": 16757361,
+      "intensity": 18,
+      "dist": 13
+     },
+     {
+      "pos": [
+       4.4,
+       3.4,
+       -21.6
+      ],
+      "color": 7311294,
+      "intensity": 40,
+      "dist": 20
+     }
+    ],
+    "cool": {
+     "pos": [
+      8.6,
+      1.9,
+      -25.1
+     ],
+     "color": 11062516,
+     "intensity": 46,
+     "dist": 10
+    }
+   }
+  },
+  {
+   "id": "ballroom",
+   "name": "THE BALLROOM",
+   "x0": -13.6,
+   "x1": 13.6,
+   "z0": -8.3,
+   "z1": 7,
+   "storey": 9.6,
+   "floor": "floor",
+   "wall": "wall",
+   "pilasters": "both",
+   "order": "ballroom",
+   "columns": {
+    "z": -0.65,
+    "xs": [
+     -11,
+     -6.6,
+     -2.2,
+     2.2,
+     6.6,
+     11
+    ],
+    "w": 0.95
+   },
+   "lights": {
+    "key": {
+     "pos": [
+      -2,
+      8.2,
+      5.4
+     ],
+     "at": [
+      1,
+      0.7,
+      -6
+     ],
+     "color": 16768180,
+     "intensity": 360,
+     "angle": 0.86,
+     "penumbra": 0.7,
+     "dist": 38,
+     "decay": 1.3
+    },
+    "warm": [
+     {
+      "pos": [
+       -11.8,
+       2.6,
+       -2.9
+      ],
+      "color": 9417694,
+      "intensity": 44,
+      "dist": 22,
+      "decay": 1.4
+     },
+     {
+      "pos": [
+       10.8,
+       3.2,
+       1.2
+      ],
+      "color": 16757361,
+      "intensity": 32,
+      "dist": 20,
+      "decay": 1.34
+     }
+    ],
+    "cool": {
+     "pos": [
+      0,
+      1.9,
+      -9.4
+     ],
+     "color": 11062516,
+     "intensity": 46,
+     "dist": 11
+    },
+    "up": 4871012
+   },
+   "lightsBox": {
+    "key": {
+     "pos": [
+      -2,
+      6.4,
+      5.4
+     ],
+     "at": [
+      1,
+      0.7,
+      -6
+     ],
+     "color": 16768180,
+     "intensity": 330,
+     "angle": 0.8,
+     "penumbra": 0.7,
+     "dist": 34,
+     "decay": 1.35
+    },
+    "warm": [
+     {
+      "pos": [
+       -10.5,
+       4.2,
+       -4
+      ],
+      "color": 16757361,
+      "intensity": 26,
+      "dist": 18
+     },
+     {
+      "pos": [
+       10.5,
+       4.2,
+       -4
+      ],
+      "color": 16757361,
+      "intensity": 26,
+      "dist": 18
+     }
+    ],
+    "cool": {
+     "pos": [
+      0,
+      1.9,
+      -9.4
+     ],
+     "color": 11062516,
+     "intensity": 46,
+     "dist": 11
+    }
+   }
+  },
+  {
+   "id": "chapel",
+   "name": "THE CHAPEL",
+   "x0": 4.2,
+   "x1": 11,
+   "z0": -37.8,
+   "z1": -31.3,
+   "storey": 4.8,
+   "floor": "floor",
+   "wall": "wall",
+   "pilasters": "both",
+   "lights": {
+    "key": {
+     "pos": [
+      7.6,
+      4.6,
+      -36.9
+     ],
+     "at": [
+      7.6,
+      0.6,
+      -33.2
+     ],
+     "color": 14673652,
+     "intensity": 165,
+     "angle": 0.7,
+     "penumbra": 0.6,
+     "dist": 20,
+     "decay": 1.6
+    },
+    "warm": [
+     {
+      "pos": [
+       5.4,
+       2.5,
+       -35.6
+      ],
+      "color": 16757361,
+      "intensity": 12,
+      "dist": 9
+     },
+     {
+      "pos": [
+       9.8,
+       2.5,
+       -33.4
+      ],
+      "color": 16757361,
+      "intensity": 11,
+      "dist": 9
+     }
+    ],
+    "cool": {
+     "pos": [
+      7.6,
+      1.9,
+      -30.6
+     ],
+     "color": 11062516,
+     "intensity": 44,
+     "dist": 10
+    }
+   }
+  }
+ ],
+ "INNER_WALLS": [],
+ "PORTALS": [
+  {
+   "id": "D1",
+   "state": "open",
+   "a": "gallery",
+   "b": "study_w",
+   "axis": "x",
+   "x": -8.6,
+   "z": -24.15,
+   "w": 1.9,
+   "h": 2.72
+  },
+  {
+   "id": "D4",
+   "state": "open",
+   "a": "study_w",
+   "b": "ballroom",
+   "axis": "x",
+   "x": -8.6,
+   "z": -8.45,
+   "w": 1.9,
+   "h": 2.72
+  },
+  {
+   "id": "D5",
+   "state": "open",
+   "a": "service",
+   "b": "ballroom",
+   "axis": "x",
+   "x": 0,
+   "z": -8.45,
+   "w": 1.9,
+   "h": 2.72
+  },
+  {
+   "id": "D6",
+   "state": "open",
+   "a": "study_e",
+   "b": "ballroom",
+   "axis": "x",
+   "x": 8.6,
+   "z": -8.45,
+   "w": 1.9,
+   "h": 2.72
+  }
+ ],
+ "PANELS": [
+  {
+   "id": "p.svc_w.n",
+   "state": "breachable",
+   "a": "service",
+   "b": "study_w",
+   "x": -1.85,
+   "z": -20,
+   "rotY": 1.5707963267948966
+  },
+  {
+   "id": "p.svc_w.s",
+   "state": "breachable",
+   "a": "service",
+   "b": "study_w",
+   "x": -1.85,
+   "z": -12.2,
+   "rotY": 1.5707963267948966
+  },
+  {
+   "id": "p.svc_e.n",
+   "state": "breachable",
+   "a": "service",
+   "b": "study_e",
+   "x": 1.85,
+   "z": -20,
+   "rotY": 1.5707963267948966
+  },
+  {
+   "id": "p.svc_e.s",
+   "state": "breachable",
+   "a": "service",
+   "b": "study_e",
+   "x": 1.85,
+   "z": -12.2,
+   "rotY": 1.5707963267948966
+  },
+  {
+   "id": "p.gal_w",
+   "state": "breachable",
+   "a": "gallery",
+   "b": "study_w",
+   "x": -12,
+   "z": -24.15,
+   "rotY": 0
+  },
+  {
+   "id": "p.gal_e",
+   "state": "breachable",
+   "a": "gallery",
+   "b": "study_e",
+   "x": 12,
+   "z": -24.15,
+   "rotY": 0
+  },
+  {
+   "id": "p.bal_w",
+   "state": "breachable",
+   "a": "study_w",
+   "b": "ballroom",
+   "x": -3.6,
+   "z": -8.45,
+   "rotY": 0
+  },
+  {
+   "id": "p.chapel",
+   "state": "breachable",
+   "a": "gallery",
+   "b": "chapel",
+   "x": 5.6,
+   "z": -31.15,
+   "rotY": 0
+  },
+  {
+   "id": "x.chapel.vestry",
+   "a": "chapel",
+   "b": "outside",
+   "x": 4.05,
+   "z": -33,
+   "rotY": 1.5707963267948966,
+   "state": "exit",
+   "name": "THE VESTRY DOOR",
+   "room": "the chapel"
+  },
+  {
+   "id": "x.study_w.servants",
+   "a": "study_w",
+   "b": "outside",
+   "x": -13.75,
+   "z": -18,
+   "rotY": 1.5707963267948966,
+   "state": "exit",
+   "name": "THE SERVANTS PASSAGE",
+   "room": "the west study"
+  },
+  {
+   "id": "x.ballroom.orangery",
+   "a": "ballroom",
+   "b": "outside",
+   "x": 0,
+   "z": 7.15,
+   "rotY": 0,
+   "w": 3.2,
+   "h": 3.4,
+   "cy": 1.7,
+   "state": "exit",
+   "name": "THE ORANGERY DOORS",
+   "room": "the ballroom"
+  },
+  {
+   "id": "x.gallery.boards",
+   "a": "gallery",
+   "b": "outside",
+   "x": -4.8,
+   "z": -31.15,
+   "rotY": 0,
+   "state": "exit",
+   "name": "THE BOARDED BAY",
+   "room": "the long gallery"
+  },
+  {
+   "id": "x.gallery.west",
+   "a": "gallery",
+   "b": "outside",
+   "x": -13.75,
+   "z": -29.4,
+   "rotY": 1.5707963267948966,
+   "state": "exit",
+   "name": "THE WEST BAY",
+   "room": "the long gallery"
+  },
+  {
+   "id": "x.gallery.east",
+   "a": "gallery",
+   "b": "outside",
+   "x": 13.75,
+   "z": -29.4,
+   "rotY": 1.5707963267948966,
+   "state": "exit",
+   "name": "THE EAST BAY",
+   "room": "the long gallery"
+  },
+  {
+   "id": "x.gallery.north_w",
+   "a": "gallery",
+   "b": "outside",
+   "x": -11.6,
+   "z": -31.15,
+   "rotY": 0,
+   "state": "exit",
+   "name": "THE NORTH BAY",
+   "room": "the long gallery"
+  },
+  {
+   "id": "x.study_w.scullery",
+   "a": "study_w",
+   "b": "outside",
+   "x": -13.75,
+   "z": -11.5,
+   "rotY": 1.5707963267948966,
+   "state": "exit",
+   "name": "THE SCULLERY DOOR",
+   "room": "the west study"
+  },
+  {
+   "id": "x.study_e.icehouse",
+   "a": "study_e",
+   "b": "outside",
+   "x": 13.75,
+   "z": -18,
+   "rotY": 1.5707963267948966,
+   "state": "exit",
+   "name": "THE ICE HOUSE DOOR",
+   "room": "the east study"
+  },
+  {
+   "id": "x.study_e.stair",
+   "a": "study_e",
+   "b": "outside",
+   "x": 13.75,
+   "z": -11.5,
+   "rotY": 1.5707963267948966,
+   "state": "exit",
+   "name": "THE BACK STAIR DOOR",
+   "room": "the east study"
+  },
+  {
+   "id": "x.ballroom.terrace_w",
+   "a": "ballroom",
+   "b": "outside",
+   "x": -13.75,
+   "z": -5.45,
+   "rotY": 1.5707963267948966,
+   "state": "exit",
+   "name": "THE WEST TERRACE DOOR",
+   "room": "the ballroom"
+  },
+  {
+   "id": "x.ballroom.terrace_e",
+   "a": "ballroom",
+   "b": "outside",
+   "x": 13.75,
+   "z": -5.45,
+   "rotY": 1.5707963267948966,
+   "state": "exit",
+   "name": "THE EAST TERRACE DOOR",
+   "room": "the ballroom"
+  },
+  {
+   "id": "x.ballroom.south_w",
+   "a": "ballroom",
+   "b": "outside",
+   "x": -8,
+   "z": 7.15,
+   "rotY": 0,
+   "state": "exit",
+   "name": "THE GARDEN DOOR",
+   "room": "the ballroom"
+  },
+  {
+   "id": "x.chapel.crypt",
+   "a": "chapel",
+   "b": "outside",
+   "x": 5.6,
+   "z": -37.95,
+   "rotY": 0,
+   "state": "exit",
+   "name": "THE CRYPT DOOR",
+   "room": "the chapel"
+  }
+ ],
+ "CONNECTORS": [
+  {
+   "id": "D1",
+   "state": "open",
+   "a": "gallery",
+   "b": "study_w",
+   "axis": "x",
+   "x": -8.6,
+   "z": -24.15,
+   "w": 1.9,
+   "h": 2.72
+  },
+  {
+   "id": "D4",
+   "state": "open",
+   "a": "study_w",
+   "b": "ballroom",
+   "axis": "x",
+   "x": -8.6,
+   "z": -8.45,
+   "w": 1.9,
+   "h": 2.72
+  },
+  {
+   "id": "D5",
+   "state": "open",
+   "a": "service",
+   "b": "ballroom",
+   "axis": "x",
+   "x": 0,
+   "z": -8.45,
+   "w": 1.9,
+   "h": 2.72
+  },
+  {
+   "id": "D6",
+   "state": "open",
+   "a": "study_e",
+   "b": "ballroom",
+   "axis": "x",
+   "x": 8.6,
+   "z": -8.45,
+   "w": 1.9,
+   "h": 2.72
+  },
+  {
+   "id": "p.svc_w.n",
+   "state": "breachable",
+   "a": "service",
+   "b": "study_w",
+   "x": -1.85,
+   "z": -20,
+   "rotY": 1.5707963267948966
+  },
+  {
+   "id": "p.svc_w.s",
+   "state": "breachable",
+   "a": "service",
+   "b": "study_w",
+   "x": -1.85,
+   "z": -12.2,
+   "rotY": 1.5707963267948966
+  },
+  {
+   "id": "p.svc_e.n",
+   "state": "breachable",
+   "a": "service",
+   "b": "study_e",
+   "x": 1.85,
+   "z": -20,
+   "rotY": 1.5707963267948966
+  },
+  {
+   "id": "p.svc_e.s",
+   "state": "breachable",
+   "a": "service",
+   "b": "study_e",
+   "x": 1.85,
+   "z": -12.2,
+   "rotY": 1.5707963267948966
+  },
+  {
+   "id": "p.gal_w",
+   "state": "breachable",
+   "a": "gallery",
+   "b": "study_w",
+   "x": -12,
+   "z": -24.15,
+   "rotY": 0
+  },
+  {
+   "id": "p.gal_e",
+   "state": "breachable",
+   "a": "gallery",
+   "b": "study_e",
+   "x": 12,
+   "z": -24.15,
+   "rotY": 0
+  },
+  {
+   "id": "p.bal_w",
+   "state": "breachable",
+   "a": "study_w",
+   "b": "ballroom",
+   "x": -3.6,
+   "z": -8.45,
+   "rotY": 0
+  },
+  {
+   "id": "p.chapel",
+   "state": "breachable",
+   "a": "gallery",
+   "b": "chapel",
+   "x": 5.6,
+   "z": -31.15,
+   "rotY": 0
+  },
+  {
+   "id": "x.chapel.vestry",
+   "a": "chapel",
+   "b": "outside",
+   "x": 4.05,
+   "z": -33,
+   "rotY": 1.5707963267948966,
+   "state": "exit",
+   "name": "THE VESTRY DOOR",
+   "room": "the chapel"
+  },
+  {
+   "id": "x.study_w.servants",
+   "a": "study_w",
+   "b": "outside",
+   "x": -13.75,
+   "z": -18,
+   "rotY": 1.5707963267948966,
+   "state": "exit",
+   "name": "THE SERVANTS PASSAGE",
+   "room": "the west study"
+  },
+  {
+   "id": "x.ballroom.orangery",
+   "a": "ballroom",
+   "b": "outside",
+   "x": 0,
+   "z": 7.15,
+   "rotY": 0,
+   "w": 3.2,
+   "h": 3.4,
+   "cy": 1.7,
+   "state": "exit",
+   "name": "THE ORANGERY DOORS",
+   "room": "the ballroom"
+  },
+  {
+   "id": "x.gallery.boards",
+   "a": "gallery",
+   "b": "outside",
+   "x": -4.8,
+   "z": -31.15,
+   "rotY": 0,
+   "state": "exit",
+   "name": "THE BOARDED BAY",
+   "room": "the long gallery"
+  },
+  {
+   "id": "x.gallery.west",
+   "a": "gallery",
+   "b": "outside",
+   "x": -13.75,
+   "z": -29.4,
+   "rotY": 1.5707963267948966,
+   "state": "exit",
+   "name": "THE WEST BAY",
+   "room": "the long gallery"
+  },
+  {
+   "id": "x.gallery.east",
+   "a": "gallery",
+   "b": "outside",
+   "x": 13.75,
+   "z": -29.4,
+   "rotY": 1.5707963267948966,
+   "state": "exit",
+   "name": "THE EAST BAY",
+   "room": "the long gallery"
+  },
+  {
+   "id": "x.gallery.north_w",
+   "a": "gallery",
+   "b": "outside",
+   "x": -11.6,
+   "z": -31.15,
+   "rotY": 0,
+   "state": "exit",
+   "name": "THE NORTH BAY",
+   "room": "the long gallery"
+  },
+  {
+   "id": "x.study_w.scullery",
+   "a": "study_w",
+   "b": "outside",
+   "x": -13.75,
+   "z": -11.5,
+   "rotY": 1.5707963267948966,
+   "state": "exit",
+   "name": "THE SCULLERY DOOR",
+   "room": "the west study"
+  },
+  {
+   "id": "x.study_e.icehouse",
+   "a": "study_e",
+   "b": "outside",
+   "x": 13.75,
+   "z": -18,
+   "rotY": 1.5707963267948966,
+   "state": "exit",
+   "name": "THE ICE HOUSE DOOR",
+   "room": "the east study"
+  },
+  {
+   "id": "x.study_e.stair",
+   "a": "study_e",
+   "b": "outside",
+   "x": 13.75,
+   "z": -11.5,
+   "rotY": 1.5707963267948966,
+   "state": "exit",
+   "name": "THE BACK STAIR DOOR",
+   "room": "the east study"
+  },
+  {
+   "id": "x.ballroom.terrace_w",
+   "a": "ballroom",
+   "b": "outside",
+   "x": -13.75,
+   "z": -5.45,
+   "rotY": 1.5707963267948966,
+   "state": "exit",
+   "name": "THE WEST TERRACE DOOR",
+   "room": "the ballroom"
+  },
+  {
+   "id": "x.ballroom.terrace_e",
+   "a": "ballroom",
+   "b": "outside",
+   "x": 13.75,
+   "z": -5.45,
+   "rotY": 1.5707963267948966,
+   "state": "exit",
+   "name": "THE EAST TERRACE DOOR",
+   "room": "the ballroom"
+  },
+  {
+   "id": "x.ballroom.south_w",
+   "a": "ballroom",
+   "b": "outside",
+   "x": -8,
+   "z": 7.15,
+   "rotY": 0,
+   "state": "exit",
+   "name": "THE GARDEN DOOR",
+   "room": "the ballroom"
+  },
+  {
+   "id": "x.chapel.crypt",
+   "a": "chapel",
+   "b": "outside",
+   "x": 5.6,
+   "z": -37.95,
+   "rotY": 0,
+   "state": "exit",
+   "name": "THE CRYPT DOOR",
+   "room": "the chapel"
+  }
+ ],
+ "EXIT_SITES": [
+  "x.chapel.vestry",
+  "x.study_w.servants",
+  "x.ballroom.orangery",
+  "x.gallery.boards",
+  "x.gallery.west",
+  "x.gallery.east",
+  "x.gallery.north_w",
+  "x.study_w.scullery",
+  "x.study_e.icehouse",
+  "x.study_e.stair",
+  "x.ballroom.terrace_w",
+  "x.ballroom.terrace_e",
+  "x.ballroom.south_w",
+  "x.chapel.crypt"
+ ],
+ "PATROL_ROUTE": [
+  {
+   "space": "ballroom",
+   "x": 9,
+   "z": 4.2,
+   "dwell": 2
+  },
+  {
+   "space": "ballroom",
+   "x": -4.2,
+   "z": 5.2,
+   "dwell": 3
+  },
+  {
+   "space": "study_e",
+   "x": 8.6,
+   "z": -12,
+   "dwell": 2.5
+  },
+  {
+   "space": "study_e",
+   "x": 4,
+   "z": -21,
+   "dwell": 2
+  },
+  {
+   "space": "gallery",
+   "x": 11,
+   "z": -27.6,
+   "dwell": 3
+  },
+  {
+   "space": "chapel",
+   "x": 7.6,
+   "z": -34.5,
+   "dwell": 2.5
+  },
+  {
+   "space": "gallery",
+   "x": 0,
+   "z": -27.6,
+   "dwell": 2
+  },
+  {
+   "space": "gallery",
+   "x": -11,
+   "z": -27.6,
+   "dwell": 3
+  },
+  {
+   "space": "study_w",
+   "x": -8.6,
+   "z": -21,
+   "dwell": 2
+  },
+  {
+   "space": "study_w",
+   "x": -4,
+   "z": -12,
+   "dwell": 2.5
+  },
+  {
+   "space": "service",
+   "x": 0,
+   "z": -16,
+   "dwell": 2
+  },
+  {
+   "space": "ballroom",
+   "x": 0,
+   "z": -4,
+   "dwell": 1.5
+  }
+ ],
+ "SPAWN": {
+  "player": [
+   [
+    -8.6,
+    -11.6
+   ],
+   [
+    -6.2,
+    -11.6
+   ]
+  ],
+  "hunter": [
+   9,
+   4.2
+  ],
+  "capture": [
+   -8.8,
+   -27.6
+  ]
+ },
+ "ANCHORS": {
+  "hide.player": [
+   -4,
+   -18
+  ],
+  "hide.hunter": [
+   -4,
+   -30
+  ],
+  "los.player": [
+   -8.6,
+   -11
+  ],
+  "los.hunter": [
+   -8.6,
+   -27
+  ],
+  "duel.player": [
+   -8,
+   -10.5
+  ],
+  "duel.hunter": [
+   -8,
+   -22.5
+  ],
+  "tell.player": [
+   -8,
+   -14
+  ],
+  "tell.hunter": [
+   -8,
+   -16.3
+  ],
+  "wall.back": [
+   -11,
+   -10.6
+  ],
+  "study_w.south": [
+   -8.6,
+   -11.6
+  ],
+  "study_w.north": [
+   -8.6,
+   -21
+  ],
+  "study_e.south": [
+   8.6,
+   -11.6
+  ],
+  "study_e.north": [
+   8.6,
+   -21
+  ],
+  "gallery.west": [
+   -12,
+   -27.6
+  ],
+  "gallery.mid": [
+   0,
+   -27.6
+  ],
+  "gallery.east": [
+   12,
+   -27.6
+  ],
+  "service.mid": [
+   0,
+   -16
+  ],
+  "service.north": [
+   0,
+   -21.5
+  ],
+  "service.south": [
+   0,
+   -11
+  ],
+  "ballroom.centre": [
+   0,
+   -0.65
+  ],
+  "ballroom.north": [
+   0,
+   -6.2
+  ],
+  "ballroom.south": [
+   0,
+   5.2
+  ],
+  "ballroom.east": [
+   11,
+   -3
+  ],
+  "chapel.centre": [
+   7.6,
+   -34.5
+  ]
+ },
+ "exports": [
+  "ANCHORS",
+  "BREACH_NOISE",
+  "CHAINED_DEFS",
+  "CONNECTORS",
+  "DOOR_H",
+  "EXIT_DEFS",
+  "EXIT_SITES",
+  "INNER_WALLS",
+  "PANELS",
+  "PANEL_CY",
+  "PANEL_H",
+  "PANEL_W",
+  "PATROL_ROUTE",
+  "PORTALS",
+  "SPACES",
+  "SPAWN",
+  "WALL_T",
+  "abuts",
+  "anchorVec",
+  "spaceAtXZ",
+  "spaceById"
+ ]
+}

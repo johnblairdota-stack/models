@@ -1,0 +1,215 @@
+<!doctype html><html><head><meta charset="utf-8">
+<title>Run Robot Run — listen to the audio</title>
+<style>
+ body{background:#14171b;color:#dfe4ea;font:15px/1.5 "Segoe UI",system-ui,sans-serif;margin:0;padding:28px 32px 80px;}
+ h1{font-size:24px;margin:0 0 6px;color:#fff;}
+ .lede{color:#9aa4b0;max-width:70ch;margin:0 0 26px;}
+ section{border-top:1px solid #262c34;padding:18px 0 6px;}
+ h2{font-size:16px;margin:0 0 4px;font-weight:600;color:#eef2f6;}
+ .id{display:inline-block;min-width:26px;color:#5bd6c8;font-variant-numeric:tabular-nums;}
+ .blurb{margin:0 0 10px;color:#93a0ad;max-width:80ch;font-size:14px;}
+ audio{width:min(640px,100%);height:38px;filter:invert(.92) hue-rotate(180deg);}
+ .m{margin-top:7px;color:#6d7885;font-size:12px;font-variant-numeric:tabular-nums;}
+ .ph{margin-top:3px;color:#8a94a0;font-size:12px;}
+ .bad{color:#ff7a7a;}
+ section.alt{border-left:3px solid #5bd6c8;padding-left:14px;margin-left:-17px;}
+ #warn{background:#3a2a12;border:1px solid #7a5a20;color:#f0d9a8;padding:12px 14px;border-radius:6px;margin:0 0 20px;}
+ #ask{background:#152a2f;border:1px solid #2c5b63;color:#cfeef2;padding:14px 16px;border-radius:6px;margin:0 0 22px;max-width:80ch;}
+ #ask b{color:#8ff0e2;}
+ code{background:#1e242b;padding:1px 5px;border-radius:3px;color:#b8e6dd;}
+</style></head><body>
+<h1>Run Robot Run — the sounds, rendered</h1>
+<p class="lede">Every clip below is the game's real audio code rendered offline
+(<code>harness/audio-render.mjs</code> -&gt; <code>src/audio/audio.js</code>). Play them in order.
+<b>Clip 08 is the one that matters</b> — it is what sixty seconds of digging actually sounds like.</p>
+<div id="ask"><b>The one question this round.</b> You said the barrier should sound like a force
+field — "non natural shock absorption" — rather than a clank. It now does, and there are
+<b>three readings of that</b> to choose between: <b>04a swallowed</b>, <b>04b shoved</b> and
+<b>04c dispersed</b> (the three clips with the cyan bar). <b>04</b> and <b>05</b> are the one
+currently wired into the game, which is <b>swallow</b> — so one of the three
+alternates is the same sound in a longer clip. Everything else on this page is unchanged from
+last time; the breakable-material voices were not touched.</div>
+<div id="warn" hidden>The players could not load the .wav files. Close this tab and double-click
+<code>LISTEN.bat</code> in this folder instead — it serves the files over localhost, which the
+browser is happy with.</div>
+<section>
+  <h2><span class="id">01</span> Impact — depth 0.00 (a fresh, undamaged surface)</h2>
+  <p class="blurb">THIS IS WHAT EVERY ORDINARY WALL IN THE HOUSE SOUNDS LIKE, ON EVERY BLOW FOREVER — wall.js's no-damage-field arm returns a hard-coded depth of 0. A dig wall, by contrast, never reports a depth this low (see 06).</p>
+  <audio controls preload="none" src="01-impact-fresh.wav" onerror="document.getElementById('warn').hidden=false"></audio>
+  <div class="m">0.8s · peak -8.6 dBFS · RMS -38.4 dB · crest 29.8 dB · centroid 541 Hz · attack 0 ms · decay 24 ms</div>
+  
+  
+</section>
+<section>
+  <h2><span class="id">02</span> Impact — depth 0.35 (into the body of the wall)</h2>
+  <p class="blurb">Meant to be the biggest, lowest, most full-bodied blow in the set.</p>
+  <audio controls preload="none" src="02-impact-mid.wav" onerror="document.getElementById('warn').hidden=false"></audio>
+  <div class="m">0.8s · peak -5.3 dBFS · RMS -30.7 dB · crest 25.3 dB · centroid 492 Hz · attack 2 ms · decay 66 ms</div>
+  
+  
+</section>
+<section>
+  <h2><span class="id">03</span> Impact — depth 0.70 (spent material, digging into cavity)</h2>
+  <p class="blurb">Should read as drier and deader than 02 without simply being quieter.</p>
+  <audio controls preload="none" src="03-impact-deep.wav" onerror="document.getElementById('warn').hidden=false"></audio>
+  <div class="m">0.8s · peak -6.9 dBFS · RMS -32.7 dB · crest 25.9 dB · centroid 444 Hz · attack 10 ms · decay 50 ms</div>
+  
+  
+</section>
+<section>
+  <h2><span class="id">04</span> Impact — THE CYAN BARRIER (depth 1.00, blocked)</h2>
+  <p class="blurb">THE ONE THAT HAS TO SAY &quot;NOT HERE&quot; WITH NO TEXT. Judge this hardest.</p>
+  <audio controls preload="none" src="04-impact-barrier.wav" onerror="document.getElementById('warn').hidden=false"></audio>
+  <div class="m">0.8s · peak -16.8 dBFS · RMS -39.6 dB · crest 22.8 dB · centroid 511 Hz · attack 18 ms · decay 42 ms</div>
+  
+  <div class="ph">over <b>16</b> consecutive blows (the honest sample — four blows is a three-delta
+      coin toss): <b>3.07 dB</b> loudness, <b>32.82%</b>
+      centroid, peak 0.073..0.224, centroid 483..1018 Hz</div>
+</section>
+<section>
+  <h2><span class="id">05</span> The barrier, four swings in a row (what a dud spot really sounds like)</h2>
+  <p class="blurb">A single hit is not the test — the player hears it 2-4 times before believing it. Listen for the rebound (a second, outward event ~40 ms after each contact) and whether four in a row start to grate.</p>
+  <audio controls preload="none" src="05-barrier-x4.wav" onerror="document.getElementById('warn').hidden=false"></audio>
+  <div class="m">4.2s · peak -16.8 dBFS · RMS -43.5 dB · crest 26.7 dB · centroid 618 Hz · attack 18 ms · decay 44 ms</div>
+  <div class="ph">4 hits · consecutive-blow spread: <b>0.63 dB</b> loudness, <b>42.3%</b> centroid, <b>9.88 dB</b> tail · silent hits: 0</div>
+  <div class="ph">over <b>16</b> consecutive blows (the honest sample — four blows is a three-delta
+      coin toss): <b>3.07 dB</b> loudness, <b>32.82%</b>
+      centroid, peak 0.073..0.224, centroid 483..1018 Hz</div>
+</section>
+<section class="alt">
+  <h2><span class="id">04a</span> ALTERNATE — SWALLOWED — the blow vanishes into it</h2>
+  <p class="blurb">No impact sound at all. The hammer makes no crack, no tap, nothing: the sound rises INTO the contact instead of starting at it, hums for 50 ms in a register no wall in this house occupies, and stops dead. Then something is pushed back out at you. Ask: does &quot;nothing hit anything&quot; read as a wall refusing you, or as a swing that did not register? One hit, a pause, then four in a row.</p>
+  <audio controls preload="none" src="04a-barrier-swallow.wav" onerror="document.getElementById('warn').hidden=false"></audio>
+  <div class="m">6.3s · peak -16.6 dBFS · RMS -44.5 dB · crest 27.9 dB · centroid 628 Hz · attack 18 ms · decay 44 ms</div>
+  <div class="ph">5 hits · consecutive-blow spread: <b>0.99 dB</b> loudness, <b>44.04%</b> centroid, <b>10.34 dB</b> tail · silent hits: 0</div>
+  <div class="ph">over <b>16</b> consecutive blows (the honest sample — four blows is a three-delta
+      coin toss): <b>3.07 dB</b> loudness, <b>32.82%</b>
+      centroid, peak 0.073..0.224, centroid 483..1018 Hz</div>
+</section>
+<section class="alt">
+  <h2><span class="id">04b</span> ALTERNATE — SHOVED — it pushes the hammer back at you</h2>
+  <p class="blurb">You DO feel a contact — a dull, dead tap with no brightness and no ring, like hitting something that gives nothing — and then the field answers, hard. The push-back is the loudest part of the sound and it flies upward and away. The safest of the three: there is an unmistakable moment of impact. One hit, a pause, then four in a row.</p>
+  <audio controls preload="none" src="04b-barrier-shove.wav" onerror="document.getElementById('warn').hidden=false"></audio>
+  <div class="m">6.3s · peak -17.3 dBFS · RMS -44.1 dB · crest 26.8 dB · centroid 487 Hz · attack 10 ms · decay 58 ms</div>
+  <div class="ph">5 hits · consecutive-blow spread: <b>1.5 dB</b> loudness, <b>36.25%</b> centroid, <b>8.58 dB</b> tail · silent hits: 0</div>
+  <div class="ph">over <b>16</b> consecutive blows (the honest sample — four blows is a three-delta
+      coin toss): <b>2.51 dB</b> loudness, <b>24.55%</b>
+      centroid, peak 0.076..0.255, centroid 346..660 Hz</div>
+</section>
+<section class="alt">
+  <h2><span class="id">04c</span> ALTERNATE — DISPERSED — the hit spreads out and travels away</h2>
+  <p class="blurb">The blow instantly stops being a point and becomes a widening wash that climbs away from you and is gone. Longest of the three at about a tenth of a second, but it is fading for nearly all of it. Ask: does &quot;the energy went somewhere else&quot; say NOT HERE, or just say pretty? One hit, a pause, then four in a row.</p>
+  <audio controls preload="none" src="04c-barrier-disperse.wav" onerror="document.getElementById('warn').hidden=false"></audio>
+  <div class="m">6.3s · peak -15.4 dBFS · RMS -43.6 dB · crest 28.2 dB · centroid 737 Hz · attack 4 ms · decay 74 ms</div>
+  <div class="ph">5 hits · consecutive-blow spread: <b>5.79 dB</b> loudness, <b>23.71%</b> centroid, <b>6.39 dB</b> tail · silent hits: 0</div>
+  <div class="ph">over <b>16</b> consecutive blows (the honest sample — four blows is a three-delta
+      coin toss): <b>4.16 dB</b> loudness, <b>19.06%</b>
+      centroid, peak 0.047..0.170, centroid 562..923 Hz</div>
+</section>
+<section>
+  <h2><span class="id">06</span> ONE SPOT, SEVEN BLOWS — the real ladder the game plays</h2>
+  <p class="blurb">Real DamageField depths 0.31 / 0.55 / 0.71 / 0.84 / 0.94 / 1.00, then one more swing that takes nothing off (the force field). This is the whole arc a player hears at one spot — and the reason clip 01 is theoretical: a dig wall never reports a depth below 0.31.</p>
+  <audio controls preload="none" src="06-one-spot-real.wav" onerror="document.getElementById('warn').hidden=false"></audio>
+  <div class="m">8s · peak -4.8 dBFS · RMS -36.2 dB · crest 31.4 dB · centroid 444 Hz · attack 2 ms · decay 64 ms</div>
+  <div class="ph">7 hits · consecutive-blow spread: <b>4.44 dB</b> loudness, <b>18.31%</b> centroid, <b>9.48 dB</b> tail · silent hits: 0</div>
+  
+</section>
+<section>
+  <h2><span class="id">07</span> FATIGUE MONTAGE A — 90 blows, depth ramped 0 -&gt; 1 (the briefed model)</h2>
+  <p class="blurb">60 s at a blow every 0.667 s with depth rising smoothly. Useful as a sweep of the whole ladder, but it is NOT what the game does — see B.</p>
+  <audio controls preload="none" src="07-montage-90-ramp.wav" onerror="document.getElementById('warn').hidden=false"></audio>
+  <div class="m">62s · peak -5 dBFS · RMS -34.5 dB · crest 29.5 dB · centroid 423 Hz · attack 0 ms · decay 48 ms</div>
+  <div class="ph">90 hits · consecutive-blow spread: <b>2.3 dB</b> loudness, <b>14.93%</b> centroid, <b>8.18 dB</b> tail · silent hits: 0</div>
+  
+</section>
+<section>
+  <h2><span class="id">08</span> FATIGUE MONTAGE B — the ACTUAL dig, real DamageField depths and real blocked flags</h2>
+  <p class="blurb">52 blows at a 0.95 s swing: two dud probes over cyan (each ending in the force field) then the dig that works. Exactly 4 blows here are a real barrier contact; 48 more report depth 1.00 on BREAKABLE material and under the old depth-only rule every one of those played the &quot;not here&quot; sound too. This is the montage that matters — it is what sixty seconds of the game sounds like.</p>
+  <audio controls preload="none" src="08-montage-real-dig.wav" onerror="document.getElementById('warn').hidden=false"></audio>
+  <div class="m">51.2s · peak -7.5 dBFS · RMS -34.1 dB · crest 26.6 dB · centroid 472 Hz · attack 8 ms · decay 58 ms</div>
+  <div class="ph">52 hits · consecutive-blow spread: <b>1.06 dB</b> loudness, <b>13.09%</b> centroid, <b>5.29 dB</b> tail · silent hits: 0</div>
+  
+</section>
+<section>
+  <h2><span class="id">09</span> Nailgun — one shot</h2>
+  <p class="blurb">One of the three voices John already called &quot;pretty meh&quot;.</p>
+  <audio controls preload="none" src="09-gun-single.wav" onerror="document.getElementById('warn').hidden=false"></audio>
+  <div class="m">0.5s · peak -9.4 dBFS · RMS -36.9 dB · crest 27.5 dB · centroid 661 Hz · attack 2 ms · decay 20 ms</div>
+  
+  
+</section>
+<section>
+  <h2><span class="id">10</span> Nailgun — held trigger, 12 shots at the real 0.13 s cooldown</h2>
+  <p class="blurb">The most-repeated sound in the game. Does a held trigger read as a mechanism or as a buzz?</p>
+  <audio controls preload="none" src="10-gun-burst.wav" onerror="document.getElementById('warn').hidden=false"></audio>
+  <div class="m">2.2s · peak -7 dBFS · RMS -31.7 dB · crest 24.7 dB · centroid 642 Hz · attack 2 ms · decay 18 ms</div>
+  <div class="ph">12 hits · consecutive-blow spread: <b>1.44 dB</b> loudness, <b>9.98%</b> centroid, <b>n/a</b> tail · silent hits: 0</div>
+  
+</section>
+<section>
+  <h2><span class="id">11</span> Wall stage crossings — wallpaper, plaster, lath, beam, BREACH</h2>
+  <p class="blurb">Fires once per stage boundary. Should read as five materials, not one crack five times.</p>
+  <audio controls preload="none" src="11-wall-stages.wav" onerror="document.getElementById('warn').hidden=false"></audio>
+  <div class="m">5s · peak -8.2 dBFS · RMS -32.6 dB · crest 24.4 dB · centroid 290 Hz · attack 2 ms · decay 124 ms</div>
+  <div class="ph">5 hits · consecutive-blow spread: <b>5.57 dB</b> loudness, <b>61.4%</b> centroid, <b>18.16 dB</b> tail · silent hits: 0</div>
+  
+</section>
+<section>
+  <h2><span class="id">13</span> Door bang — the FIRST blow on an untouched chained door</h2>
+  <p class="blurb">One blow, close, no wall between. Listen for the chain: a tight little cluster of metal right on the impact. That layer is the only thing saying this is a CHAINED door and not a heavy knock — if it does not read, the mechanic has no identity.</p>
+  <audio controls preload="none" src="13-door-first.wav" onerror="document.getElementById('warn').hidden=false"></audio>
+  <div class="m">1.2s · peak -11.4 dBFS · RMS -38.8 dB · crest 27.4 dB · centroid 866 Hz · attack 10 ms · decay 70 ms</div>
+  
+  
+</section>
+<section>
+  <h2><span class="id">14</span> Door bang — the LAST blow before it comes off its hinges</h2>
+  <p class="blurb">The same event at escalation 1.0. Against 13 it should differ by MATERIAL, not by volume: an octave lower, the chain loose and long instead of tight, a timber split that simply does not exist in 13, and a hinge groan bending underneath. If this only sounds LOUDER than 13, the escalation has failed.</p>
+  <audio controls preload="none" src="14-door-last.wav" onerror="document.getElementById('warn').hidden=false"></audio>
+  <div class="m">1.6s · peak -7.2 dBFS · RMS -32.5 dB · crest 25.3 dB · centroid 433 Hz · attack 6 ms · decay 150 ms</div>
+  
+  
+</section>
+<section>
+  <h2><span class="id">15</span> THE TIMER — all six blows, real progress, real 2.4 s cadence</h2>
+  <p class="blurb">This is John's timer end to end: six blows at the shipped cadence, escalating through the door's own remaining health. The question to judge is whether you can tell, by ear alone and without counting, that blow five is nearly through and blow two is not.</p>
+  <audio controls preload="none" src="15-door-timer.wav" onerror="document.getElementById('warn').hidden=false"></audio>
+  <div class="m">16.1s · peak -6.6 dBFS · RMS -37.5 dB · crest 30.9 dB · centroid 609 Hz · attack 6 ms · decay 140 ms</div>
+  
+  
+</section>
+<section>
+  <h2><span class="id">16</span> The same six blows AS THE PLAYER IN THE SEALED ROOM HEARS THEM</h2>
+  <p class="blurb">Distance 6 m with the door between you and it, which is the case the mechanic exists for — the top is rolled off by 72% so the chain and the split are muffled and the mass carries. Judge this one for DREAD and for locatability; 15 is the one to judge the escalation on.</p>
+  <audio controls preload="none" src="16-door-from-inside.wav" onerror="document.getElementById('warn').hidden=false"></audio>
+  <div class="m">16.1s · peak -12.9 dBFS · RMS -41 dB · crest 28.1 dB · centroid 290 Hz · attack 20 ms · decay 128 ms</div>
+  
+  
+</section>
+<section>
+  <h2><span class="id">12</span> Hunter proximity — threat 0 -&gt; 1, then committed</h2>
+  <p class="blurb">A continuous cue, not a one-shot. Should stay alive across 18 s without becoming wallpaper.</p>
+  <audio controls preload="none" src="12-hunter-ramp.wav" onerror="document.getElementById('warn').hidden=false"></audio>
+  <div class="m">18s · peak -10.9 dBFS · RMS -25.4 dB · crest 14.5 dB · centroid 253 Hz · attack 92 ms · decay 1204 ms</div>
+  
+  
+</section>
+<section>
+<h2><span class="id">!</span> What changed, and what is still open</h2>
+<p class="blurb"><b>Only the barrier changed.</b> Clips 01, 02, 03, 09, 10, 11 and 12 are byte-for-byte
+the same design as the last render — you said 08 was on track, so the breakable-material voices were
+left alone. 04, 05, 06 and 08 move only because the barrier blows inside them are now the field.</p>
+<p class="blurb"><b>The barrier is deliberately the quietest thing you swing at</b>, on peak
+<i>and</i> on RMS. It used to be the loudest hit in the game, 18 dB over a fresh wall, which taught
+players that a dud spot was the best spot. If 04 sounds small next to 02, that is the point — but if
+it sounds so small you would miss it mid-fight, say so, because that is the one number that is easy
+to move back.</p>
+<p class="blurb"><b>The rebound survives in all three.</b> A hard thing throws a hammer back and
+nobody needs that explained; each voice keeps a second, separate event 36-62 ms after the contact.
+What differs is what that second event sounds like — in every case it travels <i>outward</i>, away
+from you, rather than ringing.</p>
+<p class="blurb"><b>Still open, and not in the audio file:</b> ordinary house walls have one sound
+and it never develops. <code>wall.js</code>'s no-damage-field arm returns <code>depthAt: 0</code> on
+every blow, so clip 01 is the entire hammer experience outside a dig wall.</p>
+</section>
+</body></html>

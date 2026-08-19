@@ -1,0 +1,12 @@
+import { chromium } from 'playwright';
+const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader'] });
+const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+const lines = [];
+page.on('console', m => lines.push(m.text()));
+page.on('pageerror', e => lines.push('PAGEERROR: ' + e.message));
+await page.goto('http://localhost:5178/?view=game.play&capture=1&mesh=1', { waitUntil: 'load' });
+await page.waitForTimeout(60000);
+const err = await page.evaluate(() => window.__rrrError ?? null);
+console.log('__rrrError:', err ? String(err).split('\n')[0] : 'none');
+for (const l of lines) if (/mesh|avatar|ERROR|Error|identity/i.test(l)) console.log(' >', l.slice(0, 160));
+await browser.close();

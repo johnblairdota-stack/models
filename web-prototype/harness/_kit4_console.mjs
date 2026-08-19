@@ -1,0 +1,10 @@
+import { chromium } from 'playwright';
+const browser = await chromium.launch({ args: ['--use-gl=angle','--enable-unsafe-swiftshader'] });
+const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+const lines = [];
+page.on('console', (m) => lines.push(m.text()));
+page.on('pageerror', (e) => lines.push('PAGE ERROR: ' + e.message));
+await page.goto('http://localhost:5178/?view=mesh.animated&capture=1&solo=1&clip=merged&anim=Alert&azim=180', { waitUntil: 'load' });
+await page.waitForTimeout(9000);
+await browser.close();
+console.log(lines.length + " console lines"); for (const l of lines) console.log(l);
