@@ -1,0 +1,20 @@
+# Dependencies and build output
+node_modules/
+dist/
+
+# Generated critic / playtest dumps (multi-GB, rebuild locally)
+web-prototype/progress/
+web-prototype/tmp_critic/
+web-prototype/harness/out/
+
+# Secrets and local env
+.env
+.env.*
+*.local
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log
+__pycache__/
+*.pyc

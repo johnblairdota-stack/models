@@ -1,0 +1,1984 @@
+import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { estate } from './_studio.js';
+import { estateMaterials, ceilingMat, foxedMirrorMat, parquetMat } from '../world/materials-local.js';
+import { GeoBin, STOREY, STOREY2 } from '../world/kit.js';
+/**
+ * 🆕 **THE ARCHITECTURE MOVED OUT** (`estate-3`, 2026-08-09). Every kit builder this view used
+ * to call by hand — `wallRun`, `windowBay`, `archedOpening`, `cove`, `cofferedCeiling`,
+ * `ceilingRose`, `pilaster`, `balustrade`, `pierGlass`, `urnOnPedestal`, `consoleTable` — is now
+ * called from `src/world/ballroom-order.js`, which the PLAYABLE ballroom builds from as well.
+ * This view still passes every literal it always had, and its capture is byte-identical across
+ * the extraction. See the order's header, and the block at the first `ballroomOrder` call below.
+ */
+import { ballroomPlan, ballroomOrder } from '../world/ballroom-order.js';
+import { dustSheetRow, chairRow, crateStack, trestle, paperScatter } from '../world/props.js';
+import { buildChandelier } from '../world/chandelier.js';
+import { sconce, candelabra, driveFlicker } from '../lighting/practicals.js';
+import { lightShaft, dustMotes, lightPool, glowPatch, driveVolumetrics } from '../lighting/volumetric.js';
+import { ballroomEnv, spotKey, bounceFill, GRADES } from '../lighting/rig.js';
+import { buildUnit4H } from '../characters/unit4h.js';
+
+/**
+ * ROOM.BALLROOM — the hero space. Battlefield 1's "Ballroom Blitz" and the Hitman 3 Paris
+ * atrium are the bar.
+ *
+ * What those references actually teach, and what this room is built to:
+ *   1. THE ORNAMENT DENSITY IS ABSURD. Every bay carries a pilaster with a capital, a
+ *      panel with a gilt bolection inside a bolection, a dado, a frieze, a dentil cornice
+ *      and a coffer overhead. Under-ornamenting is the standard failure and it is what
+ *      makes a WebGL room read as a box with wallpaper.
+ *   2. DOUBLE HEIGHT, and the eye must be able to measure it. The window order runs the
+ *      full 9.6 m — two storeys of the kit stacked exactly — with a musicians' gallery
+ *      cutting across at 5.2 so there is a horizontal to read the height against.
+ *   3. THE WINDOWS DO THE LIGHTING. A row of real holes in the long wall and ONE spot
+ *      outside: the shadow map turns that into six hard-edged patches of daylight
+ *      marching down a black-and-white marble chequer, which is the Ballroom Blitz shot.
+ *   4. Everything else is a practical. Three crystal chandeliers, sconces between the
+ *      piers, a pair of candelabra. No second shadow caster anywhere.
+ *
+ * PLAN (metres)
+ *   26 x 16 x 9.6.  Window wall x = -13 (six bays at BAY*1.8).  Mirror wall x = +13 with a
+ *   musicians' gallery over it.  Arched openings in the end wall z = -8.
+ */
+
+const R = { x0: -13, x1: 13, z0: -8, z1: 8, h: STOREY2 };
+const WIN = { w: 2.05, sill: 1.05, h: 4.35, spacing: 4.2, n: 5, z0: -6.4 };
+const GALLERY_Y = 5.2;
+
+/**
+ * ---- `?mirror=` — THE PERMANENT ABLATION TOGGLE FOR THE END-PLATE REFLECTION ----------
+ *
+ * This exists because `critic-estate-7` measured this view at gpu 2.24-2.28 ms against a
+ * 1.39 ms budget, over two consistent runs, and COULD NOT ATTRIBUTE IT — the round that
+ * swapped the plates from a cube envmap to a planar reflection left no way to render the
+ * old path, so "is the mirror the cost?" was unanswerable and the reading sat open. That
+ * is the exact gap `perf-ao` avoided by keeping `?aodepth=prepass` permanently, and it is
+ * why this is NOT debug scaffolding to be tidied away later: a change that cannot be
+ * ablated cannot be judged, and this view has now paid that price once.
+ *
+ *   ?mirror=planar   (default) the shipping path — one scene render per plate at build
+ *                    time into a 576x1024 target, sampled through EO_PLANAR.
+ *   ?mirror=cube     the pre-r7 path — one 640 cube per plate (PMREM floors it to 512),
+ *                    envMapIntensity 1.35, no planar patch and no EO_PLANAR program.
+ *   ?mirror=off      no end plates at all. Not a shipping look; it is the strict upper
+ *                    bound on what these two plates can possibly cost per frame, which is
+ *                    the number that actually settles the attribution question.
+ *
+ * `mirror=cube` and `mirror=off` change the PICTURE, so never file a look verdict from
+ * them. They change GPU time by the plates' own per-frame cost and nothing else.
+ *
+ * ---- WHAT THE TOGGLE ANSWERED, AND IT IS NOT THE MIRROR ------------------------------
+ *
+ * `node harness/perf-ab.mjs --view room.ballroom --extra "quality=medium" --config planar
+ * --config cube --config off`, three interleaved rounds in one session after a discarded
+ * round, `quality=medium`, RTX 3060 Ti:
+ *
+ *     planar 2.32 ms   cube 2.31 ms   off 2.30 ms      (within-config spread 0.02-0.07)
+ *
+ * The plates cost NOTHING per frame, and REMOVING THEM ENTIRELY costs nothing either — the
+ * delta is smaller than the instrument can resolve. `estate-owner-9`'s "per-frame cost is
+ * zero both before and after" is CONFIRMED, and `critic-estate-7`'s 2.24-2.28 ms is also
+ * confirmed (I read 2.30-2.38 on a warmer machine). Both were right; they were about
+ * different things.
+ *
+ * ⚠️ THE OVERRUN IS THE LIGHT COUNT, AND NOTHING ELSE COMES CLOSE. Same session, same tool:
+ *
+ *     census                       19 PointLight + 1 SpotLight + 3 DirectionalLight
+ *     all 19 point lights removed  2.33 -> 1.23 ms   -1.10 ms   <- 47% OF THE FRAME
+ *     all 23 lights removed        2.33 -> 0.95 ms   -1.38 ms
+ *     scene.environment = null     2.33 -> 2.12 ms   -0.21 ms
+ *     the shadow-casting spot      2.33 -> 2.17 ms   -0.16 ms
+ *     AO pass off                  2.36 -> 2.21 ms   -0.15 ms
+ *     bloom off                    2.36 -> 2.23 ms   -0.13 ms
+ *     FXAA off                     2.36 -> 2.34 ms   -0.02 ms   (not resolvable)
+ *     ALL volumetrics hidden       2.36 -> 2.34 ms   -0.02 ms   (not resolvable)
+ *     renderScale 0.5              2.36 -> 0.81 ms   -1.55 ms   <- fragment-bound, not geometry
+ *
+ * That is ~0.058 ms per point light at 1080p, paid by EVERY fragment: three.js's forward
+ * renderer unrolls `NUM_POINT_LIGHTS` into the fragment shader and evaluates all of them
+ * everywhere, so a sconce's 6.5 m `distance` culls its CONTRIBUTION and not its COST.
+ * Three chandeliers are two PointLights each (`chandelier.js` core + upper), nine sconces
+ * and two candelabra are one each, plus two bounce cards: 6 + 9 + 2 + 2 = 19 exactly.
+ *
+ * ⚠️ IT IS NOT THIS VIEW'S DEFECT, IT IS THE SHOWCASE RIG'S — `room.gallery` measures WORSE
+ * and nobody has ever flagged it: 3.32 ms with 17 point + 13 SPOT + 3 directional, and
+ * killing all 33 takes it to 0.90 ms (-2.42, i.e. 73% of its frame is lights).
+ *
+ * ⚠️ AND THE SHIPPING GAME DOES NOT SHARE IT. `views/game.js` runs a FIXED FIVE-LIGHT RIG
+ * for the whole mansion (one spot, three points, one hemisphere) precisely because
+ * `numPointLights` is in three's program cache key — which is why `perf-spaces.mjs` reads
+ * the worst mansion space at 1.22-1.38 ms against the same 1.39 ms budget. The budget is a
+ * GAME budget and the game meets it. These six estate views are art references lit like art
+ * references; bringing this one under 1.39 ms means deleting ~16 of its 19 practicals, which
+ * is a look change in the room whose whole job is the look. NOT DONE UNILATERALLY: it is
+ * priced above so a critic or the lead can rule on it, rather than a builder quietly
+ * trading the hero room's atmosphere for a number the shipping renderer already clears.
+ */
+// ITEM 2 (estate-owner-16, ROUND 16, LOW PRIORITY): TRIED AND REVERTED. A critic's 3x crop of
+// the drape (ITEM 3's fix, `estate-owner-15`) found "a flat, foldless plane with only a rim-lit
+// edge" where the art shows fold banding, so this round tried replacing each side panel's flat
+// `box()` with a real pleated surface (a PlaneGeometry sine-displaced in depth, ~5 folds across
+// the 0.55 m panel). Geometry only — it never touched the drape's colour — but even at amp 0.012
+// (a bare 12 mm ripple, visually almost flat) `grade.mjs`'s darkest-decile L read 8.05 against a
+// ceiling of 8.0, and the budget had only ~0.3 left after ITEM 1 (vestibule, this round) moved
+// it 7.5 -> 7.7. Larger amplitudes (0.03, 0.055) read 8.1-8.2, so the failure was not amplitude —
+// it was ANY relief at all, most likely the new AO cavities firing at full occlusion regardless
+// of visible fold depth, or the flat box's own thin edge faces (lost when swapped for a single
+// plane) having been carrying more of the panel's rim highlight than expected. Not chased
+// further because "do not break the canonical gate" is explicit and this item is filed
+// low-priority/optional. Left for a future round with real toe-decile headroom to spend, or a
+// fix that keeps the box's edge faces and displaces only its front face.
+
+export default async function view(args = {}) {
+  const qs = args.params ?? new URLSearchParams(location.search);
+  const MIRROR = args.mirror ?? qs.get('mirror') ?? 'planar';
+  if (!['planar', 'cube', 'off'].includes(MIRROR)) {
+    console.warn(`[room.ballroom] unknown ?mirror=${MIRROR} — expected planar|cube|off. Using planar.`);
+  }
+  const mirrorMode = ['planar', 'cube', 'off'].includes(MIRROR) ? MIRROR : 'planar';
+  // `?planarclip=flat` restores the pre-r10 FLAT near plane on the planar reflection, kept
+  // permanently for the same reason `?mirror=` is: it is the only way to see what the oblique
+  // clip is worth, and the round it replaced argued from a picture nobody could ablate. It is
+  // also the break-test — with `flat`, the back of the end wall comes back and covers half the
+  // left plate. See fitMirrorCamera.
+  const PLANAR_CLIP = qs.get('planarclip') === 'flat' ? 'flat' : 'oblique';
+  // ---- `?mirrorfilter=` — THE PERMANENT ABLATION TOGGLE FOR THE PLATE'S MINIFICATION -----
+  //
+  // ROUND 11. The remaining hate on this piece is "the near plate is still visibly softer
+  // than the far one", and it is NOT a resolution problem at either end. Measured
+  // (`harness/_tmp_eo11_plates.mjs`):
+  //
+  //     end-mirror.l   71 x 142 screen px   reflection target 506 x 1024   -> 7.1 : 1
+  //     end-mirror.r  188 x 245 screen px   reflection target 568 x 1024   -> 3.0 : 1
+  //
+  // Both plates render MORE reflection than they can show and then throw it away: the
+  // target was created with `minFilter: LinearFilter` and no mip chain, so one screen pixel
+  // took a single bilinear tap out of a 7 x 7 texel footprint. That is textbook minification
+  // ALIASING, and it destroys exactly the content the critic is looking for — the window's
+  // glazing bars are 4-8 texels wide, i.e. far under the sampling interval, so they arrive as
+  // speckle rather than as a grid. `harness/_tmp_eo11_rt.mjs` dumps the target and
+  // `_tmp_eo11_ideal.mjs` box-filters it to 71 x 142: the correctly filtered version of the
+  // SAME data is fully legible at the plate's real screen size.
+  //
+  //   ?mirrorfilter=point   the pre-r11 path: LinearFilter, no mip chain, one tap. THE BREAK
+  //                         TEST — it puts the aliasing straight back.
+  //   ?mirrorfilter=mip     trilinear + anisotropy, explicit LOD from the projected uv.
+  //   ?mirrorfilter=sharp   (default) mip, plus a one-octave unsharp mask in the mip domain,
+  //                         which gives back the acutance a box-filtered minification takes
+  //                         out at the Nyquist band. One extra texture fetch.
+  const MF = qs.get('mirrorfilter');
+  const MIRROR_FILTER = ['point', 'mip', 'sharp'].includes(MF) ? MF : 'sharp';
+  // `?floorreflect=0` — the ablation for the near-floor washout fix. See the block after the
+  // end plates for the measurement that motivated it.
+  const FLOOR_REFLECT = qs.get('floorreflect') !== '0';
+  // ---- `?floor=` — THE PERMANENT ABLATION TOGGLE FOR THE FLOOR MATERIAL -------------------
+  //
+  // ROUND 14. `critic-estate-11`'s fastest remaining tell: the bar (`refs/bf1/bf1-ballroom-01.png`
+  // — note `refs/bf1/…`, not `progress/refs/…`) has a floor of WOOD PARQUET with chequer marble
+  // only at the room's EDGES; this piece has run chequer edge to edge since round 1. The brief
+  // filed three things this was expected to move: the whole-frame macro overshoot (ours 0.8815
+  // against the art's 0.7796), the shaded-floor macro, and the paper litter's admitted ~40%
+  // invisibility (half this floor is white marble at paper's own value).
+  //
+  // ⚠ MEASURED AFTER THE FACT, ONE OF THREE DID NOT MOVE THE WAY EXPECTED. Whole-frame macro got
+  // WORSE, not better — 0.92-1.00 depending on the parquet's own brightness (see the material
+  // block below), and reflection was ruled out as the cause. The mechanism, best guess: an
+  // edge-to-edge alternating chequer averages toward its own block mean at 32 px (a block spans
+  // several tiles), where a large uniform dark field next to a blown sun patch does not — so
+  // replacing "busy but self-cancelling" with "flat plus one hard extreme" widens std/mean
+  // regardless of the field's absolute tone. The paper legibility win is real and proven by
+  // ablation (unchanged from r13, see `_eo13_paper.mjs`'s own note below) and the composition
+  // now matches the bar's, which was the critic's actual top-line complaint; the whole-frame
+  // macro NUMBER is not the same thing as the composition match and does not confirm it.
+  //
+  // ⚠ COUPLED TO THE r9 PLANAR-REFLECTION WIN. That patch's roughness gate (lo 0.06 / hi 0.42) is
+  // authored for polished marble baking at ~0.135 roughness; PARQUET_SURFACE's own `rough`
+  // formula centres near 0.40-0.45 in the clean field before wear or plank joints push it past
+  // 0.6 — roughly double marble's baseline — so reusing marble's gate on wood asks for a knee that
+  // has already closed and the floor would show no sheen at all. The patch is applied TWICE, once
+  // per material, off the SAME render target (the two planes are 4 mm apart, i.e. coplanar for
+  // this purpose, so one capture serves both) — see the reflection block below.
+  //
+  //   ?floor=mixed     the parquet field with the chequer marble left showing as a border at the
+  //                    room's edges, matching the bar's composition.
+  //   ?floor=chequer   THE COMPLETE PRE-r14 REVERT: no parquet plane is built, no second
+  //                    reflection patch runs, and the base chequer plane's own gate is untouched
+  //                    — byte-for-byte the r13 floor.
+  //
+  // DEFAULT DEPENDS ON `?cam=`, NOT A FIXED VALUE, and this is the fix applying its own lesson to
+  // itself: this file's `?cam=r10` promises "every historic number stays checkable", and the
+  // r10/pre-r14 gate figure was filed under the all-chequer floor — that material did not exist
+  // at r10 any more than the vestibule key or the 165-sheet paper did. Building it unconditionally
+  // (the first version of this line) would have been the EXACT bug `toggle-audit-1` found in
+  // those two — caught here by re-measuring `?cam=r10` after landing this item and finding the
+  // gate did not reproduce (0.147/33.5/5.6, a WARN, against the recorded 0.123/39.1/4.5) until
+  // this coupling was added. An explicit `?floor=` still wins over the camera either way, so
+  // `?floor=mixed&cam=r10` (the new floor under the old camera) stays reachable.
+  const FLOOR = qs.has('floor')
+    ? (qs.get('floor') === 'chequer' ? 'chequer' : 'mixed')
+    : (qs.get('cam') === 'r10' ? 'chequer' : 'mixed');
+  const FLOOR_BORDER = 2.2; // metres of chequer left showing at each edge under `mixed`
+  // ---- `?daylight=` and `?depot=` — ROUND 12's TWO ABLATIONS ------------------------------
+  //
+  // `critic-estate-9` and `estate-owner-11` independently measured the one remaining gap to
+  // the locked art as MACRO LIGHT/SHADOW VARIATION: 32-px block variation on the lit floor
+  // 0.658 against the art's 0.915, with grain, micro-contrast, Sobel acutance and 10-90 edge
+  // rise all AT PARITY. "This room is evenly lit; the reference has big hard sun patches and
+  // deep shade."
+  //
+  // ⚠ MEASURED, AND IT IS NOT A GRADE PROBLEM AND NOT A SHADOW-TINT PROBLEM. Live ablation in
+  // one boot (`harness/_eo12_macro.mjs`, four floor rects on the 1920x1080 frame):
+  //
+  //     the 19 point lights, ALL OFF        floor mean 78.3 -> 77.7    -0.8%
+  //     the 19 point lights, ALL x6         floor mean 78.3 -> 58.7*   (*at env 1.8; +1%)
+  //     the one SpotLight OFF               floor mean 78.3 -> 75.9    -3.1%
+  //     the one SpotLight x12               floor mean 78.3 -> 84.4    +7.8%
+  //     the 3 DirectionalLights OFF         floor mean 78.3 -> 74.9    -4.3%
+  //     scene.environmentIntensity 3.2->0.8 floor mean 78.3 -> 22.9    -71%
+  //
+  // So ~95% of the light on this floor is a STRUCTURELESS FIVE-BOX IBL SHELL. That is the
+  // whole of "evenly lit": the dominant source in the room has no shape, casts no shadow and
+  // arrives equally from every direction, and no amount of work on the 20 punctual lights can
+  // be seen underneath it. `estate-owner-11`'s "sweeping the SpotLight 300 -> 650 moves median
+  // L 49.8 -> 49.8" is CONFIRMED and generalised: at 3.2 the shell drowns everything.
+  //
+  // ⚠ AND THE 19 POINT LIGHTS COST 47% OF THE FRAME (-1.10 ms of 2.33, `estate-owner-10`)
+  // WHILE CONTRIBUTING UNDER 1% OF ITS LIGHT. They are not deleted here — the sconce and
+  // chandelier GLOWS are sprites and would survive, but that is a look call on the hero room
+  // and it belongs to a critic or the lead. It is priced, not taken.
+  //
+  //   ?daylight=hard  (default) the rebalance: the shell down, the sun up by the same energy,
+  //                   the shaped bounce up. Same lamps, same count, same programs.
+  //   ?daylight=flat  the pre-r12 levels EXACTLY, as the break test.
+  //   ?depot=0        no packing cases, no trestles, no loose paper — the pre-r12 dressing.
+  //   ?sunmap=N       the shadow map edge for the one daylight spot (default 2048, r11 was
+  //                   1024). Its own toggle because `?daylight=flat` moves nine things at once
+  //                   and the whole +0.22 ms this round costs turned out to be here: with the
+  //                   depot ablated the geometry is NOT RESOLVED (-0.09 ms against a 0.24 ms
+  //                   spread), so the map is the bill and it needs to be priceable on its own.
+  const DAYLIGHT = qs.get('daylight') === 'flat' ? 'flat' : 'hard';
+  const DEPOT = qs.get('depot') !== '0';
+  // ⚠ `null` WHEN THE PARAM IS ABSENT, and the first version of this line got it wrong in the
+  // way this project keeps recording: `Math.max(256, Math.min(4096, +(qs.get('sunmap')||0)||0))`
+  // clamps the ABSENT case to 256, so the default build silently shipped a 256 px shadow map.
+  // It did not throw and it did not look broken — it looked like a slightly brighter room —
+  // and it moved the lit floor's mean 80.1 -> 85.9 and its p95 205 -> 240, i.e. it would have
+  // been read as a real lighting result. Caught only because two captures of "the same" build
+  // disagreed. A clamp is not a default.
+  const SUNMAP = qs.has('sunmap') ? Math.max(256, Math.min(4096, +qs.get('sunmap') || 1024)) : null;
+  //   ?vol=0          no light shafts and no dust motes. Round 12 moves the three shafts from
+  //                   windows 1/2/3 to 0/1/2 (window 3 is at z 6.2, i.e. beside the camera at
+  //                   z 6.1, so its prism was almost entirely off-screen while window 0's fills
+  //                   the depth of the frame). This view is FRAGMENT-BOUND — renderScale 0.5
+  //                   takes it 2.36 -> 0.81 ms — so moving a big additive volume INTO the frame
+  //                   is a real suspect for the round's cost, and `estate-owner-10`'s
+  //                   "volumetrics not resolvable" was measured on the OLD placement.
+  const VOLUMETRICS = qs.get('vol') !== '0';
+  // Every level this round moves, in one table, so `flat` is a real reproduction of the old
+  // build rather than an approximation of it.
+  //
+  // ⚠ THE GRADE IS PART OF THE TOGGLE, and it has to be. Dropping the shell from 3.2 to 1.70
+  // takes the frame's median luminance to 24 and its darkest decile to 1.1 — a FAIL and a WARN
+  // on `harness/grade.mjs` — so the round would be un-shippable without re-centring the curve
+  // over the new light. Leaving `GRADES.ballroom` at the r11 numbers under `?daylight=flat`
+  // would then compare the old LIGHTING against the new GRADE, which is not the ablation
+  // anybody wants and is exactly the kind of half-reverted A/B this project keeps being burnt
+  // by. `flat` restores both.
+  //
+  // ⚠ AND THIS IS NOT "A STRONGER GRADE", which is the thing the brief warned against. Exposure
+  // moves the whole curve and cannot create a difference between two points on it; what changed
+  // is the RATIO between the two, and that is measurable independently of any grade:
+  // turning the spot off now takes the lit floor down 40%, where before it took it down 3.1%.
+  // The exposure lift is there to put the median back in the gate's 30-60 band after the
+  // ambient came out, and the numbers below were solved together on one boot
+  // (`harness/_eo12_gradesweep.mjs`, gate and macro in the same table).
+  // ⚠ `lift: [0, 0, 0]`, NOT `lift: undefined`. Spreading an explicit `undefined` over the base
+  // grade DELETES the field, and `Pipeline._applyGrade` does `fromArray(grade.lift)` with no
+  // guard — so `?daylight=flat` threw `Cannot read properties of undefined` on the first frame
+  // and shoot.mjs reported the whole view FAILED. An ablation that cannot boot is worse than no
+  // ablation, because the next owner reads the flag in the header and believes it works.
+  const FLAT_GRADE = {
+    exposure: 1.05, vignette: 0.26, haze: 0.016, toeCrush: 0.005,
+    highlightTint: [1.015, 1.00, 0.985], lift: [0, 0, 0],
+  };
+  //
+  // ⚠ THE SUN'S DIRECTION IS IN THIS TABLE TOO, AND IT HAS TO BE. Round 12 also rakes the sun
+  // from 26.1 to 21.6 degrees, which moves every floor patch and therefore which windows get a
+  // shaft and where the pool decals land. A `flat` that restored the LEVELS but kept the new
+  // ANGLE would be a break test of half the change, reported as a break test of all of it.
+  const LIGHTS = DAYLIGHT === 'flat'
+    ? { env: 3.2, sun: 300, bounce: 1.0, bounceCard: 2.2, grade: FLAT_GRADE,
+        dir: [0.865, -0.44, 0.24], aim: null, angle: 0.34, penumbra: 0.28, mapSize: 1024,
+        shaftWins: [1, 2, 3], cardWins: [1, 3] }
+    : { env: 1.70, sun: 19400, bounce: 2.1, bounceCard: 5.0, grade: null,
+        dir: [0.885, -0.375, 0.265], aim: [-4.7, 0, 0.2], angle: 0.42, penumbra: 0.22, mapSize: 2048,
+        shaftWins: [0, 1, 2], cardWins: [0, 2] };
+
+  // ---- `?cam=overlook|r10` — THE PERMANENT ABLATION TOGGLE FOR THE FRAMING ----------------
+  //
+  // ROUND 13. `critic-estate-10`'s #1 hate is not about a surface at all:
+  //
+  //   "shown unlabelled beside the piece's own PRIMARY bar (refs/bf1/bf1-ballroom-01.png), the
+  //    fastest tell that these are not the same shot is the CAMERA, not any pixel-level render
+  //    defect. The bar is a high overlook that is mostly wood parquet with checker only at the
+  //    room's edges; this piece's default camera is a close three-quarter view dominated by
+  //    checkerboard marble and ~45% ceiling/upper wall."
+  //
+  // Four rounds of surface work had been done inside a frame composed differently from the thing
+  // it is judged against. `harness/_eo13_cam.mjs` puts a number on it that cannot be confounded
+  // by lighting or grade: cast every pixel's ray and ask which face of the room box (x -13..13,
+  // y 0..9.6, z -8..8) it leaves through. That is the frame's SUBJECT, independent of what is
+  // standing in the way.
+  //
+  //     camera      floor%   ceiling%   window wall%   end wall%   near wall%   room corners
+  //     r10          30.5      20.7        17.7          30.8         0.4          3 of 8
+  //     overlook     40.3       3.7        18.9          31.3         5.8          4 of 8
+  //
+  // The eye height is what moves it: at 1.62 m the floor is seen at ~6 degrees of grazing and
+  // costs a third of the frame; from the musicians' gallery it is seen at ~17 and costs 40%,
+  // and the coffered ceiling stops being a fifth of the picture. Nothing about the room's read
+  // is given up for it — see the note on scale below.
+  //
+  //   ?cam=overlook  (default) from just inboard of the musicians' gallery rail, pitched down.
+  //   ?cam=r10       the shipping camera of rounds 1-12, EXACTLY. Every number on this piece
+  //                  from `critic-estate-10` and earlier was taken here, so this is the only
+  //                  way to compare against the board's own history rather than re-measure it.
+  //
+  // ⚠ THE FRAMING IS A SCENE-BUILD INPUT, NOT JUST A VIEW MATRIX, so it cannot be changed by
+  // moving the camera live and there is no shortcut. The floor's planar reflection AND both end
+  // plates are rendered ONCE at build time through a camera reflected about their own plane;
+  // move the camera after that and those three surfaces — including the largest and best one in
+  // the room — keep the OLD camera's reflection. `_eo13_cam.mjs` says so in its own header and
+  // its pictures show it. Choose a framing live; capture it from source.
+  const CAM_DEFS = {
+    r10: { pos: [7.4, 1.62, 6.1], target: [-5.2, 4.1, -6.4], fov: 66 },
+    overlook: { pos: [9.6, 6.6, 7.0], target: [-4.5, 1.0, -4.0], fov: 56 },
+  };
+  const CAM = qs.get('cam') === 'r10' ? 'r10' : 'overlook';
+  const CAM_DEF = CAM_DEFS[CAM];
+
+  const engine = await estate({
+    cameraPos: args.cameraPos ?? CAM_DEF.pos,
+    target: args.target ?? CAM_DEF.target,
+    fov: args.fov ?? CAM_DEF.fov,
+    far: 90,
+    envIntensity: 1.0,
+    // ITEM 2 (camtool-1): `?orbit=1`'s live readout ports `_eo13_cam.mjs`'s own room-box
+    // ray-cast, and `R` above is the exact box that script used (x -13..13, z -8..8, plus
+    // the storey height). ⚠️ Orbiting here is still subject to this file's own build-time
+    // caveat: the floor's planar reflection and both end plates are fitted to the camera
+    // that existed when the scene was BUILT, so an orbited/`?campose=`-overridden frame's
+    // mirror keeps showing the old camera's reflection. Fine for choosing a framing; not a
+    // substitute for hard-coding it into `CAM_DEFS` and re-capturing, as this file's own
+    // header above already says.
+    roomBox: { x0: R.x0, x1: R.x1, y0: 0, y1: R.h, z0: R.z0, z1: R.z1 },
+  });
+  // ⚠ THE OVERLOOK NEEDS A LARGER TOE LIFT AND THE GATE IS WHY, not taste. The reframe trades a
+  // fifth of the frame from evenly-lit ceiling to floor, and the floor's shaded two-thirds plus
+  // the (now dark) vestibule sit at the bottom of the curve: the darkest decile falls
+  // 4.5 -> 1.7 against a 2-8 target, i.e. a WARN, on a build whose median and top-decile chroma
+  // both improve. `lift` moves the toe only and cannot manufacture the macro difference this
+  // round is judged on (that is measured by the `?cam=r10` A/B, which is un-lifted and
+  // reproduces `critic-estate-10`'s filed gate to two decimals). It is applied ONLY to the
+  // overlook so `?cam=r10` remains a true reproduction of the board's own numbers rather than
+  // the old lighting under a new curve — the half-reverted A/B this project keeps being burnt by.
+  // ⚠ NOTED, NOT CHANGED (`toggle-audit-1`, round 14): `?cam=overlook&daylight=flat` gets NO toe
+  // lift, because the spread below takes `LIGHTS.grade` (which `daylight=flat` sets regardless
+  // of CAM) over `CAM_GRADE` whenever both are present. That combination is not on the board and
+  // no filed verdict rests on it — flagged rather than fixed blind, since a change here would
+  // touch the `?daylight=flat` break-test's own grade too and that ablation has its own
+  // documented reasoning a few lines up that this round did not re-derive.
+  const CAM_GRADE = CAM === 'overlook' ? { lift: [0.030, 0.0292, 0.0282] } : null;
+  engine.pipeline.setGrade({
+    ...GRADES.ballroom,
+    ...(LIGHTS.grade ?? {}),
+    ...(LIGHTS.grade ? {} : (CAM_GRADE ?? {})),
+  });
+  const { scene, renderer, camera } = engine;
+  const rng = engine.rng;
+
+  scene.environment = ballroomEnv(renderer);
+  scene.environmentIntensity = LIGHTS.env;
+  scene.background = new THREE.Color(0x05070c);
+
+  const mats = await estateMaterials();
+  const dark = new THREE.MeshStandardMaterial({ color: 0x0a0a0c, roughness: 0.95, metalness: 0 });
+  // ITEM 3 (estate-owner-15, ROUND 15): the drape GEOMETRY (the swag + two side panels per
+  // window, below) has been here since before this round — the bar's red velvet at every window
+  // was reported as entirely absent because the material was, not because it was missing. At
+  // 0x3a0d10 under this room's near-black ambient the panels rendered as raw RGB ~(4,3,3) at a
+  // fixed sample point beside the window (`harness/_eo15_drape_sweep.mjs`) — indistinguishable
+  // from shadow, same failure class as the vestibule void a few lines down. Brightening the
+  // albedo alone (not the light, not the geometry) was swept live on the SAME mesh
+  // (`scene.getObjectByName('kit:drape')`) up to pure white to find the ceiling this position can
+  // reach at all: white read only ~(75,60,52), confirming the spot is genuinely indirect-lit and
+  // any colour placed there reads proportionally dark — so the fix is a saturated albedo, not a
+  // brighter one. A first pass at 0xd82535 read ~(42,3,4) at the sample point, matching the bar's
+  // OWN shaded drapery pixels sampled off `refs/bf1/bf1-ballroom-01.png` at ~(45-48,2-3,1-2) to
+  // within a few counts — a real measured match — BUT it promotes enough of the frame's own dark
+  // decile (the panels cover real screen area at every one of five windows) to push
+  // `grade.mjs`'s darkest-decile L from this round's 7.0 to 9.6, a WARN. `harness/_eo15_vest_sweep.mjs`
+  // (which patches this mesh AND `kit:vest` AND the grade together, see the vestibule note below)
+  // found the joint point that keeps both fixes AND the gate: 0xc02030, paired with the vestibule
+  // change and `GRADES.ballroom.toeCrush` 0.010 -> 0.018 / `exposure` 1.50 -> 1.55 below, reads
+  // ~(10-17, 6-13, 3-10) through the frame — still unmistakably a saturated red column beside a
+  // window, not the vivid ceiling colour, but darkest-decile L holds at 7.5 and median at 31.8,
+  // both comfortably inside the gate. Roughness (0.86, matte) left untouched: swept to 0.7 in the
+  // same tool and it moved the sample by <1 count, i.e. this position is diffuse/indirect-dominated
+  // and roughness is not the lever here.
+  const drape = new THREE.MeshStandardMaterial({ color: 0xc02030, roughness: 0.86, metalness: 0 });
+  const ceilPaint = ceilingMat({ tint: [0.480, 0.452, 0.398], stain: 0.7 });
+
+  const M = {
+    wall: mats.boiserie,
+    gilt: mats.gilt,
+    frieze: mats.giltFrieze,
+    stone: mats.stone,
+    ceil: ceilPaint,
+    glass: mats.clearGlass,
+    dark,
+    drape,
+    marbleTop: mats.marbleSlab,
+    wintrim: mats.stone,
+  };
+  // `estateMaterials()` entries are LAZY GETTERS and reading one bakes it, so `?depot=0` must
+  // not name it in the object literal or the ablation still pays for the surface it removed.
+  if (DEPOT) M.crate = mats.crateDeal;
+  const K = { wall: 'wall', mould: 'gilt', cornice: 'gilt', skirt: 'gilt', trim: 'gilt', leaf: 'wall' };
+
+  const bin = new GeoBin();
+
+  // ---- floor: black-and-white marble chequer ----------------------------
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(R.x1 - R.x0 + 2, R.z1 - R.z0 + 2), mats.marbleChequer);
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(0, 0, 0);
+  floor.receiveShadow = true;
+  {
+    // INTEGER REPEATS. Was 4.2 x 2.6, and that is a chequer bug, not a scale choice: the
+    // baked tile carries an EVEN number of squares, so its black/white parity only continues
+    // across a tile boundary if the repeat count is a whole number. At 4.2 the last fifth of
+    // a tile wraps to the start of the next one, two same-colour squares meet, and the eye
+    // reads a line running the width of the room — which is `critic-estate-2`'s "confirmed
+    // visible seam where tile scale changes". Nothing about the scale changes; the parity
+    // flips. 4 x 3 keeps the squares within a few percent of square on a 28 x 18 m plane.
+    const uv = floor.geometry.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 4, uv.getY(i) * 3);
+  }
+  scene.add(floor);
+
+  // ---- floor: wood parquet field, chequer left showing only at the edges -----------------
+  // See the `?floor=` note above. Built as a SECOND, smaller plane laid 4 mm above the chequer,
+  // not a cut border ring: the chequer plane above is untouched and simply shows through around
+  // the outside, which is the picture the bar actually has, and it means the r9 planar-reflection
+  // floor keeps working exactly as before under both `?floor=` states.
+  //
+  // ⚠ A DEDICATED BAKE, NOT `mats.parquet`. The first version of this cloned the lazy-cached
+  // default (`room.gallery`'s own oak, [0.300, 0.196, 0.108]) and it measured wrong: this room's
+  // shaded two-thirds is candlelit ambient, not the gallery's brighter fill, and the SAME wood
+  // came back at meanL 20.5 against a matched patch of the bar's own shaded floor at meanL 36.2
+  // — half the art's brightness, not a subtle miss. That is an albedo choice, in scope for the
+  // floor-material item, and not the settled "do not chase the warm shaded floor" ruling, which
+  // is about CHROMA (candlelight this room has and the bar does not), not raw level. Swept live
+  // at 1.6x / 2.0x / 2.4x off the default and re-measured against the same art patch (36.22):
+  // 27.6 / 32.6 / 37.7. 2.0x is shipped — 2.4x matched the art almost exactly but pushed the
+  // grade gate's darkest decile from 7.9 to 8.1, out of the 2-8 band, for a shadow floor that
+  // has no business matching a room lit only by daylight when this one is also candlelit. A
+  // dedicated bake costs one more 1024 compile, which this room's own budget notes (eleven owned
+  // surfaces at 7.8 s total) have room for. `room.gallery`'s own floor is untouched.
+  //
+  // ⚠ WHAT THIS DID NOT FIX: whole-frame macro variation, which is the number the brief predicted
+  // this change would move toward the art (0.8815 against 0.7796). Measured at each brightness
+  // above, whole-frame macro read 0.9968 / 0.9632 / 0.9411 / 0.9199 — WORSE than the pre-fix
+  // baseline at every level tried, not better, and reflection was ruled out as the cause
+  // (`?floorreflect=0` moves it 0.9632 -> 0.9596, inside noise). The mechanism: replacing an
+  // edge-to-edge alternating chequer (which averages toward its own block mean at 32 px, since a
+  // block spans several tiles) with a large uniform dark field plus a blown sun patch WIDENS the
+  // frame's std/mean rather than narrowing it, regardless of the field's absolute tone. The
+  // composition match to the bar is real and measured elsewhere (see the report); this specific
+  // metric is not the one it fixes, and chasing it further into brightness costs the grade gate
+  // for no return — see the sweep above. Left open rather than forced.
+  let floorParquet = null;
+  if (FLOOR === 'mixed') {
+    const pw = (R.x1 - R.x0) - FLOOR_BORDER * 2;
+    const pd = (R.z1 - R.z0) - FLOOR_BORDER * 2;
+    const parquetFloorMat = parquetMat({
+      oak: [0.600, 0.392, 0.216], oakDark: [0.280, 0.168, 0.092], wear: 0.6,
+    });
+    parquetFloorMat.name = 'ballroom-floor-parquet';
+    engine.onDispose?.(() => parquetFloorMat.dispose());
+    floorParquet = new THREE.Mesh(new THREE.PlaneGeometry(pw, pd), parquetFloorMat);
+    floorParquet.rotation.x = -Math.PI / 2;
+    floorParquet.position.set(0, 0.004, 0);
+    floorParquet.receiveShadow = true;
+    floorParquet.name = 'floor-parquet';
+    {
+      // Repeat picked for a ~0.7 m panel cell over this field — the same reasoning
+      // `room.gallery` used for its own parquet floor (2.6 x 10.0 over a 7.2 x ~25 m plane) —
+      // not the INTEGER-repeat rule the chequer needs above: PARQUET_SURFACE keys its stave and
+      // panel colour off per-cell hashes, not off world-space UV parity, so there is no seam to
+      // protect and the repeat count can scale continuously with the border.
+      const uv = floorParquet.geometry.attributes.uv;
+      const ru = pw / 2.9, rv = pd / 2.9;
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * ru, uv.getY(i) * rv);
+    }
+    scene.add(floorParquet);
+  }
+
+  /**
+   * ---- THE ORDER (call 1 of 3): window wall, mirror wall + gallery, arched end wall -------
+   *
+   * 🆕 **THIS ROOM'S ARCHITECTURE NOW LIVES IN `src/world/ballroom-order.js`, WHICH THE GAME
+   * BUILDS FROM TOO** (`estate-3`, 2026-08-09). Third of John's three rooms, after
+   * `gallery-order.js` (`estate-1`) and `study-order.js` (`estate-2`), and the one three
+   * rounds recorded as un-portable because the game's ballroom was a 7.20 m storey against this
+   * one's two-storey 9.6. **That constraint did not exist** — `DIG_H` is a fixed 2.80 m band
+   * and every `.storey` reader in `room.js` is parametric — so `spaces.js` raised the game's
+   * ballroom to 9.60 and the order goes across UNCUT, upper window register and all.
+   *
+   * ⚠ **NOTHING ABOUT THIS VIEW'S RENDER MAY MOVE**, and it is checked by pixel diff rather than
+   * asserted: `shoot.mjs --view room.ballroom` before and after is byte-identical. Three
+   * properties make that possible and they are the design — every dimension is a PARAMETER this
+   * file passes as the literal it already had, a `FramedBin` proxy renames buckets so no shared
+   * kit builder is touched, and emission ORDER is preserved term for term. The order is emitted
+   * in THREE calls because two things this file owns land between the phases: the five-band
+   * vestibule (below) and the `?depot=` packing cases.
+   */
+  const PLAN = ballroomPlan({
+    x0: R.x0, x1: R.x1, z0: R.z0, z1: R.z1, h: R.h, split: STOREY, galleryY: GALLERY_Y,
+    win: WIN,
+    bays: { window: 8, mirror: 6, end: 8, near: 8 },
+    arches: [{ x: 0, w: 5.2, h: 5.2, spring: 2.6, t: 0.30 }],
+  });
+  const winZ = PLAN.winZ;
+  ballroomOrder(bin, {
+    plan: PLAN, keys: K,
+    parts: { nearWall: false, ceiling: false, mirrors: false, dressing: false, balustrade: false },
+  });
+  // the vestibule beyond the arch, so the opening is not a black hole
+  //
+  // ⚠ IT IS A SEPARATE, DARKER KEY BECAUSE THE OVERLOOK LOOKS THROUGH THE ARCH AND THE r10
+  // CAMERA DID NOT. At eye height the arch reads as a dark opening and the back wall is barely
+  // in it; from the gallery the eye goes straight down the vestibule and lands on 6.6 x 5.6 m
+  // of plain stone lit to roughly the value of the room — a FEATURELESS PALE CARD covering
+  // about 4% of the frame, and the largest detail-free area in the new picture. Nothing about
+  // the wall changed; the camera did. Darkening it to a third puts the anteroom BEHIND the
+  // ballroom in depth instead of level with it, which is what an unlit service space looks
+  // like, and it costs one draw call (a new bin bucket) and no bake — it is a clone of the
+  // same baked stone maps. It also gets a floor, which it never had: `R.z0 - 8..-12.4` is
+  // outside the 28 x 18 floor plane, so the vestibule was standing on nothing.
+  // ⚠ 0x4a4640 WAS TOO FAR AND THE GRADE GATE CAUGHT IT: this anteroom is ~4% of the frame and
+  // the gate's darkest decile is 10% of it, so at a third value the vestibule alone took the
+  // darkest decile 2.3 -> 1.4 and turned a PASS into a WARN (target 2-8). Two thirds keeps the
+  // depth read and puts the decile back inside the band. Measured both ways, same build.
+  // ⚠ CAM-GATED (`toggle-audit-1`, round 14). `?cam=r10` is meant to be a byte-for-byte
+  // reproduction of the rounds 1-12 camera, and this line was not conditioned on it — so the
+  // "historic reproduction" was silently getting r13's darker vestibule key even though that
+  // key did not exist when the r10 gate figure (0.123 / 39.1 / 4.5) was filed. A critic's fresh
+  // `?cam=r10` capture read 0.122 / 37.6 / 3.1, and this line is one of the two reasons.
+  // Pre-r13 the vestibule wall was the room's own `mats.stone`, unmodified — the "featureless
+  // pale card" the r13 header describes — so `?cam=r10` leaves this clone's colour untouched
+  // rather than keying it two-thirds down.
+  //
+  // ITEM 2 (estate-owner-15, ROUND 15): "two thirds" (0x6d685e) turned out to still be a WRONG
+  // FIX, just a smaller one — `harness/_eo15_vest_sweep.mjs` forced this mesh to pure white and
+  // it STILL only read ~(43-63) through the arch, confirming the space genuinely receives very
+  // little light; at 0x6d685e specifically it sampled literal (0,0,0) at four fixed points behind
+  // the arch, not merely dark. That is the render's own `contrast: 1.06` grade term doing it: its
+  // pivot-at-0.5 formula pushes any sufficiently dark linear value NEGATIVE before the final
+  // clamp, so a colour can be genuinely present and still rasterize to true zero — same mechanism
+  // whether the cause is "too dark a light" or "too dark an albedo". No amount of local geometry
+  // or normal variation can read through a flat zero, which is why 4x-brightening a crop of it
+  // showed nothing rather than a dim shape.
+  // 0x6d685e -> 0x9a9486 (r15) got the space off literal zero but LEFT IT ONE FLAT COLOUR, and a
+  // critic re-confirmed at 8x it is still "uniform grain with zero legible geometry" — a single
+  // flat tint can never read as depth, because depth IS a gradient. r15's own header named the
+  // fix and did not build it: "an authored near/far gradient — a different material per surface
+  // — rather than one flat colour."
+  //
+  // ITEM 1 (estate-owner-16, THIS ROUND): built as THREE flat z-bands (near/mid/far) rather than
+  // one continuous vertex-colour ramp, because every surface in this room is a flat merged-
+  // material bucket (see `GeoBin`) and three buckets is the cheap version of the same cue — no
+  // new bake, one more draw call than r15's single 'vest' bucket. The FAR band (and the back
+  // wall, which was always the room's single darkest vestibule surface) keeps r15's EXACT
+  // 0x9a9486 — unchanged, because that value is the one already proven off true zero and inside
+  // the gate, and going darker risks the same negative-clamp mechanism ITEM 2 above describes.
+  // Only the NEAR and MID bands (2/3 of the side-wall/ceiling/floor area, i.e. under half of the
+  // vestibule's own ~4% of the frame) get brighter, tapering toward the arch — which is also
+  // where a little of the ballroom's own bounce light would plausibly reach first. That is the
+  // "cheaper per unit of visible improvement in toe-decile budget" the r15 header asked for:
+  // brightening the WHOLE plane to the near-band value would have spent the budget across 3x the
+  // area for the same peak brightness; concentrating it near the arch buys more visible contrast
+  // per unit of darkest-decile L spent. Swept live: rebuild, `harness/shoot.mjs --view
+  // room.ballroom`, `harness/grade.mjs` against the canonical 0.087/31.9/7.5, plus
+  // `harness/_estate14_floorcrop.mjs` for matched before/after 8x crops of the arch — see the
+  // report for the measured result: still dark, still a "not black" read rather than a lit
+  // gallery, but now a real stepped gradient instead of one flat plane of grain.
+  //
+  // FIVE bands rather than three, added after a first three-band pass measured PASS 0.087/32.0/7.6
+  // (canonical 0.087/31.9/7.5 — toe moved +0.1 against a ceiling of 8) and read as a visible but
+  // coarse two-step edge rather than a ramp. `GeoBin.add()` strips any vertex-colour attribute at
+  // merge time (`kit.js`, out of this round's file list, keeps only position/normal/uv), so a
+  // true continuous gradient is not available without touching a shared file five other views
+  // depend on — five flat bands is the finer-grained version of the SAME technique already
+  // budget-checked, not a new mechanism. The far band's colour is left mathematically exact to
+  // r15's `0x9a9486` (t=1 below) so it still butts seamlessly against the unchanged back wall.
+  const VEST_FAR = new THREE.Color(0x9a9486);   // r15's value, unchanged — proven safe
+  const VEST_NEAR = new THREE.Color(0xdfd7c2);  // +~45% over far, only at the arch-adjacent band
+  const vestTiers = [0, 0.25, 0.5, 0.75, 1].map((t) => {
+    const m = mats.stone.clone();
+    if (CAM !== 'r10') m.color = VEST_FAR.clone().lerp(VEST_NEAR, 1 - t);
+    m.name = `vestibule-stone-t${t}`;
+    return m;
+  });
+  const VEST_KEYS = ['vestNear', 'vestT25', 'vestT50', 'vestT75', 'vest'];
+  VEST_KEYS.forEach((k, i) => { M[k] = vestTiers[i]; });
+  engine.onDispose?.(() => vestTiers.forEach((m) => m.dispose()));
+  // back wall: the farthest surface, stays the single darkest tier (unchanged geometry)
+  bin.box('vest', 6.6, 5.6, 0.3, 0, 2.8, R.z0 - 4.2, 1.6);
+  // side walls / ceiling / floor: each split into five 0.84 m z-bands spanning the same
+  // R.z0-4.2..R.z0 range r15's single boxes covered — near (at the arch) to far (at the back
+  // wall), so the total footprint and draw surface area are exactly unchanged, only re-bucketed.
+  VEST_KEYS.forEach((key, i) => {
+    const z = R.z0 - (i + 0.5) * 0.84;
+    bin.box(key, 0.3, 5.6, 0.84, -3.3, 2.8, z, 1.6);
+    bin.box(key, 0.3, 5.6, 0.84, 3.3, 2.8, z, 1.6);
+    bin.box(key, 6.6, 0.3, 0.84, 0, 5.6, z, 1.6);
+    bin.box(key, 6.6, 0.12, 0.84, 0, -0.06, z, 1.6);
+  });
+
+  /**
+   * ---- THE NEAR WALL AND THE CEILING (order call 2 of 3) -------------------------------
+   *
+   * ⚠ THE NEAR WALL WAS HALF A WALL, AND ONLY THE r10 CAMERA HID IT. Every other wall in this
+   * room is built as TWO storeys (0..4.8 and 4.8..9.6); this one stopped at 4.8 and the 4.8 m
+   * above it was open to the void — the cove and coffers simply ended in mid-air. It never
+   * showed because the r10 camera stands at z 6.1 with this wall behind it, so nobody had
+   * looked: `node harness/_eo13_cam.mjs --shots --cams "NEARWALL:0,5,-4,0,4.5,8,60"` points a
+   * camera at it and photographs a black band across two-thirds of the frame. It carries the
+   * same full-height pilaster order as the other three, because any overlook framing wraps its
+   * left edge past x -13 and puts 5-10% of the picture on it.
+   *
+   * The ceiling — cove, 7 x 4 coffer grid, three roses and the gilt anthemion frieze — comes
+   * with it, because nothing of this view's own goes between them.
+   */
+  ballroomOrder(bin, {
+    plan: PLAN, keys: K,
+    parts: {
+      windowWall: false, mirrorWall: false, endWall: false,
+      mirrors: false, dressing: false, balustrade: false,
+    },
+  });
+
+  // ---- dressing ----------------------------------------------------------
+  //
+  // ⚠ THE PIER MIRRORS ARE NOT IN THIS FRAME, AND HAVE NEVER BEEN.
+  //
+  // `critic-estate-3` files "the mirror still does not read as a mirror -- a crop shows a
+  // slightly different wall panel". The second half of that sentence is exactly right and it is
+  // the answer to the first half: it IS a wall panel. Settled with the ownership raycast rather
+  // than by looking harder —
+  //   node harness/_tmp_geoprobe.mjs --pick --view room.ballroom --grid 0,0,1920,1080,24
+  // rasterises the whole frame and `pier-mirrors` never once appears in it; a 10-wide raster
+  // over the right-hand 300 px does not find it either. Projecting the plate at z -5.3 through
+  // this camera by hand agrees: it lands at screen x 2.37, i.e. more than a frame width off the
+  // right edge. The camera stands at (7.4, 1.62, 6.1) looking toward -X and -Z, and the mirror
+  // wall is at x +13 BEHIND it.
+  //
+  // So two rounds of probe and material work have been aimed at an object nobody can see, which
+  // is the failure class this project has recorded twice already (the boot seam, the plugged
+  // socket). The plates on the pier wall stay — that wall is real and other cameras will use it
+  // — and the room gets mirrors WHERE THE FRAME LOOKS: on the end wall, flanking the arch,
+  // which the raycast shows occupies the centre and right of the picture. They also fill two of
+  // the "large stretches of unbroken flat gilt-striped wall" the same verdict complains about.
+  // ---- ROUND 5: WHY THE PLATES REFLECT A BLOB, SOLVED AS OPTICS -------------------------
+  // `critic-estate-4` confirmed the plates are in frame and then said the thing in them is "a
+  // dark-blob-to-pale-gradient ... no window mullions, no chandelier glint, no checker floor".
+  // That is not a material fault and not a probe fault — both are working. It is where the
+  // plate is hung. Traced for the right-hand plate, camera (7.4, 1.62, 6.1), plate centre
+  // (5.4, 2.95, -7.78), normal +Z:
+  //   incident  d = (-0.142,  0.094, -0.985)
+  //   reflected r = (-0.142,  0.094, +0.985)   (a +Z normal only flips z)
+  // r has POSITIVE elevation, so every ray leaving this plate travels back up the room and
+  // lands on the far (+Z) end wall between y 2.7 and y 6.1. The blob is that wall: dark above
+  // its cornice, pale below, and the "ragged boundary" the crop shows is the cornice itself.
+  // The mirror is behaving perfectly and pointing at the one surface in the room with nothing
+  // on it.
+  // The lever is NOT the probe. An envMap is sampled by DIRECTION alone, so moving the probe
+  // changes what sits at a given angle but never the angle itself — that is why two rounds of
+  // probe work could not shift this. Direction is set by the plate, and for an untilted plate
+  // it is set by how much of it lies below the eye: below eye level d.y goes negative, r.y goes
+  // negative with it, and the plate looks DOWN at the chequer.
+  //
+  // ⚠ THAT REASONING WAS TESTED BY DROPPING THE PLATE TO y 2.30 (spanning 0.55-4.05, so about a
+  // quarter of the visible glass sits below the 1.62 eye) AND IT IS REFUTED BY THE CAPTURE.
+  // The result is WORSE, and the reason is worth keeping because it is not obvious: a sub-eye
+  // ray leaves the plate at a shallow DOWNWARD angle and meets a polished marble chequer at
+  // grazing incidence, where a polished floor returns the bright ceiling rather than its own
+  // pattern. So the chequer arrives as more pale wash. The plate went from a dark-over-pale
+  // division with a legible horizon (the far wall's cornice) to a UNIFORM pale panel with
+  // foxing at the edges — i.e. from "ambiguous" to "blank fogged glass", losing the one piece
+  // of structure it had. Reverted to 2.95. Recorded rather than quietly undone, because the
+  // next owner will otherwise re-derive the same idea from the same correct optics.
+  //
+  // WHAT IS ACTUALLY LEFT, stated plainly: at +5 degrees of elevation these plates can only
+  // ever show the far end wall, and a chandelier sits at 32 degrees from here — so no untilted
+  // plate on this wall can put one in the glass at any height or probe setting. The fix is a
+  // forward RAKE, which is also what a real pier glass has; it is blocked on `pierGlass`
+  // building its gilt surround flat against the wall, so a raked plate pokes through its own
+  // frame. Plate and frame have to rake together, and that is a `pierGlass` signature change
+  // deliberately not started at the end of a round. THE MIRRORS STILL DO NOT READ AS MIRRORS.
+  // ---- ROUND 6: THE RAKE, WHICH IS THE THING THE LAST THREE ROUNDS WERE BLOCKED ON --------
+  //
+  // The optics trace above is right and its conclusion — "no untilted plate on this wall can
+  // put a chandelier in the glass at any height or probe setting" — is right too. What it could
+  // not do was act on it, because `pierGlass` built its surround flat. That is now a signature
+  // change (`rake`), so plate and frame tilt together and the plate stops poking through its
+  // own moulding.
+  //
+  // 9 degrees, and it is solved rather than picked. With n = (0, -sin r, cos r) and the traced
+  // incident d = (-0.142, 0.0945, -0.985):
+  //
+  //   r = 0      reflected elevation  +5.4 deg   -> the blank top of the far end wall
+  //   r = 9 deg  reflected elevation -13.0 deg at the plate centre, -21 at its foot, -4 at its
+  //              head, i.e. the glass sweeps the CHEQUER FLOOR from about z 0 out to the far
+  //              end and finishes on the end wall's base
+  //
+  // The chequer is the correct target and not just a convenient one: it is the highest-contrast
+  // surface in the room, it is the one thing in frame whose reflection cannot be mistaken for a
+  // wall panel, and its perspective converges — a gradient cannot fake a receding grid. It is
+  // also NOT the failed y-2.30 experiment: that one dropped the plate so sub-eye rays met the
+  // marble at grazing incidence and returned the ceiling. These meet it at 13-21 degrees, which
+  // is where a polished floor returns its own pattern rather than the room above it.
+  //
+  // Pivoted about the BOTTOM EDGE, not the centre, or a 3.1 m plate raked 9 degrees buries its
+  // own foot 0.24 m inside the wall. The foot stays welded to the wall and the head stands
+  // 0.48 m proud, which is what a leaning glass looks like.
+  // ---- ROUND 10: THE PARITY INVERSION WAS NEVER AN AIM PROBLEM ---------------------------
+  //
+  // `critic-estate-7` closed the far-mirror haze and opened its mirror image: "the two plates
+  // are not at parity -- only the far mirror is unambiguously legible". Both plates run the
+  // SAME planar technique into targets of the same height (506x1024 and 568x1024, fitted to
+  // the plate corners), so texel density was never the difference and there was nothing to
+  // sharpen.
+  //
+  // ⚠ THE ANSWER IS IN `fitMirrorCamera`, NOT HERE: more than half of the left plate was the
+  // BACK OF ITS OWN END WALL, leaking past a flat near plane that is oblique to that wall.
+  // The full diagnosis and the fix (an oblique near plane on the mirror plane) are documented
+  // at that function. `?planarclip=flat` puts the defect back on demand.
+  //
+  // ⚠ AND A WRONG TURN WORTH KEEPING, because the next owner will otherwise take it. Before
+  // that was found, the plate's AIM was measured and looked like the culprit.
+  // `harness/_tmp_eo10_aim.mjs` reflects the eye ray about the plate plane over a 15x15 grid
+  // and classifies where each reflected ray first lands, with the right plate as the control
+  // (a critic verified it legible by name):
+  //
+  //     right plate (control)   FLOOR 60%              endZ 40%   floor z-span 10.4 m
+  //     left  plate (soft)      FLOOR 29%   wall 54%   GLASS 17%  floor z-span  5.3 m
+  //
+  // Those numbers are CORRECT and the inference from them was WRONG. "54% wall" was read as
+  // "54% blank", because the flat grey field in the capture was assumed to be that wall seen
+  // at 13x magnification. It was not — it was the clipped end wall, and the window wall the
+  // rays actually reach carries lancets, glazing bars, a lit pier and a sconce flame. Yawing
+  // the plate 8 degrees (which does move the census to FLOOR 55 / wall 20 / GLASS 11, i.e.
+  // onto the control's own numbers) was built, rendered, and then compared against yaw 0 with
+  // the near plane already fixed: yaw 0 is the better picture — the stained-glass lancet is
+  // the single most identifiable object in this room and the yaw traded it for more grey-white
+  // dust sheet. So the yaw is 0, the pair stays symmetric, and the census stands as a record
+  // of a measurement that was sound and an interpretation that was not.
+  //
+  // The per-plate `yaw` field is kept because the planar block now derives each plate's frame
+  // from it, and a shared normal across differently-oriented plates is a silent-wrong-answer
+  // bug of exactly the kind this round fixed.
+  const RAKE = 0.157;                                     // 9 degrees
+  const EM_H = 3.10, EM_FOOT = 1.30;
+  const END_MIRROR = {
+    z: R.z0 + 0.22 + (EM_H / 2) * Math.sin(RAKE),
+    y: EM_FOOT + (EM_H / 2) * Math.cos(RAKE),
+    w: 1.70, h: EM_H, rake: RAKE,
+    // x paired with the yaw that plate is turned by on its stand. Both 0: see the wrong-turn
+    // note above — yaw was measured, built and rejected once the near plane was fixed.
+    plates: [{ x: -5.4, yaw: 0 }, { x: 5.4, yaw: 0 }],
+  };
+  END_MIRROR.x = END_MIRROR.plates.map((p) => p.x);
+  /**
+   * The gilt SURROUNDS go into the shared bin through the order; the PLATES are built further
+   * down against the planar reflection target, which is this view's own business and no part of
+   * the architecture. `pierGlass` already composes T * rotY * rotX, so the surround, the
+   * cresting and the plate share the yaw by construction — the reason the rake moved into it in
+   * round 6.
+   *
+   * FAR-CORNER DRESSING is in the same call. "The far corners and the wall opposite the windows
+   * are large stretches of unbroken flat gilt-striped wall." Console tables under the new
+   * mirrors, urns on the outer piers, so the deepest part of the room has something in it to
+   * measure the depth against.
+   */
+  PLAN.consoles = [
+    ...END_MIRROR.x.map((mx) => ({ x: mx, z: R.z0 + 0.62, w: 1.55 })),
+    { x: R.x1 - 0.55, z: 0, rotY: -Math.PI / 2, w: 1.8 },
+  ];
+  ballroomOrder(bin, {
+    plan: PLAN, keys: K,
+    parts: {
+      windowWall: false, mirrorWall: false, endWall: false, nearWall: false,
+      ceiling: false, balustrade: false,
+    },
+    mirrors: {
+      pier: [-5.3, -1.3, 2.7, 6.7].map((pz) => ({
+        x: R.x1 - 0.20, y: 2.85, z: pz, rotY: -Math.PI / 2, w: 1.55, h: 3.3,
+      })),
+      plates: END_MIRROR.plates.map((p) => ({
+        x: p.x, y: END_MIRROR.y, z: END_MIRROR.z, w: END_MIRROR.w, h: END_MIRROR.h,
+        rake: END_MIRROR.rake, rotY: p.yaw,
+      })),
+    },
+  });
+
+  // ---- THE DEPOT: PACKING CASES, TRESTLES AND SPILLED PAPER ------------------------------
+  //
+  // `critic-estate-9`'s item 2: "the reference is stuffed with crates, a statue, scattered
+  // paper, wreckage; this room has a robot, a candelabra and a few sheeted shapes."
+  //
+  // ⚠ WHERE THE CASES STAND IS NOT DRESSING, IT IS THE SAME CRITIQUE'S ITEM 1. The one
+  // shadow-casting light enters through the window openings, so the floor is lit ONLY in the
+  // window patches, and those patches are solvable rather than guessable. With
+  // dir = (0.865, -0.44, 0.24), a point at window height y lands Dx = 1.966y, Dz = 0.545y
+  // further on, so each opening (sill 1.05, head 5.40) throws a parallelogram running
+  // x -10.9 -> -2.4 and z (wz + 0.57) -> (wz + 2.94). For the four openings that exist in the
+  // wall that is three bands visible in this frame:
+  //
+  //     window z -6.4   floor band z -5.83 .. -3.46
+  //     window z -2.2   floor band z -1.63 ..  0.74
+  //     window z  2.0   floor band z  2.57 ..  4.94
+  //
+  // A case standing IN one of those bands throws a hard shadow several metres long across the
+  // chequer, which is precisely the "big hard sun patches and deep shade" the measurement asks
+  // for and which no light-level change on its own can produce. So the stacks are placed on
+  // the bands, not scattered.
+  //
+  // ⚠ AND THE SPOT CANNOT REACH THE WHOLE ROOM. Its cone is 0.34 rad about an axis meeting the
+  // floor at (-6.7, 0, 3.75) from 29.3 m away, i.e. a ~10.4 m radius: nothing past about
+  // x +3.7 casts at all. The two stacks beyond that (`x 6.4` and the trestle at `z -6.4`) are
+  // there for MASS in the empty right third and are honest about getting no sun.
+  if (DEPOT) {
+    const K2 = { body: 'crate', batten: 'crate', timber: 'crate' };
+    for (const [cx, cz, n, s, ry] of [
+      // --- standing in the three sun bands, casting across the chequer ---
+      [-9.4, -4.6, 3, 1.00, 0.35],
+      [-8.2, -3.2, 2, 0.86, -0.6],
+      [-6.9, -0.5, 2, 1.05, 0.15],
+      [-10.4, 0.9, 4, 0.92, -0.25],
+      [-5.6, 3.9, 3, 0.98, 0.55],
+      [-8.6, 4.4, 2, 0.88, -0.4],
+      // --- mass in the shaded half, where the frame was emptiest ---
+      [1.6, -5.6, 3, 1.02, 0.20],
+      [0.2, -4.4, 1, 0.90, -0.5],
+      [6.4, -3.4, 2, 0.95, -0.15],
+      [4.4, -6.4, 2, 0.84, 0.45],
+    ]) {
+      crateStack(bin, { keys: K2, x: cx, z: cz, n, scale: s, rotY: ry, rng });
+    }
+    trestle(bin, { keys: K2, x: -6.2, z: 5.3, rotY: 0.28, len: 2.4 });
+    trestle(bin, { keys: K2, x: 3.4, z: -6.9, rotY: -0.42, len: 2.0, h: 0.70 });
+    // one case knocked on its side, because a depot that is all upright reads as a shop
+    crateStack(bin, { keys: K2, x: -4.4, z: -5.2, n: 1, scale: 1.1, rotY: 1.1, rng });
+  }
+
+  // ---- balustrade on the musicians' gallery ------------------------------
+  // The plinth and handrail go into the shared bin (they merge with the gilt and stone
+  // buckets, no extra draw call); the balusters come back as one InstancedMesh.
+  const bal = ballroomOrder(bin, {
+    plan: PLAN,
+    parts: {
+      windowWall: false, mirrorWall: false, endWall: false, nearWall: false,
+      ceiling: false, mirrors: false, dressing: false,
+    },
+    material: { baluster: mats.stone },
+  });
+
+  const meshes = bin.build(M, { noCast: ['glass', 'ceil', 'wintrim'] });
+  for (const m of meshes) scene.add(m);
+  scene.add(bal.instanced);
+
+  // ---- the mirror wall ---------------------------------------------------
+  // ROUND 3. `critic-estate-2` confirmed by crop what the previous round predicted but did
+  // not fix: "a flat, textureless grey-beige plane with zero reflection". The prior owner's
+  // diagnosis was correct and is the reason roughening it did nothing — A PERFECT MIRROR OF A
+  // STRUCTURELESS FIVE-BOX IBL IS STRUCTURELESS. There was never anything for the plate to
+  // reflect, so every knob on the material was being turned against a blank source.
+  //
+  // Fixed with the two halves that problem actually has:
+  //
+  //  1. SOMETHING TO REFLECT — a real reflection probe. One `CubeCamera` parked in front of
+  //     the pier wall, rendered ONCE after the room is built, its cube map assigned as the
+  //     plate's own `envMap`. That puts the three chandeliers, the window wall, the arched
+  //     opening and the gilt cornice into the glass, which is the entire read the critic says
+  //     is missing. It costs six 256px renders at build time and nothing per frame — the room
+  //     is static, so a probe that never updates is not an approximation, it is exact.
+  //     Assigning `envMap` ON THE MATERIAL is also the only path on which `envMapIntensity` is
+  //     honoured at all (three.js overwrites the uniform with `scene.environmentIntensity` for
+  //     anything lighting from `scene.environment`) — so the 2.2 this plate used to author and
+  //     never get is now live.
+  //
+  //  2. SOMETHING TO BE — `foxedMirrorMat()`. Even a correct reflection of a dark room is
+  //     mostly dark, and a mirror that is only its reflection has no surface. Oxidised
+  //     amalgam bloom at the edges, black pinholes where the tin has lifted, and pouring
+  //     drift give the plate detail at 20 cm and keep it legible where the reflection is
+  //     empty. See the note on the material.
+  //
+  // The four plates are ONE mesh: coplanar, same material, so four draw calls of nothing.
+  const mirrorMat = mats.mirror;
+  const mirrorPZ = [-5.3, -1.3, 2.7, 6.7];
+  const mirrorGeos = mirrorPZ.map((pz) => {
+    const g = new THREE.PlaneGeometry(1.55, 3.3);
+    g.applyMatrix4(new THREE.Matrix4().makeRotationY(-Math.PI / 2)
+      .premultiply(new THREE.Matrix4().makeTranslation(R.x1 - 0.21, 2.85, pz)));
+    return g;
+  });
+  const mirrorMesh = new THREE.Mesh(mergeGeometries(mirrorGeos, false), mirrorMat);
+  for (const g of mirrorGeos) g.dispose();
+  mirrorMesh.name = 'pier-mirrors';
+  scene.add(mirrorMesh);
+
+  // The two plates that are actually IN FRAME. Their own material and their own probe, because
+  // a cube map taken at the pier wall is the wrong hemisphere for a plate facing +Z: the two
+  // walls are 26 m apart and look at opposite halves of the room. `foxedMirrorMat` shares its
+  // baked textures with the pier plates through the baker's key cache, so the second instance
+  // costs one material and no bake.
+  // ONE MESH AND ONE PROBE PER PLATE, not one shared pair for both. The two plates are 10.8 m
+  // apart and a cube map is exact only AT the reflector, so the shared probe at x 0 was 5.4 m
+  // from each of them — on a FLAT mirror that is not a small approximation, it is pure parallax
+  // error, and it puts the reflected floor half a room sideways. The previous owner wrote that
+  // trade down honestly ("one cube cannot be exact for both"); with the rake now aiming the
+  // glass at a receding grid rather than at a blank wall, it stops being affordable, because a
+  // grid is exactly the content whose displacement you can see. Two 384 px cubes cost twelve
+  // face renders once, in a room that never moves, and nothing per frame.
+  // `?mirror=off` builds no end plates at all — see the toggle note at the top of the file.
+  const endPlates = (mirrorMode === 'off' ? [] : END_MIRROR.plates).map(({ x: mx, yaw }) => {
+    const g = new THREE.PlaneGeometry(END_MIRROR.w, END_MIRROR.h);
+    // T * Ry(yaw) * Rx(rake) — the SAME composition order pierGlass uses for the surround, or
+    // the plate and its own moulding come apart.
+    g.applyMatrix4(new THREE.Matrix4().makeTranslation(mx, END_MIRROR.y, END_MIRROR.z)
+      .multiply(new THREE.Matrix4().makeRotationY(yaw))
+      .multiply(new THREE.Matrix4().makeRotationX(END_MIRROR.rake))
+      .multiply(new THREE.Matrix4().makeTranslation(0, 0, 0.012)));
+    // fox 0.52, not the 0.85 default. Foxing was carrying this plate for three rounds because
+    // there was nothing else in it; with a real reflection arriving, heavy amalgam bloom eats
+    // the thing it was standing in for. Enough to keep the glass antique, not enough to be the
+    // subject.
+    const mesh = new THREE.Mesh(g, foxedMirrorMat({ fox: 0.52 }));
+    mesh.name = `end-mirror.${mx > 0 ? 'r' : 'l'}`;
+    scene.add(mesh);
+    return { mesh, x: mx, yaw };
+  });
+
+  // ---- sheeted furniture: the signature of a shut-up grand house ---------
+  // TWO SHAPES, not one. `dustSheetRow` instances a single geometry, which is why every
+  // sheeted item in the room was the identical loaf — the second call differed only in scale.
+  // Sheeted CHAIRS along the back (tall narrow back over a low seat) and sheeted TABLES down
+  // the window side (flat top, hard corners) give the row a silhouette to read, at the cost of
+  // one extra draw call in a room now running 450 against a 625 budget. See the note in
+  // `dustSheet()` for why the mass, not the material, was the defect.
+  //
+  // ROUND 12: THE MATERIAL IS THE OTHER HALF OF "READS AS STONE". `mats.plaster` is LIME
+  // PLASTER — a mineral surface with a trowel-scale normal map and a cold chalk albedo — and it
+  // was carrying every sheet in this room. No amount of geometry makes lime plaster read as
+  // linen. This is a CLONE, so it shares the baked maps and costs no bake and no compile, with
+  // two scalars changed:
+  //   normalScale 0.30x   the trowel relief is what says "wall", and at this distance it is the
+  //                       only micro-surface the eye gets. Killing most of it hands the read
+  //                       back to the fold geometry, which is where it belongs.
+  //   color               unbleached linen over a chalk-white map: warm, slightly darker, so
+  //                       the sheets stop being the brightest neutral objects in a room whose
+  //                       top decile the grade gate measures.
+  // Rounded normals (`flatShading` stays off) plus the new radial pleats do the rest.
+  const sheetMat = mats.plaster.clone();
+  sheetMat.color = new THREE.Color(0xcfc6b4);
+  if (sheetMat.normalScale) sheetMat.normalScale.multiplyScalar(0.30);
+  sheetMat.name = 'dust-sheet-linen';
+  engine.onDispose?.(() => sheetMat.dispose());
+  scene.add(dustSheetRow({
+    count: 5, material: sheetMat, rng, w: 0.98, d: 0.92, h: 1.18, nx: 40, nz: 34,
+    shape: 'chair', pleats: 7, from: [-7.5, 0, 5.6], to: [6.5, 0, 6.4],
+  }));
+  scene.add(dustSheetRow({
+    count: 3, material: sheetMat, rng, w: 2.2, d: 1.2, h: 0.86, nx: 40, nz: 28,
+    shape: 'table', pleats: 9, from: [-9.0, 0, -3.2], to: [-9.4, 0, 2.6],
+  }));
+  // Two sheeted MOUNDS among the packing cases — the reference's central pile is exactly this,
+  // a heap of crates with a sheet thrown over it, and it is the one shape that says "the house
+  // is being emptied" rather than "the furniture is stored".
+  if (DEPOT) {
+    scene.add(dustSheetRow({
+      count: 2, variants: 2, material: sheetMat, rng, w: 3.2, d: 2.3, h: 0.98, nx: 46, nz: 38,
+      shape: 'mound', pleats: 6, fold: 0.085, from: [-1.9, 0, -3.4], to: [4.9, 0, -1.6],
+    }));
+  }
+  scene.add(chairRow({
+    count: 8, material: mats.gilt, rng,
+    from: [8.5, 0, -6.6], to: [8.9, 0, 5.4], face: -Math.PI / 2,
+  }));
+
+  // ---- spilled paper ------------------------------------------------------
+  // The reference's mid-floor is a litter of ledger sheets turned out of a cabinet, and it is
+  // not only dressing: a scatter of near-white rectangles on a dark floor is 32-px-block
+  // variation of exactly the kind the macro measurement says this room is short of. One
+  // InstancedMesh, one draw call, a plain non-baked material (paper has no interesting
+  // surface at 6 m and a bake would cost seconds of D3D compile for nothing).
+  //
+  // The clusters sit ON the three solved sun bands and around the case stacks, because paper
+  // spills where something was opened.
+  if (DEPOT) {
+    // ⚠ A LEDGER SHEET, NOT A4. The first build used 0.21 x 0.28 at albedo 0.81 and the probe
+    // said all 78 were on screen while the picture showed nothing: a sheet that size, seen at
+    // 10 m from a 1.62 m eye, is foreshortened to about 4 px, and 0.81 albedo on a floor whose
+    // WHITE TILES are 0.90 makes it darker than half the surface it is lying on. Foolscap at
+    // 0.30 x 0.40 and a paler stock is what makes it read; the count goes up because the
+    // reference's litter is dense, not sparse.
+    //
+    // ⚠ ROUND 12 STILL PUT 130 SHEETS ON SCREEN THAT NOBODY COULD SEE, AND SIZE WAS NOT THE
+    // REASON. `critic-estate-10` cropped tight at their own reported coordinates and found only
+    // floor-reflection noise. `harness/_eo13_paper.mjs` measures the thing the count could not:
+    // project each instance's four corners, average the pixels inside the quad, average a ring
+    // just outside it, and take the difference. On the r12 build it read
+    //
+    //     median |dL| 6.6 of 255      36% of sheets at |dL| >= 10      15% at >= 16
+    //
+    // i.e. the typical sheet differed from the floor under it by 2.6% of the range. Swept live
+    // in one boot (`--state`), the ranking of the available levers is not the one the brief
+    // guessed:
+    //
+    //     base                       median |dL|  6.6    36% >= 10
+    //     bigger sheets (x1.45)                   6.6    31%      <- NO HELP: a bigger sheet
+    //                                                                straddles more tiles and
+    //                                                                averages them together
+    //     curled 40% out of plane                 8.7    42%
+    //     paler stock                             8.9    47%
+    //     curl + big + paler                     11.1    50%
+    //     curl + big + WHITE                     13.0    57%
+    //
+    // VALUE is the lever and SIZE is not, which inverts the obvious reading of "it is too small
+    // to see". The shipping combination below is curl + a larger foolscap + a near-white rag
+    // stock, and it is deliberately short of pure white: 0xffffff is a 1.0-reflectance surface,
+    // which no paper is, and this room's grade gate measures the frame's top decile.
+    //
+    // ⚠ AND ~40% OF THEM CANNOT BE MADE LEGIBLE FROM HERE. Half of this floor is WHITE marble
+    // at the same value as paper, so a sheet lying on a white tile is camouflaged by the floor
+    // material itself. That is not a defect of the litter, it is the composition difference
+    // `critic-estate-10` named: `refs/bf1/bf1-ballroom-01.png` scatters its paper across DARK
+    // WOOD PARQUET and every sheet in it reads. Stated rather than papered over.
+    const paperMat = new THREE.MeshStandardMaterial({
+      color: 0xfaf7ef, roughness: 0.94, metalness: 0.0,
+    });
+    // ⚠ CAM-GATED (`toggle-audit-1`, round 14), the second of the two reasons `?cam=r10` was not
+    // a true reproduction: count 165 and curl 0.40/0.85 are the r13 paper overhaul, and neither
+    // existed at r10 either — the ablation table above records r12's own shipped count as 130,
+    // and curl is a mechanism this round introduced (r12's sheets lay flat). Reverted here to the
+    // r12 numbers this file's own comments still carry; size, stock colour and cluster centres
+    // are left as shipped because no pre-r13 record of them survives to revert TO (this project
+    // keeps no VCS history) and guessing a number here would be exactly the "confident wrong
+    // answer" this file warns against elsewhere.
+    scene.add(paperScatter({
+      count: CAM === 'r10' ? 130 : 165, w: 0.34, d: 0.45, material: paperMat, rng,
+      curl: CAM === 'r10' ? 0 : 0.40, curlMax: CAM === 'r10' ? 0 : 0.85, scaleLo: 0.78, scaleHi: 1.32,
+      // Tighter discs than r12's 1.8-2.8 m: paper turned out of a case falls in DRIFTS, and a
+      // drift spans a tile boundary, so it reads as one light mass even where an individual
+      // sheet is a value match for the square under it. Two of the eight sit hard against a
+      // case stack, which is where a drift comes from.
+      clusters: [
+        [-7.2, -4.0, 1.5], [-6.4, 0.2, 1.6], [-5.0, 3.4, 1.4],
+        [-2.4, -1.4, 1.8], [1.2, -4.6, 1.4], [-3.6, 2.4, 1.2],
+        [2.6, -2.0, 1.6], [-9.0, 2.6, 1.2], [-8.9, -3.6, 1.1], [-10.0, 1.4, 1.0],
+      ],
+    }));
+    engine.onDispose?.(() => paperMat.dispose());
+  }
+
+  // ---- chandeliers -------------------------------------------------------
+  const chandeliers = [];
+  const chSpec = [
+    { z: 0, arms: 10, tiers: 2, r: 1.25, chain: 1.5, i: 15 },
+    { z: -5.0, arms: 8, tiers: 2, r: 1.05, chain: 1.5, i: 11 },
+    { z: 5.0, arms: 8, tiers: 2, r: 1.05, chain: 1.5, i: 11 },
+  ];
+  for (const c of chSpec) {
+    const ch = buildChandelier({
+      // PERF, and it is the single biggest item in this room. The default build keeps every
+      // arm and hoop addressable for `detach()`; three fixtures cost 222 meshes of a 463-mesh
+      // scene that was submitting 1150 draw calls against a 625 budget. Nothing in a showcase
+      // frame detaches an arm, and `cut()` — the one break this room would ever stage — is
+      // unaffected. Same geometry, same look, ~12 meshes per fixture instead of ~74.
+      merge: true,
+      arms: c.arms, tiers: c.tiers, radius: c.r, chain: c.chain,
+      brass: mats.brass, crystal: mats.crystal,
+      intensity: c.i, distance: 17, caustic: 0.22, causticSize: c.r * 9, rng,
+    });
+    ch.root.position.set(-1.2, R.h - 0.36, c.z);
+    // ---- THE THREE ORNAMENTAL FIXTURES DO NOT CAST -------------------------
+    // Measured with `node harness/_calls_tmp.mjs --view room.ballroom --list`: this room
+    // submits 992k triangles a frame against a 900k budget, and the per-mesh table says the
+    // largest single group is the chandeliers' brass at 27.5k EACH. `renderer.info` counts
+    // submissions, not unique geometry — the one shadow-casting spot and the AO depth prepass
+    // each re-traverse the scene — so a caster costs its triangles about three times.
+    //
+    // These three hang at 9.2 m, and the only shadow caster in the room is a spot OUTSIDE the
+    // window wall raking down onto the chequer. A chandelier shadow thrown by that light lands
+    // as a faint smear no viewer can attribute to the object that made it, so it is 120k
+    // triangles a frame for a read nobody gets. `prop.chandelier` — where the fixture IS the
+    // subject and its shadow is part of the shot — is untouched.
+    ch.root.traverse((o) => { if (o.isMesh) o.castShadow = false; });
+    scene.add(ch.root);
+    chandeliers.push(ch);
+  }
+  engine.chandeliers = chandeliers;
+  engine.onUpdate((dt, t) => { for (let i = 0; i < chandeliers.length; i++) chandeliers[i].update(t + i * 1.3); });
+
+  // ---- practicals: sconces on every pier, candelabra on the floor --------
+  // `merge: true` throughout — nine sconces and two candelabra were 183 meshes of pure
+  // ornament. Flames and cores stay separate because they scale every frame.
+  // Same reasoning as the chandeliers above, and the same measurement: nine sconces and two
+  // candelabra are 11k triangles of pure ornament, submitted three times a frame, to cast
+  // shadows from a light that is outside the building and aimed at the floor. None of them is
+  // between that spot and anything.
+  const noCast = (o) => { o.traverse((n) => { if (n.isMesh) n.castShadow = false; }); return o; };
+  for (const wz of winZ) {
+    const sc = sconce({ merge: true, brass: mats.brass, intensity: 3.0, distance: 6.5, phase: wz, glowStrength: 1.5, glowSize: 4.0 });
+    sc.position.set(R.x0 + 0.30, 2.35, wz + WIN.w / 2 + 1.35);
+    sc.rotation.y = Math.PI / 2;
+    scene.add(noCast(sc));
+  }
+  for (const pz of [-5.4, -1.2, 3.0, 6.6]) {
+    const sc = sconce({ merge: true, brass: mats.brass, intensity: 2.8, distance: 6.5, phase: pz, glowStrength: 1.5, glowSize: 4.0 });
+    sc.position.set(R.x1 - 0.30, 2.45, pz);
+    sc.rotation.y = -Math.PI / 2;
+    scene.add(noCast(sc));
+  }
+  for (const [cx, cz] of [[-3.4, -6.2], [3.4, -6.2]]) {
+    const cd = candelabra({ merge: true, brass: mats.brass, h: 1.55, arms: 6, intensity: 0.55, distance: 5.0, lights: 1, phase: cx });
+    cd.position.set(cx, 1.35, cz);
+    scene.add(noCast(cd));
+  }
+
+  // ---- daylight: ONE spot outside the window wall ------------------------
+  //
+  // ⚠ THE FILE HEADER'S CLAIM 3 — "THE WINDOWS DO THE LIGHTING" — WAS AN AMBITION, NOT A
+  // DESCRIPTION, AND ROUND 12 MAKES IT TRUE. At intensity 300 against an environment shell of
+  // 3.2 this spot moved the floor by 3.1% (measured by turning it off), so the "six hard-edged
+  // patches of daylight marching down the chequer" were a few percent of modulation on a flat
+  // IBL wash. It is paid for out of the shell rather than added on top: environmentIntensity
+  // comes down 3.2 -> 1.70 in the same change.
+  //
+  // The number is not free-chosen. Swept live over four floor rects with the grade re-solved on
+  // the same boot: below about 16x the patches do not separate from the field, and past about
+  // 3.6x THIS value the extra buys nothing measurable (macro on the lit floor 0.6159 at 3.6x
+  // against 0.6159 at 5.5x — the patches have already saturated) while the mullion grid inside
+  // them washes out, and that grid is the one thing the reference's patches unmistakably have.
+  //
+  // ⚠ AND THE SUN IS RAKED LOWER, WHICH IS A COMPOSITION CHANGE RATHER THAN A LEVEL ONE.
+  // At the old (0.865, -0.44, 0.24) the elevation is 26.1 deg, so a ray entering at window
+  // height y lands only Dx = 1.966y further into the room: every floor patch died between
+  // x -10.9 and x -2.4, i.e. entirely in the LEFT THIRD of a frame that is 26 m wide. The
+  // right two thirds of the chequer could not receive daylight at any intensity, which is why
+  // "more sun" alone reads as "somebody turned the left wall up". At 21.6 deg the same rays
+  // reach Dx = 2.36y, so the bands run x -10.5 -> -0.25 and cross the middle of the picture.
+  // A long raking bar of light is also what the reference actually has.
+  const dir = new THREE.Vector3(...LIGHTS.dir).normalize();
+  const winMid = new THREE.Vector3(R.x0, WIN.sill + WIN.h * 0.5, winZ[2]);
+  // ⚠ THE CONE HAS TO COVER THE WINDOW WALL, NOT THE FLOOR PATCH. Aim and angle are solved
+  // rather than nudged: the axis crosses the glazing plane x = -13 at (-13, 3.5, -2.3), the
+  // openings span z -6.4..6.2 and y 1.05..5.4, so the furthest opening corner is 8.5 m off the
+  // axis at 20.6 m — atan(8.5/20.6) = 0.39 rad. At 0.34 the two end windows sat in the spot's
+  // own penumbra and threw grey patches, which reads as a soft shadow map and is nothing of
+  // the kind. 0.42 with the axis aimed at the CENTRE OF THE THREE FLOOR BANDS (-4.7, 0, 0.2).
+  // `?daylight=flat` restores the old aim, which was the point where the MIDDLE window's ray
+  // met the floor.
+  const sunAim = LIGHTS.aim
+    ? new THREE.Vector3(...LIGHTS.aim)
+    : (() => {
+      const t = (0.02 - winMid.y) / dir.y;
+      const h = winMid.clone().addScaledVector(dir, t);
+      return new THREE.Vector3(h.x, 0, h.z);
+    })();
+  const sunFrom = LIGHTS.aim
+    ? sunAim.clone().addScaledVector(dir, -30)
+    : winMid.clone().addScaledVector(dir, -22);
+  const sun = spotKey({
+    color: 0xd6e4ff, intensity: LIGHTS.sun,
+    position: sunFrom.toArray(),
+    target: sunAim.toArray(),
+    // 2048, not 1024. The room now has ten stacks of packing cases standing in the light and
+    // their shadows are the macro variation this round is for; at 1024 over a 48-degree cone
+    // a case edge is 1.8 cm of texel and the shadow arrives with a visible stair. 2048 halves
+    // it. Costed with perf-ab rather than assumed — see the round-12 note in the report.
+    angle: LIGHTS.angle, penumbra: LIGHTS.penumbra, decay: 1.0, distance: 90,
+    mapSize: SUNMAP || LIGHTS.mapSize, near: 6, far: 90, normalBias: 0.03, bias: -0.0009,
+  });
+  scene.add(sun, sun.target);
+
+  // volumetric shafts through the three windows nearest the camera.
+  // `mats.glass`, NOT `mats.clearGlass`, was a real bug and it is visible in the capture:
+  // the window openings are built with `keys.glass -> M.glass -> mats.clearGlass` (nearly
+  // colourless daylight glazing), but the shafts and the floor pools were pattern-sampling
+  // the STAINED glass instead. The result was saturated red and blue rosettes projected onto
+  // a black-and-white ballroom chequer from windows that are not coloured. The pool must
+  // carry the pattern of the glass the light actually came through.
+  const glassTex = M.glass.map;
+  const lz = dir.clone().negate();
+  const lx = new THREE.Vector3(0, 0, 1).sub(lz.clone().multiplyScalar(lz.z)).normalize();
+  const ly = new THREE.Vector3().crossVectors(lz, lx).normalize();
+  // ⚠ WINDOWS 0/1/2, NOT 1/2/3, AND THE REASON IS THE NEW SUN ANGLE. The pool decal for each
+  // shaft is placed where that window's ray MEETS THE FLOOR, and at 21.6 deg the throw is
+  // Dz = 0.743y instead of 0.545y — so window 3 (z 6.2) now lands at z 8.6, which is 0.6 m
+  // OUTSIDE the room. It would have been a light pool behind the wall, and the fact that it
+  // is derived rather than typed is exactly why it would have gone unnoticed. Windows 0/1/2
+  // land at z -4.0 / 0.2 / 4.4, which are the three bands the packing cases stand in.
+  for (const wz of LIGHTS.shaftWins.map((k) => winZ[k])) {
+    const c = new THREE.Vector3(R.x0 + 0.06, WIN.sill + WIN.h * 0.5, wz);
+    const g = new THREE.Group();
+    g.matrixAutoUpdate = false;
+    g.matrix.makeBasis(lx, ly, lz).setPosition(c);
+    g.updateMatrixWorld(true);
+    scene.add(g);
+    const inner = new THREE.Group();
+    inner.position.y = -WIN.h * 0.5;
+    g.add(inner);
+    // ⚠ `?vol=0` SKIPS THE PRISM AND THE MOTES AND KEEPS THE POOL. The three multiply pool
+    // decals are built in this same loop and they are NOT volumetrics — they are the window
+    // pattern on the floor, and dropping them would change the picture in a way that has
+    // nothing to do with the fill-rate question the toggle exists to answer. An ablation that
+    // removes two things and is reported as removing one is the failure this file has a
+    // paragraph about already.
+    if (VOLUMETRICS) inner.add(lightShaft({
+      width: WIN.w + 0.10, height: WIN.h, length: 11.5, spread: 0.07,
+      // strength 0.85 -> 0.40 and fadeY 1.5 -> 3.2. Three 15 m prisms rake across the near
+      // half of the chequer, and an additive volume lying over a floor lifts its BLACK tiles
+      // as hard as its white ones — so the pattern stops at the volume's edge and what is
+      // left reads as plain pale slabs beside a chequer, i.e. the "seam where the tile scale
+      // changes" that §6.5 reports. Dissolving the prism higher above the floor keeps the
+      // beam (which is the point) and returns the floor (which is the subject).
+      // ROUND 3: strength 0.40 -> 0.24, fadeY 3.2 -> 4.6, length 15 -> 11.5. Round 2 named
+      // the mechanism correctly and then under-corrected it. An ADDITIVE volume lying over
+      // a black-and-white chequer lifts the black tiles as hard as the white ones, so the
+      // pattern dissolves wherever the prism reaches the floor and reappears where it stops
+      // — and that boundary, not any change of tile scale, is the "seam" the critic sees. At
+      // fadeY 3.2 three 15 m prisms still had real density at ankle height. They now die out
+      // a full storey above the floor, which keeps the beam (the subject) and returns the
+      // chequer (the surface it is supposed to be crossing).
+      glass: glassTex, tint: 0xd8e4ff, mean: 0xe6eeff, strength: 0.24, smear: 2.2,
+      floorY: 0.0, fadeY: 4.6, arch: 0.24,
+    }));
+    if (VOLUMETRICS) inner.add(dustMotes({
+      count: Math.round(300 * (engine.quality.dust ?? 1)),
+      extent: new THREE.Vector3(1.4, 2.1, 6.5),
+      centre: new THREE.Vector3(0, WIN.h * 0.45, -6.5),
+      rng, size: 34, intensity: 0.75, drift: 0.45, color: 0xdfeaff,
+    }));
+    const t2 = (0.02 - c.y) / dir.y;
+    const h2 = c.clone().addScaledVector(dir, t2);
+    // MULTIPLY, not add — and here the pattern the pool was destroying is the FLOOR's, which
+    // makes the failure easier to see than it was in light.shaft. Three additive decals at
+    // strength 0.42 landed on a black-and-white chequer and lifted the BLACK tiles as much as
+    // the white ones, so inside each pool the chequer simply stopped: what reads in the
+    // capture as "a visible seam where the tile scale changes" (the slice plan's §6.5) is not
+    // a tiling seam at all, it is the boundary of an additive light pool erasing a pattern.
+    // A filter cannot do that: it scales what is under it, so a black tile stays black and
+    // the chequer runs unbroken through the daylight.
+    const pool = lightPool({
+      blend: 'multiply', w: WIN.w * 2.6, h: WIN.h * 3.0, glass: glassTex,
+      tint: 0xf2f7ff, strength: 1.0, soft: 0.20, sat: 0.5,
+    });
+    pool.rotation.x = -Math.PI / 2;
+    pool.rotation.z = Math.atan2(dir.x, dir.z);
+    pool.position.set(h2.x, 0.016, h2.z);
+    scene.add(pool);
+  }
+
+  // Bounce cards where the daylight lands on the chequer. These go up with the sun, and they
+  // are the one thing that keeps the rebalance from reading as "somebody turned the lights
+  // off": a hot patch on a pale marble tile throws real light back into the room, so the floor
+  // AROUND each patch stays a half-stop above the deep shade instead of falling off a cliff.
+  // Their COUNT is unchanged — `numPointLights` is in three's program cache key, so adding one
+  // recompiles every material in the scene.
+  for (const wz of LIGHTS.cardWins.map((k) => winZ[k])) {
+    const c = new THREE.Vector3(R.x0, WIN.sill + WIN.h * 0.5, wz);
+    const t2 = (0.02 - c.y) / dir.y;
+    const h2 = c.clone().addScaledVector(dir, t2);
+    const b = new THREE.PointLight(new THREE.Color(0xc9d9f2), LIGHTS.bounceCard, 13.0, 2);
+    b.position.set(h2.x, 0.5, h2.z);
+    scene.add(b);
+  }
+
+  // The three bounceFill DirectionalLights are the only DIRECTIONAL fill in the room, and that
+  // is why they go up rather than the environment coming back. A five-box IBL shell arrives
+  // near-equally from every direction, so it lights a wall, a floor and a ceiling by the same
+  // amount and gives a surface no reason to have a shape; a directional light at least shades
+  // by orientation. Measured on the far end wall (a rect that gets no sun and no practical):
+  // dropping the shell alone takes it 67.9 -> 40.0 mean and FLAT, and the directional fill is
+  // what puts the modelling back without putting the flatness back.
+  scene.add(bounceFill({
+    warm: 0.30 * LIGHTS.bounce, warmColor: 0xffbc86, warmDir: [6, 3, 2],
+    cold: 0.42 * LIGHTS.bounce, coldColor: 0x8fa9d6, coldDir: [-8, 5, 2],
+    up: 0.20 * LIGHTS.bounce, upColor: 0xa9a290,
+  }));
+
+  const haze = glowPatch({ size: 22, color: 0x8fa6cc, strength: 0.05, pow: 1.4 });
+  haze.position.set(-4, 4.5, R.z0 + 0.8);
+  scene.add(haze);
+
+  // ---- scale -------------------------------------------------------------
+  const u = buildUnit4H({ height: 1.7 });
+  u.root.position.set(-3.1, 0, 1.9);
+  u.root.rotation.y = 2.0;
+  u.setPose({
+    head: [-0.30, 0.42, 0], chest: [-0.06, 0.16, 0],
+    shoulderL: [-0.42, 0, 0.36], shoulderR: [-0.18, 0, -0.28],
+    elbowL: [-0.62, 0, 0], elbowR: [-0.30, 0, 0],
+    hipL: [0.16, 0, 0.04], hipR: [-0.12, 0, -0.04],
+    kneeL: [-0.14, 0, 0], kneeR: [-0.20, 0, 0],
+  });
+  scene.add(u.root);
+
+  driveFlicker(engine);
+  driveVolumetrics(engine, scene);
+
+  // ---- the reflection probe ----------------------------------------------
+  // Rendered ONCE, here, after every mesh and light in the room exists and before
+  // `finalizeScene()` starts rewriting materials. The plate is hidden for the six faces so
+  // the probe cannot photograph itself — a mirror in its own cube map is the classic
+  // infinite-corridor artifact and it costs nothing to avoid.
+  //
+  // The probe sits at the mirror wall looking into the room, so the cube's -X hemisphere
+  // (which is all a wall-mounted plate can ever show) carries the chandeliers, the window
+  // wall opposite and the arch. 256px is deliberate: this is a reflection in old glass at
+  // 8 m, and a sharper one would read as chrome.
+  {
+    const cubeRT = new THREE.WebGLCubeRenderTarget(256, { type: THREE.HalfFloatType });
+    cubeRT.texture.colorSpace = THREE.NoColorSpace;
+    const probe = new THREE.CubeCamera(0.4, 80, cubeRT);
+    probe.position.set(R.x1 - 1.6, 3.2, 0.6);
+    scene.add(probe);
+    mirrorMesh.visible = false;
+    const prevTarget = renderer.getRenderTarget();
+    probe.update(renderer, scene);
+    renderer.setRenderTarget(prevTarget);
+    mirrorMesh.visible = true;
+    scene.remove(probe);
+    mirrorMat.envMap = cubeRT.texture;
+    // With `envMap` set ON THE MATERIAL, three.js finally honours `envMapIntensity` instead
+    // of overwriting it with `scene.environmentIntensity` — so this number is live, unlike
+    // the twenty inert ones this slice inherited.
+    mirrorMat.envMapIntensity = 2.0;
+    mirrorMat.needsUpdate = true;
+    engine.onDispose?.(() => cubeRT.dispose());
+  }
+  // ---- THE END PLATES: A TRUE PLANAR REFLECTION -----------------------------------------
+  //
+  // ROUND 9. `critic-estate-6`: the right-hand plate "reads as an indistinct grey-white haze
+  // with no recognisable reflected content -- a stranger would likely call it a foggy or
+  // damaged painting, not a mirror". Four rounds of cube-probe work (bigger cube, one probe
+  // per plate, probe moved onto the plate plane, rake) each improved the AIM and none of them
+  // improved the LEGIBILITY, and the reason is in three's own source rather than in this file.
+  //
+  // ⚠ A CUBE ENVMAP ON A NEAR-SPECULAR FLAT MIRROR CANNOT BE MADE SHARP BY MAKING THE CUBE
+  // BIGGER, AND THE PREVIOUS ROUND'S 384 -> 640 IS A NO-OP. Two mechanisms, both read out of
+  // three r180 and then confirmed by A/B in the browser:
+  //
+  //  1. `PMREMGenerator._setSize` does `_lodMax = floor(log2(cubeSize))` and
+  //     `_cubeSize = 2^_lodMax`. Any cube handed to `material.envMap` is PMREM'd, so 640 is
+  //     FLOORED TO 512 and the old 384 was floored to 256. The number written here has never
+  //     been the number the shader gets.
+  //  2. `cube_uv_reflection_fragment` makes `faceSize = exp2( mipInt )` -- the mip IS log2 of
+  //     the sampled face size -- and under roughness 0.21 the curve is
+  //     `mip = -2 * log2( 1.16 * roughness )`. This plate's baked silvering is ~0.055, which
+  //     asks for mip 7.94, i.e. a blend of the 128 and 256 faces. `CUBEUV_MAX_MIP` is 9 at a
+  //     512 cube and 8 at a 256 cube and NEITHER of them clamps 7.94 -- so the two cube sizes
+  //     sample identical resolution and the extra 30 MB bought nothing.
+  //
+  // The plate subtends 7.04 x 12.64 degrees from this camera, so at mip 7.94 the whole
+  // reflection is carried by about 10 x 20 texels stretched over 102 x 184 screen pixels.
+  // That is the haze, exactly, and no probe setting reaches it. Measured the other way too:
+  // scaling `material.roughness` down to 0.18 saturates the mip at `CUBEUV_MAX_MIP` and the
+  // plate does get brighter and gains banding -- and is still not legible, because 40 x 72
+  // texels is the ceiling of the technique here.
+  //
+  // So the plate stops using a cube for its mirror term. A planar reflection renders the room
+  // ONCE from the camera reflected about the plate's own raked plane, into a frustum fitted to
+  // the plate's four corners, and the shader samples it by projecting the fragment's world
+  // position through that same matrix. There is no probe approximation left to tune: the
+  // reflection is exact for this camera, at whatever resolution the target is given.
+  //
+  // ⚠ IT IS EXACT ONLY FOR THIS CAMERA, which is why this is affordable here and would not be
+  // in a walkable room: it is rendered once at build time and never again. `end-mirror.*` and
+  // `pierGlass` exist in this showcase view only -- `src/game/spaces.js` does not build them --
+  // so nothing that moves depends on this. If the ballroom ever becomes walkable with these
+  // plates in it, this block becomes a per-frame scene render per plate and must be re-costed.
+  //
+  // COST, measured rather than asserted:
+  //   VRAM   2 cubes at 640 = 39 MB, plus their two PMREM atlases (1536 x 2048 RGBA16F) at
+  //          25 MB each = 89 MB.  Now: two 576 x 1024 RGBA16F targets = 9.4 MB, plus two 128
+  //          cubes and their atlases for the foxed term = 4.8 MB.  TOTAL 14 MB, i.e. -75 MB.
+  //   build  12 face renders at 640^2 -> 2 scene renders at 576 x 1024 plus 12 at 128^2.
+  //   frame  zero, both before and after. Neither path costs anything per frame.
+  //   calls  unchanged; the plate is still one mesh with one material.
+  //
+  // The cube is KEPT, at 128, because the foxing needs it: where the amalgam has bloomed or
+  // lifted, roughness jumps past 0.34 and the plate mixes back to the blurred cube. A lifted
+  // patch scatters, so a sharp reflection there would be the wrong answer as well as an ugly
+  // one -- and at that roughness 128 is already more resolution than the mip curve will ask
+  // for. That is the one place the old technique is the right technique.
+  {
+    const prevTarget = renderer.getRenderTarget();
+    const hw = END_MIRROR.w / 2, hh = END_MIRROR.h / 2;
+    for (const p of endPlates) {
+      // ⚠ PER PLATE, not shared. These were one vector outside the loop when both plates had
+      // the same orientation; the left plate is now yawed 8 degrees and a shared normal would
+      // aim its mirror camera 8 degrees wrong — which does not throw, does not look broken,
+      // and just quietly reflects the wrong part of the room. Read off END_MIRROR the same way
+      // the geometry is built (T * Ry * Rx), never off matrixWorld: the rake and the yaw are
+      // baked into the GEOMETRY, so the mesh's matrixWorld is identity and a normal taken from
+      // it comes back as a flat (0,0,1).
+      const cr = Math.cos(END_MIRROR.rake), sr = Math.sin(END_MIRROR.rake);
+      const cy = Math.cos(p.yaw), sy = Math.sin(p.yaw);
+      const nrm = new THREE.Vector3(cr * sy, -sr, cr * cy);
+      // ---- the blurred fallback for the foxed patches ----------------------
+      // 640 under `?mirror=cube`, which is the pre-r7 size EXACTLY as it shipped — including
+      // the fact that PMREMGenerator floors it to 512. Reproducing the old path's real cost
+      // means reproducing its real allocation, not a tidied-up version of it.
+      const cubeSize = mirrorMode === 'cube' ? 640 : 128;
+      const cubeRT = new THREE.WebGLCubeRenderTarget(cubeSize, { type: THREE.HalfFloatType });
+      cubeRT.texture.colorSpace = THREE.NoColorSpace;
+      const cubeCam = new THREE.CubeCamera(0.4, 80, cubeRT);
+      cubeCam.position.set(p.x + nrm.x * 0.12, END_MIRROR.y + nrm.y * 0.12, END_MIRROR.z + nrm.z * 0.12);
+      scene.add(cubeCam);
+      for (const q of endPlates) q.mesh.visible = false;
+      mirrorMesh.visible = false;
+      cubeCam.update(renderer, scene);
+      scene.remove(cubeCam);
+
+      // ---- `?mirror=cube`: stop here, on the pre-r7 path --------------------
+      // Cube assigned, 1.35 lift restored, no planar target allocated and no EO_PLANAR
+      // define — so this material compiles the stock program, exactly as it did before r7.
+      if (mirrorMode === 'cube') {
+        const cmat = p.mesh.material;
+        cmat.envMap = cubeRT.texture;
+        cmat.envMapIntensity = 1.35;
+        cmat.needsUpdate = true;
+        engine.onDispose?.(() => cubeRT.dispose());
+        continue;
+      }
+
+      // ---- the planar reflection -------------------------------------------
+      // The plate centre and its four corners, in world space, in the plate's OWN frame — see
+      // the per-plate note at the top of this loop for why none of this may come off
+      // matrixWorld.
+      const P = new THREE.Vector3(p.x, END_MIRROR.y, END_MIRROR.z);
+      const up = new THREE.Vector3(sr * sy, cr, sr * cy);
+      const right = new THREE.Vector3(cy, 0, -sy);
+      // `cu`/`cv`, not `sx`/`sy` — `sy` is sin(yaw) three lines up and this loop shadowed it.
+      const corners = [];
+      for (const cu of [-1, 1]) {
+        for (const cv of [-1, 1]) {
+          corners.push(P.clone()
+            .add(right.clone().multiplyScalar(cu * hw))
+            .add(up.clone().multiplyScalar(cv * hh)));
+        }
+      }
+      const mcam = fitMirrorCamera(camera, P, nrm, corners, 1.04, PLANAR_CLIP);
+      const RT_H = 1024;
+      const rtW = Math.max(64, Math.round(RT_H * mcam.aspect) & ~1);
+      // MIP CHAIN, AND IT HAS TO BE ASKED FOR AT CONSTRUCTION. `RenderTarget` defaults
+      // `generateMipmaps` to false, and three sizes the texture's storage from
+      // `getMipLevels()` when the target is first BOUND — so setting the flag after the
+      // render allocates no levels and `generateMipmap` has nowhere to write. three then
+      // regenerates the chain at the end of every `render()` into this target (see
+      // `updateRenderTargetMipmap`), which here means exactly once, at build time.
+      const mip = MIRROR_FILTER !== 'point';
+      const rt = new THREE.WebGLRenderTarget(rtW, RT_H, {
+        type: THREE.HalfFloatType, colorSpace: THREE.NoColorSpace,
+        minFilter: mip ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter,
+        magFilter: THREE.LinearFilter, depthBuffer: true,
+        generateMipmaps: mip,
+      });
+      if (mip) rt.texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      renderer.setRenderTarget(rt);
+      renderer.clear();
+      renderer.render(scene, mcam);
+      renderer.setRenderTarget(prevTarget);
+
+      for (const q of endPlates) q.mesh.visible = true;
+      mirrorMesh.visible = true;
+
+      // bias * projection * view — the fragment shader projects its own world position with
+      // this and gets the texel of the reflection that belongs to it.
+      const texMat = new THREE.Matrix4()
+        .set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1)
+        .multiply(mcam.projectionMatrix)
+        .multiply(mcam.matrixWorldInverse);
+      // the plate's flat normal in VIEW space, so the shader can measure how far the foxing's
+      // normal map has bent a texel away from flat and wobble the reflection by that much.
+      const flatN = nrm.clone().transformDirection(camera.matrixWorldInverse).normalize();
+
+      // Kept on the mesh so the reflection can be INTERROGATED rather than argued about: the
+      // question "what is that grey wedge in the left plate" is a raycast from this camera,
+      // and without it the only instrument available is squinting at 71 screen pixels.
+      p.mesh.userData.mirrorCamera = mcam;
+      p.mesh.userData.mirrorRT = rt;
+
+      const mat = p.mesh.material;
+      mat.envMap = cubeRT.texture;
+      // 1.35 was solved against a cube that was returning a blurred average of the room. A
+      // planar reflection returns the room's own values, so the plate no longer needs a lift
+      // to stop reading as a panel; 1.0 is the honest number and anything above it is a
+      // mirror brighter than the thing it reflects.
+      mat.envMapIntensity = 1.0;
+      applyPlanarReflection(mat, rt.texture, texMat, flatN, MIRROR_FILTER, [rtW, RT_H]);
+      engine.onDispose?.(() => { rt.dispose(); cubeRT.dispose(); });
+    }
+  }
+
+  // ---- THE FLOOR IS A MIRROR TOO, AND IT WAS MIRRORING NOTHING --------------------------
+  //
+  // ROUND 11. The near third of this frame is a featureless pale sheet with the chequer
+  // missing, ending in a hard diagonal where the pattern comes back — the thing critics have
+  // been calling "a seam where the tile scale changes" since round 2. It is not a tiling seam
+  // and it is not the light pools. ABLATED IN ONE BOOT (`harness/_tmp_eo11_floor.mjs`,
+  // 400 x 240 px of near floor at 120,700):
+  //
+  //     base                      mean L 127.9   acutance 0.0215   macro 0.505
+  //     scene.environment = null  mean L  14.5   <- 89% OF THAT FLOOR IS THE IBL
+  //     environmentIntensity x0.35 mean L  80.5  acutance 0.0497   macro 0.669
+  //     the three lightPools hidden mean L 133.7 <- NOT the pools, they were blamed twice
+  //     material.roughness = 1.0   mean L 127.9  <- no-op: the scalar is already 1 and the
+  //                                                  ORM MAP carries the real roughness
+  //
+  // So the near floor is polished marble at grazing incidence returning `scene.environment` —
+  // and this room's environment is a FIVE-BOX SHELL. A specular term is added equally to a
+  // black tile and a white one, so a structureless bright field lands on both and the chequer
+  // stops existing exactly where the floor is most oblique to the eye. **This is the same
+  // defect the end plates had for four rounds — a perfect mirror of a structureless IBL is
+  // structureless — and nobody had noticed it was also on the largest surface in the room.**
+  //
+  // The fix is the one that worked there: give it something real to reflect. The camera never
+  // moves, so this is ONE extra scene render at build time and nothing per frame. The floor is
+  // its own mirror plane (y = 0), so the mirrored camera keeps the MAIN camera's projection —
+  // and for any point ON the plane the reflected and direct projections agree, which means the
+  // reflection target is sampled 1:1 with the screen and there is no minification to filter.
+  //
+  // What it buys, beyond the chequer: the reflection is mixed in by the SAME roughness gate the
+  // plates use, and the marble's ORM map carries wear and a dust film — so the polished lanes
+  // reflect and the dusty ones do not, which is macro-scale variation of exactly the kind the
+  // measured comparison against `refs/bf1/bf1-ballroom-01.png` says this render is short of.
+  //
+  // ⚠ `envMapIntensity` IS NOT 1 HERE. The plates set `envMap` on the material, so three
+  // honoured their 1.0. This floor lights from `scene.environment`, and three OVERWRITES the
+  // uniform with `scene.environmentIntensity` — 3.2. The injected reflection is multiplied by
+  // that on the way out of getIBLRadiance, so it is pre-divided by `uEoGain`. Without this the
+  // floor comes back at 3.2x the radiance of the room it is reflecting.
+  let floorRT = null;
+  if (FLOOR_REFLECT) {
+    const prevTarget = renderer.getRenderTarget();
+    const nrm = new THREE.Vector3(0, 1, 0);
+    const P = new THREE.Vector3(0, 0, 0);
+    const mcam = planeMirrorCamera(camera, P, nrm, PLANAR_CLIP);
+    const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+    const fw = Math.max(64, Math.round(size.x) & ~1);
+    const fh = Math.max(64, Math.round(size.y) & ~1);
+    floorRT = new THREE.WebGLRenderTarget(fw, fh, {
+      type: THREE.HalfFloatType, colorSpace: THREE.NoColorSpace,
+      minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter,
+      depthBuffer: true, generateMipmaps: true,
+    });
+    floorRT.texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    floor.visible = false;                 // or the floor photographs its own underside
+    if (floorParquet) floorParquet.visible = false;   // same plane, same reason
+    renderer.setRenderTarget(floorRT);
+    renderer.clear();
+    renderer.render(scene, mcam);
+    renderer.setRenderTarget(prevTarget);
+    floor.visible = true;
+    if (floorParquet) floorParquet.visible = true;
+    const texMat = new THREE.Matrix4()
+      .set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1)
+      .multiply(mcam.projectionMatrix)
+      .multiply(mcam.matrixWorldInverse);
+    const flatN = nrm.clone().transformDirection(camera.matrixWorldInverse).normalize();
+    // 'mip' rather than 'sharp': this target is sampled at about 1:1, so there is no
+    // minification to give acutance back — an unsharp mask here would only draw halos.
+    applyPlanarReflection(floor.material, floorRT.texture, texMat, flatN, 'mip', [fw, fh], {
+      gain: 1 / (scene.environmentIntensity || 1),
+      // The chequer bakes at roughness ~0.135 under a 0.3 clearcoat; dusty and worn patches
+      // run well past it. Reflect where the marble is polished, fall back to the environment
+      // where it is not, and let the material's own map decide which is which.
+      lo: 0.06, hi: 0.42,
+      wobble: 0.0,
+    });
+    floor.material.needsUpdate = true;
+    // ---- THE SAME PATCH, A SECOND TIME, FOR THE PARQUET — see the `?floor=` note up top ----
+    // Same render, same texture matrix, same flat normal (the two planes are 4 mm apart, nothing
+    // next to a 26 x 16 m room), but a DIFFERENT roughness gate: marble's 0.06/0.42 measured
+    // against PARQUET_SURFACE's own `rough` formula (clean field ~0.40-0.45, worn traffic lanes
+    // 0.55+, plank joints 0.7+) would either ask wood to be as polished as stone or close the
+    // knee before the clean field even reaches it. 0.32/0.68 puts the clean wax just past the
+    // knee — a soft sheen, not a mirror — and lets worn lanes and joints fall outside it, which
+    // is what a floor that is waxed rather than French-polished actually does.
+    if (floorParquet) {
+      applyPlanarReflection(floorParquet.material, floorRT.texture, texMat, flatN, 'mip', [fw, fh], {
+        gain: 1 / (scene.environmentIntensity || 1),
+        lo: 0.32, hi: 0.68,
+        wobble: 0.0,
+      });
+      floorParquet.material.needsUpdate = true;
+    }
+    engine.onDispose?.(() => floorRT.dispose());
+  }
+
+  // Introspection for the ablation harness, so an A/B can ASSERT which path it timed rather
+  // than trust the query string it passed. `planarPatched` is set inside onBeforeCompile, so
+  // it stays null until the plate's program is first compiled — the harness reads it after
+  // settling, not here.
+  engine.floorReflect = FLOOR_REFLECT ? floor : null;
+  engine.floorMode = FLOOR;
+  engine.floorParquet = floorParquet;
+  engine.mirrorMode = mirrorMode;
+  engine.mirrorFilter = MIRROR_FILTER;
+  engine.endPlates = endPlates.map((p) => p.mesh);
+
+  engine.finalizeScene();
+  engine.markReady();
+  engine.start();
+  return engine;
+}
+
+// ---------------------------------------------------------------------------
+// PLANAR REFLECTION — the two helpers the end plates use. See the long note at the end-plate
+// block for why a cube map cannot do this job and what the swap costs.
+// ---------------------------------------------------------------------------
+
+/**
+ * A camera at `cam` reflected about the plane (P, n), with its frustum fitted to `corners`
+ * so that almost every texel of the render target lands on the plate.
+ *
+ * ⚠ THE NEAR PLANE IS THE TRAP IN THIS TECHNIQUE, AND IT FAILS SILENTLY. A mirrored camera
+ * stands BEHIND the wall the mirror is hung on, so with a default near plane it photographs
+ * the back of that wall and returns a flat field — which looks exactly like "the reflection
+ * has nothing in it" and is nothing of the kind.
+ *
+ * ⚠⚠ ROUND 10: THE FLAT NEAR PLANE THAT USED TO SIT HERE WAS NOT ENOUGH, AND THIS COMMENT
+ * ARGUED ITSELF INTO THE BUG. It said: "the plate spans only ~0.3 m of depth from this camera,
+ * so a flat near plane just short of the nearest corner clips the wall (0.49 m nearer) and
+ * keeps the whole plate." Both halves are true and the conclusion does not follow, because
+ * A NEAR PLANE IS PERPENDICULAR TO THE VIEW AXIS AND THE WALL IS NOT. The two planes are
+ * oblique to each other, so they INTERSECT IN A LINE, and on one side of that line the wall
+ * is beyond the near plane and renders. For the left plate the mirrored camera meets the end
+ * wall at 60 degrees off its normal and the crossing line falls right across the middle of
+ * the frustum: MORE THAN HALF THAT PLATE'S REFLECTION WAS THE BACK OF ITS OWN WALL — a flat
+ * grey field with a dead-straight diagonal edge, which reads exactly like "soft mirror" and
+ * is nothing of the kind. The right plate escaped only because its axis is nearly normal to
+ * the wall (view-axis z-component 0.964 against 0.868), which pushes the crossing line
+ * outside the frustum. That is the whole of "the two plates are not at parity".
+ *
+ * The fix is the oblique near plane the old comment named and declined to build — Lengyel's
+ * clip-plane substitution, the same one three's own `Reflector` uses. The near plane is
+ * replaced by the MIRROR PLANE ITSELF, so anything behind the glass is clipped whatever the
+ * angle, and there is no longer a hand-tuned distance that can be right for one plate and
+ * wrong for another.
+ *
+ * ⚠ Validated by breaking it: `?planarclip=flat` puts the old flat near plane back, and the
+ * grey wedge returns across the left plate. That flag is kept permanently, not deleted after
+ * the round — the previous owner's flat-plane reasoning shipped precisely because there was
+ * no way to run it against the alternative.
+ */
+function fitMirrorCamera(cam, P, n, corners, margin = 1.04, clipMode = 'oblique') {
+  const reflectPoint = (p) => p.clone().sub(n.clone().multiplyScalar(2 * p.clone().sub(P).dot(n)));
+  const reflectDir = (d) => d.clone().sub(n.clone().multiplyScalar(2 * d.dot(n)));
+
+  const mcam = new THREE.PerspectiveCamera(30, 1, 0.1, 90);
+  mcam.position.copy(reflectPoint(cam.position));
+  mcam.up.copy(reflectDir(cam.up));
+  mcam.lookAt(P);
+  mcam.updateMatrixWorld(true);
+
+  const inv = new THREE.Matrix4().copy(mcam.matrixWorld).invert();
+  let tx = 1e-4, ty = 1e-4, near = Infinity;
+  for (const c of corners) {
+    const v = c.clone().applyMatrix4(inv);
+    const z = Math.max(1e-3, -v.z);
+    tx = Math.max(tx, Math.abs(v.x) / z);
+    ty = Math.max(ty, Math.abs(v.y) / z);
+    near = Math.min(near, z);
+  }
+  tx *= margin; ty *= margin;
+  mcam.fov = 2 * Math.atan(ty) * 180 / Math.PI;
+  mcam.aspect = tx / ty;
+  // A SMALL near plane on purpose. The oblique substitution below REPLACES the near plane with
+  // the mirror plane, so the number here only sets the depth range; keeping the old
+  // "just short of the nearest corner" value would leave the flat plane fighting the oblique
+  // one for whichever is nearer, which is the bug this is fixing.
+  mcam.near = clipMode === 'flat' ? Math.max(0.05, near - 0.05) : 0.1;
+  mcam.far = 90;
+  mcam.updateProjectionMatrix();
+  mcam.updateMatrixWorld(true);
+  if (clipMode === 'flat') return mcam;
+
+  // ---- OBLIQUE NEAR PLANE (Lengyel), matching three's own Reflector -----------------------
+  // `n` faces the room (it is the plate's outward normal and the real camera stands in front
+  // of the plate), which is the sign convention Reflector uses.
+  const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(n, P);
+  plane.applyMatrix4(mcam.matrixWorldInverse);
+  const cp = new THREE.Vector4(plane.normal.x, plane.normal.y, plane.normal.z, plane.constant);
+  const e = mcam.projectionMatrix.elements;
+  const q = new THREE.Vector4(
+    (Math.sign(cp.x) + e[8]) / e[0],
+    (Math.sign(cp.y) + e[9]) / e[5],
+    -1.0,
+    (1.0 + e[10]) / e[14]);
+  cp.multiplyScalar(2.0 / cp.dot(q));
+  e[2] = cp.x;
+  e[6] = cp.y;
+  // The 1e-4 is a clip bias: without it the plate's own coplanar geometry z-fights the new
+  // near plane and stipples the first few texels of the reflection.
+  e[10] = cp.z + 1.0 - 1e-4;
+  e[14] = cp.w;
+  mcam.projectionMatrixInverse.copy(mcam.projectionMatrix).invert();
+  return mcam;
+}
+
+/**
+ * The camera reflected about the plane (P, n), KEEPING the real camera's own projection.
+ *
+ * This is the right form for a mirror that fills the frame — the floor — and the wrong form
+ * for a small plate, which wants `fitMirrorCamera`'s fitted frustum so its target is not
+ * mostly wasted. The useful property: for any point ON the plane the reflected view matrix
+ * and the direct one agree, so a floor fragment samples the reflection target at its own
+ * screen position and there is no minification to filter.
+ *
+ * ⚠ BOTH the eye and the look direction are reflected, and `lookAt` then rebuilds an
+ * orthonormal RIGHT-handed basis — so the scene is rendered unmirrored from a normal camera
+ * and no winding or culling flip is needed. This is three's own `Reflector` construction;
+ * reflecting the world instead (a matrix with determinant -1) is the version that needs one.
+ */
+function planeMirrorCamera(cam, P, n, clipMode = 'oblique') {
+  const reflectPoint = (p) => p.clone().sub(n.clone().multiplyScalar(2 * p.clone().sub(P).dot(n)));
+  const reflectDir = (d) => d.clone().sub(n.clone().multiplyScalar(2 * d.dot(n)));
+
+  const mcam = new THREE.PerspectiveCamera(cam.fov, cam.aspect, cam.near, cam.far);
+  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
+  const camUp = new THREE.Vector3(0, 1, 0).applyQuaternion(cam.quaternion);
+  mcam.position.copy(reflectPoint(cam.position));
+  mcam.up.copy(reflectDir(camUp));
+  mcam.lookAt(reflectPoint(cam.position.clone().add(fwd)));
+  mcam.updateProjectionMatrix();
+  mcam.updateMatrixWorld(true);
+  if (clipMode === 'flat') return mcam;
+
+  // Oblique near plane (Lengyel) at the mirror plane itself — same substitution and the same
+  // reasoning as `fitMirrorCamera`; here it is what stops anything under the floor rendering.
+  const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(n, P);
+  plane.applyMatrix4(mcam.matrixWorldInverse);
+  const cp = new THREE.Vector4(plane.normal.x, plane.normal.y, plane.normal.z, plane.constant);
+  const e = mcam.projectionMatrix.elements;
+  const q = new THREE.Vector4(
+    (Math.sign(cp.x) + e[8]) / e[0],
+    (Math.sign(cp.y) + e[9]) / e[5],
+    -1.0,
+    (1.0 + e[10]) / e[14]);
+  cp.multiplyScalar(2.0 / cp.dot(q));
+  e[2] = cp.x;
+  e[6] = cp.y;
+  e[10] = cp.z + 1.0 - 1e-4;
+  e[14] = cp.w;
+  mcam.projectionMatrixInverse.copy(mcam.projectionMatrix).invert();
+  return mcam;
+}
+
+/**
+ * Swap a MeshStandardMaterial's IBL RADIANCE (its mirror term) for a screen-projected planar
+ * reflection, leaving every other part of the standard shading — Fresnel, the metalness and
+ * roughness maps, the diffuse irradiance — exactly as it was. That is the whole reason for
+ * patching `getIBLRadiance` rather than adding light in `opaque_fragment`: the foxed silvering
+ * is what makes this plate read as glass, and it is carried by those maps.
+ *
+ * ⚠ `patchForScreenAO` (post/pipeline.js) runs LATER, chains onto this `onBeforeCompile`, and
+ * then OVERWRITES `customProgramCacheKey` with a constant shared by every standard material in
+ * the project. So a cache key of our own would be thrown away, and this material could be
+ * handed a program compiled for the pier plates — same parameters, no planar patch. A
+ * `defines` entry is used instead: `getProgramCacheKey` walks `parameters.defines` BEFORE it
+ * reaches `customProgramCacheKey`, so the define is the thing that actually keeps the programs
+ * apart. Verified against three r180's own `WebGLPrograms.getProgramCacheKey`.
+ *
+ * ⚠ AND THE ONE THAT COST THIS ROUND AN HOUR: `onBeforeCompile` HANDS YOU THE SHADER WITH ITS
+ * `#include` DIRECTIVES STILL UNRESOLVED. `resolveIncludes()` runs later, inside WebGLProgram.
+ * So a string replace aimed at text that lives INSIDE a chunk — here
+ * `vec4 envMapColor = textureCubeUV(...)`, which lives in envmap_physical_pars_fragment —
+ * matches nothing, returns the string unchanged, and FAILS COMPLETELY SILENTLY. The plate went
+ * on rendering the cube path and simply looked a bit darker, which is indistinguishable from
+ * "the planar reflection is working and the target is dark". Every other onBeforeCompile in
+ * this project (pipeline.js, materials-local.js, robot.js, gadgetmat.js) replaces an
+ * `#include <...>` line or `void main() {` — that is not a style, it is the only thing that
+ * works. The chunk is pulled out of THREE.ShaderChunk, edited, and injected in place of its
+ * own include, and the edit is ASSERTED rather than hoped for.
+ *
+ * ⚠ NO BACKTICKS ANYWHERE IN THIS FUNCTION, including in comments — one inside a GLSL template
+ * literal terminates the JS string and takes the whole bundle down for every agent sharing the
+ * dev server. It has happened four times in two days. These strings are single-quoted and
+ * array-joined for that reason.
+ */
+// The anchor is three r180 verbatim, envMapRotation included — read out of
+// ShaderChunk.envmap_physical_pars_fragment rather than recalled. It occurs exactly once;
+// getIBLIrradiance uses worldNormal and is deliberately left on the cube, because the diffuse
+// term genuinely does want a blurred average of the room.
+const IBL_RADIANCE_ANCHOR =
+  'vec4 envMapColor = textureCubeUV( envMap, envMapRotation * reflectVec, roughness );';
+
+function planarEnvmapChunk(filterMode = 'sharp') {
+  const src = THREE.ShaderChunk.envmap_physical_pars_fragment;
+  if (src.indexOf(IBL_RADIANCE_ANCHOR) < 0) {
+    console.warn('[room.ballroom] planar reflection: getIBLRadiance anchor not found in '
+      + 'THREE.ShaderChunk.envmap_physical_pars_fragment — three.js changed the chunk. '
+      + 'The plates are on the cube path and WILL read as haze.');
+    return null;
+  }
+  // The pre-r11 fetch, kept verbatim behind ?mirrorfilter=point so the aliasing can be put
+  // back on demand. A change that ships without an ablation cannot be judged later.
+  const POINT = [
+    '  vec2 eoUv = clamp( eoBase + ( normal - uEoFlatN ).xy * uEoWobble, 0.002, 0.998 );',
+    '  vec3 eoPlanar = texture2D( uEoMap, eoUv ).rgb;',
+  ];
+  // ⚠ THE LOD IS TAKEN FROM THE SMOOTH PROJECTED UV, NEVER FROM THE WOBBLED ONE. The wobble
+  // is a normal-map term, so its derivative is high-frequency noise; feeding that to the mip
+  // selection picks a different level per pixel and reintroduces the exact speckle this is
+  // removing — as a blur that changes every pixel, which looks like dirty glass and is not.
+  const LOD = [
+    '  vec2 eoPx = eoBase * uEoSize;',
+    '  vec2 eoDx = dFdx( eoPx ), eoDy = dFdy( eoPx );',
+    '  float eoLod = clamp( 0.5 * log2( max( dot( eoDx, eoDx ), dot( eoDy, eoDy ) ) ), 0.0, uEoMaxLod );',
+    '  vec2 eoUv = clamp( eoBase + ( normal - uEoFlatN ).xy * uEoWobble, 0.002, 0.998 );',
+    '  vec3 eoPlanar = texture2DLodEXT( uEoMap, eoUv, eoLod ).rgb;',
+  ];
+  // One octave of unsharp mask, in the mip domain. A box-filtered minification is a correct
+  // low-pass and an ugly one: it rolls the top octave off long before Nyquist, which is what
+  // a viewer reads as "soft". Subtracting the next mip puts that octave back at one extra
+  // fetch, and it cannot ring beyond the data because both taps come from the same chain.
+  const SHARP = [
+    '  vec3 eoBlur = texture2DLodEXT( uEoMap, eoUv, min( eoLod + 1.0, uEoMaxLod ) ).rgb;',
+    '  eoPlanar = max( vec3( 0.0 ), eoPlanar + uEoSharp * ( eoPlanar - eoBlur ) );',
+  ];
+  const body = filterMode === 'point' ? POINT
+    : filterMode === 'mip' ? LOD
+      : LOD.concat(SHARP);
+  return src.replace(IBL_RADIANCE_ANCHOR, [
+    IBL_RADIANCE_ANCHOR,
+    '#ifdef EO_PLANAR',
+    '{',
+    '  vec4 eoClip = uEoMat * vec4( vEoWorld, 1.0 );',
+    '  vec2 eoBase = eoClip.xy / max( eoClip.w, 1e-4 );',
+    ...body,
+    // Where the amalgam has bloomed or lifted, the roughness map jumps well past the gate and
+    // the plate goes back to the blurred cube — a scattering patch should not carry a sharp
+    // image. Clean silvering bakes at about 0.055, so it is fully planar. The floor uses the
+    // same gate against its own wear-and-dust map, which is what makes its polished lanes
+    // reflect and its dusty ones not.
+    '  envMapColor.rgb = mix( eoPlanar * uEoGain, envMapColor.rgb, smoothstep( uEoRough.x, uEoRough.y, roughness ) );',
+    '}',
+    '#endif',
+  ].join('\n'));
+}
+
+function applyPlanarReflection(mat, texture, texMat, flatViewNormal, filterMode = 'sharp',
+  size = [512, 1024], opts = {}) {
+  const chunk = planarEnvmapChunk(filterMode);
+  // If three ever moves that line, leave the plate on the cube rather than shipping a material
+  // that silently does nothing. planarEnvmapChunk has already warned.
+  if (chunk === null) { mat.userData.planarPatched = false; return mat; }
+
+  const uni = {
+    uEoMap: { value: texture },
+    uEoMat: { value: texMat },
+    uEoFlatN: { value: flatViewNormal },
+    // How far the silvering's own normal map drags the reflection sideways, in uv. A real
+    // mercury plate is not optically flat and a perfectly rigid reflection is one of the
+    // tells that a frame is a render; this couples the pouring drift already in the normal
+    // map into the image the plate carries.
+    //
+    // ⚠ 0.030 -> 0.010, AND THIS IS HALF OF THE PARITY HATE. The displacement is in UV, so it
+    // is 3% of the PLATE regardless of how big the plate is on screen — but what it costs is
+    // measured in the SIZE OF THE FEATURES it smears. On the far plate 3% is 5.6 screen px
+    // against a reflected chequer square of about 40, i.e. invisible. On the near plate it is
+    // 2.1 screen px against a window mullion of about 1, i.e. it destroys the one piece of
+    // structure the plate has. The same number, applied honestly to both plates, damages only
+    // the small one — which is exactly the asymmetry the "not at parity" hate describes.
+    // Swept in one boot at 0.030 / 0.010 / 0 (`harness/_tmp_eo11_knob.mjs uEoWobble`): at
+    // 0.030 the reflected glazing bars are visibly wavy and broken, at 0.010 they are a clean
+    // grid with a slight lean, at 0 they are ruler-straight and the plate starts to read as
+    // polished steel rather than as old glass. 0.010 keeps the character and returns the read.
+    uEoWobble: { value: opts.wobble ?? 0.010 },
+    // ⚠ getIBLRadiance ends in `* envMapIntensity`, and three OVERWRITES that uniform with
+    // `scene.environmentIntensity` for anything lighting from the scene environment rather
+    // than from its own `envMap`. The plates set envMap and get 1.0; the floor does not and
+    // gets 3.2. Pre-divide, or the reflection comes out brighter than the room.
+    uEoGain: { value: opts.gain ?? 1.0 },
+    uEoRough: { value: new THREE.Vector2(opts.lo ?? 0.10, opts.hi ?? 0.34) },
+    uEoSize: { value: new THREE.Vector2(size[0], size[1]) },
+    uEoMaxLod: { value: Math.floor(Math.log2(Math.max(size[0], size[1]))) },
+    // Swept in one boot at 0 / 0.55 / 1.0 (`harness/_tmp_eo11_knob.mjs uEoSharp`), measured on
+    // the near plate's 64 x 134 crop: acutance 0.1949 / 0.2048 / 0.2144 and the 2-px band
+    // 8.36 / 9.03 / 9.71, with the reflected glazing bars gaining definition the whole way and
+    // no visible halo at this magnification. 0.85 rather than 1.0 only because a mask this
+    // strong on a 71-px plate has nowhere to hide if a later camera enlarges it.
+    uEoSharp: { value: 0.85 },
+  };
+  mat.userData.planarUniforms = uni;
+  mat.userData.planarFilter = filterMode;
+  // The filter mode changes the PROGRAM, so it has to be part of the cache key or two plates
+  // built in different modes share one compilation. Same reason EO_PLANAR is a define and not
+  // a customProgramCacheKey — see the note above.
+  mat.defines = { ...(mat.defines || {}), EO_PLANAR: '1', EO_FILTER: filterMode.toUpperCase() };
+
+  const prev = mat.onBeforeCompile;
+  mat.onBeforeCompile = function (shader, renderer) {
+    if (prev) prev.call(this, shader, renderer);
+    Object.assign(shader.uniforms, uni);
+
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', [
+        '#include <common>',
+        'varying vec3 vEoWorld;',
+      ].join('\n'))
+      // worldpos_vertex runs after begin_vertex, so 'transformed' is the final local position.
+      .replace('#include <worldpos_vertex>', [
+        '#include <worldpos_vertex>',
+        'vEoWorld = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;',
+      ].join('\n'));
+
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', [
+        '#include <common>',
+        'uniform sampler2D uEoMap;',
+        'uniform mat4  uEoMat;',
+        'uniform vec3  uEoFlatN;',
+        'uniform float uEoWobble;',
+        'uniform vec2  uEoSize;',
+        'uniform float uEoMaxLod;',
+        'uniform float uEoSharp;',
+        'uniform float uEoGain;',
+        'uniform vec2  uEoRough;',
+        'varying vec3  vEoWorld;',
+      ].join('\n'))
+      // The chunk is injected EXPANDED, in place of its own include — see the note above for
+      // why replacing chunk-internal text here matches nothing and fails silently.
+      .replace('#include <envmap_physical_pars_fragment>', chunk);
+    // ASSERT THE REPLACE LANDED, both halves. `String.replace` returning its input unchanged
+    // is this file's documented silent failure; `uEoMap` proves the uniform block arrived and
+    // `eoBase` proves the CHUNK did, which is the half that fails when three moves an include.
+    const fs = shader.fragmentShader;
+    mat.userData.planarPatched = fs.indexOf('uEoMap') >= 0 && fs.indexOf('eoBase') >= 0;
+    mat.userData.planarLod = fs.indexOf('texture2DLodEXT( uEoMap') >= 0;
+    mat.userData.planarSharpPatched = fs.indexOf('uEoSharp *') >= 0;
+    if (!mat.userData.planarPatched) {
+      console.warn('[room.ballroom] planar reflection: the chunk injection MATCHED NOTHING. '
+        + 'The plate is on the cube path and will read as haze.');
+    }
+  };
+  mat.needsUpdate = true;
+  return mat;
+}

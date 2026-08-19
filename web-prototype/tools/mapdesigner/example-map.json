@@ -1,0 +1,2146 @@
+{
+ "format": "rrr.map/1",
+ "generator": "harness/genspike.mjs",
+ "generatorVersion": "genspike-2026-08-11",
+ "_README": "Example only. Produced by tools/mapdesigner (MAPS.bat) -> \"download this map\". NOTHING IN src/ CONSUMES THIS YET - this file defines the shape, it is not wired in. Regenerate with: node harness/genspike.mjs --seed 7. NEW 2026-08-11: every boundary now carries runs/runMax (a boundary can be several separate stretches of wall, and a door has to fit in ONE of them), hunterForces (breachable, i.e. the set room.chainedDoorsOf returns - NOT chained), slabs/slabWhy (the slab arm on this same wall, cap 35 m, no minimum) and interconnect (the one 1.55 m spot per wall with no barrier behind it).",
+ "handEdited": false,
+ "customFootprints": 0,
+ "dials": {
+  "align": 0.35,
+  "gap": 2.2,
+  "waste": 0.04,
+  "cutSpan": 30
+ },
+ "seed": 7,
+ "align": 0.35,
+ "envelope": {
+  "x0": 0,
+  "x1": 51.08,
+  "z0": 0,
+  "z1": 47.26
+ },
+ "spaces": [
+  {
+   "id": "r0.ballroom",
+   "kind": "room",
+   "type": "ballroom",
+   "rot": false,
+   "rects": [
+    {
+     "x0": 0.15,
+     "x1": 27.35,
+     "z0": 14.01,
+     "z1": 29.31
+    }
+   ],
+   "y0": 0,
+   "storey": 9.6
+  },
+  {
+   "id": "r1.ballroom",
+   "kind": "room",
+   "type": "ballroom",
+   "rot": false,
+   "rects": [
+    {
+     "x0": 0.15,
+     "x1": 27.35,
+     "z0": 31.81,
+     "z1": 47.11
+    }
+   ],
+   "y0": 0,
+   "storey": 9.6,
+   "exit": true
+  },
+  {
+   "id": "r2.gallery",
+   "kind": "room",
+   "type": "gallery",
+   "rot": true,
+   "rects": [
+    {
+     "x0": 29.74,
+     "x1": 36.44,
+     "z0": 14.01,
+     "z1": 41.21
+    }
+   ],
+   "y0": 0,
+   "storey": 5.6
+  },
+  {
+   "id": "r3.study",
+   "kind": "room",
+   "type": "study",
+   "rot": false,
+   "rects": [
+    {
+     "x0": 39.24,
+     "x1": 50.84,
+     "z0": 14.01,
+     "z1": 29.41
+    }
+   ],
+   "y0": 0,
+   "storey": 4.8
+  },
+  {
+   "id": "r4.study",
+   "kind": "room",
+   "type": "study",
+   "rot": false,
+   "rects": [
+    {
+     "x0": 39.33,
+     "x1": 50.93,
+     "z0": 29.71,
+     "z1": 45.11
+    }
+   ],
+   "y0": 0,
+   "storey": 4.8
+  },
+  {
+   "id": "r5.study",
+   "kind": "room",
+   "type": "study",
+   "rot": true,
+   "rects": [
+    {
+     "x0": 0.15,
+     "x1": 15.55,
+     "z0": 0.15,
+     "z1": 11.75
+    }
+   ],
+   "y0": 0,
+   "storey": 4.8
+  },
+  {
+   "id": "r6.service",
+   "kind": "room",
+   "type": "service",
+   "rot": true,
+   "rects": [
+    {
+     "x0": 15.85,
+     "x1": 31.25,
+     "z0": 7.16,
+     "z1": 10.56
+    }
+   ],
+   "y0": 0,
+   "storey": 4.8
+  },
+  {
+   "id": "r7.chapel",
+   "kind": "room",
+   "type": "chapel",
+   "rot": false,
+   "rects": [
+    {
+     "x0": 18.85,
+     "x1": 25.65,
+     "z0": 0.36,
+     "z1": 6.86
+    }
+   ],
+   "y0": 0,
+   "storey": 4.8,
+   "spawn": true
+  },
+  {
+   "id": "v0",
+   "kind": "void",
+   "type": "void",
+   "rot": false,
+   "rects": [],
+   "y0": 0,
+   "storey": 4.8
+  },
+  {
+   "id": "c0",
+   "kind": "corridor",
+   "type": "corridor",
+   "rot": false,
+   "rects": [
+    {
+     "x0": 15.85,
+     "x1": 18.55,
+     "z0": 0.36,
+     "z1": 6.86
+    }
+   ],
+   "y0": 0,
+   "storey": 4.8
+  },
+  {
+   "id": "c1",
+   "kind": "corridor",
+   "type": "corridor",
+   "rot": false,
+   "rects": [
+    {
+     "x0": 25.95,
+     "x1": 50.93,
+     "z0": 0.36,
+     "z1": 6.86
+    },
+    {
+     "x0": 31.55,
+     "x1": 50.93,
+     "z0": 7.16,
+     "z1": 13.71
+    }
+   ],
+   "y0": 0,
+   "storey": 4.8
+  },
+  {
+   "id": "c2",
+   "kind": "corridor",
+   "type": "corridor",
+   "rot": false,
+   "rects": [
+    {
+     "x0": 15.85,
+     "x1": 31.25,
+     "z0": 10.86,
+     "z1": 13.71
+    }
+   ],
+   "y0": 0,
+   "storey": 4.8
+  },
+  {
+   "id": "c3",
+   "kind": "corridor",
+   "type": "corridor",
+   "rot": false,
+   "rects": [
+    {
+     "x0": 0.15,
+     "x1": 15.55,
+     "z0": 12.05,
+     "z1": 13.71
+    }
+   ],
+   "y0": 0,
+   "storey": 4.8
+  },
+  {
+   "id": "c4",
+   "kind": "corridor",
+   "type": "corridor",
+   "rot": false,
+   "rects": [
+    {
+     "x0": 27.65,
+     "x1": 29.44,
+     "z0": 14.01,
+     "z1": 47.11
+    }
+   ],
+   "y0": 0,
+   "storey": 4.8
+  },
+  {
+   "id": "c5",
+   "kind": "corridor",
+   "type": "corridor",
+   "rot": false,
+   "rects": [
+    {
+     "x0": 36.74,
+     "x1": 38.94,
+     "z0": 14.01,
+     "z1": 47.11
+    }
+   ],
+   "y0": 0,
+   "storey": 4.8
+  },
+  {
+   "id": "c6",
+   "kind": "corridor",
+   "type": "corridor",
+   "rot": false,
+   "rects": [
+    {
+     "x0": 0.15,
+     "x1": 27.35,
+     "z0": 29.61,
+     "z1": 31.51
+    }
+   ],
+   "y0": 0,
+   "storey": 4.8
+  },
+  {
+   "id": "c7",
+   "kind": "corridor",
+   "type": "corridor",
+   "rot": false,
+   "rects": [
+    {
+     "x0": 39.33,
+     "x1": 50.93,
+     "z0": 45.41,
+     "z1": 47.11
+    }
+   ],
+   "y0": 0,
+   "storey": 4.8
+  },
+  {
+   "id": "c8",
+   "kind": "corridor",
+   "type": "corridor",
+   "rot": false,
+   "rects": [
+    {
+     "x0": 29.74,
+     "x1": 36.44,
+     "z0": 41.51,
+     "z1": 47.11
+    }
+   ],
+   "y0": 0,
+   "storey": 4.8
+  }
+ ],
+ "edges": [
+  {
+   "a": "r0.ballroom",
+   "b": "c2",
+   "clear": 11.5,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "runs": 1,
+   "runMax": 11.5,
+   "hunterForces": false,
+   "spans": [
+    5.72,
+    2.96
+   ]
+  },
+  {
+   "a": "r0.ballroom",
+   "b": "c3",
+   "clear": 15.4,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "open",
+   "runs": 1,
+   "runMax": 15.4,
+   "hunterForces": false,
+   "spans": [
+    5.72,
+    5.72,
+    2.96
+   ]
+  },
+  {
+   "a": "r0.ballroom",
+   "b": "c4",
+   "clear": 15.3,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "breachable",
+   "runs": 1,
+   "runMax": 15.3,
+   "hunterForces": true,
+   "spans": [
+    5.72,
+    5.72,
+    2.56
+   ]
+  },
+  {
+   "a": "r0.ballroom",
+   "b": "c6",
+   "clear": 27.2,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "breachable",
+   "runs": 1,
+   "runMax": 27.2,
+   "hunterForces": true,
+   "spans": [
+    5.72,
+    5.72,
+    5.72,
+    5.72,
+    2.56
+   ]
+  },
+  {
+   "a": "r1.ballroom",
+   "b": "c4",
+   "clear": 15.3,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "open",
+   "runs": 1,
+   "runMax": 15.3,
+   "hunterForces": false,
+   "spans": [
+    5.72,
+    5.72,
+    2.56
+   ]
+  },
+  {
+   "a": "r1.ballroom",
+   "b": "c6",
+   "clear": 27.2,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "runs": 1,
+   "runMax": 27.2,
+   "hunterForces": false,
+   "spans": [
+    5.72,
+    5.72,
+    5.72,
+    5.72,
+    2.56
+   ]
+  },
+  {
+   "a": "r2.gallery",
+   "b": "c1",
+   "clear": 4.888,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "breachable",
+   "runs": 1,
+   "runMax": 4.888,
+   "hunterForces": true,
+   "spans": [
+    2.96
+   ]
+  },
+  {
+   "a": "r2.gallery",
+   "b": "c2",
+   "clear": 1.512,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "none",
+   "runs": 1,
+   "runMax": 1.512,
+   "hunterForces": false,
+   "spans": []
+  },
+  {
+   "a": "r2.gallery",
+   "b": "c4",
+   "clear": 27.2,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "runs": 1,
+   "runMax": 27.2,
+   "hunterForces": false,
+   "spans": [
+    5.72,
+    5.72,
+    5.72,
+    5.72,
+    2.56
+   ]
+  },
+  {
+   "a": "r2.gallery",
+   "b": "c5",
+   "clear": 27.2,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "runs": 1,
+   "runMax": 27.2,
+   "hunterForces": false,
+   "spans": [
+    5.72,
+    5.72,
+    5.72,
+    5.72,
+    2.56
+   ]
+  },
+  {
+   "a": "r2.gallery",
+   "b": "c8",
+   "clear": 6.7,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "breachable",
+   "runs": 1,
+   "runMax": 6.7,
+   "hunterForces": true,
+   "spans": [
+    5.72
+   ]
+  },
+  {
+   "a": "r3.study",
+   "b": "r4.study",
+   "clear": 11.516,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "runs": 1,
+   "runMax": 11.516,
+   "hunterForces": false,
+   "spans": [
+    5.72,
+    2.96
+   ]
+  },
+  {
+   "a": "r3.study",
+   "b": "c1",
+   "clear": 27.3,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "breachable",
+   "runs": 2,
+   "runMax": 15.4,
+   "hunterForces": true,
+   "spans": [
+    5.72,
+    5.72,
+    5.72,
+    5.72,
+    2.56
+   ]
+  },
+  {
+   "a": "r3.study",
+   "b": "c5",
+   "clear": 15.4,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "open",
+   "runs": 1,
+   "runMax": 15.4,
+   "hunterForces": false,
+   "spans": [
+    5.72,
+    5.72,
+    2.96
+   ]
+  },
+  {
+   "a": "r4.study",
+   "b": "c7",
+   "clear": 27.3,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "breachable",
+   "runs": 2,
+   "runMax": 15.4,
+   "hunterForces": true,
+   "spans": [
+    5.72,
+    5.72,
+    5.72,
+    5.72,
+    2.56
+   ]
+  },
+  {
+   "a": "r5.study",
+   "b": "r6.service",
+   "clear": 3.4,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "runs": 1,
+   "runMax": 3.4,
+   "hunterForces": false,
+   "spans": [
+    2.96
+   ]
+  },
+  {
+   "a": "r5.study",
+   "b": "c0",
+   "clear": 6.5,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "open",
+   "runs": 1,
+   "runMax": 6.5,
+   "hunterForces": false,
+   "spans": [
+    5.72
+   ]
+  },
+  {
+   "a": "r5.study",
+   "b": "c2",
+   "clear": 0.889,
+   "band": 2.8,
+   "diggable": false,
+   "solid": false,
+   "door": "none",
+   "runs": 1,
+   "runMax": 0.889,
+   "hunterForces": false,
+   "spans": []
+  },
+  {
+   "a": "r5.study",
+   "b": "c3",
+   "clear": 15.4,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "runs": 1,
+   "runMax": 15.4,
+   "hunterForces": false,
+   "spans": [
+    5.72,
+    5.72,
+    2.96
+   ]
+  },
+  {
+   "a": "r6.service",
+   "b": "r7.chapel",
+   "clear": 6.8,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "runs": 1,
+   "runMax": 6.8,
+   "hunterForces": false,
+   "spans": [
+    5.72
+   ]
+  },
+  {
+   "a": "r6.service",
+   "b": "c0",
+   "clear": 2.702,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "runs": 1,
+   "runMax": 2.702,
+   "hunterForces": false,
+   "spans": []
+  },
+  {
+   "a": "r6.service",
+   "b": "c1",
+   "clear": 8.998,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "runs": 2,
+   "runMax": 5.298,
+   "hunterForces": false,
+   "spans": [
+    5.72,
+    2.56
+   ]
+  },
+  {
+   "a": "r6.service",
+   "b": "c2",
+   "clear": 15.4,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "runs": 1,
+   "runMax": 15.4,
+   "hunterForces": false,
+   "spans": [
+    5.72,
+    5.72,
+    2.96
+   ]
+  },
+  {
+   "a": "r7.chapel",
+   "b": "v0",
+   "clear": 6.8,
+   "band": 2.8,
+   "diggable": false,
+   "solid": true,
+   "door": "none",
+   "runs": 1,
+   "runMax": 6.8,
+   "hunterForces": false,
+   "spans": []
+  },
+  {
+   "a": "r7.chapel",
+   "b": "c0",
+   "clear": 6.5,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "runs": 1,
+   "runMax": 6.5,
+   "hunterForces": false,
+   "spans": [
+    5.72
+   ]
+  },
+  {
+   "a": "r7.chapel",
+   "b": "c1",
+   "clear": 6.5,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "runs": 1,
+   "runMax": 6.5,
+   "hunterForces": false,
+   "spans": [
+    5.72
+   ]
+  },
+  {
+   "a": "v0",
+   "b": "c0",
+   "clear": 2.702,
+   "band": 2.8,
+   "diggable": false,
+   "solid": true,
+   "door": "none",
+   "runs": 1,
+   "runMax": 2.702,
+   "hunterForces": false,
+   "spans": []
+  },
+  {
+   "a": "v0",
+   "b": "c1",
+   "clear": 24.976,
+   "band": 2.8,
+   "diggable": false,
+   "solid": true,
+   "door": "none",
+   "runs": 1,
+   "runMax": 24.976,
+   "hunterForces": false,
+   "spans": []
+  },
+  {
+   "a": "c1",
+   "b": "c2",
+   "clear": 2.848,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "open",
+   "runs": 1,
+   "runMax": 2.848,
+   "hunterForces": false,
+   "spans": []
+  },
+  {
+   "a": "c1",
+   "b": "c5",
+   "clear": 2.206,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "none",
+   "runs": 1,
+   "runMax": 2.206,
+   "hunterForces": false,
+   "spans": []
+  },
+  {
+   "a": "c2",
+   "b": "c3",
+   "clear": 1.658,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "none",
+   "runs": 1,
+   "runMax": 1.658,
+   "hunterForces": false,
+   "spans": []
+  },
+  {
+   "a": "c2",
+   "b": "c4",
+   "clear": 1.788,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "none",
+   "runs": 1,
+   "runMax": 1.788,
+   "hunterForces": false,
+   "spans": []
+  },
+  {
+   "a": "c4",
+   "b": "c6",
+   "clear": 1.898,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "none",
+   "runs": 1,
+   "runMax": 1.898,
+   "hunterForces": false,
+   "spans": []
+  },
+  {
+   "a": "c4",
+   "b": "c8",
+   "clear": 5.598,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "runs": 1,
+   "runMax": 5.598,
+   "hunterForces": false,
+   "spans": [
+    2.96
+   ]
+  },
+  {
+   "a": "c5",
+   "b": "c7",
+   "clear": 17.398,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "runs": 1,
+   "runMax": 17.398,
+   "hunterForces": false,
+   "spans": [
+    5.72,
+    5.72,
+    2.96
+   ]
+  },
+  {
+   "a": "c5",
+   "b": "c8",
+   "clear": 5.598,
+   "band": 2.8,
+   "diggable": true,
+   "solid": false,
+   "door": "breachable",
+   "runs": 1,
+   "runMax": 5.598,
+   "hunterForces": true,
+   "spans": [
+    2.96
+   ]
+  }
+ ],
+ "boundaries": [
+  {
+   "key": "ballroom|corridor|z13.86|15.70..27.50",
+   "a": "r0.ballroom",
+   "b": "c2",
+   "axis": "z",
+   "at": 13.86,
+   "lo": 15.7,
+   "hi": 27.5,
+   "clear": 11.5,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "hunterForces": false,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [
+    {
+     "at": 0.2,
+     "len": 5.72
+    },
+    {
+     "at": 6.2,
+     "len": 2.96
+    }
+   ],
+   "slabs": 2,
+   "slabWhy": "door",
+   "interconnect": {
+    "at": 1.674,
+    "w": 1.55
+   }
+  },
+  {
+   "key": "ballroom|corridor|z13.86|0.00..15.70",
+   "a": "r0.ballroom",
+   "b": "c3",
+   "axis": "z",
+   "at": 13.86,
+   "lo": 0,
+   "hi": 15.7,
+   "clear": 15.4,
+   "diggable": true,
+   "solid": false,
+   "door": "open",
+   "hunterForces": false,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [
+    {
+     "at": 0.2,
+     "len": 5.72
+    },
+    {
+     "at": 6.2,
+     "len": 5.72
+    },
+    {
+     "at": 12.2,
+     "len": 2.96
+    }
+   ],
+   "slabs": 2,
+   "slabWhy": "door",
+   "interconnect": {
+    "at": 1.751,
+    "w": 1.55
+   }
+  },
+  {
+   "key": "ballroom|corridor|x27.50|13.86..29.46",
+   "a": "r0.ballroom",
+   "b": "c4",
+   "axis": "x",
+   "at": 27.5,
+   "lo": 13.86,
+   "hi": 29.46,
+   "clear": 15.3,
+   "diggable": true,
+   "solid": false,
+   "door": "breachable",
+   "hunterForces": true,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [
+    {
+     "at": 0.2,
+     "len": 5.72
+    },
+    {
+     "at": 6.2,
+     "len": 5.72
+    },
+    {
+     "at": 12.2,
+     "len": 2.56
+    }
+   ],
+   "slabs": 2,
+   "slabWhy": "door",
+   "interconnect": {
+    "at": 13.253,
+    "w": 1.55
+   }
+  },
+  {
+   "key": "ballroom|corridor|z29.46|0.00..27.50",
+   "a": "r0.ballroom",
+   "b": "c6",
+   "axis": "z",
+   "at": 29.46,
+   "lo": 0,
+   "hi": 27.5,
+   "clear": 27.2,
+   "diggable": true,
+   "solid": false,
+   "door": "breachable",
+   "hunterForces": true,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [
+    {
+     "at": 0.2,
+     "len": 5.72
+    },
+    {
+     "at": 6.2,
+     "len": 5.72
+    },
+    {
+     "at": 12.2,
+     "len": 5.72
+    },
+    {
+     "at": 18.2,
+     "len": 5.72
+    },
+    {
+     "at": 24.2,
+     "len": 2.56
+    }
+   ],
+   "slabs": 2,
+   "slabWhy": "door",
+   "interconnect": {
+    "at": 16.321,
+    "w": 1.55
+   }
+  },
+  {
+   "key": "ballroom|corridor|x27.50|31.66..47.26",
+   "a": "r1.ballroom",
+   "b": "c4",
+   "axis": "x",
+   "at": 27.5,
+   "lo": 31.66,
+   "hi": 47.26,
+   "clear": 15.3,
+   "diggable": true,
+   "solid": false,
+   "door": "open",
+   "hunterForces": false,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [
+    {
+     "at": 0.2,
+     "len": 5.72
+    },
+    {
+     "at": 6.2,
+     "len": 5.72
+    },
+    {
+     "at": 12.2,
+     "len": 2.56
+    }
+   ],
+   "slabs": 2,
+   "slabWhy": "door",
+   "interconnect": {
+    "at": 13.507,
+    "w": 1.55
+   }
+  },
+  {
+   "key": "ballroom|corridor|z31.66|0.00..27.50",
+   "a": "r1.ballroom",
+   "b": "c6",
+   "axis": "z",
+   "at": 31.66,
+   "lo": 0,
+   "hi": 27.5,
+   "clear": 27.2,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "hunterForces": false,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [
+    {
+     "at": 0.2,
+     "len": 5.72
+    },
+    {
+     "at": 6.2,
+     "len": 5.72
+    },
+    {
+     "at": 12.2,
+     "len": 5.72
+    },
+    {
+     "at": 18.2,
+     "len": 5.72
+    },
+    {
+     "at": 24.2,
+     "len": 2.56
+    }
+   ],
+   "slabs": 2,
+   "slabWhy": "door",
+   "interconnect": {
+    "at": 10.264,
+    "w": 1.55
+   }
+  },
+  {
+   "key": "corridor|gallery|z13.86|31.40..36.59",
+   "a": "r2.gallery",
+   "b": "c1",
+   "axis": "z",
+   "at": 13.86,
+   "lo": 31.4,
+   "hi": 36.59,
+   "clear": 4.89,
+   "diggable": true,
+   "solid": false,
+   "door": "breachable",
+   "hunterForces": true,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [
+    {
+     "at": 0.2,
+     "len": 2.96
+    }
+   ],
+   "slabs": 2,
+   "slabWhy": "door",
+   "interconnect": {
+    "at": 2.113,
+    "w": 1.55
+   }
+  },
+  {
+   "key": "corridor|gallery|z13.86|29.59..31.40",
+   "a": "r2.gallery",
+   "b": "c2",
+   "axis": "z",
+   "at": 13.86,
+   "lo": 29.59,
+   "hi": 31.4,
+   "clear": 1.51,
+   "diggable": true,
+   "solid": false,
+   "door": "none",
+   "hunterForces": false,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [],
+   "slabs": 1,
+   "slabWhy": "one",
+   "interconnect": null
+  },
+  {
+   "key": "corridor|gallery|x29.59|13.86..41.36",
+   "a": "r2.gallery",
+   "b": "c4",
+   "axis": "x",
+   "at": 29.59,
+   "lo": 13.86,
+   "hi": 41.36,
+   "clear": 27.2,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "hunterForces": false,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [
+    {
+     "at": 0.2,
+     "len": 5.72
+    },
+    {
+     "at": 6.2,
+     "len": 5.72
+    },
+    {
+     "at": 12.2,
+     "len": 5.72
+    },
+    {
+     "at": 18.2,
+     "len": 5.72
+    },
+    {
+     "at": 24.2,
+     "len": 2.56
+    }
+   ],
+   "slabs": 2,
+   "slabWhy": "door",
+   "interconnect": {
+    "at": 9.133,
+    "w": 1.55
+   }
+  },
+  {
+   "key": "corridor|gallery|x36.59|13.86..41.36",
+   "a": "r2.gallery",
+   "b": "c5",
+   "axis": "x",
+   "at": 36.59,
+   "lo": 13.86,
+   "hi": 41.36,
+   "clear": 27.2,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "hunterForces": false,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [
+    {
+     "at": 0.2,
+     "len": 5.72
+    },
+    {
+     "at": 6.2,
+     "len": 5.72
+    },
+    {
+     "at": 12.2,
+     "len": 5.72
+    },
+    {
+     "at": 18.2,
+     "len": 5.72
+    },
+    {
+     "at": 24.2,
+     "len": 2.56
+    }
+   ],
+   "slabs": 2,
+   "slabWhy": "door",
+   "interconnect": {
+    "at": 4.789,
+    "w": 1.55
+   }
+  },
+  {
+   "key": "corridor|gallery|z41.36|29.59..36.59",
+   "a": "r2.gallery",
+   "b": "c8",
+   "axis": "z",
+   "at": 41.36,
+   "lo": 29.59,
+   "hi": 36.59,
+   "clear": 6.7,
+   "diggable": true,
+   "solid": false,
+   "door": "breachable",
+   "hunterForces": true,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [
+    {
+     "at": 0.2,
+     "len": 5.72
+    }
+   ],
+   "slabs": 2,
+   "slabWhy": "door",
+   "interconnect": {
+    "at": 1.003,
+    "w": 1.55
+   }
+  },
+  {
+   "key": "study|study|z29.56|39.18..50.99",
+   "a": "r3.study",
+   "b": "r4.study",
+   "axis": "z",
+   "at": 29.56,
+   "lo": 39.18,
+   "hi": 50.99,
+   "clear": 11.52,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "hunterForces": false,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [
+    {
+     "at": 0.2,
+     "len": 5.72
+    },
+    {
+     "at": 6.2,
+     "len": 2.96
+    }
+   ],
+   "slabs": 2,
+   "slabWhy": "door",
+   "interconnect": {
+    "at": 7.648,
+    "w": 1.55
+   }
+  },
+  {
+   "key": "corridor|study|x50.99|13.86..29.56",
+   "a": "r3.study",
+   "b": "c1",
+   "axis": "x",
+   "at": 50.99,
+   "lo": 13.86,
+   "hi": 29.56,
+   "clear": 15.4,
+   "diggable": true,
+   "solid": false,
+   "door": "breachable",
+   "hunterForces": true,
+   "run": 0,
+   "ofRuns": 2,
+   "spans": [
+    {
+     "at": 0.2,
+     "len": 5.72
+    },
+    {
+     "at": 6.2,
+     "len": 5.72
+    },
+    {
+     "at": 12.2,
+     "len": 2.96
+    }
+   ],
+   "slabs": 2,
+   "slabWhy": "door",
+   "interconnect": {
+    "at": 13.575,
+    "w": 1.55
+   }
+  },
+  {
+   "key": "corridor|study|z13.86|39.09..50.99",
+   "a": "r3.study",
+   "b": "c1",
+   "axis": "z",
+   "at": 13.86,
+   "lo": 39.09,
+   "hi": 50.99,
+   "clear": 11.6,
+   "diggable": true,
+   "solid": false,
+   "door": "none",
+   "hunterForces": false,
+   "run": 1,
+   "ofRuns": 2,
+   "spans": [
+    {
+     "at": 0.2,
+     "len": 5.72
+    },
+    {
+     "at": 6.2,
+     "len": 2.96
+    }
+   ],
+   "slabs": 1,
+   "slabWhy": "one",
+   "interconnect": {
+    "at": 2.568,
+    "w": 1.55
+   }
+  },
+  {
+   "key": "corridor|study|x39.09|13.86..29.56",
+   "a": "r3.study",
+   "b": "c5",
+   "axis": "x",
+   "at": 39.09,
+   "lo": 13.86,
+   "hi": 29.56,
+   "clear": 15.4,
+   "diggable": true,
+   "solid": false,
+   "door": "open",
+   "hunterForces": false,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [
+    {
+     "at": 0.2,
+     "len": 5.72
+    },
+    {
+     "at": 6.2,
+     "len": 5.72
+    },
+    {
+     "at": 12.2,
+     "len": 2.96
+    }
+   ],
+   "slabs": 2,
+   "slabWhy": "door",
+   "interconnect": {
+    "at": 9.636,
+    "w": 1.55
+   }
+  },
+  {
+   "key": "corridor|study|x39.18|29.56..45.26",
+   "a": "r4.study",
+   "b": "c7",
+   "axis": "x",
+   "at": 39.18,
+   "lo": 29.56,
+   "hi": 45.26,
+   "clear": 15.4,
+   "diggable": true,
+   "solid": false,
+   "door": "breachable",
+   "hunterForces": true,
+   "run": 0,
+   "ofRuns": 2,
+   "spans": [
+    {
+     "at": 0.2,
+     "len": 5.72
+    },
+    {
+     "at": 6.2,
+     "len": 5.72
+    },
+    {
+     "at": 12.2,
+     "len": 2.96
+    }
+   ],
+   "slabs": 2,
+   "slabWhy": "door",
+   "interconnect": {
+    "at": 8.486,
+    "w": 1.55
+   }
+  },
+  {
+   "key": "corridor|study|z45.26|39.18..51.08",
+   "a": "r4.study",
+   "b": "c7",
+   "axis": "z",
+   "at": 45.26,
+   "lo": 39.18,
+   "hi": 51.08,
+   "clear": 11.6,
+   "diggable": true,
+   "solid": false,
+   "door": "none",
+   "hunterForces": false,
+   "run": 1,
+   "ofRuns": 2,
+   "spans": [
+    {
+     "at": 0.2,
+     "len": 5.72
+    },
+    {
+     "at": 6.2,
+     "len": 2.96
+    }
+   ],
+   "slabs": 1,
+   "slabWhy": "one",
+   "interconnect": {
+    "at": 7.518,
+    "w": 1.55
+   }
+  },
+  {
+   "key": "service|study|x15.70|7.01..10.71",
+   "a": "r5.study",
+   "b": "r6.service",
+   "axis": "x",
+   "at": 15.7,
+   "lo": 7.01,
+   "hi": 10.71,
+   "clear": 3.4,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "hunterForces": false,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [
+    {
+     "at": 0.2,
+     "len": 2.96
+    }
+   ],
+   "slabs": 2,
+   "slabWhy": "door",
+   "interconnect": {
+    "at": 1.915,
+    "w": 1.55
+   }
+  },
+  {
+   "key": "corridor|study|x15.70|0.21..7.01",
+   "a": "r5.study",
+   "b": "c0",
+   "axis": "x",
+   "at": 15.7,
+   "lo": 0.21,
+   "hi": 7.01,
+   "clear": 6.5,
+   "diggable": true,
+   "solid": false,
+   "door": "open",
+   "hunterForces": false,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [
+    {
+     "at": 0.2,
+     "len": 5.72
+    }
+   ],
+   "slabs": 2,
+   "slabWhy": "door",
+   "interconnect": {
+    "at": 1.965,
+    "w": 1.55
+   }
+  },
+  {
+   "key": "corridor|study|x15.70|10.71..11.90",
+   "a": "r5.study",
+   "b": "c2",
+   "axis": "x",
+   "at": 15.7,
+   "lo": 10.71,
+   "hi": 11.9,
+   "clear": 0.89,
+   "diggable": false,
+   "solid": false,
+   "door": "none",
+   "hunterForces": false,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [],
+   "slabs": 1,
+   "slabWhy": "one",
+   "interconnect": null
+  },
+  {
+   "key": "corridor|study|z11.90|0.00..15.70",
+   "a": "r5.study",
+   "b": "c3",
+   "axis": "z",
+   "at": 11.9,
+   "lo": 0,
+   "hi": 15.7,
+   "clear": 15.4,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "hunterForces": false,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [
+    {
+     "at": 0.2,
+     "len": 5.72
+    },
+    {
+     "at": 6.2,
+     "len": 5.72
+    },
+    {
+     "at": 12.2,
+     "len": 2.96
+    }
+   ],
+   "slabs": 2,
+   "slabWhy": "door",
+   "interconnect": {
+    "at": 7.776,
+    "w": 1.55
+   }
+  },
+  {
+   "key": "chapel|service|z7.01|18.70..25.80",
+   "a": "r6.service",
+   "b": "r7.chapel",
+   "axis": "z",
+   "at": 7.01,
+   "lo": 18.7,
+   "hi": 25.8,
+   "clear": 6.8,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "hunterForces": false,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [
+    {
+     "at": 0.2,
+     "len": 5.72
+    }
+   ],
+   "slabs": 2,
+   "slabWhy": "door",
+   "interconnect": {
+    "at": 3.708,
+    "w": 1.55
+   }
+  },
+  {
+   "key": "corridor|service|z7.01|15.70..18.70",
+   "a": "r6.service",
+   "b": "c0",
+   "axis": "z",
+   "at": 7.01,
+   "lo": 15.7,
+   "hi": 18.7,
+   "clear": 2.7,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "hunterForces": false,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [],
+   "slabs": 2,
+   "slabWhy": "door",
+   "interconnect": null
+  },
+  {
+   "key": "corridor|service|x31.40|7.01..10.71",
+   "a": "r6.service",
+   "b": "c1",
+   "axis": "x",
+   "at": 31.4,
+   "lo": 7.01,
+   "hi": 10.71,
+   "clear": 3.4,
+   "diggable": true,
+   "solid": false,
+   "door": "none",
+   "hunterForces": false,
+   "run": 0,
+   "ofRuns": 2,
+   "spans": [
+    {
+     "at": 0.2,
+     "len": 2.96
+    }
+   ],
+   "slabs": 1,
+   "slabWhy": "one",
+   "interconnect": {
+    "at": 1.16,
+    "w": 1.55
+   }
+  },
+  {
+   "key": "corridor|service|z7.01|25.80..31.40",
+   "a": "r6.service",
+   "b": "c1",
+   "axis": "z",
+   "at": 7.01,
+   "lo": 25.8,
+   "hi": 31.4,
+   "clear": 5.3,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "hunterForces": false,
+   "run": 1,
+   "ofRuns": 2,
+   "spans": [
+    {
+     "at": 0.2,
+     "len": 2.96
+    }
+   ],
+   "slabs": 2,
+   "slabWhy": "door",
+   "interconnect": {
+    "at": 2.196,
+    "w": 1.55
+   }
+  },
+  {
+   "key": "corridor|service|z10.71|15.70..31.40",
+   "a": "r6.service",
+   "b": "c2",
+   "axis": "z",
+   "at": 10.71,
+   "lo": 15.7,
+   "hi": 31.4,
+   "clear": 15.4,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "hunterForces": false,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [
+    {
+     "at": 0.2,
+     "len": 5.72
+    },
+    {
+     "at": 6.2,
+     "len": 5.72
+    },
+    {
+     "at": 12.2,
+     "len": 2.96
+    }
+   ],
+   "slabs": 2,
+   "slabWhy": "door",
+   "interconnect": {
+    "at": 7.911,
+    "w": 1.55
+   }
+  },
+  {
+   "key": "chapel|void|z0.21|18.70..25.80",
+   "a": "r7.chapel",
+   "b": "v0",
+   "axis": "z",
+   "at": 0.21,
+   "lo": 18.7,
+   "hi": 25.8,
+   "clear": 6.8,
+   "diggable": false,
+   "solid": true,
+   "door": "none",
+   "hunterForces": false,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [],
+   "slabs": 1,
+   "slabWhy": "one",
+   "interconnect": null
+  },
+  {
+   "key": "chapel|corridor|x18.70|0.21..7.01",
+   "a": "r7.chapel",
+   "b": "c0",
+   "axis": "x",
+   "at": 18.7,
+   "lo": 0.21,
+   "hi": 7.01,
+   "clear": 6.5,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "hunterForces": false,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [
+    {
+     "at": 0.2,
+     "len": 5.72
+    }
+   ],
+   "slabs": 2,
+   "slabWhy": "door",
+   "interconnect": {
+    "at": 1.006,
+    "w": 1.55
+   }
+  },
+  {
+   "key": "chapel|corridor|x25.80|0.21..7.01",
+   "a": "r7.chapel",
+   "b": "c1",
+   "axis": "x",
+   "at": 25.8,
+   "lo": 0.21,
+   "hi": 7.01,
+   "clear": 6.5,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "hunterForces": false,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [
+    {
+     "at": 0.2,
+     "len": 5.72
+    }
+   ],
+   "slabs": 2,
+   "slabWhy": "door",
+   "interconnect": {
+    "at": 2.134,
+    "w": 1.55
+   }
+  },
+  {
+   "key": "corridor|void|z0.21|15.70..18.70",
+   "a": "v0",
+   "b": "c0",
+   "axis": "z",
+   "at": 0.21,
+   "lo": 15.7,
+   "hi": 18.7,
+   "clear": 2.7,
+   "diggable": false,
+   "solid": true,
+   "door": "none",
+   "hunterForces": false,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [],
+   "slabs": 1,
+   "slabWhy": "one",
+   "interconnect": null
+  },
+  {
+   "key": "corridor|void|z0.21|25.80..51.08",
+   "a": "v0",
+   "b": "c1",
+   "axis": "z",
+   "at": 0.21,
+   "lo": 25.8,
+   "hi": 51.08,
+   "clear": 24.98,
+   "diggable": false,
+   "solid": true,
+   "door": "none",
+   "hunterForces": false,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [],
+   "slabs": 1,
+   "slabWhy": "one",
+   "interconnect": null
+  },
+  {
+   "key": "corridor|corridor|x31.40|10.71..13.86",
+   "a": "c1",
+   "b": "c2",
+   "axis": "x",
+   "at": 31.4,
+   "lo": 10.71,
+   "hi": 13.86,
+   "clear": 2.85,
+   "diggable": true,
+   "solid": false,
+   "door": "open",
+   "hunterForces": false,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [],
+   "slabs": 2,
+   "slabWhy": "door",
+   "interconnect": null
+  },
+  {
+   "key": "corridor|corridor|z13.86|36.59..39.09",
+   "a": "c1",
+   "b": "c5",
+   "axis": "z",
+   "at": 13.86,
+   "lo": 36.59,
+   "hi": 39.09,
+   "clear": 2.21,
+   "diggable": true,
+   "solid": false,
+   "door": "none",
+   "hunterForces": false,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [],
+   "slabs": 1,
+   "slabWhy": "one",
+   "interconnect": null
+  },
+  {
+   "key": "corridor|corridor|x15.70|11.90..13.86",
+   "a": "c2",
+   "b": "c3",
+   "axis": "x",
+   "at": 15.7,
+   "lo": 11.9,
+   "hi": 13.86,
+   "clear": 1.66,
+   "diggable": true,
+   "solid": false,
+   "door": "none",
+   "hunterForces": false,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [],
+   "slabs": 1,
+   "slabWhy": "one",
+   "interconnect": null
+  },
+  {
+   "key": "corridor|corridor|z13.86|27.50..29.59",
+   "a": "c2",
+   "b": "c4",
+   "axis": "z",
+   "at": 13.86,
+   "lo": 27.5,
+   "hi": 29.59,
+   "clear": 1.79,
+   "diggable": true,
+   "solid": false,
+   "door": "none",
+   "hunterForces": false,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [],
+   "slabs": 1,
+   "slabWhy": "one",
+   "interconnect": null
+  },
+  {
+   "key": "corridor|corridor|x27.50|29.46..31.66",
+   "a": "c4",
+   "b": "c6",
+   "axis": "x",
+   "at": 27.5,
+   "lo": 29.46,
+   "hi": 31.66,
+   "clear": 1.9,
+   "diggable": true,
+   "solid": false,
+   "door": "none",
+   "hunterForces": false,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [],
+   "slabs": 1,
+   "slabWhy": "one",
+   "interconnect": null
+  },
+  {
+   "key": "corridor|corridor|x29.59|41.36..47.26",
+   "a": "c4",
+   "b": "c8",
+   "axis": "x",
+   "at": 29.59,
+   "lo": 41.36,
+   "hi": 47.26,
+   "clear": 5.6,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "hunterForces": false,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [
+    {
+     "at": 0.2,
+     "len": 2.96
+    }
+   ],
+   "slabs": 2,
+   "slabWhy": "door",
+   "interconnect": {
+    "at": 2.022,
+    "w": 1.55
+   }
+  },
+  {
+   "key": "corridor|corridor|x39.09|29.56..47.26",
+   "a": "c5",
+   "b": "c7",
+   "axis": "x",
+   "at": 39.09,
+   "lo": 29.56,
+   "hi": 47.26,
+   "clear": 17.4,
+   "diggable": true,
+   "solid": false,
+   "door": "chained",
+   "hunterForces": false,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [
+    {
+     "at": 0.2,
+     "len": 5.72
+    },
+    {
+     "at": 6.2,
+     "len": 5.72
+    },
+    {
+     "at": 12.2,
+     "len": 2.96
+    }
+   ],
+   "slabs": 2,
+   "slabWhy": "door",
+   "interconnect": {
+    "at": 13.831,
+    "w": 1.55
+   }
+  },
+  {
+   "key": "corridor|corridor|x36.59|41.36..47.26",
+   "a": "c5",
+   "b": "c8",
+   "axis": "x",
+   "at": 36.59,
+   "lo": 41.36,
+   "hi": 47.26,
+   "clear": 5.6,
+   "diggable": true,
+   "solid": false,
+   "door": "breachable",
+   "hunterForces": true,
+   "run": 0,
+   "ofRuns": 1,
+   "spans": [
+    {
+     "at": 0.2,
+     "len": 2.96
+    }
+   ],
+   "slabs": 2,
+   "slabWhy": "door",
+   "interconnect": {
+    "at": 1.339,
+    "w": 1.55
+   }
+  }
+ ],
+ "difficulty": {
+  "score": null,
+  "model": "none — the hunter is deferred (procedural-map.md §6)",
+  "routeDigs": 2,
+  "routeRegions": 4,
+  "farthestDigs": 3,
+  "farthestRegions": 4,
+  "meanDigsFromSpawn": 1.82,
+  "deadEndRooms": 0,
+  "loops": 17,
+  "corridorNetworks": 2,
+  "roomsOnCorridor": 8,
+  "roomsTotal": 8,
+  "longestSightline": 33.1,
+  "biggestCorridorSpan": 29.05,
+  "roomsOnBiggestCorridor": 4,
+  "diggableEdges": 32,
+  "undiggableEdges": 4,
+  "diggableFraction": 0.9132,
+  "openDoors": 5,
+  "depthMean": 2.559,
+  "isFlat": false,
+  "isShallow": false
+ },
+ "flatness": {
+  "depth": 3,
+  "flat": false,
+  "good": true,
+  "crossedH": 3,
+  "crossedV": 4,
+  "depthMean": 2.559,
+  "depthMax": 4,
+  "rank2": 0.847,
+  "aspect": 1.081,
+  "envLong": 51.1,
+  "envShort": 47.3,
+  "slabs": [
+   {
+    "a": 0,
+    "b": 15.700000000000001,
+    "c": 3
+   },
+   {
+    "a": 15.700000000000001,
+    "b": 18.70197411500849,
+    "c": 3
+   },
+   {
+    "a": 18.70197411500849,
+    "b": 25.80197411500849,
+    "c": 4
+   },
+   {
+    "a": 25.80197411500849,
+    "b": 27.5,
+    "c": 3
+   },
+   {
+    "a": 27.5,
+    "b": 29.588093002187087,
+    "c": 1
+   },
+   {
+    "a": 29.588093002187087,
+    "b": 31.400000000000002,
+    "c": 2
+   },
+   {
+    "a": 31.400000000000002,
+    "b": 36.58809300218709,
+    "c": 1
+   },
+   {
+    "a": 36.58809300218709,
+    "b": 39.093858266086315,
+    "c": 0
+   },
+   {
+    "a": 39.093858266086315,
+    "b": 39.17790177983697,
+    "c": 1
+   },
+   {
+    "a": 39.17790177983697,
+    "b": 50.99385826608631,
+    "c": 2
+   },
+   {
+    "a": 50.99385826608631,
+    "b": 51.07790177983697,
+    "c": 1
+   }
+  ],
+  "longIsX": true,
+  "shallow": false
+ },
+ "gate": {
+  "allRoomsReachable": true,
+  "exitReachable": true,
+  "hunterReachesAll": true,
+  "everyRoomOnCorridor": true,
+  "corridorNetworks": 2
+ },
+ "metrics": {
+  "sharedWallM": 407.5,
+  "diggableM": 372.1,
+  "exteriorM": 195.5,
+  "fracInternalDiggable": 0.9132,
+  "fracAllDiggable": 0.6172,
+  "corridorShare": 0.2703,
+  "sliverEdges": 1,
+  "alcoves": 2,
+  "voids": 1
+ }
+}

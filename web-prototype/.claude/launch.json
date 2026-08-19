@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "refsheet",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["refs/_server.mjs"],
+      "port": 8787
+    },
+    {
+      "name": "game",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "preview"],
+      "port": 5179
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+import { chromium } from 'playwright';
+import path from 'node:path';
+const [src, dst, w] = process.argv.slice(2);
+const url = 'file:///' + path.resolve(src).split(path.sep).join('/');
+const b = await chromium.launch();
+const p = await b.newPage({ viewport: { width: +w, height: Math.round((+w * 9) / 16) } });
+await p.goto(url);
+await p.addStyleTag({ content: 'html,body{margin:0;padding:0;overflow:hidden}img{width:100vw;height:auto;display:block}' });
+await p.screenshot({ path: dst });
+await b.close();

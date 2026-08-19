@@ -1,0 +1,31 @@
+---
+description: Default RRR agent loop — slice, pipeline, critique, playcritique. Role walls stay separate.
+alwaysApply: true
+---
+
+# Default loop
+
+This project's loop is the four RRR skills. They are the source of truth. Do not merge them
+into a generic Gauntlet / prompt-writer loop. Role walls are the point.
+
+| Phase | Skill | Job |
+|---|---|---|
+| Decide | `rrr-slice` | Write a decided plan (`docs/slices/task-*.md`). Presentation, grounding, exposure. |
+| Build | `rrr-pipeline` | Execute that plan. GPU-baked GLSL + harness. Ceiling is **PASS**. |
+| Judge pixels | `rrr-critique` | Hostile art director. Blind A/B, fresh overlay. Only this role may award **WOWED**. |
+| Judge feel | `rrr-playcritique` | Drive a real Playwright session. Do not score art. |
+
+`GAUNTLET.md` is the roll-out order. It wires the first three skills; it is not a substitute
+for them.
+
+## Session start
+
+Read `HANDOFF.md` first. For the Jackbox party game, `docs/design/party-loop.md` wins if it
+disagrees with HANDOFF or gameplay-plan.
+
+## Hard rules
+
+- A builder never grades its own fix. Re-critique after every build.
+- Never contaminate a critic with "this is fixed" — only what was *claimed*.
+- One owner per coupled concern; run sequentially.
+- Use `npm run build`, never `npx vite build`.

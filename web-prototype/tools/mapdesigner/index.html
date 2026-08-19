@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Run Robot Run — Map Designer</title>
+<style>
+/* No CDN, no external fonts, no network of any kind. Everything below is local. */
+:root{
+  --bg:#0d0f12; --panel:#14171c; --panel2:#1a1e25; --line:#262c35;
+  --ink:#d6dbe2; --dim:#8892a0; --faint:#5d6673;
+  --dig:#ff9a3c;        /* DIGGABLE — the ornate coat that tears off */
+  --nodig:#3fd0e0;      /* NOT DIGGABLE — the game's cyan structure, which is indestructible.
+                           ⚠️ ONE REFERENT ONLY. See the palette block in app.js: cyan used to
+                           mean the hard stop, the interconnect (its opposite) AND the undrawn
+                           barrier, all at once, and John caught it. */
+  --ic:#b6ff2e;         /* THE SOFT SPOT — the one way through a wall. Never cyan, never orange. */
+  --exit:#67e08a; --spawn:#ffd75e; --warn:#ff6b6b; --route:#c98cff;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:var(--bg);color:var(--ink);
+  font:13px/1.5 ui-monospace,"Cascadia Mono",Consolas,"DejaVu Sans Mono",monospace;
+  display:flex;flex-direction:column;overflow:hidden;
+}
+header{
+  flex:0 0 auto;display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--line);
+}
+h1{font-size:14px;margin:0;letter-spacing:.06em;font-weight:600}
+h1 small{color:var(--faint);font-weight:400;letter-spacing:0}
+main{flex:1 1 auto;display:flex;min-height:0}
+#stage{flex:1 1 auto;position:relative;min-width:0;background:#090a0c}
+canvas{display:block;width:100%;height:100%;cursor:grab}
+canvas.dragging{cursor:grabbing}
+canvas.edit{cursor:default}
+#hint{
+  position:absolute;left:12px;bottom:10px;color:var(--faint);font-size:11px;
+  background:rgba(9,10,12,.82);padding:5px 9px;border:1px solid var(--line);border-radius:3px;
+  pointer-events:none;max-width:60ch;
+}
+#toast{
+  position:absolute;left:50%;top:14px;transform:translateX(-50%);
+  background:#2a1b12;border:1px solid var(--dig);color:#ffd7ae;
+  padding:6px 12px;border-radius:3px;font-size:12px;opacity:0;transition:opacity .18s;pointer-events:none;
+}
+#toast.on{opacity:1}
+/* the route-hidden arm's banner — unmissable, but it must not cover the plan */
+#armBanner{
+  position:absolute;left:0;right:0;top:0;display:none;
+  background:linear-gradient(#3a1442,#2a0f30);border-bottom:2px solid var(--route);
+  color:#e6c9ff;font-size:12px;letter-spacing:.04em;padding:6px 12px;text-align:center;
+  pointer-events:none;
+}
+#armBanner.on{display:block}
+#armBtn.armon{background:#3a1442;border-color:var(--route);color:#e6c9ff}
+aside{
+  flex:0 0 400px;overflow-y:auto;background:var(--panel);border-left:1px solid var(--line);
+  padding:0 0 40px;
+}
+aside::-webkit-scrollbar{width:10px}
+aside::-webkit-scrollbar-thumb{background:#2b323c;border-radius:5px}
+section{border-bottom:1px solid var(--line);padding:11px 14px}
+section>h2{
+  font-size:11px;margin:0 0 9px;letter-spacing:.11em;color:var(--dim);
+  text-transform:uppercase;font-weight:600;
+}
+details>summary{
+  cursor:pointer;font-size:11px;letter-spacing:.11em;color:var(--dim);
+  text-transform:uppercase;font-weight:600;list-style:none;
+}
+details>summary::before{content:"▸ ";color:var(--faint)}
+details[open]>summary::before{content:"▾ "}
+p{margin:0 0 8px;color:var(--dim)}
+p.tight{margin-bottom:4px}
+b{color:var(--ink);font-weight:600}
+.hi{color:var(--dig)}
+.cy{color:var(--nodig)}
+.ic{color:var(--ic)}
+.gd{color:var(--exit)}
+.bad{color:var(--warn)}
+.mut{color:var(--faint)}
+button{
+  font:inherit;background:var(--panel2);color:var(--ink);border:1px solid var(--line);
+  border-radius:3px;padding:4px 9px;cursor:pointer;
+}
+button:hover{background:#232933;border-color:#3a4453}
+button.on{background:#243040;border-color:var(--nodig);color:#cfefff}
+button:disabled{opacity:.4;cursor:default}
+input[type=text],input[type=number]{
+  font:inherit;background:#0c0e11;color:var(--ink);border:1px solid var(--line);
+  border-radius:3px;padding:3px 6px;width:88px;
+}
+input[type=range]{width:100%;accent-color:var(--dig)}
+.row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.grid{display:grid;grid-template-columns:1fr auto;gap:1px 10px;font-size:12px}
+.grid div:nth-child(odd){color:var(--dim)}
+.grid div:nth-child(even){text-align:right;font-variant-numeric:tabular-nums}
+.dial{margin-bottom:10px}
+.dial label{display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:2px}
+.dial label b{color:var(--ink);font-variant-numeric:tabular-nums}
+.dial .why{font-size:11px;color:var(--faint);margin-top:1px;line-height:1.4}
+.swatch{display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:-1px;margin-right:5px}
+.legend{display:grid;grid-template-columns:auto 1fr;gap:3px 8px;font-size:11.5px;align-items:center}
+.legend span:nth-child(even){color:var(--dim)}
+.chk{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--dim);cursor:pointer;padding:1px 0}
+.chk input{accent-color:var(--dig)}
+.bar{height:7px;background:#0c0e11;border:1px solid var(--line);border-radius:2px;overflow:hidden;margin:3px 0 7px}
+.bar i{display:block;height:100%;background:var(--dig)}
+.verdict{padding:6px 9px;border-radius:3px;font-size:12px;margin-bottom:8px;border:1px solid}
+.verdict.ok{background:#0f1d14;border-color:#2c5a3a;color:#9fe3b6}
+.verdict.no{background:#241213;border-color:#5c2b2d;color:#ffb0b0}
+.verdict.mid{background:#241f10;border-color:#5c4f22;color:#ffdf9a}
+code{background:#0c0e11;border:1px solid var(--line);border-radius:2px;padding:0 3px;color:#b8c4d4}
+.libitem{display:flex;gap:9px;align-items:center;margin-bottom:5px;font-size:11.5px}
+.libsw{flex:0 0 auto;border:1px solid #000}
+kbd{
+  background:#0c0e11;border:1px solid var(--line);border-bottom-width:2px;border-radius:3px;
+  padding:0 4px;font-size:11px;color:var(--ink);
+}
+table.mini{width:100%;border-collapse:collapse;font-size:11.5px;font-variant-numeric:tabular-nums}
+table.mini th{text-align:right;color:var(--faint);font-weight:400;padding:1px 0 3px}
+table.mini th:first-child{text-align:left}
+table.mini td{text-align:right;padding:1px 0;color:var(--ink)}
+table.mini td:first-child{text-align:left;color:var(--dim)}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>MAP DESIGNER <small>· run robot run · procedural house</small></h1>
+  <div class="row">
+    <button id="prev" title="previous seed (←)">◀</button>
+    <span class="mut">seed</span>
+    <input type="text" id="seed" value="7" size="6" title="type a seed and press Enter">
+    <button id="next" title="next seed (→)">▶</button>
+    <button id="rand" title="random seed (R)">random</button>
+  </div>
+  <div class="row">
+    <button id="modeBtn" title="edit mode (E)">edit: off</button>
+    <button id="fit" title="fit to view (F)">fit</button>
+    <button id="shot" title="save a PNG of this plan">png</button>
+    <button id="armBtn" title="hide the route and judge the house on its own (H)">route: shown</button>
+  </div>
+  <span id="status" class="mut"></span>
+</header>
+
+<main>
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <!-- 🚨 THE ARM BANNER. It is over the plan, not in the sidebar, because the whole point is
+         that John cannot be in the route-hidden arm without knowing it. Hidden entirely in the
+         normal arm, so the tool looks exactly as it did. -->
+    <div id="armBanner"></div>
+    <div id="hint"></div>
+    <div id="toast"></div>
+  </div>
+
+  <aside>
+
+  <section>
+    <details open id="explainer">
+      <summary>What am I looking at</summary>
+      <p style="margin-top:9px">This is one <b>procedurally generated house</b>, drawn as a floor plan,
+      seen from above. Nothing here is hand-drawn — a seed number goes in, this comes out.
+      Press <kbd>→</kbd> to see the next one.</p>
+
+      <p>The generator places the six estate rooms free-form, flush against each other, then
+      <b>fills every scrap of space left over with corridors</b> so that no wall in the house has
+      empty nothing on the other side of it. That is the whole idea: a wall with a room on both
+      sides is <b>a wall you can dig through</b>.</p>
+
+      <p><span class="hi">■ Orange</span> boundaries are <b>diggable</b> — you can smash through
+      them. The little bright blocks along them are the actual <b>dig panels</b> the game would
+      build, at the real 2.56 / 2.96 / 5.72 m lengths it already ships; the
+      <span style="color:#8a6a45">■ brown</span> between and around them is the same wall, just the
+      bit no panel fitted on. <span class="cy">■ Cyan</span> boundaries <b>cannot be dug at
+      all</b> — under 1.20 m of shared wall, so there is nowhere to put a dig face. <b>Cyan on this
+      plan means exactly one thing: a hard stop.</b></p>
+
+      <p><b>And there is one <span class="ic">bright lime blob</span> on every diggable wall. That
+      is the <span class="ic">soft spot</span> — the one place on that wall where a dig gets you
+      through.</b> Everywhere else on an orange wall you dig all the way and hit brick you cannot
+      break, so orange means "somewhere worth searching", not "a way out of this room". Find a soft
+      spot and that brick switches off for the whole house, for everybody. You cannot see it in the
+      game — this plan shows it so you can see how much wall a player has to chew through to find
+      one.</p>
+
+      <p><b>⚠️ The unbreakable brick itself is NOT on this plan, and it never was.</b> ⟵ <i>you
+      asked about this, and the answer you got before was wrong.</i> It stands <i>behind</i> the
+      orange, and this is a view from above, so there is nowhere to draw it. What you can see is
+      the one <b>gap</b> in it, and that gap is the lime blob. <b>It used to be drawn cyan, which
+      made it look like the hard stops it is the opposite of</b> — that is what you were seeing,
+      and it was a real fault in this tool, not a misunderstanding.</p>
+
+      <p>The house you play now has <b>7 hand-authored dig edges, 14 panels, 47.7 m</b> — which is
+      <b>52.6%</b> of the wall it actually has between rooms. A generated house gets
+      <b>92.8%</b>, on four times as much wall. That is the number this whole thing is for.</p>
+
+      <p class="mut">Corridors are the blue-grey shapes with the dotted fill. In the game they are
+      <i>dark</i> — that is the point of them, and eventually they are where the hunter lives — but
+      on a plan they are drawn light so you can see the circulation. Solid black hatched blocks are
+      <b>void</b>: leftover space too small to walk in, filled with masonry. Void is a failure and
+      it is counted.</p>
+
+      <p class="mut">Everything you see is drawn from <code>harness/genspike.mjs</code>, the same
+      file that produced the 512-seed measurements. This tool has no generator of its own — if a
+      number here disagrees with the harness, the tool is wrong, and the VERIFICATION panel at the
+      bottom checks exactly that on every single frame.</p>
+    </details>
+  </section>
+
+  <section style="background:#171b21">
+    <h2>Is this a good house? <span style="color:var(--dig)">← the important bit</span></h2>
+    <p class="tight mut" style="font-size:11.5px">Nobody can teach the generator what a good house
+    looks like except you. The fix for flat, boring plans is a <b>scoring term</b>, and a scoring
+    term needs examples — <b>your</b> examples. One click per plan. It writes to
+    <code>tools/mapdesigner/labels.jsonl</code> in the project, so the next agent can actually use
+    it.</p>
+    <div class="row" style="margin:9px 0">
+      <button id="vGood" style="flex:1;padding:9px;font-size:14px;border-color:#2c5a3a;color:#9fe3b6">GOOD <kbd>1</kbd></button>
+      <button id="vMeh"  style="flex:1;padding:9px;font-size:14px;border-color:#5c4f22;color:#ffdf9a">MEH <kbd>2</kbd></button>
+      <button id="vBad"  style="flex:1;padding:9px;font-size:14px;border-color:#5c2b2d;color:#ffb0b0">BAD <kbd>3</kbd></button>
+    </div>
+    <input type="text" id="vNote" placeholder="why? (optional, one line)" style="width:100%;margin-bottom:7px">
+    <div id="labelState" class="mut" style="font-size:11.5px"></div>
+    <p class="mut" style="font-size:11px;margin:7px 0 0">Judge it as a <b>place to be chased through</b>,
+    not as a drawing. Would you know where you were? Is there anywhere to go that is not just
+    forward? After a verdict it jumps to the next seed automatically.</p>
+  </section>
+
+  <section>
+    <h2>Legend <span class="mut" style="text-transform:none;letter-spacing:0">— every colour, in the player's terms</span></h2>
+    <div class="legend" id="legend"></div>
+  </section>
+
+  <section style="background:#181419">
+    <h2>The three doors, and one of them was drawn wrong</h2>
+    <p class="tight mut" style="font-size:11.5px">You said the red chained doors should be the ones
+    the hunter attacks. <b class="bad">They are the opposite, and the colour was teaching you
+    that.</b> Fixed on the plan; here is what the code actually says, checked on disk rather than
+    remembered.</p>
+    <table class="mini" style="margin-top:7px">
+      <tr><th style="width:36%">on the plan</th><th style="text-align:left">what it is to play</th></tr>
+      <tr><td style="color:#67e08a"><b>green gap</b></td>
+        <td style="text-align:left;color:var(--dim)"><b>OPEN.</b> A hole. You walk through, he walks
+        through, it costs nothing and it is the route the house gives you.</td></tr>
+      <tr><td style="color:#ffbe4d"><b>amber + <span style="color:#ff4fd8">magenta chevrons</span></b></td>
+        <td style="text-align:left;color:var(--dim)"><b>BREACHABLE — this is the one he batters.</b>
+        Six blows, about fourteen seconds of banging, and he is through. You can break it too, and
+        cheaply. <b>The chain you see on half of them in-game is dressing</b>, seeded per doorway
+        and never read off what the door actually is — that is deliberate, so counting padlocks
+        tells you nothing.</td></tr>
+      <tr><td style="color:#ff6b6b"><b>black + red cross</b></td>
+        <td style="text-align:left;color:var(--dim)"><b>CHAINED — nobody forces it.</b> Not your
+        hammer, not the nail gun, not him. The code marks it <code>damageable: false</code> and the
+        hunter's own door list skips it. <b>The way past a chained door is the wall next to it.</b></td></tr>
+      <tr><td style="color:#67e08a"><b>arrow off the edge</b></td>
+        <td style="text-align:left;color:var(--dim)"><b>THE WAY OUT.</b> A 15–25 s siege with a yard
+        behind it. In the house you play there are fourteen of these sites and only one is live per
+        run; the other thirteen get padlocked and are the decoys. <b>The generator only places the
+        live one</b> — it does not model the decoys yet, and that is a gap, not a design.</td></tr>
+    </table>
+    <p class="mut" style="font-size:11px;margin:8px 0 0">Where the confusion came from, since it is
+    worth knowing: the function in the game that hands the hunter his list of doors to hammer is
+    called <code>chainedDoorsOf()</code> — and the first thing it does is throw out every chained
+    door. The name is a lie in <code>src/</code>. This tool now draws the set, not the name.</p>
+  </section>
+
+  <section>
+    <h2>Show</h2>
+    <div id="toggles"></div>
+  </section>
+
+  <section>
+    <h2>The three dials</h2>
+    <p class="tight mut" style="font-size:11.5px">These are the generator's own knobs. Moving one
+    re-runs the whole plan. <b>They pull against each other</b> — that is the real finding of the
+    spike, and it is easier to feel here than to read.</p>
+    <div id="dials"></div>
+    <div class="row"><button id="resetDials">back to the shipping settings</button></div>
+  </section>
+
+  <section>
+    <h2>This plan</h2>
+    <div class="grid" id="metrics"></div>
+  </section>
+
+  <section>
+    <h2>Is it flat?</h2>
+    <p class="tight mut" style="font-size:11.5px">The worst failure mode, and no summary number
+    caught it before. A <b>flat</b> plan is one file of rooms with nothing behind anything — no
+    upstairs, no round-the-back. They score <i>well</i> on everything else and they are the
+    dullest houses the generator makes. <b>42.4% of seeds are flat.</b></p>
+    <div id="flatVerdict"></div>
+    <canvas id="rankstrip" height="46" style="width:100%;height:46px;display:block;margin:6px 0 4px"></canvas>
+    <p class="mut" style="font-size:11px;margin:0">Each slice of the bar is a step along the
+    house's long axis, coloured by how many rooms you would walk through crossing it.
+    <span style="color:#ff6b6b">■ 1</span> <span style="color:#ffbe4d">■ 2</span>
+    <span style="color:#67e08a">■ 3+</span></p>
+    <div class="grid" id="flatGrid" style="margin-top:8px"></div>
+    <p class="mut" style="font-size:11px;margin:8px 0 0">The test is
+    <code>min(rooms crossed left-to-right, rooms crossed top-to-bottom)</code>, and 2 or less is
+    flat. It is checked against the one house we know is good: <b>the mansion you already play
+    scores 3</b>, so any rule that called it flat would be a broken rule. That control is asserted
+    in the harness's own self-test.</p>
+  </section>
+
+  <section>
+    <h2>The zero-dig pocket — i.e. how much house you get for free</h2>
+    <p class="tight mut" style="font-size:11.5px">Shaded yellow on the plan. <b>It is the part of
+    the house you can walk to from where you spawn without swinging the hammer once</b> — open
+    doors only, nothing forced, nothing dug. That is the whole of it.</p>
+    <p class="tight mut" style="font-size:11.5px">It is drawn because you cannot see it otherwise:
+    a padlocked door and a wall you have to dig are the same line on a floor plan and completely
+    different to play. A <b>big</b> pocket is a house that lets you in and the run opens with
+    exploring. A <b>tiny</b> one is a house that is a wall from the first second. Neither is
+    automatically right — that is exactly why it is worth looking at.</p>
+    <div id="pocketBox"></div>
+  </section>
+
+  <section style="background:#16151d">
+    <h2>🧱 Slabs — one wall, not tiles</h2>
+    <p class="tight mut" style="font-size:11.5px">Turn on <b>SLAB ARM</b> in the Show list. Each
+    diggable wall is redrawn as the <span style="color:#8f7bd6">■ violet</span> faces it would
+    actually become, with a <span class="bad">■ red tick</span> at every seam.</p>
+    <div id="slabBox"></div>
+    <p class="mut" style="font-size:11px;margin:8px 0 0"><b>The cap is 35 m and there is no
+    minimum.</b> Re-measured on this tree (<code>node harness/_slab1-cost.mjs</code>): a 34.80 m
+    face costs <b>1.077 ms</b> of the 2.00 ms CPU budget, an 85.90 m face costs <b>2.576 ms</b> and
+    blows it. The straight-line fit crosses the budget at about 66 m — <b>but nobody has measured
+    between 35 and 86, so the cap sits at the longest length actually measured good.</b></p>
+    <p class="mut" style="font-size:11px;margin:6px 0 0">⚠️ <b>And the cap never fires here.</b>
+    Over 512 seeds the longest single stretch of diggable wall this generator makes is
+    <b>31.33 m</b> (p95 27.20 — the gallery's own long side). The "85.90 m" quoted elsewhere is the
+    <i>total</i> of every separate stretch two rooms share, not a wall; no face that long exists.
+    <b>So the cap is a guard rail, and the thing actually cutting walls in half is doors.</b></p>
+    <p class="mut" style="font-size:11px;margin:6px 0 0">🚨 <b>Not solved, and not pretended
+    otherwise:</b> a slab cannot contain a doorway. Every wall with a door in it therefore comes
+    out as two faces with a seam between them — which is the one thing you said you did not want.
+    Either the wall machine learns to punch a hole in a face, or generated walls get seams at every
+    door. <b>That is a decision, not a bug, and it is yours.</b></p>
+  </section>
+
+  <section>
+    <h2>Do corridors cost contact?</h2>
+    <p class="tight mut" style="font-size:11.5px">No — they nearly double it. This is the same
+    seed built twice: once as you have it, once with <code>gap 0</code> (rooms packed flush, no
+    corridors at all).</p>
+    <table class="mini" id="gapCmp"></table>
+    <p class="mut" style="font-size:11px;margin:7px 0 0">Packing rooms tight <i>against each
+    other</i> is the intuitive reading of "maximum surface area contact" and it is the worse one.
+    <code>room|room</code> is one boundary; <code>room|corridor|room</code> is two.</p>
+  </section>
+
+  <section>
+    <h2>Difficulty — the slot, not the score</h2>
+    <div class="verdict mid" id="diffVerdict">NOT MODELLED YET</div>
+    <p class="tight mut" style="font-size:11.5px">You asked for difficulty estimation
+    <i>"when the hunter is better developed"</i>. He is not, so there is deliberately no score
+    here — a number invented now would be a guess that later gets quoted as a measurement. What is
+    here is <b>every property a difficulty model will need</b>, measured. When the hunter exists,
+    the score is a weighted sum over exactly these rows and nothing else has to move.</p>
+    <div class="grid" id="difficulty"></div>
+  </section>
+
+  <section>
+    <h2>The room library — and why it is the real limit</h2>
+    <div id="library"></div>
+    <p class="mut" style="font-size:11.5px;margin-top:8px">Five shapes. That is the whole library.
+    <code>study_w</code> and <code>study_e</code> in <code>spaces.js</code> are
+    <b>byte-identical</b> — 11.60 × 15.40 both — so the house has six spaces but five distinct
+    footprints.</p>
+    <p class="mut" style="font-size:11.5px">The arithmetic says roughly <b>10¹⁵</b> different
+    arrangements. It does not matter. Every run the player walks into the same gallery, the same
+    ballroom, the same two studies. <b>They will run out of new-looking houses in about ten runs
+    and the maths will be nowhere near exhausted.</b> The library is the limit, not the generator —
+    so a sixth footprint, or dressing the two studies differently, buys more than any dial on this
+    page does.</p>
+  </section>
+
+  <section>
+    <h2>Edit</h2>
+    <p class="tight mut" style="font-size:11.5px">Press <kbd>E</kbd>, then drag a room. The
+    corridors, the dig walls and every number on this page recompute <b>as you drag</b>, because
+    the tool hands your layout straight back to the generator rather than guessing.</p>
+    <div class="row" style="margin-bottom:7px">
+      <button id="rotBtn">rotate 90° (<kbd>R</kbd>)</button>
+      <button id="delBtn">delete (<kbd>Del</kbd>)</button>
+    </div>
+    <div class="row" style="margin-bottom:7px">
+      <span class="mut">add:</span><span id="addRow" class="row"></span>
+    </div>
+    <div class="row" style="margin-bottom:7px">
+      <label class="chk"><input type="checkbox" id="snap" checked> snap to flush / corridor stand-off</label>
+    </div>
+    <div id="editWarn"></div>
+    <div class="row">
+      <button id="save">save this layout</button>
+      <button id="revert">back to the seed</button>
+    </div>
+    <div id="saved" style="margin-top:7px"></div>
+  </section>
+
+  <section>
+    <h2>Give it to the game</h2>
+    <p class="tight mut" style="font-size:11.5px">Exports the plan as JSON in the shape
+    <code>spaces.js</code> would need to consume it: spaces with clear rects, connectors, dig
+    edges with content-hashed ids, the one exit, and the difficulty block.
+    <b>Nothing is wired into the game yet</b> — this defines the format only.</p>
+    <div class="row">
+      <button id="exp">download this map (.json)</button>
+      <button id="expShow">show it</button>
+    </div>
+    <pre id="jsonOut" style="display:none;max-height:260px;overflow:auto;background:#0c0e11;border:1px solid var(--line);padding:8px;font-size:10.5px;margin-top:8px;white-space:pre-wrap"></pre>
+    <p class="mut" style="font-size:11px;margin-top:9px">An example is already in the project at
+    <code>tools/mapdesigner/example-map.json</code>.</p>
+    <details style="margin-top:9px">
+      <summary>What the game would have to change to eat one</summary>
+      <p style="margin-top:8px" class="mut">Short version, biggest job first — and none of it is
+      done, deliberately.</p>
+      <p class="mut"><b>1. The dressing has to stop being written in world coordinates.</b> The
+      gallery's entry in <code>spaces.js</code> is about 150 lines and only one of them is the
+      footprint; the rest is lights, pilasters and order, and <b>the light positions are absolute</b>
+      — the gallery's key light is at <code>[11.6, 4.05, -30.55]</code>, which is only true where
+      the gallery currently sits. Every one of those has to become room-local and get moved by the
+      plan. <b>This is the whole cost of the feature.</b> Everything else on this list is small.</p>
+      <p class="mut"><b>2. <code>EXIT_SITES</code> has to stop being a constant.</b> It is computed
+      at import today, and in a generated house the exit pool is different for every seed by
+      construction. Which also means: <b>every "seed s4 exits at…" note anywhere becomes
+      meaningless in generated mode</b>, so this must ship as a new mode next to the authored
+      house, not as a replacement for it.</p>
+      <p class="mut"><b>3. Dig ids become a version handshake.</b> Two players on the same seed and
+      different builds would derive different wall ids and desync <i>silently</i>. The export keys
+      every boundary on a hash of the wall itself rather than its position in a list, which helps,
+      but the generator version still has to be checked when a session starts.</p>
+      <p class="mut"><b>4. Three times the dig panels.</b> 46 spans per plan against the shipped
+      14. The panel <i>types</i> stay at three, so the draw-call gate holds, but nobody has
+      measured the renderer at 3× the panel count.</p>
+      <p class="mut">What comes free: the pathfinding already works this way, and the connector
+      system generalises untouched.</p>
+    </details>
+  </section>
+
+  <section>
+    <details>
+      <summary>Verification — is this drawing telling the truth?</summary>
+      <p style="margin-top:9px" class="mut">A tool that draws a plan wrongly is worse than no tool:
+      it would send your judgement the wrong way and you would have no way of knowing. So the
+      picture checks itself against the generator's own arithmetic on every frame.</p>
+      <div id="verify"></div>
+    </details>
+  </section>
+
+  </aside>
+</main>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>

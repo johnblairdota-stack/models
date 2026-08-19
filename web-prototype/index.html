@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Run Robot Run — prototype</title>
+<style>
+  :root { color-scheme: dark; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:100%; height:100%; overflow:hidden; background:#05070a; }
+  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #boot {
+    position:fixed; inset:0; display:grid; place-items:center; z-index:100;
+    background:#05070a; color:#7f95ab; font:12px/1.6 ui-monospace, Menlo, monospace;
+    letter-spacing:.06em; transition:opacity .35s ease; text-align:center;
+  }
+  #boot.gone { opacity:0; pointer-events:none; }
+  #boot b { color:#cfe4f7; font-weight:600; letter-spacing:.14em; display:block; margin-bottom:10px; }
+  /* Progress bar lives HERE, in the static HTML, because #boot is z-index:100 and covers
+     everything the app draws until the view resolves. Loaders added from JS sat underneath it
+     and were invisible — present in the DOM, so tests that only checked existence passed while
+     the screen showed nothing but two lines of static text for ten seconds. Building this
+     scene blocks the main thread ~2 s in Chromium and 7-11 s in Firefox; over a tunnel the
+     bundle download comes first. Without this the app looks broken during every cold load. */
+  #bootbar { width:190px; height:3px; margin:14px auto 0; border-radius:2px;
+    background:#101720; overflow:hidden; }
+  #bootbar i { display:block; width:38%; height:100%; border-radius:2px;
+    background:linear-gradient(90deg,#152538,#7dd3fc,#152538);
+    animation:bootsweep 1.15s ease-in-out infinite; }
+  @keyframes bootsweep { 0% { transform:translateX(-165%) } 100% { transform:translateX(430%) } }
+  @media (prefers-reduced-motion:reduce) { #bootbar i { animation:none; width:100% } }
+  #boothint { display:block; margin-top:12px; color:#4c5f73; font-size:11px; letter-spacing:.04em; }
+  #err {
+    position:fixed; inset:0; z-index:200; display:none; padding:28px 32px; overflow:auto;
+    background:#160a0c; color:#ffb9ad; font:12px/1.65 ui-monospace, Menlo, monospace; white-space:pre-wrap;
+  }
+  #views {
+    position:fixed; right:8px; top:8px; z-index:60; max-height:calc(100vh - 16px); overflow:auto;
+    background:rgba(6,10,16,.78); border:1px solid rgba(120,180,255,.2); border-radius:5px;
+    padding:6px; font:11px/1.5 ui-monospace, Menlo, monospace; backdrop-filter:blur(6px);
+  }
+  #views a { display:block; color:#9fc4e8; text-decoration:none; padding:2px 6px; border-radius:3px; white-space:nowrap; }
+  #views a:hover { background:rgba(120,180,255,.14); color:#e6f2ff; }
+  #views a.on { background:rgba(120,180,255,.2); color:#fff; }
+  #views .grp { color:#557; padding:5px 6px 2px; text-transform:uppercase; letter-spacing:.1em; font-size:9px; }
+  body[data-capture="1"] #views, body[data-capture="1"] #boot { display:none !important; }
+</style>
+</head>
+<body>
+<div id="boot"><div><b>RUN ROBOT RUN</b><span id="bootmsg">booting…</span>
+  <div id="bootbar"><i></i></div>
+  <span id="boothint">first load builds the scene — 25–30 s. after that, restarts are instant</span>
+</div></div>
+<div id="err"></div>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>

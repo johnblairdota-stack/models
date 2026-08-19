@@ -1,0 +1,333 @@
+<style>
+/* ══ tokens ══
+   Neutrals carry a slight blue bias, taken from the estate's cold shadow tint
+   (#0.74,0.86,1.14 shadowTint in the render pipeline) rather than being pure grey.
+   The accent pair IS the thesis of this board: cyan = independently verified,
+   amber = the builder graded its own work. Semantic band colours are separate. */
+:root{
+  --ground:#0B0D11; --panel:#12161E; --panel-2:#171C26; --line:#212936; --line-2:#2E3949;
+  --ink:#DDE5EF; --ink-dim:#8194A8; --ink-faint:#55677C;
+  --verified:#4FC3E8; --selfgrade:#E0A75E;
+  --reject:#E06A62; --weak:#D9A441; --pass:#5FBF8C; --wowed:#B583E8; --unbuilt:#3C4757;
+  --up:#5FBF8C; --down:#E06A62;
+  --shadow:0 1px 2px rgba(0,0,0,.4);
+}
+@media (prefers-color-scheme: light){
+  :root{
+    --ground:#F3F5F8; --panel:#FFFFFF; --panel-2:#EDF1F6; --line:#DBE2EB; --line-2:#C3CEDB;
+    --ink:#111820; --ink-dim:#516274; --ink-faint:#7C8C9E;
+    --verified:#0E7FA8; --selfgrade:#A96A15;
+    --reject:#C0392F; --weak:#9A6D08; --pass:#237A50; --wowed:#6D3EA8; --unbuilt:#AFBAC6;
+    --shadow:0 1px 2px rgba(16,32,48,.10);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0B0D11; --panel:#12161E; --panel-2:#171C26; --line:#212936; --line-2:#2E3949;
+  --ink:#DDE5EF; --ink-dim:#8194A8; --ink-faint:#55677C;
+  --verified:#4FC3E8; --selfgrade:#E0A75E;
+  --reject:#E06A62; --weak:#D9A441; --pass:#5FBF8C; --wowed:#B583E8; --unbuilt:#3C4757;
+  --shadow:0 1px 2px rgba(0,0,0,.4);
+}
+:root[data-theme="light"]{
+  --ground:#F3F5F8; --panel:#FFFFFF; --panel-2:#EDF1F6; --line:#DBE2EB; --line-2:#C3CEDB;
+  --ink:#111820; --ink-dim:#516274; --ink-faint:#7C8C9E;
+  --verified:#0E7FA8; --selfgrade:#A96A15;
+  --reject:#C0392F; --weak:#9A6D08; --pass:#237A50; --wowed:#6D3EA8; --unbuilt:#AFBAC6;
+  --shadow:0 1px 2px rgba(16,32,48,.10);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font:14px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1400px; margin:0 auto; padding:26px 22px 70px}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-variant-numeric:tabular-nums}
+.lab{font:600 9.5px/1 ui-monospace,Menlo,monospace; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-faint)}
+
+/* ══ header ══ */
+header{display:flex; justify-content:space-between; align-items:flex-end; gap:24px; flex-wrap:wrap;
+  padding-bottom:16px; border-bottom:1px solid var(--line)}
+h1{margin:0; font-size:17px; font-weight:650; letter-spacing:.015em; text-wrap:balance}
+.snapnote{margin-top:5px; font-size:11.5px; color:var(--ink-dim)}
+.snapnote b{color:var(--ink); font-weight:600}
+
+/* ══ trust ledger — the thesis ══ */
+.ledger{display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:1px;
+  background:var(--line); border:1px solid var(--line); border-radius:9px; overflow:hidden; margin:20px 0 8px}
+.cell{background:var(--panel); padding:13px 15px 14px}
+.cell .n{font:600 27px/1.05 ui-monospace,Menlo,monospace; letter-spacing:-.02em; font-variant-numeric:tabular-nums}
+.cell .n small{font-size:14px; color:var(--ink-faint); font-weight:400}
+.cell .lab{margin-top:5px}
+.cell .note{margin-top:5px; font-size:11px; color:var(--ink-dim); line-height:1.4}
+
+.trustbar{display:flex; height:7px; border-radius:4px; overflow:hidden; margin-top:9px; background:var(--panel-2)}
+.trustbar i{display:block; height:100%}
+
+/* ══ band distribution ══ */
+.bands{display:flex; gap:2px; margin:14px 0 4px; height:26px; border-radius:5px; overflow:hidden}
+.bands i{display:flex; align-items:center; justify-content:center; font:600 10px/1 ui-monospace,monospace;
+  color:var(--ground); min-width:0}
+.bandkey{display:flex; gap:14px; flex-wrap:wrap; font-size:11px; color:var(--ink-dim)}
+.bandkey span{display:flex; align-items:center; gap:5px}
+.sw{width:9px; height:9px; border-radius:2px; flex:none}
+
+/* ══ attention ══ */
+.att{border:1px solid var(--line); background:var(--panel); border-radius:9px; padding:14px 16px; margin:22px 0}
+.att h2{margin:0 0 11px; font:600 12px/1 system-ui,sans-serif; letter-spacing:.02em; display:flex; align-items:center; gap:9px}
+.att h2:after{content:""; flex:1; height:1px; background:var(--line)}
+.arow{display:grid; grid-template-columns:auto 150px 46px 1fr; gap:12px; align-items:baseline;
+  padding:5px 0; border-top:1px solid var(--line)}
+.arow:first-of-type{border-top:none}
+.arow .rank{font:600 10px/1.6 ui-monospace,monospace; color:var(--ink-faint)}
+.arow .aid{font:600 11.5px/1.5 ui-monospace,monospace; color:var(--ink)}
+.arow .asc{font:700 13px/1.4 ui-monospace,monospace; text-align:right; font-variant-numeric:tabular-nums}
+.arow .awhy{font-size:12px; color:var(--ink-dim); line-height:1.45}
+
+/* ══ groups + cards ══ */
+.grouphead{display:flex; align-items:baseline; gap:11px; margin:30px 0 12px}
+.grouphead .gname{font:600 11px/1 ui-monospace,monospace; letter-spacing:.19em; text-transform:uppercase; color:var(--ink-dim)}
+.grouphead .gmeta{font:11px/1 ui-monospace,monospace; color:var(--ink-faint)}
+.grouphead:after{content:""; flex:1; height:1px; background:var(--line)}
+
+.grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(310px,1fr)); gap:13px}
+.card{background:var(--panel); border:1px solid var(--line); border-radius:9px; overflow:hidden;
+  display:flex; flex-direction:column; position:relative; box-shadow:var(--shadow)}
+/* trust stripe: solid = a critic checked it, hatched = the builder graded itself */
+.card:before{content:""; position:absolute; left:0; top:0; bottom:0; width:3px; z-index:2}
+.card.tv:before{background:var(--verified)}
+.card.ts:before{background:repeating-linear-gradient(135deg,var(--selfgrade) 0 3px,transparent 3px 7px)}
+.card.tn:before{background:repeating-linear-gradient(180deg,var(--unbuilt) 0 2px,transparent 2px 6px)}
+
+.thumb{position:relative; aspect-ratio:16/9; background:#05070A; overflow:hidden}
+.thumb img{width:100%; height:100%; object-fit:cover; display:block}
+.thumb .none{position:absolute; inset:0; display:grid; place-items:center; color:var(--ink-faint);
+  font:600 10px/1 ui-monospace,monospace; letter-spacing:.16em}
+.pill{position:absolute; top:8px; right:8px; font:700 9px/1 ui-monospace,monospace; letter-spacing:.13em;
+  padding:4px 7px; border-radius:4px; background:rgba(6,9,14,.82); border:1px solid currentColor}
+.rnd{position:absolute; top:8px; left:11px; font:600 9px/1 ui-monospace,monospace; letter-spacing:.1em;
+  padding:4px 6px; border-radius:4px; background:rgba(6,9,14,.82); color:#9FB6CC; border:1px solid var(--line-2)}
+
+.body{padding:11px 13px 13px; display:flex; flex-direction:column; gap:9px; flex:1}
+.ttl{font-size:13px; font-weight:600; line-height:1.3}
+.pid{font:10.5px/1 ui-monospace,monospace; color:var(--ink-faint); margin-top:3px}
+.scorerow{display:flex; align-items:center; gap:10px}
+.score{font:700 19px/1 ui-monospace,monospace; font-variant-numeric:tabular-nums}
+.delta{font:600 11px/1 ui-monospace,monospace}
+.spark{margin-left:auto; opacity:.85}
+.who{font:10px/1.4 ui-monospace,monospace; color:var(--ink-faint)}
+.who b{font-weight:600}
+.who .v{color:var(--verified)} .who .s{color:var(--selfgrade)}
+
+.summ{font-size:12px; color:var(--ink-dim); line-height:1.45}
+ul{margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:4px}
+li{font-size:11.5px; line-height:1.42; padding-left:15px; position:relative}
+li.h{color:#C99B95} li.h:before{content:"×"; position:absolute; left:2px; color:var(--reject); font-weight:700}
+li.w{color:#8FB9A0} li.w:before{content:"✓"; position:absolute; left:2px; color:var(--pass); font-size:9px}
+:root[data-theme="light"] li.h{color:#8C3730} :root[data-theme="light"] li.w{color:#245C3F}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]) li.h{color:#8C3730}
+  :root:not([data-theme="dark"]) li.w{color:#245C3F}}
+
+.meta{margin-top:auto; padding-top:9px; border-top:1px solid var(--line);
+  display:flex; gap:10px; flex-wrap:wrap; font:10px/1.5 ui-monospace,monospace; color:var(--ink-faint)}
+.meta b{color:var(--ink-dim); font-weight:600}
+.blind{padding:2px 6px; border-radius:3px; font-weight:600}
+.blind.y{color:var(--pass); border:1px solid currentColor}
+.blind.n{color:var(--reject); border:1px solid currentColor}
+
+.logsec{margin-top:34px; padding-top:16px; border-top:1px solid var(--line)}
+.logsec ol{margin:10px 0 0; padding:0; list-style:none; display:flex; flex-direction:column; gap:3px;
+  max-height:290px; overflow:auto}
+.logsec li{font:11px/1.6 ui-monospace,monospace; color:var(--ink-dim); padding-left:0}
+.logsec li:before{content:none}
+.logsec time{color:var(--ink-faint); margin-right:9px}
+.logsec b{color:var(--ink)}
+
+@media (max-width:640px){
+  .arow{grid-template-columns:auto 1fr auto; }
+  .arow .awhy{grid-column:1/-1; padding-left:22px}
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Run Robot Run — build progress</h1>
+      <div class="snapnote" id="snapnote"></div>
+    </div>
+    <div class="lab" id="roundlab"></div>
+  </header>
+
+  <div class="ledger" id="ledger"></div>
+  <div class="bands" id="bands"></div>
+  <div class="bandkey" id="bandkey"></div>
+
+  <section class="att" id="att"></section>
+  <main id="main"></main>
+
+  <section class="logsec">
+    <div class="lab">activity</div>
+    <ol id="log"></ol>
+  </section>
+</div>
+
+<script>
+const DATA = /*__DATA__*/null;
+
+const BAND = {
+  WOWED:{c:'var(--wowed)',pct:100}, PASS:{c:'var(--pass)',pct:82},
+  WEAK:{c:'var(--weak)',pct:58}, REJECT:{c:'var(--reject)',pct:30},
+  BUILDING:{c:'var(--verified)',pct:12}, NOT_BUILT:{c:'var(--unbuilt)',pct:0},
+};
+const pct = p => p.score ? Math.max(0,Math.min(100,p.score)) : (BAND[p.verdict]?.pct ?? 0);
+const isCritic = p => !!(p.owner && /^critic/i.test(p.owner));
+const esc = s => String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const ago = iso => {
+  if(!iso) return 'never';
+  const s=(Date.parse(DATA.generatedAt)-Date.parse(iso))/1000;
+  if(s<90) return 'just now';
+  if(s<5400) return Math.round(s/60)+'m before snapshot';
+  return Math.round(s/3600)+'h before snapshot';
+};
+
+const P = DATA.pieces;
+const built = P.filter(p=>p.verdict!=='NOT_BUILT');
+const verified = P.filter(isCritic);
+const selfg = built.filter(p=>!isCritic(p));
+
+document.getElementById('snapnote').innerHTML =
+  `Static snapshot taken <b>${new Date(DATA.generatedAt).toLocaleString()}</b> — it does not update. ` +
+  `Ask for a fresh one any time.`;
+document.getElementById('roundlab').textContent = 'round ' + DATA.round;
+
+/* ── trust ledger. The board's own reliability is the headline, because five
+      independent critics have now overturned five builder self-assessments. ── */
+const vPct = built.length ? Math.round(verified.length/built.length*100) : 0;
+document.getElementById('ledger').innerHTML = `
+  <div class="cell">
+    <div class="n">${verified.length}<small> / ${built.length}</small></div>
+    <div class="lab">independently checked</div>
+    <div class="trustbar">
+      <i style="width:${vPct}%;background:var(--verified)"></i>
+      <i style="width:${100-vPct}%;background:repeating-linear-gradient(135deg,var(--selfgrade) 0 3px,transparent 3px 7px)"></i>
+    </div>
+    <div class="note">${vPct}% of built pieces carry a critic's verdict. The rest are self-graded and have historically been optimistic.</div>
+  </div>
+  <div class="cell">
+    <div class="n">${P.filter(p=>p.verdict==='WOWED').length}<small> / ${P.length}</small></div>
+    <div class="lab">wowed</div>
+    <div class="note">The bar the project is aiming at: a critic could not tell it from the reference.</div>
+  </div>
+  <div class="cell">
+    <div class="n">${built.length}<small> / ${P.length}</small></div>
+    <div class="lab">built at all</div>
+    <div class="note">${P.length-built.length} pieces have never been rendered.</div>
+  </div>
+  <div class="cell">
+    <div class="n">${P.reduce((a,p)=>a+(p.hates?.length||0),0)}</div>
+    <div class="lab">open complaints</div>
+    <div class="note">Specific, actionable objections still on the board.</div>
+  </div>`;
+
+/* ── band distribution ── */
+const order = ['WOWED','PASS','WEAK','REJECT','BUILDING','NOT_BUILT'];
+const counts = Object.fromEntries(order.map(k=>[k,P.filter(p=>p.verdict===k).length]));
+document.getElementById('bands').innerHTML = order.filter(k=>counts[k])
+  .map(k=>`<i style="flex:${counts[k]};background:${BAND[k].c}" title="${k}: ${counts[k]}">${counts[k]>1?counts[k]:''}</i>`).join('');
+document.getElementById('bandkey').innerHTML = order.filter(k=>counts[k])
+  .map(k=>`<span><i class="sw" style="background:${BAND[k].c}"></i>${k.replace('_',' ').toLowerCase()} · ${counts[k]}</span>`).join('');
+
+/* ── what needs attention: rank by how far below the bar, weighted by trust ── */
+const att = P.filter(p=>p.verdict!=='NOT_BUILT')
+  .map(p=>{
+    const s = pct(p);
+    let why = p.hates?.[0] || p.summary || '';
+    let w = 100 - s;
+    if(p.blind && p.blind.correct===false){ w += 60; why = 'Fails the blind identification gate — ' + why; }
+    if(p.verdict==='REJECT') w += 25;
+    if(!isCritic(p)) w += 8;
+    return {p,s,w,why};
+  })
+  .sort((a,b)=>b.w-a.w).slice(0,7);
+
+document.getElementById('att').innerHTML =
+  `<h2>Needs attention</h2>` + att.map((a,i)=>`
+    <div class="arow">
+      <span class="rank">${String(i+1).padStart(2,'0')}</span>
+      <span class="aid">${esc(a.p.id)}</span>
+      <span class="asc" style="color:${BAND[a.p.verdict]?.c||'var(--ink)'}">${a.s}</span>
+      <span class="awhy">${esc(a.why)}</span>
+    </div>`).join('');
+
+/* ── sparkline: score history. Endpoint emphasised, faint baseline at the current bar. ── */
+function spark(hist, colour){
+  if(!hist || hist.length<2) return '';
+  const w=62,h=18,max=100;
+  const pts = hist.map((v,i)=>[i/(hist.length-1)*w, h-(Math.max(0,Math.min(100,v))/max)*h]);
+  const d = pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+  const area = d+` L ${w} ${h} L 0 ${h} Z`;
+  const last = pts[pts.length-1];
+  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">
+    <path d="${area}" fill="${colour}" opacity=".13"/>
+    <path d="${d}" fill="none" stroke="${colour}" stroke-width="1.4" stroke-linejoin="round"/>
+    <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="2.1" fill="${colour}"/>
+  </svg>`;
+}
+
+/* ── cards ── */
+const groups = [...new Set(P.map(p=>p.group))];
+document.getElementById('main').innerHTML = groups.map(g=>{
+  const arr = P.filter(p=>p.group===g);
+  const avg = Math.round(arr.reduce((a,p)=>a+pct(p),0)/arr.length);
+  const v = arr.filter(isCritic).length;
+  return `<div class="grouphead"><span class="gname">${esc(g)}</span>
+      <span class="gmeta">${avg}% avg · ${v}/${arr.length} checked</span></div>
+    <div class="grid">${arr.map(card).join('')}</div>`;
+}).join('');
+
+function card(p){
+  const b = BAND[p.verdict] || BAND.NOT_BUILT;
+  const s = pct(p);
+  const trust = p.verdict==='NOT_BUILT' ? 'tn' : (isCritic(p) ? 'tv' : 'ts');
+  const hist = p.history || [];
+  const prev = hist.length>1 ? hist[hist.length-2] : null;
+  const d = prev==null ? null : s - prev;
+  return `<article class="card ${trust}">
+    <div class="thumb">
+      ${p.thumb ? `<img src="${p.thumb}" alt="${esc(p.title)}" loading="lazy">`
+                : `<div class="none">NO CAPTURE</div>`}
+      <span class="rnd">R${p.round}</span>
+      <span class="pill" style="color:${b.c}">${esc(p.verdict)}</span>
+    </div>
+    <div class="body">
+      <div>
+        <div class="ttl">${esc(p.title)}</div>
+        <div class="pid">${esc(p.id)}</div>
+      </div>
+      <div class="scorerow">
+        <span class="score" style="color:${b.c}">${s}</span>
+        ${d!=null && d!==0 ? `<span class="delta" style="color:${d>0?'var(--up)':'var(--down)'}">${d>0?'▲':'▼'} ${Math.abs(d)}</span>`:''}
+        ${spark(hist, b.c)}
+      </div>
+      <div class="who">${isCritic(p)
+        ? `<b class="v">✓ checked</b> by ${esc(p.owner)}`
+        : (p.owner ? `<b class="s">self-graded</b> by ${esc(p.owner)}` : `<span>ungraded</span>`)}</div>
+      ${p.summary ? `<div class="summ">${esc(p.summary)}</div>`:''}
+      ${p.hates?.length ? `<ul>${p.hates.slice(0,4).map(h=>`<li class="h">${esc(h)}</li>`).join('')}</ul>`:''}
+      ${p.wins?.length ? `<ul>${p.wins.slice(0,2).map(h=>`<li class="w">${esc(h)}</li>`).join('')}</ul>`:''}
+      <div class="meta">
+        ${p.blind ? `<span class="blind ${p.blind.correct?'y':'n'}">blind: ${p.blind.correct?'passed':'FAILED'}</span>`:''}
+        ${p.perf ? `<span><b>${p.perf.gpuMs??'–'}</b> ms gpu${p.perf.quality?' · '+esc(p.perf.quality):''}</span>`:''}
+        ${p.perf?.calls ? `<span>${p.perf.calls} calls</span>`:''}
+        <span>${ago(p.updatedAt)}</span>
+      </div>
+    </div>
+  </article>`;
+}
+
+document.getElementById('log').innerHTML = (DATA.log||[]).map(l=>
+  `<li><time>${new Date(l.at).toLocaleTimeString()}</time>` +
+  (l.note ? esc(l.note) : `<b>${esc(l.id)}</b> → ${esc(l.verdict)} ${l.score??''}${l.by?' · '+esc(l.by):''}`) +
+  `</li>`).join('');
+</script>
