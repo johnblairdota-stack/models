@@ -46,10 +46,10 @@ invent one.
 
 The whole mode in one task: a robot in unlit corridors and a voice that can see the house.
 
-**What the runner sees.** First person, no map, no compass, no minimap, lights off. The corridors are
-genuinely dark — mean frame luma in a generated house is measured at **6.65 of 255**
-(`src/views/game.js:2069-2072`), which is the reason the flyover exists at all. They see a terminal prompt
-when they are on it, and nothing else. Their own speed is their own noise: `player.noise = speed / MOVE.run`
+**What the runner sees.** First person, no map, no compass, lights off. The corridors are genuinely dark —
+mean frame luma in a generated house is measured at **6.65 of 255** (`src/views/game.js:2069-2072`), which
+is why the flyover exists at all. They see a terminal prompt when they are on it, and nothing else. Their
+own speed is their own noise: `player.noise = speed / MOVE.run`
 (`src/game/player.js:633-640`), so sprinting at `MOVE.run = 5.20` m/s is 1.0 — audible at 14 m — a walk at
 2.55 is ~0.49 → ~7 m, and **standing still is literal silence** (`rules.js:84-86`, `rules.js:265-267`).
 Stage-1 hunter walks 2.05 m/s (`rules.js:127`), so the runner can always outrun it and can never do so
@@ -73,13 +73,13 @@ gets a decaying last-known ghost and nothing more. **NOT BUILT** — this gating
 single most important new line of code in the deck.
 
 **Two honest error sources, both physical, both already measured.**
-1. **The blind strip.** A wall of height `H` at elevation θ hides `H / tan θ` of floor behind it.
-At the shipped 4.80 m storey: 0 m at 90°, 1.75 m at 70°, **2.55 m at the 62° tilt floor**
-(`src/views/game.js:2161-2168`). The view already publishes it live as `blindStrip`
-(`src/views/game.js:2740`). A guide tilted for a good view of the route is, by arithmetic, blind to a 2.55 m
-band behind every wall — which is where a stationary hunter stands.
-2. **Camera coverage.** Under the gating above, "clear" outside coverage is a *guess* the guide
-is honestly entitled to make.
+1. **The blind strip.** A wall of height `H` at elevation θ hides `H / tan θ` of floor behind it — at the
+   shipped 4.80 m storey, 0 m at 90°, 1.75 m at 70°, **2.55 m at the 62° tilt floor**
+   (`src/views/game.js:2161-2168`), published live as `blindStrip` (`:2740`). A guide tilted for a good view
+   of the route is, by arithmetic, blind to a 2.55 m band behind every wall — which is exactly where a
+   stationary hunter stands.
+2. **Camera coverage.** Under the gating above, "clear" outside coverage is a *guess* the guide is honestly
+   entitled to make.
 
 **Out loud.** Directions plus a status word: *"through the study, left, left, stop — he's in the gallery"* /
 *"clear"* / *"go now"*. The status word is the whole game; the directions are what make refusing to say it
@@ -94,13 +94,13 @@ the clock runs out because the guide routed badly.
 bus carries placed events only (`src/game/noise.js:14-22`). Target peak bus loudness on success **0**, which
 is what makes the other four tasks expensive by comparison.
 
-**Where the lie lives.** *"Clear."* It is one word, it is unverifiable in the moment, and after a grab the
-honest version and the malicious version produce exactly the same TV.
+**Where the lie lives.** *"Clear."* One word, unverifiable in the moment, and after a grab the honest
+version and the malicious version produce exactly the same TV.
 
 **How it reads on TV.** The best shot in the deck and the cheapest: a dark corridor, a robot hesitating at a
-junction, and a voice in the actual room saying *go*. Split-screen the runner's view against the runner's
-face. Lower-third the guide's last spoken word as a caption (`[GUIDE: "CLEAR"]`) — the *word* is public, the
-*map* never is (`party-loop.md:50`).
+junction, a voice in the actual room saying *go*. Split-screen the runner's view against their face, and
+lower-third the guide's last spoken word (`[GUIDE: "CLEAR"]`) — the *word* is public, the *map* never is
+(`party-loop.md:50`).
 
 **Leans on.** `src/views/game.js:2057-2135` (flyover), `:2451-2461` (marks), `:2554-2600` (senses),
 `:2161-2168`+`:2740` (blind strip), `rules.js:259-322` (`HUNTER_SENSE`), `player.js:633-644` (noise),
@@ -224,24 +224,24 @@ Each successful expedition lights one camera; each camera carries a `spaceId` an
 exists (`src/game/furn-dress.js:768-772`), and there are ~12–18 sites in the house
 (`src/game/furn-dress.js:776`, capped at 16 at `:883`). Three things compound across rounds:
 
-1. **The TV gets better when good wins.** More live cameras means more angles for the Broadcast
-Director, which is the only real answer to the Watch Party problem under a pair (6 of 8 on the couch).
-Losing rounds literally makes the show worse to watch.
-2. **The guide gets less blind — so lying gets harder.** Under the gating in Task 1, the hunter
-mark only renders inside covered spaces. Early rounds: most of the house is dark, *"clear"* is cheap and
-mostly unfalsifiable, and evil's best round is round one. Late rounds: coverage is wide, *"clear"* is
-checkable against what the room watched on the TV, and a guide who says it into a covered room where the
-hunter visibly stood has been caught **by the audience, not by the game**. The honest error rate of Task 1
-should therefore *decline measurably* round over round — that decline is the deduction curve, made
-mechanical, and §1.1's information funnel narrowing at a rate the design controls rather than hopes for.
-3. **Evil's counter-play is to keep the house dark.** `FURN_HP.camera = 1.0` is the softest thing
-in the table (`src/destruction/furnprop.js:41`), and breaking a camera already clears `live` and kills its
-tally (`src/game/furn-dress.js:722-728`). A camera can die to a deliberate swing or to a collapse — collapse
-being an *allowed side effect* of a legitimate breach (`party-loop.md:21`) is what makes it deniable. **NOT
-BUILT / unverified:** I could not find any path where falling debris damages a `FurnProp`; today all
-furniture damage comes through the player's sledge raycast (`src/game/player.js:1242`). If that path does
-not exist, deniable camera loss does not exist either, and *"the arch came down on it"* becomes a lie the
-game can trivially disprove.
+1. **The TV gets better when good wins.** More live cameras means more angles for the Broadcast Director,
+   which is the only real answer to the Watch Party problem under a pair (6 of 8 on the couch). Losing
+   rounds literally makes the show worse to watch.
+2. **The guide gets less blind — so lying gets harder.** Under the gating in Task 1, the hunter mark only
+   renders inside covered spaces. Early rounds: most of the house is dark, *"clear"* is cheap and mostly
+   unfalsifiable, and evil's best round is round one. Late rounds: coverage is wide, *"clear"* is checkable
+   against what the room watched on the TV, and a guide who says it into a covered room where the hunter
+   visibly stood has been caught **by the audience, not by the game**. The honest error rate of Task 1
+   should therefore *decline measurably* round over round — that decline is the deduction curve, made
+   mechanical, and §1.1's information funnel narrowing at a rate the design controls rather than hopes for.
+3. **Evil's counter-play is to keep the house dark.** `FURN_HP.camera = 1.0` is the softest thing in the
+   table (`src/destruction/furnprop.js:41`), and breaking a camera already clears `live` and kills its tally
+   (`src/game/furn-dress.js:722-728`). A camera can die to a deliberate swing or to a collapse — collapse
+   being an *allowed side effect* of a legitimate breach (`party-loop.md:21`) is what makes it deniable.
+   **NOT BUILT / unverified:** I could not find any path where falling debris damages a `FurnProp`; today
+   all furniture damage comes through the player's sledge raycast (`src/game/player.js:1242`). If that path
+   does not exist, deniable camera loss does not exist either, and *"the arch came down on it"* becomes a
+   lie the game can trivially disprove.
 
 Design consequence to hold: **camera coverage is a resource evil spends and good accrues.** Do not let a
 round unlock more than one, and do not let evil dark a camera without a legitimate cover story available in
@@ -251,13 +251,13 @@ the same second.
 
 ## 5. What does not exist yet (stated plainly)
 
-- **Guide-map gating on camera coverage.** The core new mechanic in this deck. `hunterMark` is
-currently ungated (`src/views/game.js:2559`).
-- **Per-blow and per-prop noise.** The bus is fed only by wall stage transitions and hunter door
-work (`src/views/game.js:1432`, `:1546`).
-- **"Taken = out for good."** `_attack` detaches a limb and absorbs it (`hunter-ai.js:1090-1116`);
-there is no death, no removal, no round-level TAKEN outcome.
-- **The rescue window.** The bible's §6.3 remote-noise save cannot work today: `hearNoise` refuses
-outright during `PURSUE`/`ATTACK`/`GROW` (`src/game/hunter-ai.js:302`). With a pair there is no second body
-in the halls to rescue with anyway — recommend cutting it from the pair build.
+- **Guide-map gating on camera coverage.** The core new mechanic in this deck. `hunterMark` is currently
+  ungated (`src/views/game.js:2559`).
+- **Per-blow and per-prop noise.** The bus is fed only by wall stage transitions and hunter door work
+  (`src/views/game.js:1432`, `:1546`).
+- **"Taken = out for good."** `_attack` detaches a limb and absorbs it (`hunter-ai.js:1090-1116`); there is
+  no death, no removal, no round-level TAKEN outcome.
+- **The rescue window.** The bible's §6.3 remote-noise save cannot work today: `hearNoise` refuses outright
+  during `PURSUE`/`ATTACK`/`GROW` (`src/game/hunter-ai.js:302`). With a pair there is no second body in the
+  halls to rescue with anyway — recommend cutting it from the pair build.
 - **Touch input, phone views, PartyKit, terminals, the Broadcast Director.** All 0% (audit §2).

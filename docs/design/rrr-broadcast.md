@@ -29,6 +29,7 @@ are the pieces to build it out of.
 New, all of it: the shot library, the event bus, static RRR cameras as world objects, the
 camera-unlock roster, the lower-third/nameplate/chat layer, the cutaway budget, and the
 info-isolation boundary that keeps alignment out of the Director's scope.
+
 ## 1. The camera model
 
 ### 1.1 Shots
@@ -85,6 +86,7 @@ equal rank waits out `MIN_HOLD`; lower rank queues, capped at `QUEUE_MAX`.
 
 Target cadence (§8/B3): **12–22 cuts/min**, median shot 2.2–3.5 s — a 90 s expedition is 25–30
 shots. That is television. Six shots is a security monitor.
+
 ## 2. Camera unlocks — the progression, on screen
 
 Cameras are the objective (`party-loop.md`). Each terminal reached lights one **RRR camera** in a
@@ -107,6 +109,7 @@ it sees nothing outside its room. Coverage is genuinely partial, and that is the
   reward is the shot, not a toast.
 - Cameras only ever go up; a failed task leaves its slot dark ("that terminal's cameras stay dark").
 - Shot bug, bottom-left: `CAM 03 · EAST GALLERY · LIVE`.
+
 ## 3. Deliberate blind spots
 
 Three things produce a gap; only the third is authored:
@@ -137,6 +140,7 @@ Three things produce a gap; only the third is authored:
 from a seeded RNG over the round seed, weighted only by cutaway-count-so-far (least-cut subject wins
 ties). The Director **cannot** read alignment, because alignment is not in its scope. If cutaway
 frequency ever correlates with alignment, the edit becomes an oracle and P1 dies. Tested in §8/B2.
+
 ## 4. Screen layout
 
 ```
@@ -174,6 +178,7 @@ cards, replays, reaction-bar emote bursts, the outcome card, `NO SIGNAL` static.
 lower third ≥ 34 px; all text ≥ 4.5:1 on an opaque plate, never straight on the feed; nothing
 important within 4% of an edge; every state change carries a non-colour channel (strike-through for
 out, a lit/dark glyph for cameras) because half a party room is looking at the screen sideways.
+
 ## 5. The chat
 
 One column, right side, 9 lines visible, 400 ms fade-in. Four sources, one visual treatment:
@@ -200,6 +205,7 @@ card and increment the denominator.
 **Chat may never contain:** a true role, an unpublished claim draft, an alignment, `X sabotaged Y`
 (§5.3), or wall stage health — it is generated from the same event bus as the Director, which has
 none of those in scope.
+
 ## 6. Never do this
 
 Derived from `party-loop.md`'s **Do not** section, plus what follows from it.
@@ -221,6 +227,7 @@ Derived from `party-loop.md`'s **Do not** section, plus what follows from it.
    shown as *blows landing*, never as a progress bar.
 9. **Never show the runner's private prompts or the guide's callouts as on-screen text.** The guide
    talks out loud, in the room. That is the game.
+
 ## 7. Build vs fake in v1
 
 **Minimum viable director (M4b, one sentence):** *the ranked event bus, three shot solvers
@@ -240,6 +247,7 @@ else. That alone is watchable, and it must be proven before the rest is worth bu
 **Perf caution (audit A1).** The **≤ 625 draw call** budget is a single-player budget. A seated
 circle of eight plus one live feed has never been measured, and `SPLIT` doubles the resident set.
 Measure at M2 before art is committed to the circle; gate `SPLIT` on that number.
+
 ## 8. Verification
 
 Extends §16.2 of the bible. **V18 is the parent gate**; B1 is its concrete form.

@@ -225,15 +225,14 @@ shipped room module, no renderer and no wall clock — the same construction as 
 L36–41, which drives the real `DamageField` headless and gets bit-identical answers under any load.
 
 **What it plays.** Complete games — `CASTING → EXPEDITION → DEBRIEF → NOMINATION → VOTE → VERDICT`
-— at 4, 5, 6, 7 and 8 players × 1000 seeds. The Expedition is the runner/guide pair with the
-automated hammer, resolved against the real `HUNTER_SENSE` and `NoiseBus`, not a stub.
+— at 4–8 players × 1000 seeds, the Expedition being the runner/guide pair with the automated hammer
+resolved against the real `HUNTER_SENSE` and `NoiseBus`, not a stub.
 
-**Bot policies.** Four, plus a control: `naive-good`, `cautious-good`, `patient-evil`,
-`aggressive-evil`, and `scatter` — a policy that plays at random. **`scatter` is not decoration.**
-If the tuned policies do not produce a materially different good win rate from `scatter`, the sim
-is not measuring play and every band below is noise. (This is `debris-collapse` C5's two-policy
-discipline, copied verbatim across `_sag1-grain` and `_limb1-rule` so three files measure the same
-player.)
+**Bot policies.** `naive-good`, `cautious-good`, `patient-evil`, `aggressive-evil`, and `scatter` —
+a policy that plays at random. **`scatter` is not decoration:** if the tuned policies do not produce
+a materially different good win rate from it, the sim is not measuring play and every band below is
+noise. (`debris-collapse` C5's two-policy discipline, copied verbatim across `_sag1-grain` and
+`_limb1-rule` so three files measure the same player.)
 
 **What it reports, and the bands.** Every one of these is a **band, not a direction**.
 
@@ -249,9 +248,9 @@ player.)
 **S0, the arm.** Both alignments won at least once; every phase was entered; the seed set produced
 distinct games (not one game 1000 times); one seed replays byte-identically across two runs.
 
-**What it does not prove.** Bots cannot model the social layer. This validates that the mechanical
-scaffolding is not already broken before humans see it. It says nothing about whether the game is
-fun, whether the lie is readable, or whether the broadcast is watchable. Those are §6.
+**What it does not prove.** Bots cannot model the social layer. It validates that the mechanical
+scaffolding is not already broken before humans see it, and says nothing about whether the game is
+fun, the lie readable, or the broadcast watchable. Those are §6.
 
 ---
 
@@ -266,9 +265,8 @@ Cheap, and it reaches what no gate above can. Findings go into `HANDOFF.md` in i
 | **Post-round one-tap survey** — *"Do you know who caused that?"* Yes / No / Guessing | accuracy **50–65%**. 95% means the game names the culprit; 20% means it is a coin flip. The most direct measurement of R1 that exists |
 | **Speaking-time distribution** across the 150s Debrief | loudest player **<35%**. Above it, quiet players have nothing to say and the design owes them evidence |
 | **Guide honest error rate**, live | the same **15–25%** band as `party-sim` S4. If the live number is materially under the sim's, the flyover is too legible and the lie has no cover |
-| **Wall clock per phase** | total session **25–40 min** |
-| **Off-crew evil**, post-game — *"did you have anything to do while you weren't the pair?"* | this is R2b, and under C2 it is worse than the bible assumed |
-| **The Reunion reveal** — count audible reactions in the room | zero is a design failure, and it is the only test of D5 there is |
+| **Wall clock per phase** · **the Reunion reveal**, counted as audible reactions | total session **25–40 min**; zero reactions at the Reunion is a design failure and the only test of D5 there is |
+| **Off-crew evil**, post-game — *"did you have anything to do while you weren't the pair?"* | R2b, and under C2 it is worse than the bible assumed |
 | **Draw calls in the seated circle** (audit **A1**) | budget is **≤625 and it is a single-player budget**; one gadget prop costs 39–205. Eight customised robots plus a TV camera has **never been measured**. Measure at M2, before art is committed |
 
 Two of these are judgements, not counts, and they belong to the existing critic skills rather than
@@ -282,18 +280,17 @@ seated circle reads → `rrr-critique`. A builder must never grade its own fix (
 Before any party code ships — and specifically **before the wire format is settled**, because all
 three are cheap as constraints and expensive as migrations.
 
-1. **`party-isolation` (§3).** It is the product-ending bug, it is invisible without a transcript
-   gate, and writing it forces the two architectural decisions that everything else depends on:
-   the room module must be importable in bare node, and the entitlement matrix must exist as data
-   with a stated audience per field. Deny-by-default is only free while the payload set is empty.
-2. **`party-anon` (§4).** Closing the failure-event schema costs five lines today and is a
-   migration across twenty payload types later. T5 is unguarded in the tree right now — the audit
-   says so in §3 — and the first debug caption that reads *"ALEX was 0.4s late"* will ship without
-   anyone noticing it was a design decision.
-3. **`role-deal` (§2).** Ten minutes of work, bare node, no transport. It settles C4 (1 evil @4–5,
-   2 @6–8 — `party-loop.md` wins over the bible's §8) in code rather than in two documents that
-   disagree, and it proves the deal returns per-player views before there is a socket to leak
-   them down.
+1. **`party-isolation` (§3).** The product-ending bug, invisible without a transcript gate. Writing
+   it forces the two architectural decisions everything else depends on: the room module importable
+   in bare node, and the entitlement matrix as data with a stated audience per field.
+   Deny-by-default is only free while the payload set is empty.
+2. **`party-anon` (§4).** Closing the failure-event schema costs five lines today and is a migration
+   across twenty payload types later. T5 is unguarded in the tree right now (audit §3), and the
+   first debug caption reading *"ALEX was 0.4s late"* will ship without anyone noticing it was a
+   design decision.
+3. **`role-deal` (§2).** Ten minutes, bare node, no transport. It settles C4 in code rather than in
+   two documents that disagree, and proves the deal returns per-player views before there is a
+   socket to leak them down.
 
 `party-sim` is fourth and it is close, because it is what makes every balance argument after M3 a
 measurement instead of an opinion. But it needs a loop to play, and the three above do not.
