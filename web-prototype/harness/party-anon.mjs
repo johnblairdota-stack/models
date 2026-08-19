@@ -46,7 +46,7 @@ for (let s = 0; s < GAMES; s++) {
   const r = createRoom({ count: 8, castSeed: 1000 + s, worldSeed: s, send: (id, f) => frames.push({ id, f }) });
   r.start(); r.playEpisode(); r.playEpisode();
   truth = r.truth();
-  for (const e of r.log) if (isFailure(e.type)) failures.push(e);
+  for (const e of r.log.all()) if (isFailure(e.type)) failures.push(e);
 }
 const roster = truth.seats.map((s) => ({ id: s.id, seat: s.seat, name: `Robot ${s.seat + 1}` }));
 const CREW = 2;

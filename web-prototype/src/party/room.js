@@ -19,6 +19,7 @@
 import { dealCast, viewFor, EVIL } from './cast.js';
 import { project } from '../../net/party/entitle.js';
 import { makeEvent, VIS } from './events.js';
+import { createLog, visibleTo } from './log.js';
 import { hunterVisibleToGuide, ROOMS } from './coverage.js';
 import { applyTake, resolveContact, MODE, PLATE } from './taken.js';
 
@@ -29,10 +30,11 @@ export const PHASES = ['LOBBY', 'CASTING', 'EXPEDITION', 'DEBRIEF', 'VERDICT'];
  * @param {number} opts.count          players
  * @param {number} opts.castSeed       NEVER transmitted. See cast.js's header.
  * @param {number} opts.worldSeed      public, exactly as today
- * @param {(socketId:string, frame:object)=>void} opts.send
+ * @param {(socketId:string, frame:object)=>void} opts.send   STATE frames, governed by the matrix
+ * @param {(socketId:string, event:object)=>void} [opts.emit]  EVENTS, governed by `vis`
  * @param {number} [opts.leak]         inject a known leak — the gate's controls, never shipped
  */
-export function createRoom({ count, castSeed, worldSeed, send, leak = 0 }) {
+export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak = 0 }) {
   const deal = dealCast({ count, castSeed });
   const sockets = deal.seats.map((s) => ({
     id: `phone-${s.seat}`, playerId: s.id, isTV: false,
@@ -40,7 +42,15 @@ export function createRoom({ count, castSeed, worldSeed, send, leak = 0 }) {
   }));
   sockets.push({ id: 'tv', playerId: null, isTV: true, alignment: null, seatRole: null });
 
-  const log = [];
+  /**
+   * ⚠️ TWO CHANNELS, TWO RULES, AND THEY ARE COMPLEMENTARY RATHER THAN DUPLICATIVE — worth being
+   * precise about, because "one mechanism" is easy to overclaim. A STATE FRAME is a projection
+   * of what is true now, and the entitlement matrix governs it field by field. An EVENT is a
+   * fact about a moment, and `vis` governs it whole. What `vis` buys is the part that matters:
+   * the live filter and the Reunion are the same replay, so a leak and a missing reveal are the
+   * same bug.
+   */
+  const log = createLog();
   const state = {
     phase: 'LOBBY', tick: 0, episode: 1, worldSeed,
     players: deal.seats.map((s) => ({ id: s.id, seat: s.seat, name: `Robot ${s.seat + 1}`, alive: true, claim: null, plate: PLATE.UNDECLARED })),
@@ -55,7 +65,16 @@ export function createRoom({ count, castSeed, worldSeed, send, leak = 0 }) {
     incident: { alarms: 0 },
   };
 
-  const record = (e) => { log.push(e); return e; };
+  const record = (e) => {
+    const stored = log.append(e);
+    if (emit) {
+      for (const sock of sockets) {
+        const ctx = { playerId: sock.playerId, alignment: sock.alignment, isTV: sock.isTV };
+        if (visibleTo(stored, ctx)) emit(sock.id, stored);
+      }
+    }
+    return stored;
+  };
 
   /** The full frame for a socket, before projection. `you` is that socket's own deal view. */
   function fullFor(sock) {
@@ -132,6 +151,23 @@ export function createRoom({ count, castSeed, worldSeed, send, leak = 0 }) {
       s.seatRole = s.playerId === runner.id ? 'runner' : s.playerId === guide.id ? 'guide' : null;
     }
     record(makeEvent('cast.pair', VIS.PUBLIC, { runner: runner.id, guide: guide.id }));
+    // The deal itself is written once, SEALED. The Reunion is the same replay with the filter
+    // off, so this is what makes the roll call complete without a second reveal pipeline.
+    if (state.episode === 1) {
+      record(makeEvent('cast.deal', VIS.SEALED, {
+        seats: deal.seats.map((s) => ({ id: s.id, role: s.role, alignment: s.alignment })),
+      }));
+      for (const s of deal.seats) {
+        record({ ...makeEvent('role.card', VIS.SELF, { role: s.role }), for: s.id });
+        if (s.alignment === EVIL) {
+          record({
+            ...makeEvent('production.panel', VIS.EVIL, {
+              teammates: deal.seats.filter((o) => o.alignment === EVIL && o.id !== s.id).map((o) => ({ id: o.id, role: o.role })),
+            }), for: s.id,
+          });
+        }
+      }
+    }
     broadcast();
 
     setPhase('EXPEDITION');
@@ -162,6 +198,8 @@ export function createRoom({ count, castSeed, worldSeed, send, leak = 0 }) {
 
   return {
     sockets, deal, log, state,
+    /** Mid-game replay for one socket — what a reconnecting phone is caught up with. */
+    replayFor: (sock) => log.replayFor({ playerId: sock.playerId, alignment: sock.alignment, isTV: sock.isTV }),
     playEpisode,
     start() { setPhase('LOBBY'); },
     /** Ground truth. Belongs to the gate and the Reunion. Never to a socket. */

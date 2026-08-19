@@ -15,9 +15,12 @@
     "gate:role-deal": "node harness/role-deal.mjs",
     "gate:party-anon": "node harness/party-anon.mjs",
     "gate:party-isolation": "node harness/party-isolation.mjs",
-    "gates:party": "node harness/role-deal.mjs && node harness/party-anon.mjs && node harness/party-isolation.mjs && node harness/party-taken.mjs && node harness/guide-coverage.mjs",
+    "gates:party": "node harness/role-deal.mjs && node harness/party-anon.mjs && node harness/party-isolation.mjs && node harness/party-taken.mjs && node harness/guide-coverage.mjs && node harness/party-log.mjs && node harness/party-sockets.mjs",
     "gate:party-taken": "node harness/party-taken.mjs",
-    "gate:guide-coverage": "node harness/guide-coverage.mjs"
+    "gate:guide-coverage": "node harness/guide-coverage.mjs",
+    "gate:party-log": "node harness/party-log.mjs",
+    "gate:party-sockets": "node harness/party-sockets.mjs",
+    "party:local": "node net/party/local.mjs"
   },
   "dependencies": {
     "three": "^0.180.0",
