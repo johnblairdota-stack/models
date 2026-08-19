@@ -240,7 +240,8 @@ changed, THE NUMBER, THE INSTRUMENT.**
 
 | watch | the number | why |
 |---|---|---|
-| **Second-screen rate** during the Expedition — count non-pair players who look away from the TV | **C2 changed this and the bible's threshold is now stale.** It said >1 of 5 is a warning, >2 has failed. With a pair, 6 of 8 are spectating: **>2 of 6 warning, >3 of 6 the broadcast has failed and D1 needs revisiting.** Re-derive it at the first session rather than inheriting the number |
+| **Dead air** — fraction of Expedition 5s bins with zero spectator reaction-bar events | **RESOLVED as D15.** Primary watchability metric, automatic, no observer. **Target under 40%, alarm above 60%.** A rapt silent room reads as a false positive, which is what the glance count is for |
+| **Glance count** — spectators with eyes on their own phone for ≥3 consecutive seconds, sampled t=20/50/80s | **D15.** Warning at ⅓ of spectators, failure at ½, sustained across 2 of 3 samples. 7–8 players only. Episode 3 onward. **Turning to argue with a neighbour is engagement, not defection — only the phone counts** |
 | **Post-round one-tap survey** — *"Do you know who caused that?"* Yes / No / Guessing | accuracy **50–65%**. 95% means the game names the culprit; 20% means it is a coin flip. The most direct measurement of R1 that exists |
 | **Speaking-time distribution** across the 150s Debrief | loudest player **<35%**. Above it, quiet players have nothing to say and the design owes them evidence |
 | **Guide honest error rate**, live | the same **15–25%** band as `party-sim` S4. If the live number is materially under the sim's, the flyover is too legible and the lie has no cover |

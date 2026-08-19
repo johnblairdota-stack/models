@@ -114,13 +114,15 @@ Three things I had specced as separate systems collapse into one. Design the env
 
 ---
 
-## 7. Open — needs John
+## 7. Decisions — all resolved
 
 1. ~~Runner view: phone or TV?~~ **DECIDED — TV. The phone is a controller (D13).** It overrides `party-loop.md`'s "Phone first-person + touch". New work it creates: the guide is now the *only* player with private information, so casting becomes a referendum on one seat; and an evil **runner** needs a lever, which is the **throttle detent** — choosing RUN near the Hunter is loud, on camera, and completely deniable as panic. P3 survives D13 through the throttle, not the hammer. Overturned only if a stripped runner scene boots in under 8s on the worst phone in the matrix.
-2. **Six players.** Flagged independently by two agents: 33% evil, parity two deaths away, one reachable body per round.
-3. **The draw-call budget is already breached** — the flyover alone measures **644 against 625** (`game.js:2708`, `:826`) on desktop, before a phone connects. Decide whether the budget moves or the flyover does.
-4. **Second-screen threshold needs re-deriving.** The bible's ">1 of 5 looking away" is stale under a pair — it is now 6 of 8 spectating. Derive it at the first session rather than inheriting it.
+2. ~~Six players.~~ **DECIDED — 2 evil, settled (D14).** 33% is above the genre band and accepted; R9 drops from a balance risk to a tuning note.
+3. ~~The draw-call budget is already breached.~~ **ACCEPTED as a running concern, not a blocker.** The flyover measures 644 against 625 (`game.js:2708`, `:826`). Optimisations and cuts come out of playtest. Worth keeping the number visible on the board rather than treating it as solved.
+4. ~~Second-screen threshold needs re-deriving.~~ **DECIDED as D15 — dead air first, eyes second.** Primary: fraction of Expedition 5s bins with zero spectator reaction-bar taps; target <40%, alarm >60%; automatic, free, no observer. Secondary: a glance count at t=20/50/80s, warning at ⅓ of spectators and failure at ½, sustained across 2 of 3 samples, 7–8 players only, from episode 3 onward — **counting only eyes on a phone for ≥3s, because turning to argue with a neighbour is the design working, not a defection.**
 
 ## 8. The gap no gate can close
 
-**Watchability.** C2 made six of eight players spectators, so the Broadcast Director carries the mode — and no automated gate can judge whether a round is worth watching. `director-cut` only proves key events weren't off-screen. That is a playtest measurement or it is nothing.
+**Watchability.** C2 made six of eight players spectators, so the Broadcast Director carries the mode — and no automated gate can judge whether a round is *worth watching*. `director-cut` only proves key events weren't off-screen.
+
+D15 narrows the gap without closing it: **dead air** is automatic and catches a dull round cheaply, but it cannot tell a rapt silent room from a bored one. The glance count can, and it needs a human in the room. Everything else in this brief can be proven by a machine; this one cannot, and pretending otherwise is how a party game ships un-fun.

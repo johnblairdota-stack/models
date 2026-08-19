@@ -1,7 +1,7 @@
 # Run Robot Run — Social Deception Mode
 
 **Working title: "PRIME TIME"**
-Design plan v0.5 — thirteen decisions locked, reconciled against the prototype
+Design plan v0.6 — fifteen decisions locked, reconciled against the prototype
 
 > One line: *Eight robots on a reality TV show. The producers want a body count. You talk in the room, you act on your phone, and the edit is lying to you.*
 
@@ -22,6 +22,8 @@ Design plan v0.5 — thirteen decisions locked, reconciled against the prototype
 | D11 | **Networking is Cloudflare PartyKit.** | 8 phones + 1 TV per room, QR join. The existing `client.js`/`server.mjs` pair is a reference for the *authority model*, not the transport. |
 | D12 | **The party mode does not reuse `run.js`'s WINDDOWN/DETONATION.** | The bomb timer stays survival-mode only. The aimed-dig survival slice still ships as its own mode and remains the art/physics bed. |
 | D13 | **The runner's first-person view lives on the TV. The phone is a controller, never a viewport.** | **This overrides `party-loop.md`'s "Phone first-person + touch"** — the one place D8's deference is deliberately set aside, on John's call. See §5.7 for what it changes. |
+| D14 | **Six players is 2 evil, and that is settled.** | 33% is above the genre band and accepted. R9 is downgraded from a balance risk to a tuning note. Optimisations and cuts are expected to come out of playtest, not out of more planning. |
+| D15 | **Watchability is measured by dead air first, eyes second.** | Replaces the bible's old "count who looks away" line, which was both stale and wrong. See §16.5. |
 
 ### Superseded by the audit
 
@@ -758,7 +760,16 @@ Cheap to add, disproportionately useful:
 - Wall-clock time per phase (are we hitting 25–40 min?)
 - **Speaking-time distribution** — the loudest player shouldn't own >35% of the debrief. If they do, the design isn't giving quiet players enough to say
 - Post-round one-tap survey on the phone: *"Do you know who caused that?"* Yes/No/Guessing — this is the most direct measurement of R1 that exists
-- **Second-screen rate** — the direct measurement of R2. Have someone watch the room during the Expedition and count how many of the five non-Crew players look away from the TV. **More than one is a warning; more than two means the broadcast has failed and D1 needs revisiting.**
+- **DEAD AIR — the primary watchability metric (D15), and it is free.** Under D13 spectators hold nothing but the reaction bar, and every tap is already a timestamped event in the log. So measure the *absence*: bucket the Expedition's 90 seconds into 5-second bins and count the bins in which **no spectator tapped anything**. An engaged room reacts more or less continuously through a chase.
+  - **Target: dead air under 40% of Expedition seconds. Alarm above 60%.**
+  - It runs on every playtest with no observer and no extra instrumentation, and it lands in the same event stream as everything else.
+  - It is a proxy and should be named as one: a rapt, silent room reads as dead air. That is what the human check below is for.
+
+- **THE GLANCE COUNT — the human check, once a session.** One observer, three fixed samples at t=20s / 50s / 80s of the Expedition.
+  - **Count only a spectator whose eyes are on their own phone for three or more consecutive seconds.** This is the correction that matters: the old metric counted "looking away from the TV", which would have penalised someone turning to argue with the person beside them. In a party game that is the design working. **Only the phone counts as a defection.**
+  - **Warning at one third of spectators, failure at one half — and only if sustained across two of the three samples**, which kills single-glance noise.
+  - **Measure at 7–8 players only.** Below that the spectator count is too small for a fraction to mean anything, and the problem is milder anyway.
+  - **Take it from episode 3 onward.** Novelty carries episode 1; the failure mode this is watching for is boredom by episode 4.
 - **Off-crew evil involvement** — ask evil players post-game: *"did you have anything to do while you weren't on the Crew?"* This is the R2b measurement.
 - Post-game: *"Was that fun?"* and *"Did you understand your role?"*
 
