@@ -115,111 +115,86 @@ for 90 seconds. Measure before designing anything else onto it.
 
 ### 2 — THE WALL CALL
 
-**Runner:** stands in a dead-end service corridor facing two or three identical dark faces, holding the
-sledge. The hammer is automated: `pickDoorwayHit()` takes the shallowest still-solid cell in an 0.80 m
-window, y ∈ [0, 1.95] (`src/game/doorway-pick.js:33-61`), and opens `channel(0.34, 1.70, 0.30)` — the same
-predicate `wall.js` `blocksMovement()` uses — in a **measured 3 blows** on 5.72 / 2.96 / 2.08 m faces
-(`doorway-pick.js:10-12`), gated at ≤6 (`harness/_taskrun_picker_unit.mjs:22`). At `WEAPON_COOLDOWN.sledge =
-0.95` s (`rules.js:78`) that is ~3 seconds of committed, loud work. The runner picks *which face*; the
-picker does the rest.
-
-**Guide:** the flyover shows what is behind each face — the terminal room, a dead cavity, or the space the
-hunter is standing in.
-
-**Out loud:** *"the left one"* / *"not that one — the one behind you."*
-
-**Failure:** the wrong face costs 3 blows, the noise, ~4 seconds, and can open a path straight into the
-runner's room. Collapse is an allowed side effect, not the goal (`party-loop.md:21`); a collapse that lands
-on you takes a limb (audit §1).
-
-**Noise:** exactly `BREACH_NOISE.panel = 1.25` on the stage crossing (`connectors.js:224`,
-`src/views/game.js:1432`) — carries 17.5 m. Sound alone cannot get the hunter past `soundCeiling = 0.86`,
-under `commitAt = 1.00` (`rules.js:316-321`), so a breach brings it into your half of the house but only a
-*sighting* makes it run. Evidence, never proof — exactly right.
-
-**Where the lie lives:** the guide is the only one who can tell two dark faces apart, and being wrong about
-which wall a corridor is on is the most ordinary mistake in the game.
-
-**On TV:** three swings, an arch coming down, dust. The most physical thing in the deck.
-
-**NOT BUILT:** per-blow noise. Today only the stage crossing emits, so two blows that do not cross a stage
-are silent. T4 wants a small per-blow emit (~0.6) so a *failed* breach is audible too.
+- **Runner:** stands in a dead-end service corridor facing two or three identical dark faces, holding the
+  sledge. The hammer is automated: `pickDoorwayHit()` takes the shallowest still-solid cell in an 0.80 m
+  window, y ∈ [0, 1.95] (`src/game/doorway-pick.js:33-61`), and opens `channel(0.34, 1.70, 0.30)` — the same
+  predicate `wall.js` `blocksMovement()` uses — in a **measured 3 blows** on 5.72 / 2.96 / 2.08 m faces
+  (`doorway-pick.js:10-12`), gated at ≤6 (`harness/_taskrun_picker_unit.mjs:22`). At `WEAPON_COOLDOWN.sledge
+  = 0.95` s (`rules.js:78`) that is ~3 seconds of committed, loud work. The runner picks *which face*; the
+  picker does the rest.
+- **Guide:** the flyover shows what is behind each face — the terminal room, a dead cavity, or the space the
+  hunter is standing in.
+- **Out loud:** *"the left one"* / *"not that one — the one behind you."*
+- **Failure:** the wrong face costs 3 blows, the noise, ~4 seconds, and can open a path straight into the
+  runner's room. Collapse is an allowed side effect, not the goal (`party-loop.md:21`); a collapse that
+  lands on you takes a limb (audit §1).
+- **Noise:** exactly `BREACH_NOISE.panel = 1.25` on the stage crossing (`connectors.js:224`,
+  `src/views/game.js:1432`) — carries 17.5 m. Sound alone cannot get the hunter past `soundCeiling = 0.86`,
+  under `commitAt = 1.00` (`rules.js:316-321`), so a breach brings it into your half of the house but only a
+  *sighting* makes it run. Evidence, never proof — exactly right.
+- **Where the lie lives:** the guide is the only one who can tell two dark faces apart, and being wrong
+  about which wall a corridor is on is the most ordinary mistake in the game.
+- **On TV:** three swings, an arch coming down, dust. The most physical thing in the deck.
+- **NOT BUILT:** per-blow noise. Today only the stage crossing emits, so two blows that do not cross a stage
+  are silent. T4 wants a small per-blow emit (~0.6) so a *failed* breach is audible too.
 
 ---
 
 ### 3 — THE MANIFEST
 
-**Runner:** a room of destructible furniture — voxel-carvable (`src/destruction/furn-voxels.js:519`,
-`src/game/furn-smash-lab.js`), damaged through the sledge raycast (`src/game/player.js:1242-1249`), HP table
-at `src/destruction/furnprop.js:29-44`. A camera body is inside exactly one piece.
-
-**Guide:** the manifest — three object *names* on their phone, one of which is the right one, and the
-flyover positions of all three.
-
-**Out loud:** *"the candelabra by the window"* — and then, when it is empty, the second name.
-
-**Failure:** wrong furniture smashed, clock burned, and every smash is bus traffic. The Escort's attribution
-problem in miniature.
-
-**Noise:** **NOT BUILT** — furniture destruction emits nothing on the bus today (only
-`src/views/game.js:1432` and `:1546` emit). Propose 0.9 per prop destroyed (below a wall breach, above
-silence).
-
-**Where the lie lives:** *"I said the candlestick." "You said the clock."* Memory under a 90 s clock is
-genuinely unreliable, so a misdirection and a mishearing are the same event.
-
-**On TV:** robots destroying antiques. Uses the destruction tech harder than anything else.
+- **Runner:** a room of destructible furniture — voxel-carvable (`src/destruction/furn-voxels.js:519`,
+  `src/game/furn-smash-lab.js`), damaged through the sledge raycast (`src/game/player.js:1242-1249`), HP
+  table at `src/destruction/furnprop.js:29-44`. A camera body is inside exactly one piece.
+- **Guide:** the manifest — three object *names* on their phone, one of which is the right one, and the
+  flyover positions of all three.
+- **Out loud:** *"the candelabra by the window"* — and then, when it is empty, the second name.
+- **Failure:** wrong furniture smashed, clock burned, and every smash is bus traffic. The Escort's
+  attribution problem in miniature.
+- **Noise:** **NOT BUILT** — furniture destruction emits nothing on the bus today (only
+  `src/views/game.js:1432` and `:1546` emit). Propose 0.9 per prop destroyed (below a wall breach, above
+  silence).
+- **Where the lie lives:** *"I said the candlestick." "You said the clock."* Memory under a 90 s clock is
+  genuinely unreliable, so a misdirection and a mishearing are the same event.
+- **On TV:** robots destroying antiques. Uses the destruction tech harder than anything else.
 
 ---
 
 ### 4 — THE TALLY
 
-**Runner:** stands at a dark camera and holds an interact (`src/game/player.js:1040-1042`, `_interactCd =
-0.35`). Holding it does nothing on its own.
-
-**Guide:** an ARM control on their phone, equally inert alone. Both must be held inside the same **1.2 s
-window** for the tally LED to go red — LED, emissive material and `live` flag already exist
-(`src/game/furn-dress.js:701-718`, `props.js:1284`).
-
-**Out loud:** a human countdown. *"Three, two, one."*
-
-**Failure:** miss the window and the camera shorts — dark for the rest of the round, and loud.
-
-**Noise:** propose 1.4 on a miss (above a panel breach: this is the deck's punishing failure), 0.3 on
-success.
-
-**Where the lie lives:** being 0.4 s late is indistinguishable from lag, from a robot mid-turn, and from a
-phone that did not register the press. 🚨 **T5 is at its most fragile here.** The game must never display the
-actual timings, ever, and with N=2 even "the runner was early" names a person. Report *"the camera shorted"*
-and nothing else.
-
-**On TV:** split-screen, two hands, one light. Among the most readable things possible.
+- **Runner:** stands at a dark camera and holds an interact (`src/game/player.js:1040-1042`, `_interactCd =
+  0.35`). Holding it does nothing on its own.
+- **Guide:** an ARM control on their phone, equally inert alone. Both must be held inside the same **1.2 s
+  window** for the tally LED to go red — LED, emissive material and `live` flag already exist
+  (`src/game/furn-dress.js:701-718`, `props.js:1284`).
+- **Out loud:** a human countdown. *"Three, two, one."*
+- **Failure:** miss the window and the camera shorts — dark for the rest of the round, and loud.
+- **Noise:** propose 1.4 on a miss (above a panel breach: this is the deck's punishing failure), 0.3 on
+  success.
+- **Where the lie lives:** being 0.4 s late is indistinguishable from lag, from a robot mid-turn, and from a
+  phone that did not register the press. 🚨 **T5 is at its most fragile here.** The game must never display
+  the actual timings, ever, and with N=2 even "the runner was early" names a person. Report *"the camera
+  shorted"* and nothing else.
+- **On TV:** split-screen, two hands, one light. Among the most readable things possible.
 
 ---
 
 ### 5 — THE EXTRACTION *(late round only)*
 
-**Runner:** carries the tape reel from a live camera back to the entry hall. Carrying forbids running —
-capped at `MOVE.walk = 2.55` m/s (`rules.js:85`), against a hunter at 2.05 / 2.70 / 3.35 by stage
-(`rules.js:127`). At stage 2 the hunter is faster than you and you cannot drop the reel.
-
-**Guide:** the whole house, the route, and — inside camera coverage — the hunter.
-
-**Out loud:** a continuous route, revised live. The only task where the guide talks for the whole duration,
-which is why it belongs late: the room has had four rounds to learn what this guide sounds like.
-
-**Failure:** taken with the reel; the reel is lost with the runner (`party-loop.md:23`).
-
-**Noise:** a walking body reaches ~7 m for the whole transit (`player.js:633-640`, `rules.js:265`). Peak bus
-loudness 0, but sustained and unavoidable.
-
-**Where the lie lives:** route length. A guide who routes you the long way round has a perfect excuse (*"the
-short way was through his cone"*) and only they could ever have seen whether that was true. Distinct from
-the bible's original Escort, where the lie lived in unattributable smashing — with a pair there is only one
-hammer, so **the noise is attributable and the routing is not.** That inversion is the reason this task
-survives the move to pairs at all.
-
-**On TV:** an object moving through a collapsing mansion on a clock. The best set piece of the five.
+- **Runner:** carries the tape reel from a live camera back to the entry hall. Carrying forbids running —
+  capped at `MOVE.walk = 2.55` m/s (`rules.js:85`), against a hunter at 2.05 / 2.70 / 3.35 by stage
+  (`rules.js:127`). At stage 2 the hunter is faster than you and you cannot drop the reel.
+- **Guide:** the whole house, the route, and — inside camera coverage — the hunter.
+- **Out loud:** a continuous route, revised live. The only task where the guide talks for the whole
+  duration, which is why it belongs late: the room has had four rounds to learn what this guide sounds like.
+- **Failure:** taken with the reel; the reel is lost with the runner (`party-loop.md:23`).
+- **Noise:** a walking body reaches ~7 m for the whole transit (`player.js:633-640`, `rules.js:265`). Peak
+  bus loudness 0, but sustained and unavoidable.
+- **Where the lie lives:** route length. A guide who routes you the long way round has a perfect excuse
+  (*"the short way was through his cone"*) and only they could ever have seen whether that was true.
+  Distinct from the bible's original Escort, where the lie lived in unattributable smashing — with a pair
+  there is only one hammer, so **the noise is attributable and the routing is not.** That inversion is the
+  reason this task survives the move to pairs at all.
+- **On TV:** an object moving through a collapsing mansion on a clock. The best set piece of the five.
 
 ---
 

@@ -2,20 +2,19 @@
 
 Spec for the TV surface. **Authority:** `web-prototype/docs/design/party-loop.md` wins any
 disagreement; `rrr-social-deception-mode.md` D1/D8/D9 and pillars **P1** (the broadcast is the
-Storyteller) and **P10** (atmosphere never breaks) are the frame. Companion to
-`rrr-prototype-audit.md` §2 ("Broadcast Director — not started").
+Storyteller) and **P10** (atmosphere never breaks) are the frame.
 
-**Why this is a core system.** Under D9 a pair acts and **six of eight players see nothing but the
-TV**; for those six the broadcast *is* the game. And the objective is **camera unlocks**, so the
-broadcast is also the progression bar: succeed and the show gets more angles. The Director is the
-Showrunner's hand — it is what makes an authored blind spot read as an edit, not as concealment.
+Under D9 a pair acts and **six of eight players see nothing but the TV** — for those six the
+broadcast *is* the game. The objective is **camera unlocks**, so the broadcast is also the
+progression bar: succeed and the show gets more angles. The Director is the Showrunner's hand, and
+it is what makes an authored blind spot read as an edit rather than as concealment.
 
 ---
 
 ## 0. What exists today, and what is new
 
-Measured against `web-prototype/` on this branch. Plainly: **no broadcast camera exists.** What
-exists are pieces to build it out of.
+Measured against `web-prototype/` on this branch. Plainly: **no broadcast camera exists.** These
+are the pieces to build it out of.
 
 | Piece | Where | Reuse |
 |---|---|---|
@@ -47,18 +46,12 @@ Every shot is a solver — `(world, subject, t) -> {eye, at, fov}` — plus an a
 | `SPONSOR` | Full-frame card, no world render | Dead air ≥ 5 s with no rank ≥ 2 event |
 | `SPLIT` | Two shots side by side through `setViewpoints([a, b])` | ≥ 4 cameras unlocked, two rank ≥ 2 events in different rooms |
 
-There is **no establishing wide of the house, no exterior aerial, and no roofless shot.** That is the
-guide's map with better lighting. §6.
+There is **no establishing wide, no aerial, no roofless shot.** That is the guide's map with better
+lighting — §6.
 
 ### 1.2 The event bus
 
-The sim emits, and the Director consumes, only this:
-
-```
-{ t, rank, kind, subjectId, roomId, pos }
-```
-
-`kind` ∈ `place | progress | blow | channel_open | terminal | cam_unlock | noise | hunter_alert |
+The sim emits, and the Director consumes, only `{ t, rank, kind, subjectId, roomId, pos }`. `kind` ∈ `place | progress | blow | channel_open | terminal | cam_unlock | noise | hunter_alert |
 hunter_commit | grab | taken | task_result`. **No alignment field exists in this struct**, and the
 Director imports no role source; §8/B2 tests it.
 
@@ -125,7 +118,7 @@ Three things produce a gap; only the third is authored:
 3. **Authored cutaways** (the Storyteller). The Director *chooses* to leave. These are the deniable
    blind spots players argue about — P1's whole payload.
 
-**Rules that make a cutaway read as television rather than as concealment:**
+**Rules that make a cutaway read as television rather than concealment:**
 
 - **Motivated.** Never cut to black. Cut to a face, a chat spike, a sponsor, a confessional — the
   audience is always watching something they want to watch.
@@ -183,8 +176,7 @@ important within 4% of an edge; every state change carries a non-colour channel 
 out, a lit/dark glyph for cameras) because half a party room is looking at the screen sideways.
 ## 5. The chat
 
-One column, right side, 9 lines visible, 400 ms fade-in, oldest scrolls off. Four sources, one
-visual treatment:
+One column, right side, 9 lines visible, 400 ms fade-in. Four sources, one visual treatment:
 
 | Source | Behaviour |
 |---|---|
@@ -206,11 +198,11 @@ invariant (§8/B7). The Fan Favourite's lock renders as a `◆`; Favour-bought t
 card and increment the denominator.
 
 **Chat may never contain:** a true role, an unpublished claim draft, an alignment, `X sabotaged Y`
-(§5.3's rule), or wall stage health. The chat is generated from the same event bus as the Director,
-which has none of those in scope.
+(§5.3), or wall stage health — it is generated from the same event bus as the Director, which has
+none of those in scope.
 ## 6. Never do this
 
-Derived from `party-loop.md`'s **Do not**, plus what follows from it.
+Derived from `party-loop.md`'s **Do not** section, plus what follows from it.
 
 1. **Never put the guide's flyover on the TV.** No top-down, no roofless view, no minimap bug, no
    route line, no plan diagram. `placeFlyCamera` (`src/views/game.js:2273`) is a phone-only view.
@@ -250,7 +242,7 @@ circle of eight plus one live feed has never been measured, and `SPLIT` doubles 
 Measure at M2 before art is committed to the circle; gate `SPLIT` on that number.
 ## 8. Verification
 
-Extends `rrr-social-deception-mode.md` §16.2. **V18 is the parent gate**; B1 is its concrete form.
+Extends §16.2 of the bible. **V18 is the parent gate**; B1 is its concrete form.
 
 | # | Gate | Method | Pass |
 |---|---|---|---|
