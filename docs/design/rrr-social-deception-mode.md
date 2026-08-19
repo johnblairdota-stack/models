@@ -1,7 +1,7 @@
 # Run Robot Run — Social Deception Mode
 
 **Working title: "PRIME TIME"**
-Design plan v0.2 — four decisions locked after review round 1
+Design plan v0.3 — seven decisions locked
 
 > One line: *Eight robots on a reality TV show. The producers want a body count. You talk in the room, you act on your phone, and the edit is lying to you.*
 
@@ -13,6 +13,9 @@ Design plan v0.2 — four decisions locked after review round 1
 | D2 | **Light role script, ~10 one-liners.** | Season One as written in §7.3. Scripts are content, not code. |
 | D3 | **Good wins by killing all evil *or* by escaping.** | Two win paths, and the strategic tension between them, are in. See §11. |
 | D4 | **The dead become the chat and keep one vote.** | Ghosts-as-audience is in. See §10. |
+| D5 | **The game ends in a Reunion Special with a full reveal.** | Everything the game withheld gets paid back at once. Every beat is a query over the event log, so the **log schema must be designed for it at M3**, not retrofitted. See §11.1. |
+| D6 | **Evil know each other from the start, and see each other's claims live** — including drafts, before the room does. | A read-only Production Panel on evil phones (§7.5). Not a chat. Also the cheapest available fix for R2b: an off-crew evil player always has a live job. |
+| D7 | **Five tasks in v1, designed for many more.** | The deck in §5.2, gated by the **Task Contract** in §5.2.1 — six rules any future task must satisfy or it's a minigame, not a deduction engine. |
 
 **One flagged consequence of D1.** With no Control Room powers, an evil player who isn't picked for the Crew has very little to do for the 90 seconds of the Expedition. That is a real balance problem, not a cosmetic one, and §5.5 is the answer to it: every evil player keeps at least one *remote* lever they can pull from their seat. If that section doesn't hold up in the paper prototype, D1 is the decision to revisit first.
 
@@ -149,7 +152,9 @@ No day/night. The show is always live; good and evil can act from their phones a
 An episode (= one round) is roughly 7–9 minutes:
 
 ### 4.1 CASTING — 45s
-The **Episode Lead** (rotates each round) picks the **Crew** — 3 players — to go into the mansion. TV shows the picks as a casting montage with headshots. Any player may spend their one-per-game **VETO** to force a re-pick.
+**The task for this episode is announced first**, before anyone is picked (D7). The **Episode Lead** (rotates each round) then picks the **Crew** — 3 players — to go into the mansion. TV shows the picks as a casting montage with headshots. Any player may spend their one-per-game **VETO** to force a re-pick.
+
+Announcing the task first is what gives Casting its teeth: the Manifest needs people who can remember a list, the Fuse Run needs people who can count together, the Escort needs someone you trust not to drop the trophy. The Lead has to justify a pick against a *specific* job, and evil has to angle for the tasks that suit them without being seen to.
 
 *Why:* team composition is the highest-value information in Avalon and it costs nothing to compute. Who you send, and who you refuse to send, is a public statement about who you trust.
 
@@ -182,27 +187,89 @@ The mansion's **Exit Vault** is sealed by **N locks** (N = 3 for a 4-round game)
 
 Each Expedition, the Security Panel and the Junction spawn in **different wings**, connected by destructible walls and furniture — so the destruction tech is load-bearing: it's how you make a shortcut, and it's how you make noise.
 
-### 5.2 The core minigame: the BREAKER SEQUENCE
+### 5.2 The task deck (D7)
 
-This is the mechanic I'd build first, because it does four jobs at once.
+Five tasks in v1, one per episode, no repeats within a game. The Showrunner announces which one before Casting.
+
+The deck is designed to grow. What keeps it from degenerating into a bag of minigames is that every task must pass the same contract.
+
+#### 5.2.1 THE TASK CONTRACT
+
+A task that fails any of these six is a minigame, not a deduction engine. This list is the thing to hold onto as the deck grows past five.
+
+| | Rule | Why |
+|---|---|---|
+| **T1** | **Split the crew.** At least two Crew must be in different rooms holding different information. | A task one player can do alone generates nothing. (§1.5) |
+| **T2** | **Put the only channel in the room.** The link between them is a human voice, out loud, in front of everyone. No in-game comms, ever. | This is the party game. Everything else is scaffolding. |
+| **T3** | **Build in an honest error rate.** There must be a way to fail sincerely, at a measurable rate — target 15–25%. **The lie and the honest mistake must be the same observable event.** | This is the whole trick. Without it, every failure is a confession. |
+| **T4** | **Fail loudly.** Failure emits noise, which feeds the Hunter. Success should require *some* noise too, so silence isn't a winning strategy. | Ties the task to the threat |
+| **T5** | **Never name the culprit.** Report that something went wrong; never who, never by how much. No exact timings, no accuracy readouts, no per-player stats — until the Reunion. | The single easiest way to accidentally destroy the game |
+| **T6** | **Be watchable.** Under D1, five people are only spectating. If it can't be followed on a TV from across a lounge in 90 seconds, it doesn't ship. | D1 makes this a hard gate, not a nice-to-have |
+
+#### 5.2.2 The five
+
+Each task has a different **shape**, and the shape determines where the lie lives. Future tasks should pick a shape rather than inventing one.
+
+| # | Task | Shape | Where the lie lives |
+|---|---|---|---|
+| 1 | **The Breaker Sequence** | Relay | The reader miscalls a symbol |
+| 2 | **The Fuse Run** | Sync | Someone is late on the count |
+| 3 | **The Vault Dial** | Sensor / actuator | The listener says warmer when it's colder |
+| 4 | **The Manifest** | Recall | The list-holder names the wrong object |
+| 5 | **The Escort** | Transit | Everyone is smashing; nobody knows whose noise it was |
+
+**1 — THE BREAKER SEQUENCE** *(build this one first)*
 
 - The **Panel** (Crew member A) shows three empty slots and a keypad of eight symbols.
-- The **Junction** (Crew member B), in another wing, is the only place the correct three symbols are displayed — **on B's phone**, rendered as degraded, glitchy, low-contrast VHS static.
+- The **Junction** (Crew member B), in another wing, is the only place the correct symbols are displayed — **on B's phone**, rendered as degraded, glitchy, low-contrast VHS static.
 - B has to **say the symbols out loud, in the real room**, so A can enter them.
-- A third Crew member (C) is free: break walls to shorten the route, or watch for the Hunter.
+- C is free: break walls to shorten the route, or watch for the Hunter.
 
-Three correct entries → lock opens. A wrong entry → the panel **buzzes loudly** → the Hunter's attention spikes on that room.
+Three correct entries opens the lock; a wrong entry makes the panel **buzz loudly** and spikes the Hunter's attention on that room.
 
-Why this is the right mechanic:
+The degraded render is the trick. Tune its legibility until the honest error rate sits at 15–25% per symbol. That baseline noise is what buys evil its cover — the "obfuscate the traitor's misdeeds through honest mistakes" principle from §1.1, made mechanical.
 
-| It does | How |
-|---|---|
-| Forces real speech | The only channel between Junction and Panel is a human voice in the room |
-| Manufactures testimony | Everyone in the room *hears* the call-out, so there's a public record to argue about later |
-| Gives evil a deniable lie | B calls a wrong symbol on purpose. But the render is genuinely hard to read — good players get it wrong too. **The lie and the honest mistake are the same event.** |
-| Makes destruction matter | The route between stations is walls |
+**2 — THE FUSE RUN**
 
-The degraded render is the whole trick. Tune its legibility until the honest error rate sits around 15–25% per symbol. That baseline noise is what buys evil its cover, and it's directly the "obfuscate the traitor's misdeeds through honest mistakes" principle from §1.1.
+Three fuse boxes in three rooms must be thrown **within two seconds of each other**. Each player sees only their own box. The countdown is a human voice: someone calls *"three, two, one."*
+
+Late by half a second and the circuit blows — a bang, and the mansion goes dark for ten seconds.
+
+*Where the lie lives:* being 0.4s late is indistinguishable from lag, panic, or a robot mid-turn. **Critical: the game must never display the actual timings.** "Someone was late" — never "who". Violating T5 here would end the game's life instantly.
+
+*Watchability:* three split-screen boxes with big lights. Among the most readable things on this list.
+
+**3 — THE VAULT DIAL**
+
+One Crew member turns a dial on the vault. The feedback — clicks, warmer, colder — is audible only to a second player at a listening point in an adjacent room, who has to talk them in: *"warmer… warmer… stop."*
+
+Over-turn and the alarm goes.
+
+*Where the lie lives:* the listener's channel is pure interpretation. Saying "warmer" when it's colder is invisible — and the audio genuinely is noisy and hard to read.
+
+*Watchability:* the TV splits between a hand on a dial and a robot with its ear to a wall. Very tense, very cheap.
+
+**4 — THE MANIFEST**
+
+Three specific objects are hidden in furniture around the mansion. The **list of which three** exists only on one Crew member's phone; the other two are elsewhere and have to be told what to look for, out loud, and then go smash furniture to find it.
+
+*Where the lie lives:* "I said the candlestick." "You said the clock." Memory under time pressure is genuinely unreliable, so a deliberate misdirection and a misheard word are the same event.
+
+*Watchability:* robots destroying furniture is inherently watchable, and this task uses the destruction tech harder than any other.
+
+**5 — THE ESCORT**
+
+A fragile object — the Show Trophy — must be carried from one wing to another. The carrier moves slowly and **cannot smash**. The other two must clear the route ahead of them.
+
+*Where the lie lives:* clearing a route means constant, loud, legitimate smashing by two people at once. When the Hunter arrives, **nobody can say whose noise brought it.** This is the highest-noise task in the deck and the hardest to attribute — save it for a late round when suspicion is already high.
+
+*Watchability:* a physical object moving through a collapsing mansion, on a clock. The best set piece of the five.
+
+#### 5.2.3 Growing the deck
+
+The five above cover five shapes. Obvious room to expand: a **Vote** shape (the crew must agree on something under time pressure, and the tally is private), a **Trade** shape (two crew hold halves of a resource and must hand off), and a **Watch** shape (one crew member must observe and report a thing the others can't see — the purest testimony generator of all, and the most abusable).
+
+Each new task ships with three numbers measured before it goes in the deck: **honest error rate**, **median completion time**, and **noise generated on success**. Without those, adding a task is a balance change of unknown size.
 
 ### 5.3 Secondary sabotage verbs (all dual-use, all deniable)
 
@@ -359,6 +426,21 @@ The Outsider slot is essential, not flavour: it's the reason no information role
 
 Note how each evil ability is a **deniable-by-construction** version of something the world does anyway (§6.1): attention spikes happen naturally, fixtures collapse in a decaying mansion, and info roles are already unreliable because of the Glitched.
 
+### 7.5 The Production Panel (D6)
+
+Evil know each other from the moment the show starts. On every evil phone, always visible:
+
+- Each teammate's **name and true role**
+- Each teammate's **current claim — including drafts they haven't published yet.** You watch your partner start typing "Sound Guy" before the room sees it, and quietly pick something else.
+- Which once-per-game abilities the team still holds
+
+**It is read-only. It is not a chat.** That line is deliberate and worth defending: all actual coordination happens out loud, in front of everyone, in the room. Watching your partner's claim form in real time and silently steering around it *is* the coordination — and doing that while making conversation with the people you're deceiving is the best thing evil gets to do in this game. A private text channel would delete that entirely, and I'd resist it even if asked. *(Open question 21.)*
+
+Two consequences worth naming:
+
+- **It's the cheapest fix in this document for R2b.** An off-crew evil player now always has a live job: managing the team's claim surface while five people watch television.
+- **It makes evil meaningfully stronger.** That's fine, but rebalance it with the **Outsider count**, not by weakening the panel — more Glitched and Klutz means more good-player behaviour that looks like sabotage, which is the right pressure valve.
+
 ### 7.4 Claims and nameplates
 
 Your **true role** is private, on your phone, always. Your **claim** is public, on the nameplate in front of your chair on the TV, set and changed from your phone at any time. Default claim is blank ("*undeclared*"), which is itself a statement.
@@ -453,7 +535,26 @@ The **Fan Favourite** can lock one tip as true. The dead can inject tips. Living
 
 Two win paths for good is deliberate: it means good must decide each round whether to spend it hunting traitors or opening locks, and evil must decide whether to stall or to kill. That tension is the strategic spine, and it's what stops the game collapsing into pure accusation.
 
-The **Verdict** (§4.6) is the only feedback loop. "RENEWED" tells good that evil is still alive — which is real information, delivered without revealing anything about the person they just destroyed.
+The **Verdict** (§4.6) is the only feedback loop *during* the game. "RENEWED" tells good that evil is still alive — real information, delivered without revealing anything about the person they just destroyed.
+
+### 11.1 THE REUNION SPECIAL (D5)
+
+Everything the game withheld gets paid back here, at once. This is what earns P6: silent deaths are only tolerable because of what happens at the end.
+
+Four beats:
+
+| | Beat | What airs |
+|---|---|---|
+| 1 | **Roll call** | The dead are reassembled and everyone retakes their chair. One at a time, each nameplate flips: **true role** beside **what they claimed**. Slow. Let the room shout. |
+| 2 | **The Director's Cut** | The raw, unedited footage of the round that decided the game — with sabotage captioned for the first time. `[THE FIXER RIGGED THIS CHANDELIER — EPISODE 2]`. Every lie the broadcast told is now annotated. |
+| 3 | **The awards** | Most Trusted (never nominated) · The Mark (most-voted good player) · Best Liar (evil, never nominated) · Loudest Robot · The Klutz Award (most honest mistakes) · Cold Blood (bussed a teammate). This is where a party game actually lands — it's the bit people quote afterwards. |
+| 4 | **The chat, unmixed** | The final scroll, colour-coded: which lines were real dead players, which were generated. Nobody has been able to tell all game. |
+
+Three notes that matter for the build:
+
+- **Every beat is a query over the append-only event log** (§15). Cheap to build *if* the log is right, expensive if it isn't — so design the log schema against the Reunion at **M3**, not at M7. This is the strongest argument for the event-sourced architecture.
+- **Ship a host control: SKIP TO REUNION.** Games get abandoned when the pizza arrives. An abandoned game with no reveal is a game where the silent deaths were pure cost.
+- **If the Reunion is weak, P6 is just frustrating.** Treat it as a headline feature, not an epilogue screen.
 
 ---
 
@@ -485,6 +586,10 @@ The **Verdict** (§4.6) is the only feedback loop. "RENEWED" tells good that evi
 | R8 | Motion sickness / control frustration on phone | Medium | Simple stick + two buttons; test on small screens early |
 | R9 | Evil feels helpless in a 6-player game with 1 traitor | Medium | Scale Expedition difficulty, not traitor count |
 | R10 | The chat is unreadable across a lounge | Low | Large-type mode, cap to 5 tips, slow the scroll during debrief |
+| R11 | **The Reunion is now load-bearing** (D5) — if it's weak, or the group quits early, silent deaths never pay off | High | Build it at M3 off the event log; ship SKIP TO REUNION; treat it as a headline feature |
+| R12 | **Five tasks is five times the content risk** (D7) — each needs art, code, its own error-rate tuning and TV readability | High | Ship M4 with the Breaker only and prove the Task Contract; batch the other four in M4b with the three required numbers measured per task |
+| R13 | **The Production Panel makes evil stronger** (D6) | Medium | Rebalance via Outsider count, not by weakening the panel |
+| R14 | A task violates T5 and names a culprit — via a timing readout, an accuracy score, or a caption | Fatal | Automated check V20 asserts no payload or caption identifies a player, run in CI |
 
 ---
 
@@ -504,14 +609,19 @@ Entrances, cinematics, 8 chairs, nameplates, hype/banter reaction bar. No game r
 ### M3 — SOCIAL LOOP, NO MANSION
 Full round structure with the Expedition **stubbed to a dice roll**. Casting, nominate, vote, sledgehammer execution, verdict, silent deaths. This is a complete, playable social deception game and the point at which you find out if the design works.
 
-### M4 — THE EXPEDITION
-Breaker Sequence, Panel + Junction spawning, the Hunter, attention model, rescues, **and the Broadcast Director** — which under D1 is not a later polish pass, it's what five of your eight players are experiencing. Build the cut logic in this slice, not after it.
+### M4 — THE EXPEDITION (one task)
+**The Breaker Sequence only**, Panel + Junction spawning, the Hunter, attention model, rescues, **and the Broadcast Director** — which under D1 is not a later polish pass, it's what five of your eight players are experiencing. Build the cut logic in this slice, not after it.
+
+Prove the Task Contract on one task before building four more.
+
+### M4b — THE TASK DECK
+Fuse Run, Vault Dial, Manifest, Escort. Each ships only once its honest error rate, median completion time and success-noise are measured (§5.2.3). Per-episode task selection with no repeats.
 
 ### M5 — ROLES
 Season One script, claims/nameplates, phone role cards.
 
-### M6 — THE AUDIENCE
-Ghost promotion, chat, tips with truth counts, Favours, cutaways, spy cams.
+### M6 — THE AUDIENCE AND THE REUNION
+Ghost promotion, chat, tips with truth counts, Favours. **The Reunion Special** — roll call, Director's Cut, awards, unmixed chat — built as queries over the event log laid down in M3.
 
 ### M7 — BALANCE
 Headless simulation at scale, telemetry, tuning passes.
@@ -583,6 +693,10 @@ The user asked specifically what we need to build to *know* each part works. Ans
 | V17 | Full loop | 8-player game runs start to finish, no soft-locks | E2E soak: 100 scripted games with random inputs | 3 sessions with real humans |
 | V18 | **Broadcast Director** | Never loses the action: no Breaker entry, alarm, or Hunter arrival happens fully off-screen unless deliberately cut | Sim: replay 500 recorded rounds through the director, assert every `key_event` was either on-screen or flagged as an intentional cutaway | **Watch a round you're not in. Was it worth watching?** |
 | V19 | Remote levers | Producer spike, Favour chat spike and carry-over rigging all fire from a seat | Integration per lever; sim asserting off-crew evil influences ≥1 event per round on average | Does off-crew evil feel involved? |
+| V20 | **Task Contract conformance** | No task ever names a culprit (T5); every task splits the crew (T1) | **Per task: assert no socket payload or TV caption contains a player id in a failure event; assert ≥2 distinct rooms required. CI on every commit** | Per task: measure honest error rate against the 15–25% band |
+| V21 | **Reunion accuracy** | The Reunion reconciles exactly with ground truth, and nothing it shows leaked earlier | Property test: replay 500 sim games, assert every revealed role/sabotage matches the seed's ground truth **and** that no pre-Reunion payload contained any of it | Does the roll call land? Do the awards get a laugh? |
+| V22 | **Production Panel isolation** | Only evil sockets ever receive teammate roles or draft claims | Integration: assert no good socket's transcript contains another player's true role or an unpublished claim | — |
+| V23 | Task selection | One task per episode, no repeats within a game, announced before Casting | Unit over 10k game seeds | Does the announcement change who gets picked? |
 
 ### 16.3 The balance simulator (build this at M3, not M7)
 
@@ -624,15 +738,15 @@ Beyond the four I'm asking directly, these need answers before v0.2:
 4. Is there an approval vote on the Crew (Avalon-style), or does the Lead just pick?
 
 **The Expedition**
-5. Is the Breaker Sequence the only minigame in v1, or do we need 2–3 for variety by round 3?
+5. ~~Is the Breaker Sequence the only minigame in v1?~~ **Answered (D7): five tasks, deck designed to grow.** Follow-on: should task selection be random, or should the Lead choose the task *and* the crew?
 6. Should the Crew be able to see each other's positions on their phones, or is even that too much telemetry?
 7. Can a Crew member refuse to go / abandon the mission mid-round?
 8. What happens if a Crew member dies mid-Expedition — do the remaining two carry on?
 
 **Evil**
-9. Do evil players know each other from the start? (Recommend: yes for minions, and that's already in §7.3 — but confirm.)
+9. ~~Do evil players know each other from the start?~~ **Answered (D6): yes, plus live claim visibility.** Follow-on: does the Plant know the others *and* stay hidden from them, or is the panel fully symmetrical?
 10. Can evil win by opening locks too, or are they strictly obstructive?
-11. **Should the post-game reveal everything?** Strong opinion: yes, a full "reunion special" with the true edit is the payoff that makes the whole silent-death design worth it — and it's the moment everyone shouts. But it does mean the game is only fully satisfying if you finish it.
+11. ~~Should the post-game reveal everything?~~ **Answered (D5): yes, the Reunion Special.** Follow-on: which awards make the cut, and do you want them voted on by the room rather than computed?
 12. Should evil have a kill that isn't the Hunter, or is the Hunter the only lethal force?
 
 **Presentation**
@@ -646,5 +760,8 @@ Beyond the four I'm asking directly, these need answers before v0.2:
 17. Does this share a codebase with the existing Run Robot Run mode, or fork?
 18. What's the target device floor — a five-year-old Android in a browser?
 19. Local network only, or does it need to work with someone joining remotely?
-20. Is there any persistence — profiles, stats, a "season" across multiple games?
+20. Is there any persistence — profiles, stats, a "season" across multiple games? (The Reunion's awards are the obvious hook for this.)
+21. **Should evil get a private text channel?** My answer is no, and §7.5 explains why — but it's the most likely thing to get asked for after the first playtest, so it's worth deciding deliberately rather than under pressure.
+22. Should the Episode Lead pick the task as well as the crew, or only the crew?
+23. Do tasks scale with player count, or only with round number?
 
