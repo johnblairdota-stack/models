@@ -66,7 +66,10 @@ function capture(leak) {
       send: (id, f) => { if (!tape.has(id)) tape.set(id, []); tape.get(id).push(f); },
       leak,
     });
-    room.start(); room.playEpisode(); room.playEpisode();
+    room.start();
+    room.playEpisode({ hunterRoom: 'cellar' });
+    // Episode two takes the runner, so I7 has a death to assert about.
+    room.playEpisode({ hunterRoom: 'gallery', takeRunner: true });
     runs.push({ seed, tape, truth: room.truth(), sockets: room.sockets.map((s) => ({ ...s })) });
   }
   return runs;
@@ -78,7 +81,7 @@ function capture(leak) {
  */
 function suite(runs) {
   const d = {};
-  const ok = { I1: true, I2: true, I3: true, I4: true, I4b: true, I5: true, I6: true, I8: true };
+  const ok = { I1: true, I2: true, I3: true, I4: true, I4b: true, I5: true, I6: true, I7: true, I8: true };
 
   for (const run of runs) {
     const seatOf = new Map(run.truth.seats.map((s) => [s.id, s]));
@@ -180,6 +183,56 @@ function suite(runs) {
       }
     }
 
+    // ---- I7 death reveals nothing
+    // Two properties, and the second is the one people forget: the dead player's alignment must
+    // not appear (P6), AND a survivor's frames must not CHANGE SHAPE across the take. A frame
+    // that grows a field the moment somebody dies has announced something about them.
+    {
+      const takenAt = (() => {
+        for (const sock of run.sockets) {
+          const fr = run.tape.get(sock.id) || [];
+          for (let i = 0; i < fr.length; i++) if ((fr[i].players || []).some((p) => p.alive === false)) return i;
+        }
+        return -1;
+      })();
+      if (takenAt < 0) { ok.I7 = false; d.I7 = d.I7 || 'no take occurred — I7 cannot be evaluated'; }
+      else {
+        const deadIds = new Set();
+        for (const sock of run.sockets) {
+          for (const f of (run.tape.get(sock.id) || [])) for (const p of (f.players || [])) if (p.alive === false) deadIds.add(p.id);
+        }
+        for (const id of deadIds) {
+          const seat = seatOf.get(id);
+          for (const sock of run.sockets) {
+            if (sock.playerId === id) continue;                       // their own phone knows their own role
+            const mine = sock.isTV ? null : seatOf.get(sock.playerId);
+            const isTeammate = mine && mine.alignment === 'evil' && seat.alignment === 'evil';
+            const fr = run.tape.get(sock.id) || [];
+            for (let i = takenAt; i < fr.length; i++) {
+              const blob = JSON.stringify(fr[i]);
+              if (blob.includes(`"${seat.alignment}"`) && !(mine && mine.alignment === seat.alignment)) {
+                ok.I7 = false; d.I7 = d.I7 || `${sock.id} frame ${i} carries the taken player's alignment`;
+              }
+              if (!isTeammate && roleCount[seat.role] === 1 && blob.includes(`"${seat.role}"`) && (!mine || mine.role !== seat.role)) {
+                ok.I7 = false; d.I7 = d.I7 || `${sock.id} frame ${i} carries taken ${id}'s role "${seat.role}"`;
+              }
+            }
+          }
+        }
+        // shape parity across the take, per socket
+        const shape = (f) => { const { you, ...rest } = f; return paths(rest).sort().join('|'); };
+        for (const sock of run.sockets) {
+          const fr = run.tape.get(sock.id) || [];
+          const before = new Set(fr.slice(0, takenAt).map(shape));
+          for (let i = takenAt; i < fr.length; i++) {
+            if (before.size && !before.has(shape(fr[i]))) {
+              ok.I7 = false; d.I7 = d.I7 || `${sock.id} frame ${i} changed shape across the take`;
+            }
+          }
+        }
+      }
+    }
+
     // ---- I6 the one exception is exactly one exception
     for (const sock of run.sockets) {
       if (sock.isTV) continue;
@@ -234,7 +287,8 @@ t('I4 · equally-entitled sockets are byte-identical (self-audience stripped)', 
 t('I4b · players[] is in seat order, never alignment order', R.I4b, R.detail.I4b || 'ordering carries no signal');
 t('I5 · identical frame counts across equally-entitled sockets', R.I5, R.detail.I5 || 'cardinality parity holds');
 t('I6 · only evil sockets get teammates, and the set equals ground truth', R.I6, R.detail.I6 || 'the one exception is exactly one');
-skipped('I7 death reveals nothing', 'the stub room has no take and no execution — S2 (no `taken` state) is unbuilt. Lands with Phase 1');
+t('I7 · a take reveals nothing, and no survivor frame changes shape across it', R.I7,
+  R.detail.I7 || 'alignment absent, role absent, shape unchanged');
 t('I8 · the flyover reaches one phone and never the TV', R.I8, R.detail.I8 || 'party-loop.md "Do not" holds');
 
 // ---------------------------------------------------------------- I9 · the controls
@@ -243,17 +297,24 @@ t('I8 · the flyover reaches one phone and never the TV', R.I8, R.detail.I8 || '
  * everything and a filter that blocks nothing look identical to a check that only ever runs the
  * shipped arm.
  *
- * ⚠️ THE EXPECTED SET IS NAMED PER CONTROL, NOT ASSUMED TO BE ONE. Leaks 1-3 each trip exactly
- * one assertion. **Leak 4 trips two, and that is the design rather than a defect:** the flyover
- * ban is asserted twice on purpose — once as a matrix row whose audience is `guide` (I2) and
- * once as its own named check (I8) — because `party-loop.md` puts it under *Do not* in its own
- * words and `rrr-gates.md` §2 says of it *"also I8, asserted twice on purpose"*. A control that
- * tripped only one of those would mean one of the two checks had stopped working. The gate is
- * pinned to the exact set either way, so a control that goes broad still fails here.
+ * ⚠️ THE EXPECTED SET IS NAMED PER CONTROL, NOT ASSUMED TO BE ONE, AND TWO CONTROLS TRIP TWO
+ * ASSERTIONS BY DESIGN RATHER THAN BY DEFECT.
+ *
+ *   leak 1 -> I3 + I7. It broadcasts seat 0's role, and seat 0 is the runner episode two takes,
+ *            so the same value is caught once by the general sweep and once by the post-death
+ *            sweep. I7 IS a narrower I3 scoped to the dead; a leak about a dead player that
+ *            tripped only one of them would mean the other had stopped working.
+ *   leak 4 -> I2 + I8. The flyover ban is asserted twice on purpose — once as a matrix row whose
+ *            audience is `guide`, once as its own named check — because `party-loop.md` puts it
+ *            under *Do not* in its own words and `rrr-gates.md` §2 says of it *"also I8,
+ *            asserted twice on purpose"*.
+ *
+ * The gate is pinned to the EXACT set either way, so a control that goes broad — one leak
+ * reddening five assertions because the suite has become noisy — still fails here.
  */
 if (LEAK === 0) {
-  const expect = { 1: ['I3'], 2: ['I1'], 3: ['I4b'], 4: ['I2', 'I8'] };
-  const names = ['I1', 'I2', 'I3', 'I4', 'I4b', 'I5', 'I6', 'I8'];
+  const expect = { 1: ['I3', 'I7'], 2: ['I1'], 3: ['I4b'], 4: ['I2', 'I8'] };
+  const names = ['I1', 'I2', 'I3', 'I4', 'I4b', 'I5', 'I6', 'I7', 'I8'];
   for (const n of [1, 2, 3, 4]) {
     const L = suite(capture(n));
     const red = names.filter((k) => !L[k]);

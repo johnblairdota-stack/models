@@ -19,6 +19,8 @@
 import { dealCast, viewFor, EVIL } from './cast.js';
 import { project } from '../../net/party/entitle.js';
 import { makeEvent, VIS } from './events.js';
+import { hunterVisibleToGuide, ROOMS } from './coverage.js';
+import { applyTake, resolveContact, MODE, PLATE } from './taken.js';
 
 export const PHASES = ['LOBBY', 'CASTING', 'EXPEDITION', 'DEBRIEF', 'VERDICT'];
 
@@ -41,9 +43,15 @@ export function createRoom({ count, castSeed, worldSeed, send, leak = 0 }) {
   const log = [];
   const state = {
     phase: 'LOBBY', tick: 0, episode: 1, worldSeed,
-    players: deal.seats.map((s) => ({ id: s.id, seat: s.seat, name: `Robot ${s.seat + 1}`, alive: true, claim: null })),
+    players: deal.seats.map((s) => ({ id: s.id, seat: s.seat, name: `Robot ${s.seat + 1}`, alive: true, claim: null, plate: PLATE.UNDECLARED })),
+    hunterRoom: ROOMS[0],
     pair: { runner: null, guide: null },
-    cameras: { unlocked: 0, needed: deal.cameras },
+    // ⚠️ THE SHOW STARTS WITH ONE CAMERA LIVE, AND IT IS NOT A FREEBIE. At zero cameras the
+    // guide's coverage is 0 and their honest error rate is 50% — a coin, not a game, and a
+    // guide nobody can ever catch lying. One establishing camera puts episode one at 33%
+    // coverage (deliberately above T3's band) and the broadcast has something to cut to on
+    // frame one, which the Director needs anyway.
+    cameras: { unlocked: 1, needed: deal.cameras },
     incident: { alarms: 0 },
   };
 
@@ -63,10 +71,14 @@ export function createRoom({ count, castSeed, worldSeed, send, leak = 0 }) {
       base.you = v.you;
     }
     if (sock.seatRole === 'guide' && state.phase === 'EXPEDITION') {
-      base.flyover = {
-        hunter: true,
-        marks: [{ x: 1.5, z: -2.0, kind: 'you' }, { x: 7.0, z: 3.0, kind: 'hunter' }],
-      };
+      // 🚨 S3. The Hunter is on the map only where a live camera watches. `hunterMark.visible =
+      // hs.inScene && !!hp` (views/game.js L2559) is the debug view this replaces.
+      const seen = hunterVisibleToGuide({
+        worldSeed: state.worldSeed, unlocked: state.cameras.unlocked, hunterRoom: state.hunterRoom,
+      });
+      const marks = [{ x: 1.5, z: -2.0, kind: 'you' }];
+      if (seen) marks.push({ x: 7.0, z: 3.0, kind: 'hunter' });
+      base.flyover = { hunter: seen, marks };
     }
     // ---- the four injected leaks. `harness/party-isolation.mjs` I9 requires each to turn
     // exactly one named assertion red; a control that stops failing means the gate is blind.
@@ -108,7 +120,9 @@ export function createRoom({ count, castSeed, worldSeed, send, leak = 0 }) {
   }
 
   /** Play one scripted episode. Deterministic — the gates need two runs to agree exactly. */
-  function playEpisode() {
+  function playEpisode({ takeRunner = false, hunterRoom = null } = {}) {
+    const takeRunnerThisEpisode = takeRunner;
+    if (hunterRoom) state.hunterRoom = hunterRoom;
     setPhase('CASTING');
     // A deterministic pick that does NOT consult alignment: seat 0 runs, seat 1 guides.
     const runner = state.players.find((p) => p.alive);
@@ -127,6 +141,18 @@ export function createRoom({ count, castSeed, worldSeed, send, leak = 0 }) {
     state.incident.alarms += 2;
     state.cameras.unlocked += 1;
     broadcast();
+
+    // 🚨 S2. Contact is terminal in party mode, and the limb count is not consulted. The rule
+    // lives in taken.js; hunter-ai.js is untouched and subscribes nothing here.
+    if (takeRunnerThisEpisode) {
+      const victim = state.players.find((p) => p.id === state.pair.runner);
+      const r = resolveContact({ mode: MODE.PARTY, occupiedSockets: 0 });
+      if (r.outcome === 'taken') {
+        const { player, events } = applyTake(victim);
+        Object.assign(victim, player);
+        for (const e of events) record(makeEvent(e.type, e.vis, e.data));
+      }
+    }
 
     setPhase('DEBRIEF');
     setPhase('VERDICT');

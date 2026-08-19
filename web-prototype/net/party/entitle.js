@@ -62,6 +62,7 @@ export const MATRIX = [
   ['players[].name',           'all'],
   ['players[].alive',          'all'],
   ['players[].claim',          'all'],   // PUBLISHED claims only
+  ['players[].plate',          'all'],   // undeclared/drafting/published/face-down. Never the role.
   // 'players[].alignment'               NO ROW. Nobody, ever, pre-REUNION.
   // 'players[].role'                    NO ROW. Ditto.
   // 'players[].claimDraft'              NO ROW. Drafts are evil-only, under you.teammates[].

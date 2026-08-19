@@ -15,7 +15,9 @@
     "gate:role-deal": "node harness/role-deal.mjs",
     "gate:party-anon": "node harness/party-anon.mjs",
     "gate:party-isolation": "node harness/party-isolation.mjs",
-    "gates:party": "node harness/role-deal.mjs && node harness/party-anon.mjs && node harness/party-isolation.mjs"
+    "gates:party": "node harness/role-deal.mjs && node harness/party-anon.mjs && node harness/party-isolation.mjs && node harness/party-taken.mjs && node harness/guide-coverage.mjs",
+    "gate:party-taken": "node harness/party-taken.mjs",
+    "gate:guide-coverage": "node harness/guide-coverage.mjs"
   },
   "dependencies": {
     "three": "^0.180.0",

@@ -20,19 +20,19 @@ Synthesis of seven system specs, 2026-08-19. The one document to read before wri
 
 Each was found by reading the actual code, each is cheap now and a migration later.
 
-### S1 · The cast seed leaks the entire cast
+### S1 · The cast seed leaks the entire cast  ·  ✅ BUILT
 
 `run.js:43-48` establishes the project's doctrine: *"the exit is never transmitted and never negotiated — both ends derive it from one integer."* Correct for geometry. **Fatal for roles.** One published seed plus `seededPick` recomputes who is evil.
 
 **Fix:** `castSeed` lives only in the PartyKit Durable Object and is a *different integer* from `worldSeed`. The world seed stays public exactly as today.
 
-### S2 · "Taken" does not exist
+### S2 · "Taken" does not exist  ·  ✅ BUILT
 
 The whole party loop rests on a runner being taken by the Hunter and removed from the game. `_attack` only detaches limbs (`hunter-ai.js:1114`). There is no death, no removal, no terminal state. The survival mode's limb economy is not a substitute — losing an arm is a setback, and the party mode needs an ending.
 
 **Fix:** a new terminal `taken` state, authored as an event (the Hunter's best TV moment), with the limb economy explicitly bypassed in party mode.
 
-### S3 · The guide's flyover is an oracle
+### S3 · The guide's flyover is an oracle  ·  ✅ BUILT
 
 `hunterMark.visible` is gated on `hs.inScene && !!hp` and nothing else (`game.js:2559`), drawn `depthTest:false` beside the hunter's hearing ring *and* sight cone. A guide holding that has a **zero honest error rate** — Task Contract T3 fails, and every task in the deck degrades from a deduction game into a lie detector.
 
@@ -95,7 +95,11 @@ Three things I had specced as separate systems collapse into one. Design the env
 2. `party-anon` gate — T5: no payload or caption ever identifies a player in a failure event
 3. `role-deal` gate — composition per player count
 
-**Phase 1 — the three showstoppers.** S1 seed split · S2 taken state · S3 camera-gated flyover.
+**Phase 1 — the three showstoppers. ✅ DONE.** `npm run gates:party` → **role-deal 14/0 · party-anon 10/0 · party-isolation 14/0 · party-taken 12/0 · guide-coverage 8/0.**
+
+- **S1** `castSeed` is a separate integer, never on a wire, and has no matrix row — a frame carrying it fails I1 rather than losing a game.
+- **S2** `src/party/taken.js`. Contact is terminal in party mode and the limb count is not consulted; `hunter-ai.js` is untouched and keeps its setback economy byte-for-byte. Worse than the audit said: `_attack` L1109 early-outs when no socket is occupied, so a four-limbs-gone player was *structurally* unkillable, not merely un-killed. T3 asserts that exact case.
+- **S3** `src/party/coverage.js`. The Hunter is on the guide's map only where a live camera watches. Measured honest error: **0 cams 49.9% · 1 cam 33.3% · 2 cams 16.9% · 3 cams 0%**, against `(1-c)/2` to within 0.3 points. Two cameras — the middle of a game — lands **inside T3's 15–25% band**. The show starts with one camera live, because at zero coverage the guide is a coin and can never be caught lying.
 
 **Phase 2 — the spine.** Event envelope with `vis`. Camera roster and unlock progression. PartyKit room with 9 connections.
 
