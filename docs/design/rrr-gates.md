@@ -1,10 +1,9 @@
 # PRIME TIME — the gates
 
 Written 2026-08-19 against `web-prototype/` at `9fca696`, 164 scenario gates.
-**This file supersedes `rrr-social-deception-mode.md` §16.** V1–V23 was a plan written before
-the prototype was read; this is the same plan rewritten as instruments this project already
-knows how to run, and cut from 23 rows to **nine files**, three of which must exist before any
-party code ships.
+**This file supersedes `rrr-social-deception-mode.md` §16** — V1–V23 was written before the
+prototype was read. Same plan, rewritten as instruments this project already runs, cut from 23 rows
+to **nine files**, three of which must exist before any party code ships.
 
 ---
 
@@ -14,8 +13,7 @@ Nothing here is a new practice. Every convention below is lifted from a file in 
 
 | the practice | where it already lives |
 |---|---|
-| **A gate is one `.mjs` with a header that carries the argument.** The prose that justifies a number lives above the code that measures it, because that is where it survives its author's death | `HANDOFF.md` L12–17; `harness/scenarios/dig-band.mjs` L1–75 is 75 lines of argument before the first assertion |
-| **Assertions are letter-numbered, file-local, and quotable.** `escape` 20/20, `dig-band` 14/1, `mechanics` 13/13 | `escape.mjs` E1–E10 · `limb-collapse.mjs` C1–C5 · `dig-band.mjs` B0–B4 · `aim-mark` A5 |
+| **A gate is one `.mjs` whose header carries the argument**, because that is where a number survives its author's death, and its **assertions are letter-numbered, file-local and quotable** — `escape` 20/20, `dig-band` 14/1, `mechanics` 13/13 | `HANDOFF.md` L12–17 · `dig-band.mjs` L1–75 is 75 lines of argument before the first assertion · `escape.mjs` E1–E10 · `limb-collapse.mjs` C1–C5 · `aim-mark` A5 |
 | **Three runners.** Browser gates under `harness/playtest.mjs --script`; rule gates as bare node against the shipped module; socket gates spawn the real server, connect real clients through a `t(name, cond, detail)` helper, print `N passed, M failed` and `process.exit(fail ? 1 : 0)` | `playtest.mjs` L30–41 · `_limb1-rule.mjs` L36–41 (real `DamageField`, no renderer, no wall clock) · `test-net.mjs` L5–13 · `test-net-gaps.mjs` L36–40 |
 | **B0, the arm check: refuse a vacuous green.** The first assertion in a file proves the file has something to measure, and SKIPs with a reason if not | `dig-band.mjs` L129–146 |
 | **A SKIP is never a PASS.** Twice damaged by an instrument that returned a confident wrong number rather than admitting it could not measure | `playtest.mjs` L43–49, L408 |
@@ -36,15 +34,14 @@ not share the projection, or a bug in the filter passes its own gate.
 
 ## 2. The gates
 
-Nine files. Tier 0 ships before party code; tier 1 with the loop; tier 2 with roles and the
-Reunion. Everything §16 listed and this does not is in §2.1 with the reason.
+Nine files. Tier 0 ships before party code, tier 1 with the loop, tier 2 with roles and the Reunion.
 
 | gate | file | proves | driven by |
 |---|---|---|---|
 | **0 · `party-isolation`** | `harness/party-isolation.mjs` | no socket ever receives what its player is not entitled to (§3) | real room, 9 real sockets, full transcript capture |
 | **0 · `party-anon`** | `harness/party-anon.mjs` | no payload or caption ever names a culprit — T5 (§4) | sim transcripts + one browser arm on the TV |
 | **0 · `role-deal`** | `harness/role-deal.mjs` | the cast table is exactly §8/C4 at every count, and the deal itself leaks nothing | bare node, 10k deals × 5 counts |
-| **1 · `party-sim`** | `harness/party-sim.mjs` | the mechanical scaffolding is not already broken (§5) | bare node, 1000 seeds × 5 counts × 4 bot policies |
+| **1 · `party-sim`** | `harness/party-sim.mjs` | the mechanical scaffolding is not already broken (§5) | bare node, 1000 seeds × 5 counts × 4 policies + a scatter control |
 | **1 · `guide-lie`** | `harness/scenarios/guide-lie.mjs` | the runner/guide task satisfies T1–T4 and its honest error rate sits in band | `playtest.mjs --script`, real flyover, real `doorway-pick` |
 | **1 · `phone-drop`** | `harness/phone-drop.mjs` | a phone that locks, reloads or backgrounds returns with its own private state and nothing else | real sockets, kill/restore in every phase |
 | **2 · `vote-table`** | `harness/vote-table.mjs` | nomination and vote maths, exhaustively | bare node, state table |
@@ -59,47 +56,41 @@ field naming another alignment — structural, so it holds before a socket exist
 3 evil at 8 · always-seat-0 · full roster in every view; each turns exactly one red.
 
 **`guide-lie` — G0–G6.** G0 arm: the pair spawned, the flyover opened, `channelOpen` went true
-(`src/game/doorway-pick.js` L24–26 — do **not** retarget at `COLLAPSE.fail`). G1 **T1** runner and
-guide are never co-located and each payload holds ≥1 field the other's does not. G2 **T2** no
-message type carries free text between the pair, ever — a closed-schema check like §4's A1. G3
-**T3** honest error rate on a degraded flyover read: **15–25%**, a band, not a direction. G4 **T4**
-failure emits noise into `NoiseBus` and success emits some too, so silence is not a strategy —
-both non-zero. G5 the flyover never reaches the TV (`party-loop.md` *Do not*); also I8, asserted
-twice on purpose. G6 reports median completion time and noise-on-success — the two numbers §5.2.3
-says every new task ships with.
+(`src/game/doorway-pick.js` L24–26 — do **not** retarget at `COLLAPSE.fail`). **T1** runner and
+guide are never co-located and each payload holds ≥1 field the other's does not (G1); **T2** no
+message type carries free text between the pair, ever — closed-schema, like §4's A1 (G2); **T3**
+honest error rate on a degraded flyover read is **15–25%**, a band, not a direction (G3); **T4**
+failure emits noise into `NoiseBus` and success emits some too, so silence is not a strategy, both
+non-zero (G4); the flyover never reaches the TV (G5, also I8, asserted twice on purpose). G6 reports
+median completion time and noise-on-success — the two numbers §5.2.3 requires of every new task.
 
 **`phone-drop` — P0–P5.** Kill and restore every socket in every phase. The reconnect stream is a
 subset of the entitlement (P1) and **is not a superset** (P2) — a welcome snapshot is the classic
 leak, and `net/server.mjs` welcomes with a full one today. No soft-lock with a socket absent (P3);
 a dead player reconnects to the audience, never a robot (P4); reconnect unfiltered turns P2 red (P5).
 
-**`vote-table` — V1–V5.** Exhaustive, not sampled: >50% threshold, one nomination and one
-nomination-against per player, tie = no death, no ghost vote in v1 (D4/C1 split), every path fires
-exactly once. V5 control: an off-by-one threshold goes red.
-
-**`reunion-truth` — U1–U5.** Every revealed role matches ground truth (U1); every revealed sabotage
-happened and every event is revealable (U2). **U3, the retro-leak sweep:** replay 500 games'
-pre-Reunion transcripts through `party-anon`'s scanner with the Reunion's own reveal set as the
-token list — anything revealed that already crossed a wire gets named. U4 append-only, each entry
-hashed at write; U5 mutate one and watch U4 go red.
-
-**`director-cut` — D1–D4.** Mechanical half only: every `key_event` (task entry, alarm, hunter
-arrival, a take) was on-screen or carries `cutaway:true` (D1); cutaways ≤ the authored budget (D2);
-split-screen fires whenever both of the pair act in the same second (D3); disabling the cut logic
-turns D1 red (D4). **The other half — is it worth watching — is not automatable and is §6.**
+**Tier 2, briefly.** `vote-table` V1–V5 is exhaustive and not sampled — >50% threshold, one
+nomination and one nomination-against per player, tie = no death, no ghost vote in v1 (D4/C1 split),
+every path fires exactly once, an off-by-one threshold goes red. `reunion-truth` U1–U5 checks every
+reveal against ground truth and hashes the append-only log at write, and its **U3 retro-leak sweep**
+replays 500 games' pre-Reunion transcripts through `party-anon`'s scanner using the Reunion's own
+reveal set as the token list — anything revealed that already crossed a wire gets named.
+`director-cut` D1–D4 covers the mechanical half only: every `key_event` was on-screen or carries
+`cutaway:true`, cutaways ≤ the authored budget, split-screen fires when both of the pair act in the
+same second, and disabling the cut logic turns D1 red. **Whether a round is worth watching is not
+automatable and is §6.**
 
 ### 2.1 What §16 dropped, and why
 
-**V10 silent death, V12 info isolation and V22 Production Panel are one gate** (§3) — they are one
-property. **V6 Breaker Sequence is deleted**: the runner/guide pair is the first task (audit §5.3),
-so `guide-lie` inherits its error-rate band. **V7 Hunter attention is already built and better than
-specced** — `rules.js` L259 `HUNTER_SENSE` is the model, and the bible's §6.1 should be deleted, not
-gated. V1/V3/V17 (lobby, seating, full loop) are boot-and-doesn't-throw checks that `audit.mjs
---render` already performs for 37 views; they become `party-sim --live 100` in CI. V5, V13, V19 and
-V23 become arm assertions inside `party-sim` rather than files of their own. V9 and V14 fold into
-`guide-lie` and `phone-drop`. **V2 needs no new gate but does need a measurement**: audit risk
-**A1** — the ≤625 draw-call budget is a *single-player* budget and eight robots in a circle has
-never been measured. That is a `perf-*` run at M2, before art is committed to the circle.
+**V10 silent death, V12 info isolation and V22 Production Panel are one gate** (§3) — one property.
+**V6 Breaker Sequence is deleted**: the runner/guide pair is the first task (audit §5.3), so
+`guide-lie` inherits its error-rate band. **V7 Hunter attention is already built and better than
+specced** — `rules.js` L259 `HUNTER_SENSE` is the model, so the bible's §6.1 should be deleted, not
+gated. V1/V3/V17 are boot-and-doesn't-throw checks `audit.mjs --render` already performs for 37
+views; they become `party-sim --live 100` in CI. V5, V13, V19 and V23 become arm assertions inside
+`party-sim`; V9 and V14 fold into `guide-lie` and `phone-drop`. **V2 needs no new gate but does need
+a measurement** — audit risk **A1**: the ≤625 draw-call budget is a *single-player* budget and eight
+robots in a circle has never been measured. A `perf-*` run at M2, before art is committed.
 
 ## 3. `party-isolation` — the gate that matters most
 
@@ -111,57 +102,50 @@ someone's lounge, with no error thrown. Every other gate here can be added late.
 a wall is to opening*. That is this discipline, already written down, already applied to a much
 smaller secret. This gate extends it and makes it mechanical.
 
-**Shape.** Bare node, in the manner of `test-net.mjs` L5–13: spawn the real room (`partykit dev`
-or the room module over a loopback transport), connect **nine real sockets** — 8 phones + 1 TV —
-and play a scripted full game per seed, over a seed set. **Every socket's complete raw frame
-stream is captured unfiltered** and written to `progress/party-isolation/<seed>/<socket>.jsonl`.
-Every assertion below runs against those transcripts, never against the server's intent.
+**Shape.** Bare node, in the manner of `test-net.mjs` L5–13: spawn the real room (`partykit dev`, or
+the room module over a loopback transport), connect **nine real sockets** — 8 phones + 1 TV — and
+play a scripted full game per seed. **Every socket's complete raw frame stream is captured
+unfiltered** to `progress/party-isolation/<seed>/<socket>.jsonl`, and every assertion below runs
+against those transcripts, never against the server's intent.
 
 **The entitlement matrix** is one declarative table, `net/party/entitle.js`, and it is
 **deny-by-default**: a field path with no row is a violation, not a pass. Rows are
 `[pathGlob, audience]` where audience ∈ `{self, evil, crew, guide, runner, tv, all}`.
 
 ```
-'you.role'                 -> self
-'you.teammates[]'          -> evil          // §7.5 Production Panel, and never before CASTING
-'flyover.*'                -> guide         // party-loop.md: never the TV
-'players[].alive'          -> all
-'players[].alignment'      -> (no row)      // therefore: nobody, ever, before REUNION
-'incident.count'           -> all
-'incident.by'              -> (no row)      // T5
+'you.role'          -> self     'players[].alive'     -> all
+'you.teammates[]'   -> evil     'players[].alignment' -> (no row)  // nobody, ever, pre-REUNION
+'flyover.*'         -> guide    'incident.count'      -> all
+                                'incident.by'         -> (no row)  // T5
 ```
 
 **Assertions.**
 
-- **I0 — the arm.** All 9 sockets connected, roles were dealt, ≥1 evil existed, every phase was
-  entered, ≥N frames captured per socket. Anything short → **SKIP with the reason**, never a pass.
-  A room that never dealt a role trivially leaks no role. (`dig-band` B0.)
+- **I0 — the arm.** All 9 sockets connected, roles dealt, ≥1 evil, every phase entered, ≥N frames
+  per socket. Anything short → **SKIP with the reason**, never a pass: a room that never dealt a
+  role trivially leaks no role. (`dig-band` B0.)
 - **I1 — closed schema.** Every key path on every frame on every socket has a matrix row.
   **An unknown key is a FAIL**, naming socket, frame index, and JSON pointer. This is the clause
   that stops the gate rotting: a feature added six months from now that puts a new field on the
   wire fails here until someone writes its row and states its audience out loud.
 - **I2 — the matrix holds.** No key path reaches a socket its row does not entitle.
-- **I3 — the semantic sweep.** Take the seed's ground truth — every alignment, every role name,
-  the evil roster, the guide's flyover contents, the hunter's path, the seeded task answer — and
-  recursively scan every non-entitled socket's transcript for those *values*, at any depth,
-  including inside caption strings and enum codes. I2 catches a wrong key; I3 catches the right
-  key carrying the wrong value.
+- **I3 — the semantic sweep.** Take the seed's ground truth — every alignment and role name, the
+  evil roster, the flyover contents, the hunter's path, the seeded task answer — and recursively
+  scan every non-entitled transcript for those *values*, at any depth, inside caption strings and
+  enum codes included. I2 catches a wrong key; I3 catches the right key carrying a wrong value.
 - **I4 — shape parity.** After substituting each socket's own id and display name, **the
   transcripts of all equally-entitled sockets must be byte-identical.** Six good non-crew phones
   are epistemically identical by design (§5.4) and must therefore be identical on the wire. This
   is the assertion that catches the leaks nobody writes deliberately: an array sorted by
   alignment, an evil-only array whose *length* is visible, a nullable field present on one phone
   and absent on another.
-- **I5 — cardinality and timing parity.** Identical frame counts, and identical per-phase frame
-  counts, across equally-entitled sockets. A phone that receives one extra frame during CASTING
-  has been told something.
-- **I6 — the one exception is exactly one exception.** The evil sockets, and only the evil
-  sockets, receive `you.teammates[]` and unpublished claims; no good socket's transcript contains
-  either, at any phase (V22). Assert the evil set on the wire equals the ground-truth evil set —
-  not a superset, not a subset.
-- **I7 — death reveals nothing.** After a take, no socket's subsequent frames contain the dead
-  player's alignment, and the frames a survivor receives are unchanged in shape from before the
-  take (V10 + I4 applied across the event).
+- **I5 — cardinality and timing parity.** Identical frame counts, and identical per-phase counts,
+  across equally-entitled sockets. A phone that gets one extra frame in CASTING was told something.
+- **I6 — the one exception is exactly one exception.** Only evil sockets receive `you.teammates[]`
+  and unpublished claims, at any phase (V22), and the evil set on the wire equals the ground-truth
+  evil set — not a superset, not a subset.
+- **I7 — death reveals nothing.** After a take, no socket's later frames contain the dead player's
+  alignment, and a survivor's frames are unchanged in shape from before the take (V10 + I4).
 - **I8 — the guide's map is for one phone.** `flyover.*` reaches exactly one socket per
   expedition, and never the TV. `party-loop.md` puts this under *Do not* in its own words.
 - **I9 — THE CONTROLS, and they run on every run.** Four leaks are injected one at a time via
@@ -189,8 +173,8 @@ One allow-list of fields — `{kind, room, phaseTick, loudness}` — and anythin
 failure-class payload is a FAIL. Prohibiting attribution field-by-field is unwinnable; permitting
 four fields is a five-line check.
 
-- **A0 — the arm.** The run produced at least one failure event of each kind in the deck. No
-  failures → SKIP with the reason. A game where nothing went wrong proves nothing about T5.
+- **A0 — the arm.** At least one failure event of each kind in the deck; none → SKIP with the
+  reason. A game where nothing went wrong proves nothing about T5.
 - **A1 — closed schema.** No field outside the allow-list on any failure-class payload.
 - **A2 — no identity, at any depth.** Sweep every failure payload for any player id, display name,
   seat index or nameplate from the ground-truth roster, case-folded, substring, recursive.
@@ -200,11 +184,10 @@ four fields is a five-line check.
 - **A4 — the incident count is a count.** `{alarms: 3}`, never `{alarms: [...]}`. §5.6's "3 alarms
   this episode, with no attribution" is the deduction fuel, and it stops being fuel the moment it
   is a list.
-- **A5 — the TV caption sweep.** Browser arm, under `playtest.mjs --script`, using the
-  hold-a-window-of-DOM-text technique from `limb-collapse.mjs` L70 (`watchHud`) — a caption is a
-  *moment*, and a single sample catches one lower-third and calls the other missing. Collect every
-  caption emitted over N games; assert no caption string contains any roster name or id.
-  `[LOUD CRASH — EAST WING]` passes. `[PANEL ALARM — ALEX]` does not.
+- **A5 — the TV caption sweep.** Browser arm under `playtest.mjs --script`, holding a window of DOM
+  text the way `limb-collapse.mjs` L70 (`watchHud`) does — a caption is a *moment*, and a single
+  sample catches one lower-third and calls the other missing. No caption string over N games may
+  contain a roster name or id. `[LOUD CRASH — EAST WING]` passes; `[PANEL ALARM — ALEX]` does not.
 - **A6 — the Reunion is the exception, and the scanner can see it.** Re-run A2/A3 over
   `phase === REUNION` frames with the exemption removed; **it must FAIL**. A scanner that never
   finds attribution anywhere is a scanner that cannot find attribution.
@@ -217,9 +200,9 @@ four fields is a five-line check.
 
 ## 5. `party-sim` — the balance simulator
 
-Build it at **M3, not M7** (bible §16.3, and the audit does not disagree). Bare node against the
-shipped room module, no renderer and no wall clock — the same construction as `_limb1-rule.mjs`
-L36–41, which drives the real `DamageField` headless and gets bit-identical answers under any load.
+Build it at **M3, not M7**. Bare node against the shipped room module, no renderer and no wall
+clock — the construction of `_limb1-rule.mjs` L36–41, which drives the real `DamageField` headless
+and gets bit-identical answers under any load.
 
 **What it plays.** Complete games — `CASTING → EXPEDITION → DEBRIEF → NOMINATION → VOTE → VERDICT`
 — at 4–8 players × 1000 seeds, the Expedition being the runner/guide pair with the automated hammer
@@ -242,10 +225,9 @@ noise. (`debris-collapse` C5's two-policy discipline, copied verbatim across `_s
 | S5 | off-crew evil influence | **≥1 event/round** mean | C2 makes 6 of 8 spectators; this is the D1 counterweight and if it reads 0 the levers are dead weight |
 | S6 | rounds to conclusion, median | report only | no band until playtest sets one |
 
-**S0, the arm.** Both alignments won at least once; every phase was entered; the seed set produced
-distinct games (not one game 1000 times); one seed replays byte-identically across two runs.
-
-**What it does not prove.** Bots cannot model the social layer. It validates that the mechanical
+**S0, the arm.** Both alignments won at least once; every phase entered; the seed set produced
+distinct games rather than one game 1000 times; one seed replays byte-identically twice.
+**What it does not prove:** bots cannot model the social layer. It validates that the mechanical
 scaffolding is not already broken before humans see it, and says nothing about whether the game is
 fun, the lie readable, or the broadcast watchable. Those are §6.
 
@@ -253,8 +235,8 @@ fun, the lie readable, or the broadcast watchable. Those are §6.
 
 ## 6. Playtest instrumentation
 
-Cheap, and it reaches what no gate above can. Findings go into `HANDOFF.md` in its own idiom:
-**one line of what changed, THE NUMBER, THE INSTRUMENT.**
+Reaches what no gate above can. Findings enter `HANDOFF.md` in its own idiom: **one line of what
+changed, THE NUMBER, THE INSTRUMENT.**
 
 | watch | the number | why |
 |---|---|---|
@@ -283,11 +265,11 @@ three are cheap as constraints and expensive as migrations.
    Deny-by-default is only free while the payload set is empty.
 2. **`party-anon` (§4).** Closing the failure-event schema costs five lines today and is a migration
    across twenty payload types later. T5 is unguarded in the tree right now (audit §3), and the
-   first debug caption reading *"ALEX was 0.4s late"* will ship without anyone noticing it was a
-   design decision.
-3. **`role-deal` (§2).** Ten minutes, bare node, no transport. It settles C4 in code rather than in
-   two documents that disagree, and proves the deal returns per-player views before there is a
-   socket to leak them down.
+   first debug caption reading *"ALEX was 0.4s late"* ships without anyone noticing it was a design
+   decision.
+3. **`role-deal` (§2).** Ten minutes, bare node, no transport. Settles C4 in code rather than in two
+   documents that disagree, and proves the deal returns per-player views before there is a socket
+   to leak them down.
 
-`party-sim` is fourth and it is close, because it is what makes every balance argument after M3 a
-measurement instead of an opinion. But it needs a loop to play, and the three above do not.
+`party-sim` is a close fourth — it is what makes every balance argument after M3 a measurement
+instead of an opinion — but it needs a loop to play, and these three do not.
