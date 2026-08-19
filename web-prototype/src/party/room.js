@@ -215,7 +215,19 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     record(makeEvent('noise.emitted', VIS.SEALED, { causedBy: runner.id, loud: 1.25, room: 'east' }));
     record(makeEvent('noise.emitted', VIS.SEALED, { causedBy: guide.id, loud: 0.62, room: 'east' }));
     state.incident.alarms += 2;
-    state.cameras.unlocked += 1;
+
+    // 🚨 THE OBJECTIVE HAS TO REACH THE LOG OR GOOD CANNOT WIN. `win.js` W2 counts
+    // `run.camera_lit` entries; this stub incremented `cameras.unlocked` and emitted nothing, so
+    // the camera win path was unreachable and good could only ever win by executing every member
+    // of Production. `party-sim` S1 read that as an 8-19% good win rate across every player
+    // count, which looked like a balance problem and was a missing event.
+    //
+    // A camera lights when the expedition SURVIVES. Being taken costs the terminal as well as
+    // the runner — `party-loop.md`: *"the terminal stays dark"*.
+    if (!takeRunnerThisEpisode) {
+      state.cameras.unlocked += 1;
+      record(makeEvent('run.camera_lit', VIS.PUBLIC, { camera: state.cameras.unlocked, episode: state.episode }));
+    }
     broadcast();
 
     // 🚨 S2. Contact is terminal in party mode, and the limb count is not consulted. The rule
