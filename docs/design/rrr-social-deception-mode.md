@@ -1,9 +1,20 @@
 # Run Robot Run — Social Deception Mode
 
 **Working title: "PRIME TIME"**
-Design plan v0.1 — draft for review
+Design plan v0.2 — four decisions locked after review round 1
 
 > One line: *Eight robots on a reality TV show. The producers want a body count. You talk in the room, you act on your phone, and the edit is lying to you.*
+
+### Decisions locked
+
+| # | Decision | Consequence |
+|---|---|---|
+| D1 | **Crew only drive. Everyone else watches the show.** No spy cams, no cutaway tokens, no phone powers during the Expedition. | The broadcast is now a **core system, not polish** — it has to be worth watching. Non-Crew players share one identical, public view of the round, so all private information now comes from the Crew, from roles, and from the chat. See §5.4. |
+| D2 | **Light role script, ~10 one-liners.** | Season One as written in §7.3. Scripts are content, not code. |
+| D3 | **Good wins by killing all evil *or* by escaping.** | Two win paths, and the strategic tension between them, are in. See §11. |
+| D4 | **The dead become the chat and keep one vote.** | Ghosts-as-audience is in. See §10. |
+
+**One flagged consequence of D1.** With no Control Room powers, an evil player who isn't picked for the Crew has very little to do for the 90 seconds of the Expedition. That is a real balance problem, not a cosmetic one, and §5.5 is the answer to it: every evil player keeps at least one *remote* lever they can pull from their seat. If that section doesn't hold up in the paper prototype, D1 is the decision to revisit first.
 
 ---
 
@@ -142,8 +153,12 @@ The **Episode Lead** (rotates each round) picks the **Crew** — 3 players — t
 
 *Why:* team composition is the highest-value information in Avalon and it costs nothing to compute. Who you send, and who you refuse to send, is a public statement about who you trust.
 
-### 4.2 THE EXPEDITION — 120s
-The three Crew members control their robots. Everyone else is the **Control Room** (§5.4). The Hunter is live. Objective: open one lock on the Exit Vault. See §5.
+Under D1 this phase carries even more weight: the Crew are the only players who will have private knowledge of the round, so being picked is the difference between having something to say and having nothing. Expect evil to *want* to be picked, and expect that to be readable.
+
+### 4.2 THE EXPEDITION — 90s
+The three Crew members control their robots. **Everyone else watches the show** (§5.4). The Hunter is live. Objective: open one lock on the Exit Vault. See §5.
+
+Shortened from 120s because of D1: with five players spectating, dead time is the enemy. 90 seconds is enough for one Breaker Sequence with a real chance of failure, and short enough that nobody reaches for their phone.
 
 ### 4.3 THE DEBRIEF — 150s
 Crew return to their chairs. The show airs a **Recap Reel**: 20–30 seconds of deliberately partial footage, plus the hard outcome (lock opened / not, who died). Then people **talk in the room**. Phones are dark for the Crew. This is the game.
@@ -202,18 +217,46 @@ The degraded render is the whole trick. Tune its legibility until the honest err
 
 **Rule: the game never displays "X sabotaged Y."** Not in the recap, not in the post-game — see [Q11](#17-open-questions).
 
-### 5.4 The Control Room — what the other five players do
+### 5.4 The Watch Party — what the other five players do (D1)
 
-Non-Crew players are not idle. Each gets, on their phone:
+They watch television and shout at it. That is the whole design, and it puts the entire burden on the broadcast being genuinely good to watch — the way a heist is good to watch even when you're not in it.
 
-- **A SPY CAM.** Pick one wing; get 15 seconds of a top-down blip map of it. Blips are unlabelled. You see *movement*, not identity. You now have private, partial, arguable information — **so non-Crew have testimony to give too, and evil non-Crew can lie about it.**
-- **The reaction bar** (CLAP / BOO / SUS / SHOCK) — drives crowd audio and the seated robots' body language on the TV.
-- **Chat access** — post to the stream chat.
-- **One CUTAWAY token per game** — force the TV camera onto a robot of your choice for 10 seconds. Public, dramatic, and a real strategic lever both ways.
+**What they keep:** the reaction bar (CLAP / BOO / SUS / SHOCK). This is heckling, not a game power — it drives crowd audio and the seated robots' body language, it costs nothing, it has no strategic effect, and it is most of what makes watching together fun. Keep it.
 
-This matters enormously for pacing: no one in the room is ever watching without something to do, and everyone comes out of the Expedition with something to say.
+**What they don't get:** no spy cam, no camera control, no private feed. **Every non-Crew player sees exactly the same thing**, and they see it at the same time as everyone else in the room.
 
-### 5.5 Expedition outcomes
+This is a real simplification with a real upside. It means:
+
+- **All non-Crew players are epistemically identical.** Nobody off the Crew can fabricate a private observation, so every argument about the round traces back to three people. The funnel is narrower and much easier for a first-timer to hold in their head.
+- **The Crew's testimony is the only testimony.** Exactly the brief: good players are limited to verbally recounting what happened.
+- **The broadcast becomes the deduction surface.** What the camera chose to show, and what it cut away from, is now the shared evidence everyone reasons over — which pushes more weight onto P1 than any other decision in this document.
+
+Therefore the **Broadcast Director** is promoted from polish to a core system:
+
+| Requirement | Why |
+|---|---|
+| Multi-camera with real cut logic | It has to pick a subject, hold it, and cut on action. A locked wide shot is unwatchable. |
+| Split-screen when two Crew act at once | Otherwise half of every Breaker Sequence is off-screen, and the round becomes unarguable |
+| Deliberate cutaways | Confessional stings, chat reaction shots, the Hunter's entrance. **These are the authored blind spots** — the moments players will argue about |
+| Lower thirds and captions | `[LOUD CRASH — EAST WING]`, `[PANEL ALARM]`, names, timers. This is how a spectator follows a round they aren't playing |
+| Commentary / sponsor stings | Fills the seams, keeps P10 intact |
+
+**The risk to watch (R2).** Five people watching a 90-second clip is fine. Five people watching a *boring* 90-second clip, five rounds in a row, is the failure mode that kills the mode. The M0 paper prototype can't test this — you'll need M4 in front of real people, and the metric is in §16.5.
+
+### 5.5 Evil's remote levers — the D1 counterweight
+
+Because an evil player may not be on the Crew, every evil player needs something they can do from a chair. This is the balance patch for D1 and it should be treated as load-bearing:
+
+| Lever | Who | Deniability |
+|---|---|---|
+| **Attention spike** — pick a room, spike the Hunter's interest, once per episode | The Producer | The Hunter wanders anyway (§6.1). Anonymous |
+| **Chat spike** — spend a Favour to flood the chat, which raises the Hunter's alertness | Anyone, evil or good | Favours are spent anonymously, and good players spend them too |
+| **Carry-over rigging** — a fixture rigged on a *previous* Expedition collapses on this one | The Fixer | You were in a chair on television when it went off (**P4** at its strongest) |
+| **Testimony** — the Debrief is 150s and the vote is the whole game | Anyone | This is still the main event. Off-crew evil is not powerless; it's just not holding a sledgehammer |
+
+If playtesting shows off-crew evil is still dead weight, the next lever to add is a once-per-game **"Producer's note"**: force the Broadcast Director to cut away from a chosen robot for 10 seconds. Deniable (the camera cuts away constantly), remote, and thematically perfect. It's deliberately *not* in v1 because it's the kind of power that's hard to un-ship.
+
+### 5.6 Expedition outcomes
 
 Three semi-independent results, all announced publicly:
 
@@ -419,7 +462,7 @@ The **Verdict** (§4.6) is the only feedback loop. "RENEWED" tells good that evi
 - **The lobby is the tutorial.** Free-roam smashing while waiting teaches move + smash with zero instruction. Non-negotiable — it's already the plan and it's correct.
 - **Everything a player must know is on the TV.** Nameplates (claims), lock progress, incident count, who's alive, whose turn to nominate.
 - **One-line roles** (P8), pushed to the phone as a card you can re-read at any time.
-- **A player with no role and no expedition still has:** a spy cam, a reaction bar, chat tips with a stated truth count, a veto, a cutaway, a nomination, and a vote. Nobody is ever a spectator.
+- **A player with no role and no expedition still has:** the reaction bar, chat tips with a stated truth count, a veto, a nomination, and a vote — and under D1 they see exactly what everyone else sees, so they're never behind. What they don't have is private information, which is the point: the argument is about three people's stories, and anyone can join it.
 - **A "first time?" toggle** in the lobby that puts an extra hint line on your phone each phase ("*you can nominate — it's free, and it makes people talk*").
 - **Colour-blind safety:** robots must be distinguishable by silhouette/accessory, not just colour. The Breaker symbols must not be colour-coded.
 - **The degraded symbol render must be degraded by noise, not by contrast** — otherwise it's an accessibility trap rather than a design feature.
@@ -432,7 +475,8 @@ The **Verdict** (§4.6) is the only feedback loop. "RENEWED" tells good that evi
 | # | Risk | Severity | Mitigation |
 |---|---|---|---|
 | R1 | **Attribution collapses** — the Hunter always traces to evil, or never does | Fatal | Tune baseline idle-curiosity rate; instrument "% of Hunter arrivals with no evil cause"; target 40–50% |
-| R2 | **The Expedition is a spectator sport** for 5 of 8 players | Fatal | Control Room powers (§5.4); keep Expedition ≤120s |
+| R2 | **The Expedition is a spectator sport** for 5 of 8 players — the direct cost of D1 | Fatal | Make the broadcast worth watching (§5.4 Broadcast Director); cut Expedition to 90s; measure second-screen rate (§16.5) |
+| R2b | **Off-crew evil has nothing to do** — the other cost of D1 | High | Remote levers (§5.5); if insufficient, add the Producer's Note |
 | R3 | **Nobody talks** — the video game eats the party game | High | Phones dark during Debrief; Breaker Sequence forces speech; short mission, long debrief |
 | R4 | **Good has no traction** because deaths never reveal | High | Lock progress + Verdict + incident count are the compensating signals. Playtest good win rate ≥45% |
 | R5 | **Round length creep** — 5 rounds × 9 min = too long | Medium | Hard timers on every phase; target 25–40 min total |
@@ -461,7 +505,7 @@ Entrances, cinematics, 8 chairs, nameplates, hype/banter reaction bar. No game r
 Full round structure with the Expedition **stubbed to a dice roll**. Casting, nominate, vote, sledgehammer execution, verdict, silent deaths. This is a complete, playable social deception game and the point at which you find out if the design works.
 
 ### M4 — THE EXPEDITION
-Breaker Sequence, Panel + Junction spawning, the Hunter, attention model, rescues.
+Breaker Sequence, Panel + Junction spawning, the Hunter, attention model, rescues, **and the Broadcast Director** — which under D1 is not a later polish pass, it's what five of your eight players are experiencing. Build the cut logic in this slice, not after it.
 
 ### M5 — ROLES
 Season One script, claims/nameplates, phone role cards.
@@ -537,6 +581,8 @@ The user asked specifically what we need to build to *know* each part works. Ans
 | V15 | Win conditions | All paths fire correctly and exactly once | Unit: state-table coverage | — |
 | V16 | Reconnect | Phone locks/reloads mid-round, returns with correct private state | Chaos: kill and restore each socket in every phase | Someone will background their phone. Test it |
 | V17 | Full loop | 8-player game runs start to finish, no soft-locks | E2E soak: 100 scripted games with random inputs | 3 sessions with real humans |
+| V18 | **Broadcast Director** | Never loses the action: no Breaker entry, alarm, or Hunter arrival happens fully off-screen unless deliberately cut | Sim: replay 500 recorded rounds through the director, assert every `key_event` was either on-screen or flagged as an intentional cutaway | **Watch a round you're not in. Was it worth watching?** |
+| V19 | Remote levers | Producer spike, Favour chat spike and carry-over rigging all fire from a seat | Integration per lever; sim asserting off-crew evil influences ≥1 event per round on average | Does off-crew evil feel involved? |
 
 ### 16.3 The balance simulator (build this at M3, not M7)
 
@@ -561,6 +607,8 @@ Cheap to add, disproportionately useful:
 - Wall-clock time per phase (are we hitting 25–40 min?)
 - **Speaking-time distribution** — the loudest player shouldn't own >35% of the debrief. If they do, the design isn't giving quiet players enough to say
 - Post-round one-tap survey on the phone: *"Do you know who caused that?"* Yes/No/Guessing — this is the most direct measurement of R1 that exists
+- **Second-screen rate** — the direct measurement of R2. Have someone watch the room during the Expedition and count how many of the five non-Crew players look away from the TV. **More than one is a warning; more than two means the broadcast has failed and D1 needs revisiting.**
+- **Off-crew evil involvement** — ask evil players post-game: *"did you have anything to do while you weren't on the Crew?"* This is the R2b measurement.
 - Post-game: *"Was that fun?"* and *"Did you understand your role?"*
 
 ---
@@ -588,6 +636,7 @@ Beyond the four I'm asking directly, these need answers before v0.2:
 12. Should evil have a kill that isn't the Hunter, or is the Hunter the only lethal force?
 
 **Presentation**
+12b. Should the Producer's Note (force a 10s cutaway) go into v1 after all, or stay held back as the balance patch for R2b?
 13. Is the chat fully generated, or do you want a curated writing pass? (§1.7 — for Jackbox, content *is* the product.)
 14. Is there any voice/audio through the phones, or is the room the only audio channel?
 15. Do we want confessional cams — a player privately records a 5-second reaction that airs later, possibly out of context? (Very on-theme, very cheap deception surface.)
