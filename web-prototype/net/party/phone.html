@@ -1,0 +1,200 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1">
+<meta name="theme-color" content="#0b0d12">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Prime Time — join</title>
+<!--
+  📱 THE PHONE, DURING THE LOBBY ONLY. Name, seat, connection. No game.
+
+  🚨 THIS PAGE DELIBERATELY DOES NOT HOLD A WAKE LOCK. Requesting one would be one line and would
+  destroy the measurement: "does a locked phone come back to its own seat" is a question the spike
+  exists to answer, and suppressing the lock answers it by preventing it. The wake lock is a fix to
+  reach for AFTER the number is known, not a way to avoid taking the number.
+
+  🚨 THE TOKEN IS THE SEAT, AND IT LIVES IN `localStorage`. A phone that reloads, locks, or loses
+  wifi rejoins with the token it already has and gets its own seat back. Without it a reconnect is
+  a new player, which in the real game means being handed somebody else's role mid-round.
+
+  ⚠️ THE TOKEN IS SCOPED TO THE ROOM CODE. Two different parties on the same phone must not share
+  a seat token, or the second lobby hands the phone a seat from the first one.
+-->
+<style>
+  :root{ --ink:#f2f4f8; --dim:#8b93a3; --bg:#0b0d12; --panel:#161b25; --edge:#262d3d;
+         --live:#4cc27a; --gone:#e4483a; --warn:#e0b23c; --mine:#8b93a3; }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--ink);font:400 17px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;
+       display:flex;flex-direction:column;gap:18px;padding:calc(18px + env(safe-area-inset-top)) 18px
+       calc(18px + env(safe-area-inset-bottom));overscroll-behavior:none}
+  h1{font-size:14px;letter-spacing:.24em;text-transform:uppercase;color:var(--dim);font-weight:600}
+  .card{background:var(--panel);border:1px solid var(--edge);border-radius:16px;padding:18px}
+  label{display:block;font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);margin-bottom:10px}
+  input{width:100%;background:#0d1017;border:1px solid var(--edge);border-radius:12px;color:var(--ink);
+        font:600 24px/1.2 inherit;padding:16px;outline:none}
+  input:focus{border-color:var(--warn)}
+  /* 🚨 56px MINIMUM. A 40px button is a thumb-miss at a party, and a thumb-miss during a nomination
+     is a vote for the wrong person. */
+  button{width:100%;min-height:60px;border:0;border-radius:14px;background:var(--warn);color:#171203;
+         font:700 20px/1 inherit;letter-spacing:.06em;margin-top:14px}
+  button:disabled{opacity:.4}
+  .me{display:flex;align-items:center;gap:14px}
+  .swatch{width:56px;height:56px;border-radius:14px;flex:none}
+  .me .n{font-size:28px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .me .s{color:var(--dim);font-size:13px;letter-spacing:.14em;text-transform:uppercase}
+  .rows{display:flex;flex-direction:column;gap:9px;margin-top:4px}
+  .row{display:flex;align-items:center;gap:10px;font-size:16px}
+  .row .dot{width:12px;height:12px;border-radius:50%;flex:none}
+  .row.off{opacity:.4;text-decoration:line-through}
+  .row .you{color:var(--warn);font-size:11px;letter-spacing:.18em}
+  .bar{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--dim);
+       letter-spacing:.08em;font-variant-numeric:tabular-nums}
+  .bar b{color:var(--live)}
+  .bar.down b{color:var(--gone)}
+  .hide{display:none}
+  .note{color:var(--dim);font-size:13px;margin-top:10px;line-height:1.5}
+</style>
+
+<h1>Run Robot Run · Prime Time</h1>
+
+<div class="card" id="joinCard">
+  <label for="name">Your robot's name</label>
+  <input id="name" maxlength="14" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="ROBOT">
+  <button id="go">Take a seat</button>
+  <div class="note" id="joinNote">Everyone here is on the same wifi. Nothing installs.</div>
+</div>
+
+<div class="card hide" id="meCard">
+  <div class="me">
+    <div class="swatch" id="swatch"></div>
+    <div style="min-width:0">
+      <div class="n" id="meName">…</div>
+      <div class="s">Seat <span id="meSeat">–</span> · tap your name to change it</div>
+    </div>
+  </div>
+</div>
+
+<div class="card hide" id="roomCard">
+  <label>In the room</label>
+  <div class="rows" id="rows"></div>
+</div>
+
+<div class="bar" id="bar">
+  <span id="state">connecting…</span>
+  <span>boot <b id="boot">—</b> · ping <b id="ping">—</b></span>
+</div>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  // ⏱ `performance.now()` is measured from navigationStart, so this is the honest cold-boot span
+  // — DNS, the typed URL, the page, the script, the socket — not the time since the script ran.
+  const bootMark = () => Math.round(performance.now());
+
+  const CODE = (location.search.match(/[?&]c=([a-z0-9]+)/i) || [, 'lobby'])[1];
+  const KEY = 'rrr.spike.token.' + CODE;
+  const NKEY = 'rrr.spike.name.' + CODE;
+
+  let ws = null, seated = null, wantJoin = false, backoff = 500, reported = false, bootShown = false;
+
+  $('name').value = localStorage.getItem(NKEY) || '';
+
+  $('go').onclick = () => {
+    wantJoin = true;
+    localStorage.setItem(NKEY, $('name').value.trim());
+    $('go').disabled = true;
+    $('go').textContent = 'Taking a seat…';
+    if (ws && ws.readyState === 1) sendJoin();
+  };
+  $('meName').onclick = () => {
+    const n = prompt('Robot name', seated ? seated.name : '');
+    if (n && ws && ws.readyState === 1) {
+      localStorage.setItem(NKEY, n.slice(0, 14));
+      ws.send(JSON.stringify({ t: 'rename', name: n.slice(0, 14) }));
+    }
+  };
+
+  function sendJoin() {
+    ws.send(JSON.stringify({
+      t: 'join',
+      name: ($('name').value.trim() || '').slice(0, 14),
+      token: localStorage.getItem(KEY) || null,
+      // ⚠️ SENT ONCE, ON THE FIRST JOIN ONLY. A resume reuses a warm cache and would report a
+      // flattering number; the server keeps whichever cold boot it heard first.
+      boot: reported ? null : bootMark(),
+      ua: navigator.userAgent,
+    }));
+    reported = true;
+  }
+
+  function state(txt, down) {
+    $('state').textContent = txt;
+    $('bar').className = 'bar' + (down ? ' down' : '');
+  }
+
+  function connect() {
+    ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/');
+    ws.onopen = () => {
+      backoff = 500;
+      state(seated ? 'connected' : 'ready');
+      // A phone that was already seated rejoins itself immediately — the player should never have
+      // to press anything to come back from a screen lock.
+      if (wantJoin || localStorage.getItem(KEY)) sendJoin();
+    };
+    ws.onmessage = (e) => {
+      const m = JSON.parse(e.data);
+      if (m.t === 'seated') {
+        seated = m;
+        localStorage.setItem(KEY, m.token);
+        if (!bootShown) { bootShown = true; $('boot').textContent = fmt(bootMark()); }
+        $('joinCard').classList.add('hide');
+        $('meCard').classList.remove('hide');
+        $('roomCard').classList.remove('hide');
+        $('swatch').style.background = m.colour;
+        $('meName').textContent = m.name;
+        $('meSeat').textContent = m.seat + 1;
+        state('connected');
+      }
+      if (m.t === 'full') {
+        $('go').disabled = true;
+        $('go').textContent = 'Room is full';
+        $('joinNote').textContent = 'Eight phones is the cap. Someone has to leave a seat.';
+      }
+      if (m.t === 'roster') {
+        if (seated) {
+          const mine = m.players.find((p) => p.seat === seated.seat);
+          if (mine) { $('meName').textContent = mine.name; seated.name = mine.name; }
+          $('ping').textContent = mine && mine.rtt != null ? mine.rtt + 'ms' : '—';
+        }
+        $('rows').innerHTML = m.players.map((p) =>
+          '<div class="row' + (p.live ? '' : ' off') + '">' +
+          '<span class="dot" style="background:' + p.colour + '"></span>' +
+          '<span>' + esc(p.name) + '</span>' +
+          (seated && p.seat === seated.seat ? '<span class="you">YOU</span>' : '') +
+          '</div>').join('');
+      }
+      // 🚨 THE PONG ECHOES THE SERVER'S OWN CLOCK VALUE AND NOTHING ELSE. Phone clocks at a party
+      // disagree by minutes; any RTT computed across the two devices' clocks is fiction.
+      if (m.t === 'ping') ws.send(JSON.stringify({ t: 'pong', at: m.at }));
+    };
+    ws.onclose = () => {
+      state('reconnecting…', true);
+      setTimeout(connect, backoff);
+      backoff = Math.min(backoff * 2, 5000);
+    };
+    ws.onerror = () => { try { ws.close(); } catch (_) {} };
+  }
+
+  // A phone coming back from lock reports `visible` long before the dead socket times out. Retry
+  // at once rather than waiting out the backoff — that wait IS the "did it come back" complaint.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && ws && ws.readyState > 1) { backoff = 500; connect(); }
+  });
+
+  const fmt = (v) => v >= 1000 ? (v / 1000).toFixed(1) + 's' : v + 'ms';
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  connect();
+})();
+</script>

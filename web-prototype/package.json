@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Run Robot Run \u2014 browser multiplayer survival horror prototype (Three.js)",
+  "description": "Run Robot Run — browser multiplayer survival horror prototype (Three.js)",
   "scripts": {
     "dev": "vite --port 5178 --strictPort",
     "build": "node harness/lint-glsl.mjs && vite build",
@@ -15,7 +15,7 @@
     "gate:role-deal": "node harness/role-deal.mjs",
     "gate:party-anon": "node harness/party-anon.mjs",
     "gate:party-isolation": "node harness/party-isolation.mjs",
-    "gates:party": "node harness/role-deal.mjs && node harness/party-anon.mjs && node harness/party-isolation.mjs && node harness/party-taken.mjs && node harness/guide-coverage.mjs && node harness/party-log.mjs && node harness/party-sockets.mjs && node harness/vote-table.mjs && node harness/cast-ballot.mjs && node harness/win-machine.mjs && node harness/round-loop.mjs && node harness/dark-run.mjs && node harness/director-cut.mjs && node harness/task-deck.mjs && node harness/role-script.mjs && node harness/reunion-truth.mjs && node harness/party-noise.mjs && node harness/party-sim.mjs",
+    "gates:party": "node harness/role-deal.mjs && node harness/party-anon.mjs && node harness/party-isolation.mjs && node harness/party-taken.mjs && node harness/guide-coverage.mjs && node harness/party-log.mjs && node harness/party-sockets.mjs && node harness/vote-table.mjs && node harness/cast-ballot.mjs && node harness/win-machine.mjs && node harness/round-loop.mjs && node harness/dark-run.mjs && node harness/director-cut.mjs && node harness/task-deck.mjs && node harness/role-script.mjs && node harness/reunion-truth.mjs && node harness/party-noise.mjs && node harness/party-sim.mjs && node harness/join-spike.mjs",
     "gate:party-taken": "node harness/party-taken.mjs",
     "gate:guide-coverage": "node harness/guide-coverage.mjs",
     "gate:party-log": "node harness/party-log.mjs",
@@ -31,7 +31,9 @@
     "gate:role-script": "node harness/role-script.mjs",
     "gate:reunion-truth": "node harness/reunion-truth.mjs",
     "gate:party-noise": "node harness/party-noise.mjs",
-    "gate:party-sim": "node harness/party-sim.mjs"
+    "gate:party-sim": "node harness/party-sim.mjs",
+    "gate:join-spike": "node harness/join-spike.mjs",
+    "party:spike": "node net/party/spike.mjs"
   },
   "dependencies": {
     "three": "^0.180.0",
