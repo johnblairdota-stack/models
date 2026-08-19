@@ -22,6 +22,10 @@ import { makeEvent, VIS } from './events.js';
 import { createLog, visibleTo } from './log.js';
 import { hunterVisibleToGuide, ROOMS } from './coverage.js';
 import { applyTake, resolveContact, MODE, PLATE } from './taken.js';
+import { tallyCasting } from './ballot.js';
+import { tallyVote, executioner, NO_ONE } from './vote.js';
+import { foldWin, OUTCOME } from './win.js';
+import { PHASE, orderFor, EPISODE_CAP } from './phases.js';
 
 export const PHASES = ['LOBBY', 'CASTING', 'EXPEDITION', 'DEBRIEF', 'VERDICT'];
 
@@ -56,6 +60,10 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     players: deal.seats.map((s) => ({ id: s.id, seat: s.seat, name: `Robot ${s.seat + 1}`, alive: true, claim: null, plate: PLATE.UNDECLARED })),
     hunterRoom: ROOMS[0],
     pair: { runner: null, guide: null },
+    lastPair: { runner: null, guide: null },
+    history: Object.fromEntries(deal.seats.map((s) => [s.id, { expeditions: 0, lastEp: null }])),
+    nominations: [],
+    outcome: null,
     // ⚠️ THE SHOW STARTS WITH ONE CAMERA LIVE, AND IT IS NOT A FREEBIE. At zero cameras the
     // guide's coverage is 0 and their honest error rate is 50% — a coin, not a game, and a
     // guide nobody can ever catch lying. One establishing camera puts episode one at 33%
@@ -139,14 +147,27 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
   }
 
   /** Play one scripted episode. Deterministic — the gates need two runs to agree exactly. */
-  function playEpisode({ takeRunner = false, hunterRoom = null } = {}) {
+  function playEpisode({ takeRunner = false, hunterRoom = null, ballots = null, votes = null, nominations = null } = {}) {
     const takeRunnerThisEpisode = takeRunner;
     if (hunterRoom) state.hunterRoom = hunterRoom;
     setPhase('CASTING');
-    // A deterministic pick that does NOT consult alignment: seat 0 runs, seat 1 guides.
-    const runner = state.players.find((p) => p.alive);
-    const guide = state.players.find((p) => p.alive && p.id !== runner.id);
+    // 🚨 THE PAIR COMES OUT OF A BALLOT, NOT A SEAT INDEX. `ballot.js` resolves every tie
+    // deterministically and publicly, so casting never stalls and never waits on a human.
+    const living = state.players.filter((p) => p.alive).map((p) => p.id);
+    const cast = tallyCasting({
+      ballots: ballots || living.map((v, i) => ({
+        voter: v, runner: living[(i + 1) % living.length], guide: living[(i + 2) % living.length],
+      })),
+      living, history: state.history, lastPair: state.lastPair, ep: state.episode, worldSeed,
+      matchSeed: worldSeed,
+    });
+    const runner = state.players.find((p) => p.id === cast.runner);
+    const guide = state.players.find((p) => p.id === cast.guide);
     state.pair = { runner: runner.id, guide: guide.id };
+    for (const id of [runner.id, guide.id]) {
+      state.history[id].expeditions++; state.history[id].lastEp = state.episode;
+    }
+    record(makeEvent('cast.ballot', VIS.PUBLIC, { runner: runner.id, guide: guide.id, tiebreaks: cast.tiebreaks }));
     for (const s of sockets) {
       s.seatRole = s.playerId === runner.id ? 'runner' : s.playerId === guide.id ? 'guide' : null;
     }
@@ -180,18 +201,58 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
 
     // 🚨 S2. Contact is terminal in party mode, and the limb count is not consulted. The rule
     // lives in taken.js; hunter-ai.js is untouched and subscribes nothing here.
+    const takenThisEpisode = [];
     if (takeRunnerThisEpisode) {
       const victim = state.players.find((p) => p.id === state.pair.runner);
       const r = resolveContact({ mode: MODE.PARTY, occupiedSockets: 0 });
       if (r.outcome === 'taken') {
         const { player, events } = applyTake(victim);
         Object.assign(victim, player);
+        takenThisEpisode.push(victim.id);
         for (const e of events) record(makeEvent(e.type, e.vis, e.data));
       }
     }
 
+    setPhase('RECAP');
     setPhase('DEBRIEF');
-    setPhase('VERDICT');
+
+    // ---- RECKONING / VOTE / EXECUTION. Episode 1 skips them: nobody has anything to go on,
+    // and an eviction decided on nothing teaches a table that the vote is arbitrary.
+    if (!orderFor(state.episode).includes(PHASE.RECKONING)) {
+      setPhase('VERDICT');
+    } else {
+      setPhase('RECKONING');
+      const living = state.players.filter((p) => p.alive).map((p) => p.id);
+      state.nominations = (nominations || []).filter((n) => living.includes(n.nominator) && living.includes(n.target));
+      for (const n of state.nominations) record(makeEvent('nom.made', VIS.PUBLIC, n));
+
+      setPhase('VOTE');
+      const ballotBox = votes || Object.fromEntries(living.map((id) => [id, NO_ONE]));
+      const result = tallyVote({ living, nominations: state.nominations }, ballotBox);
+      record(makeEvent('vote.tallied', VIS.PUBLIC, { counts: result.counts, executed: result.executed }));
+
+      if (result.executed) {
+        setPhase('EXECUTION');
+        const victim = state.players.find((p) => p.id === result.executed);
+        const swinger = executioner({ living, nominations: state.nominations }, result.executed, takenThisEpisode);
+        const { player, events } = applyTake(victim);
+        Object.assign(victim, player);
+        record(makeEvent('player.executed', VIS.PUBLIC, { id: victim.id, seat: victim.seat, executioner: swinger }));
+        for (const e of events.filter((e) => e.type !== 'player.taken')) record(makeEvent(e.type, e.vis, e.data));
+      }
+      setPhase('VERDICT');
+    }
+
+    // ---- the win machine, folded over the log we just wrote
+    const align = Object.fromEntries(deal.seats.map((s) => [s.id, s.alignment]));
+    const w = foldWin(log.all(), { count, alignmentOf: (id) => align[id] });
+    state.outcome = w.outcome === OUTCOME.RENEWED && state.episode >= EPISODE_CAP ? OUTCOME.CANCELLED : w.outcome;
+    record(makeEvent('win.checked', VIS.SEALED, { outcome: state.outcome, rule: w.rule, camerasLit: w.camerasLit, fed: w.fed }));
+    record(makeEvent('verdict.aired', VIS.PUBLIC, {
+      status: state.outcome, camerasLit: w.camerasLit, alarms: state.incident.alarms,
+    }));
+
+    state.lastPair = { ...state.pair };
     for (const s of sockets) s.seatRole = null;
     state.episode += 1;
   }
@@ -201,6 +262,14 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     /** Mid-game replay for one socket — what a reconnecting phone is caught up with. */
     replayFor: (sock) => log.replayFor({ playerId: sock.playerId, alignment: sock.alignment, isTV: sock.isTV }),
     playEpisode,
+    /** Run episodes until a win predicate fires or the cap is reached. Always terminates. */
+    playMatch(opts = {}) {
+      while (!state.outcome || state.outcome === OUTCOME.RENEWED) {
+        if (state.episode > EPISODE_CAP) break;
+        playEpisode(typeof opts === 'function' ? opts(state.episode) : opts);
+      }
+      return state.outcome;
+    },
     start() { setPhase('LOBBY'); },
     /** Ground truth. Belongs to the gate and the Reunion. Never to a socket. */
     truth: () => ({

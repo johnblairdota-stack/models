@@ -105,7 +105,10 @@ function honestErrorAt(unlocked, gated = true) {
   r.start();
   r.playEpisode({ hunterRoom: 'cellar' });   // cam1 covers it
   r.playEpisode({ hunterRoom: 'gallery' });  // cam3 does, but only once unlocked
-  const fly = (tape['phone-1'] || []).filter((f) => f.flyover);
+  // ⚠️ THE GUIDE IS WHOEVER THE BALLOT CAST, NOT phone-1. An earlier draft hard-coded the seat
+  // and went green only for as long as the pair was picked by seat index; the moment casting
+  // became a real ballot it measured an empty set and reported it as blind. Find the flyover.
+  const fly = Object.values(tape).flat().filter((f) => f.flyover);
   const seen = fly.filter((f) => f.flyover.hunter).length;
   t('C3 · the guide is sometimes blind and sometimes not, in a real room',
     seen > 0 && seen < fly.length, `${seen} of ${fly.length} flyover frames show the Hunter`);
