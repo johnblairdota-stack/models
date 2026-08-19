@@ -16,8 +16,7 @@ Nothing here is a new practice. Every convention below is lifted from a file in 
 |---|---|
 | **A gate is one `.mjs` with a header that carries the argument.** The prose that justifies a number lives above the code that measures it, because that is where it survives its author's death | `HANDOFF.md` L12–17; `harness/scenarios/dig-band.mjs` L1–75 is 75 lines of argument before the first assertion |
 | **Assertions are letter-numbered, file-local, and quotable.** `escape` 20/20, `dig-band` 14/1, `mechanics` 13/13 | `escape.mjs` E1–E10 · `limb-collapse.mjs` C1–C5 · `dig-band.mjs` B0–B4 · `aim-mark` A5 |
-| **Two runners, and the split is real.** Browser gates run under `harness/playtest.mjs --script`; headless-rule gates run as bare node against the shipped module | `playtest.mjs` L30–41 · `harness/_limb1-rule.mjs` L36–41 drives the real `DamageField` with no renderer and no wall clock |
-| **Socket gates spawn the real server and connect real clients** with a `t(name, cond, detail)` helper, print `N passed, M failed`, and `process.exit(fail ? 1 : 0)` | `harness/test-net.mjs` L5–13 · `harness/test-net-gaps.mjs` L36–40 |
+| **Three runners.** Browser gates under `harness/playtest.mjs --script`; rule gates as bare node against the shipped module; socket gates spawn the real server, connect real clients through a `t(name, cond, detail)` helper, print `N passed, M failed` and `process.exit(fail ? 1 : 0)` | `playtest.mjs` L30–41 · `_limb1-rule.mjs` L36–41 (real `DamageField`, no renderer, no wall clock) · `test-net.mjs` L5–13 · `test-net-gaps.mjs` L36–40 |
 | **B0, the arm check: refuse a vacuous green.** The first assertion in a file proves the file has something to measure, and SKIPs with a reason if not | `dig-band.mjs` L129–146 |
 | **A SKIP is never a PASS.** Twice damaged by an instrument that returned a confident wrong number rather than admitting it could not measure | `playtest.mjs` L43–49, L408 |
 | **Every assertion ships a control that must fail, and the control runs every run.** Sixteen instruments on this project produced result-shaped output instead of an error | `_limb1-rule.mjs` L27–34 · `limb-collapse.mjs` L33–37 · `escape.mjs` L16–22 (`E4b`, `E7`) |
@@ -25,15 +24,13 @@ Nothing here is a new practice. Every convention below is lifted from a file in 
 | **Hidden information is already server-side discipline, not a new idea** | `net/server.mjs` L18–19: *"StageHealth NOT replicated — never leaves this process… it would leak how close a wall is to opening."* |
 | A finding is recorded as **one line of what changed, THE NUMBER, and THE INSTRUMENT** | `HANDOFF.md` L12–17. 30 KB budget: adding a row means cutting one |
 
-**Two architecture constraints these gates impose, and they are load-bearing.** Both are how
-`rules.js` already works — it imports nothing, so `net/server.mjs` and the browser load one copy
-of every number (`prototype-audit` §1).
-
-1. **The PartyKit room logic must be a plain module importable in bare node**, with the transport
-   injected. Without that, `party-sim` needs 1000 browsers and will never be run.
-2. **The entitlement matrix is DATA, not code** — one declarative table, one row per field path.
-   The server projects from it; the gate checks the observed wire against it. They may share the
-   table and must not share the projection, or a bug in the filter passes its own gate.
+**Two architecture constraints these gates impose, both load-bearing, and both the way `rules.js`
+already works** — it imports nothing, so `net/server.mjs` and the browser load one copy of every
+number. **(a) The PartyKit room logic must be a plain module importable in bare node**, transport
+injected; without that, `party-sim` needs 1000 browsers and will never be run. **(b) The
+entitlement matrix is DATA, not code** — one declarative table, one row per field path. The server
+projects from it; the gate checks the observed wire against it. They may share the table and must
+not share the projection, or a bug in the filter passes its own gate.
 
 ---
 
@@ -54,12 +51,12 @@ Reunion. Everything §16 listed and this does not is in §2.1 with the reason.
 | **2 · `reunion-truth`** | `harness/reunion-truth.mjs` | the Reunion reconciles with ground truth *and* nothing it shows leaked earlier | replay 500 `party-sim` logs |
 | **2 · `director-cut`** | `harness/director-cut.mjs` | no key event happens fully off-screen unless flagged as a cutaway | replay 500 recorded rounds through the director |
 
-**`role-deal` — R0–R5.** R0 arm: both alignments dealt. R1 exact composition per count — 1 evil
-@4–5, 2 @6–8 (`party-loop.md`; the bible's §8 "1 at 6" is **wrong**, and this gate is where that is
-settled in code rather than in two documents). R2 uniform over seats, χ² over 10k deals. R3 one
-seed → one deal, byte-identical over two runs. R4 the deal returns **per-player views**, and a good
-view carries no field naming another alignment — structural, so it holds before a socket exists.
-R5 controls: 3 evil at 8 · always-seat-0 · full roster in every view; each turns exactly one red.
+**`role-deal` — R0–R5.** R0 arm: both alignments dealt. Exact composition per count — 1 evil @4–5,
+2 @6–8 (`party-loop.md`; the bible's §8 "1 at 6" is **wrong**, and this gate settles it in code
+rather than in two documents) (R1); uniform over seats, χ² over 10k deals (R2); one seed → one
+deal, byte-identical twice (R3); the deal returns **per-player views** and a good view carries no
+field naming another alignment — structural, so it holds before a socket exists (R4). R5 controls:
+3 evil at 8 · always-seat-0 · full roster in every view; each turns exactly one red.
 
 **`guide-lie` — G0–G6.** G0 arm: the pair spawned, the flyover opened, `channelOpen` went true
 (`src/game/doorway-pick.js` L24–26 — do **not** retarget at `COLLAPSE.fail`). G1 **T1** runner and
@@ -71,25 +68,25 @@ both non-zero. G5 the flyover never reaches the TV (`party-loop.md` *Do not*); a
 twice on purpose. G6 reports median completion time and noise-on-success — the two numbers §5.2.3
 says every new task ships with.
 
-**`phone-drop` — P0–P5.** Kill and restore every socket in every phase. P1 the reconnect stream is
-a subset of the entitlement; **P2 it is not a superset** — a welcome snapshot is the classic leak,
-and `net/server.mjs` welcomes with a full one today. P3 no soft-lock with a socket absent. P4 a
-dead player reconnects to the audience, never to a robot. P5 control: reconnect unfiltered, P2 red.
+**`phone-drop` — P0–P5.** Kill and restore every socket in every phase. The reconnect stream is a
+subset of the entitlement (P1) and **is not a superset** (P2) — a welcome snapshot is the classic
+leak, and `net/server.mjs` welcomes with a full one today. No soft-lock with a socket absent (P3);
+a dead player reconnects to the audience, never a robot (P4); reconnect unfiltered turns P2 red (P5).
 
 **`vote-table` — V1–V5.** Exhaustive, not sampled: >50% threshold, one nomination and one
 nomination-against per player, tie = no death, no ghost vote in v1 (D4/C1 split), every path fires
 exactly once. V5 control: an off-by-one threshold goes red.
 
-**`reunion-truth` — U1–U5.** U1 every revealed role matches ground truth; U2 every revealed
-sabotage happened and every event is revealable. **U3, the retro-leak sweep:** replay 500 games'
-pre-Reunion transcripts through `party-anon`'s scanner using the Reunion's own reveal set as the
-token list — anything revealed that already crossed a wire is named. U4 the log is append-only,
-each entry hashed at write. U5 control: mutate one event, U4 red.
+**`reunion-truth` — U1–U5.** Every revealed role matches ground truth (U1); every revealed sabotage
+happened and every event is revealable (U2). **U3, the retro-leak sweep:** replay 500 games'
+pre-Reunion transcripts through `party-anon`'s scanner with the Reunion's own reveal set as the
+token list — anything revealed that already crossed a wire gets named. U4 append-only, each entry
+hashed at write; U5 mutate one and watch U4 go red.
 
-**`director-cut` — D1–D4.** Mechanical half only. D1 every `key_event` (task entry, alarm, hunter
-arrival, a take) was on-screen or carries `cutaway:true`. D2 cutaways ≤ the authored budget. D3
-split-screen fires whenever both of the pair act in the same second. D4 control: disable cut logic,
-D1 red. **The other half — is it worth watching — is not automatable and is §6.**
+**`director-cut` — D1–D4.** Mechanical half only: every `key_event` (task entry, alarm, hunter
+arrival, a take) was on-screen or carries `cutaway:true` (D1); cutaways ≤ the authored budget (D2);
+split-screen fires whenever both of the pair act in the same second (D3); disabling the cut logic
+turns D1 red (D4). **The other half — is it worth watching — is not automatable and is §6.**
 
 ### 2.1 What §16 dropped, and why
 
