@@ -57,7 +57,9 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
   const log = createLog();
   const state = {
     phase: 'LOBBY', tick: 0, episode: 1, worldSeed,
-    players: deal.seats.map((s) => ({ id: s.id, seat: s.seat, name: `Robot ${s.seat + 1}`, alive: true, claim: null, plate: PLATE.UNDECLARED })),
+    // `taken: false` from the start — see session.js's note. A field that appears on death is
+    // what I7 forbids, so it is present and false for everyone until `applyTake` flips it.
+    players: deal.seats.map((s) => ({ id: s.id, seat: s.seat, name: `Robot ${s.seat + 1}`, alive: true, taken: false, claim: null, plate: PLATE.UNDECLARED })),
     hunterRoom: ROOMS[0],
     pair: { runner: null, guide: null },
     lastPair: { runner: null, guide: null },

@@ -47,6 +47,12 @@ export const MATRIX = [
   ['worldSeed',                'all'],   // public exactly as today (run.js L43-48)
   // 'castSeed'                          NO ROW. See src/party/cast.js's header.
 
+  // ---- the shooting clock. The countdown on the television and the one on every phone are the
+  // same number, sent rather than each side running its own timer — two clocks drift, and a phone
+  // that thinks the vote is still open when it has closed eats somebody's vote.
+  ['clock.seconds',            'all'],
+  ['clock.endsAt',             'all'],
+
   // ---- you
   ['you.id',                   'self'],
   ['you.seat',                 'self'],
@@ -55,6 +61,7 @@ export const MATRIX = [
   ['you.teammates[].id',       'evil'],
   ['you.teammates[].role',     'evil'],
   ['you.teammates[].claimDraft', 'evil'],   // the Production Panel, and the ONLY draft on any wire
+  ['you.acted',                'self'],    // has THIS phone tapped yet this phase — never anyone else's
 
   // ---- the room
   ['players[].id',             'all'],
@@ -63,6 +70,12 @@ export const MATRIX = [
   ['players[].alive',          'all'],
   ['players[].claim',          'all'],   // PUBLISHED claims only
   ['players[].plate',          'all'],   // undeclared/drafting/published/face-down. Never the role.
+  // 🚨 HOW SOMEBODY LEFT IS PUBLIC; WHAT THEY WERE IS NOT. `player.taken` and `player.executed`
+  // are both PUBLIC events already, so withholding the flag here would hide nothing and would
+  // only stop the circle drawing a hunter mark instead of a sledgehammer. This field was written
+  // by `applyTake` and silently dropped by deny-by-default for as long as it has existed —
+  // caught by `session.js` reporting `unrowed` rather than discarding it like `room.js` did.
+  ['players[].taken',          'all'],
   // 'players[].alignment'               NO ROW. Nobody, ever, pre-REUNION.
   // 'players[].role'                    NO ROW. Ditto.
   // 'players[].claimDraft'              NO ROW. Drafts are evil-only, under you.teammates[].
@@ -72,12 +85,32 @@ export const MATRIX = [
   ['pair.guide',               'all'],
   ['cameras.unlocked',         'all'],
   ['cameras.needed',           'all'],
+  // The wing is announced BEFORE anyone is cast (rrr-social-round.md §2), so casting is an
+  // argument about a specific job rather than a popularity contest.
+  ['expedition.room',          'all'],
+  ['expedition.outcome',       'all'],
+  // ⚠️ THE GUIDE'S CALL IS PUBLIC AND ATTRIBUTED. At the table they say it out loud; putting it
+  // on the record is what gives DEBRIEF something to chew on, and what makes a lie cost something
+  // later. What is NOT public is whether it was TRUE — that needs the Hunter's room, which has no
+  // row anywhere and never will before the Reunion.
+  ['call.by',                  'all'],
+  ['call.said',                'all'],
+
+  // ---- the reckoning and the ballot
+  ['nominations[].nominator',  'all'],
+  ['nominations[].target',     'all'],
+  // §4: the vote record is AIRED, attributed. It is only ever set after the phase closes — see
+  // `session.js`'s `vote` input, which holds it back so the last voter is not decisive.
+  ['tally.counts.*',           'all'],
+  ['tally.threshold',          'all'],
+  ['tally.executed',           'all'],
 
   // ---- the guide's map. party-loop.md puts this under "Do not" in its own words.
   ['flyover.marks[].x',        'guide'],
   ['flyover.marks[].z',        'guide'],
   ['flyover.marks[].kind',     'guide'],
   ['flyover.hunter',           'guide'],
+  ['flyover.room',             'guide'],   // named only when actually seen; null otherwise
 
   // ---- incidents. A count, never a list (party-anon A4).
   ['incident.alarms',          'all'],
