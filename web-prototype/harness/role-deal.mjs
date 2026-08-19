@@ -138,6 +138,11 @@ function goodViewClean(dealer) {
           if (json.includes(`"${EVIL}"`)) return `${c}p seed ${s} ${seat.id}: good view contains "evil"`;
           for (const other of deal.seats) {
             if (other.id === seat.id) continue;
+            // ⚠️ THE GLITCHED'S COVER IS ALLOWED TO DUPLICATE AN IN-PLAY ROLE, ON PURPOSE.
+            // Their phone shows a card somebody else genuinely holds and they are not told —
+            // that clash is the Outsider working, not a leak. Exempt the holder's OWN cover
+            // only; any other view carrying that name is still a failure.
+            if (seat.cover && other.role === seat.cover) continue;
             if (json.includes(`"${other.role}"`) && other.role !== seat.role) {
               return `${c}p seed ${s} ${seat.id}: good view names ${other.id}'s role ${other.role}`;
             }

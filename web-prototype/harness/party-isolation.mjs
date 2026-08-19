@@ -119,6 +119,11 @@ function suite(runs) {
         // ---- I3 the semantic sweep: right key, wrong value
         for (const [p, v] of leaves(f)) {
           if (typeof v !== 'string') continue;
+          // ⚠️ THE GLITCHED'S COVER IS A DELIBERATE DECEPTION, NOT A LEAK. Their own phone shows
+          // a role ground truth assigns to somebody else, on purpose and by design (see
+          // cast.js). Exempt it for THAT socket only — every other socket carrying it is still
+          // a leak, and `p` must still be the holder's own `you.role`.
+          if (mine && mine.cover && v === mine.cover && p.startsWith('you.role')) continue;
           for (const other of run.truth.seats) {
             if (mine && other.id === mine.id) continue;
             if (teammates.some((tm) => tm.id === other.id)) continue;   // I6's one exception
@@ -209,7 +214,14 @@ function suite(runs) {
             const isTeammate = mine && mine.alignment === 'evil' && seat.alignment === 'evil';
             const fr = run.tape.get(sock.id) || [];
             for (let i = takenAt; i < fr.length; i++) {
-              const blob = JSON.stringify(fr[i]);
+              // ⚠️ SCAN EVERYTHING EXCEPT THE SOCKET'S OWN `you.role`. A Glitched holder's cover
+              // can legitimately be the role a taken player held (see cast.js), and that is a
+              // deception rather than a reveal. Stripping it here is safe because I3 still
+              // polices `you.role` on every socket — leak 1 puts a foreign role there and I3
+              // catches it — so nothing goes unwatched, it is only watched by the right check.
+              const scan = { ...fr[i] };
+              if (scan.you) scan.you = { ...scan.you, role: undefined };
+              const blob = JSON.stringify(scan);
               if (blob.includes(`"${seat.alignment}"`) && !(mine && mine.alignment === seat.alignment)) {
                 ok.I7 = false; d.I7 = d.I7 || `${sock.id} frame ${i} carries the taken player's alignment`;
               }

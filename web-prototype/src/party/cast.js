@@ -145,6 +145,35 @@ export function dealCast({ count, castSeed, playerIds }) {
     alignment: ROLES[order[seat]].alignment,
   }));
 
+  /**
+   * 🚨 THE GLITCHED THINKS THEY ARE ANOTHER ROLE, AND THE COVER MUST ALWAYS *INFORM*.
+   *
+   * The first version drew the cover from informed roles NOT DEALT, to avoid two players
+   * truthfully claiming the same card. `role-script` S6b then measured the poison rate at
+   * **0.0% at eight players** — because `GUARANTEED[8]` deals all three informing roles, so the
+   * only covers left were Editor, Fan Favourite and Stunt Double, none of which receives any
+   * information. The Outsider whose entire job is poisoning private information was poisoning
+   * nothing, at the flagship player count, silently.
+   *
+   * So the cover is drawn from the roles that actually INFORM. An undealt one is preferred,
+   * because an unfalsifiable claim is stronger — but when all of them are in play the cover
+   * duplicates one, and **that clash is the classic behaviour rather than a defect**: two
+   * players claim Camera Op, both believe it, and the room has to work out which reading to
+   * trust. That is the Outsider doing its job out loud.
+   *
+   * ⚠️ `party-isolation` I3 has to know about this: a socket carrying a role name that ground
+   * truth assigns to someone else is normally a leak, and here it is a deliberate deception. I3
+   * exempts a holder's own cover by name, and only their own.
+   */
+  const dealtRoles = new Set(order);
+  const informing = Object.keys(ROLES).filter((r) => ROLES[r].informs);
+  for (const seat of seats) {
+    if (seat.role !== 'glitched') continue;
+    const undealt = informing.filter((r) => !dealtRoles.has(r));
+    const pool = undealt.length ? undealt : informing;
+    seat.cover = shuffle(pool, rand)[0];
+  }
+
   return {
     seats,
     evil: seats.filter((s) => s.alignment === EVIL).map((s) => s.id),
@@ -164,7 +193,9 @@ export function viewFor(deal, id) {
   const me = deal.seats.find((s) => s.id === id);
   if (!me) throw new Error(`no seat for ${id}`);
   const view = {
-    you: { id: me.id, seat: me.seat, role: me.role, alignment: me.alignment },
+    // The Glitched is shown their COVER and is never told otherwise. Ground truth stays in the
+    // deal; only the Reunion ever reconciles the two.
+    you: { id: me.id, seat: me.seat, role: me.cover ?? me.role, alignment: me.alignment },
     players: deal.seats.map((s) => ({ id: s.id, seat: s.seat, alive: true, claim: null })),
   };
   if (me.alignment === EVIL) {

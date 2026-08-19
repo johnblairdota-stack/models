@@ -15,7 +15,7 @@
     "gate:role-deal": "node harness/role-deal.mjs",
     "gate:party-anon": "node harness/party-anon.mjs",
     "gate:party-isolation": "node harness/party-isolation.mjs",
-    "gates:party": "node harness/role-deal.mjs && node harness/party-anon.mjs && node harness/party-isolation.mjs && node harness/party-taken.mjs && node harness/guide-coverage.mjs && node harness/party-log.mjs && node harness/party-sockets.mjs && node harness/vote-table.mjs && node harness/cast-ballot.mjs && node harness/win-machine.mjs && node harness/round-loop.mjs && node harness/dark-run.mjs && node harness/director-cut.mjs && node harness/task-deck.mjs",
+    "gates:party": "node harness/role-deal.mjs && node harness/party-anon.mjs && node harness/party-isolation.mjs && node harness/party-taken.mjs && node harness/guide-coverage.mjs && node harness/party-log.mjs && node harness/party-sockets.mjs && node harness/vote-table.mjs && node harness/cast-ballot.mjs && node harness/win-machine.mjs && node harness/round-loop.mjs && node harness/dark-run.mjs && node harness/director-cut.mjs && node harness/task-deck.mjs && node harness/role-script.mjs",
     "gate:party-taken": "node harness/party-taken.mjs",
     "gate:guide-coverage": "node harness/guide-coverage.mjs",
     "gate:party-log": "node harness/party-log.mjs",
@@ -27,7 +27,8 @@
     "gate:round-loop": "node harness/round-loop.mjs",
     "gate:dark-run": "node harness/dark-run.mjs",
     "gate:director-cut": "node harness/director-cut.mjs",
-    "gate:task-deck": "node harness/task-deck.mjs"
+    "gate:task-deck": "node harness/task-deck.mjs",
+    "gate:role-script": "node harness/role-script.mjs"
   },
   "dependencies": {
     "three": "^0.180.0",
