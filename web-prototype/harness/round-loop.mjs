@@ -60,11 +60,11 @@ const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' �
     Math.abs(sessionSeconds(4) - 1625) < 1 && Math.abs(sessionSeconds(5) - 1960) < 1 && Math.abs(sessionSeconds(6) - 2295) < 1,
     `${mins(4).toFixed(1)} / ${mins(5).toFixed(1)} / ${mins(6).toFixed(1)} min`);
   const worst = sessionSeconds(EPISODE_CAP, 3) / 60;
-  t('R2b · the BASE case fits the 25-40 minute window at the episode cap', mins(EPISODE_CAP) <= 40,
-    `${mins(EPISODE_CAP).toFixed(1)} min base`);
-  t('R2c · the worst case is measured and reported, not assumed', worst > 40 && worst < 45,
-    `${worst.toFixed(1)} min at three nominations every episode — §1 claims "inside 40 minutes" and IS WRONG. `
-    + `EPISODE_CAP 6->5 gives ${(sessionSeconds(5, 3) / 60).toFixed(1)} min. John's call, see the header`);
+  t('R2b · the base case fits the window at the episode cap', mins(EPISODE_CAP) <= 40,
+    `${mins(EPISODE_CAP).toFixed(1)} min base at ${EPISODE_CAP} episodes`);
+  t('R2c · THE WORST CASE fits it too — three nominations every episode', worst < 40,
+    `${worst.toFixed(1)} min · this is the assertion that caught the 42.0 min bug at EPISODE_CAP 6, `
+    + `so it asserts the worst case and not the comfortable one`);
   t('R2d · the reckoning is capped', reckoningSeconds(99) === RECKONING_CAP, `${reckoningSeconds(99)}s`);
 }
 

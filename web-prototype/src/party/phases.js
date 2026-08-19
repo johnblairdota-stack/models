@@ -62,7 +62,7 @@ export const reckoningSeconds = (noms) =>
   Math.min(RECKONING_CAP, SECONDS[PHASE.RECKONING] + RECKONING_PER_NOM * noms);
 
 /** What keeps the worst case inside forty minutes. */
-export const EPISODE_CAP = 6;
+export const EPISODE_CAP = 5;
 
 export const episodeSeconds = (ep, noms = 0) =>
   orderFor(ep).reduce((a, p) => a + (p === PHASE.RECKONING ? reckoningSeconds(noms) : SECONDS[p]), 0);
