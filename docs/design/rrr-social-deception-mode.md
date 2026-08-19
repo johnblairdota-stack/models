@@ -1,7 +1,7 @@
 # Run Robot Run — Social Deception Mode
 
 **Working title: "PRIME TIME"**
-Design plan v0.3 — seven decisions locked
+Design plan v0.4 — twelve decisions locked, reconciled against the prototype
 
 > One line: *Eight robots on a reality TV show. The producers want a body count. You talk in the room, you act on your phone, and the edit is lying to you.*
 
@@ -16,6 +16,19 @@ Design plan v0.3 — seven decisions locked
 | D5 | **The game ends in a Reunion Special with a full reveal.** | Everything the game withheld gets paid back at once. Every beat is a query over the event log, so the **log schema must be designed for it at M3**, not retrofitted. See §11.1. |
 | D6 | **Evil know each other from the start, and see each other's claims live** — including drafts, before the room does. | A read-only Production Panel on evil phones (§7.5). Not a chat. Also the cheapest available fix for R2b: an off-crew evil player always has a live job. |
 | D7 | **Five tasks in v1, designed for many more.** | The deck in §5.2, gated by the **Task Contract** in §5.2.1 — six rules any future task must satisfy or it's a minigame, not a deduction engine. |
+| D8 | **`party-loop.md` owns the Expedition. This document owns the round around it.** | Where they disagree about what happens *inside* the mansion, `party-loop.md` wins. Where it is silent — the vote, roles, the endgame, the Reunion — this document is the spec. Both files say so at the top. |
+| D9 | **The Expedition is a pair: runner + guide.** *(resolves C2)* | Runner is first-person in dark corridors; guide has a private phone flyover. **Six of eight players are now spectating**, so the Broadcast Director matters more, not less. |
+| D10 | **The hammer is automated.** *(resolves C3)* | `doorway-pick.js` opens a walkable channel in 3 blows. Player-aimed sledge is not the party verb. **P3 is rewritten below** — the lying guide replaces mistimed smashing as evil's main deniable lever. |
+| D11 | **Networking is Cloudflare PartyKit.** | 8 phones + 1 TV per room, QR join. The existing `client.js`/`server.mjs` pair is a reference for the *authority model*, not the transport. |
+| D12 | **The party mode does not reuse `run.js`'s WINDDOWN/DETONATION.** | The bomb timer stays survival-mode only. The aimed-dig survival slice still ships as its own mode and remains the art/physics bed. |
+
+### Superseded by the audit
+
+Three things in this document are now wrong and are corrected in place below:
+
+- **§5.1's Exit Vault locks are dropped.** The objective is `party-loop.md`'s **reality-TV camera unlocks** — diegetic, and they grow the shared information pool round over round, so the broadcast literally gets better when good players win.
+- **§6.1's attention weight table is dropped.** The built model in `rules.js` (`HUNTER_SENSE`) is sharper: sight fills awareness fast, sound **cannot fill it past `soundCeiling`**. A saboteur's noise can put the Hunter in the room but cannot itself kill, so every death still needs a second cause — "evidence, never proof", already implemented.
+- **§15's phase machine is dropped.** `src/game/run.js` already has authority-gated mutators and `syncPhase`/`applySnapshot`. Add entries to its `PHASE`; do not write a second machine.
 
 **One flagged consequence of D1.** With no Control Room powers, an evil player who isn't picked for the Crew has very little to do for the 90 seconds of the Expedition. That is a real balance problem, not a cosmetic one, and §5.5 is the answer to it: every evil player keeps at least one *remote* lever they can pull from their seat. If that section doesn't hold up in the paper prototype, D1 is the decision to revisit first.
 
@@ -127,7 +140,7 @@ The design below is deliberately a fusion of three proven skeletons rather than 
 
 **P2 — Testimony over telemetry.** The game shows what happened; players must explain *why*. After an Expedition, crew phones go dark: no logs, no replay, no notes. What you remember and can convince the room of is the only record.
 
-**P3 — Every verb is dual-use.** There is no evil button. Evil players use the same actions good players need, at worse moments. Smashing a wall is how you get around the mansion — and it's how you get someone killed.
+**P3 — Every channel is dual-use.** *(rewritten under D10.)* There is no evil button. The automated hammer removes mistimed smashing as a lever, so the load moves onto **the guide's voice**: the guide sees the flyover and the runner does not, and "clear" is the same word whether it's true, mistaken, or a murder. The lie and the honest mistake remain the same observable event — the channel changed, the principle didn't.
 
 **P4 — Cause and effect are separated.** The strongest sabotages are set up now and land 40 seconds later somewhere else. (Dread Hunger's lesson.)
 
@@ -457,12 +470,14 @@ Following the BotC/Werewolf convention of ~25% evil (§1.2):
 |---|---|---|---|---|---|---|---|
 | 4 | 3 | 0 | 0 | 1 | 25% | 2 | 2 |
 | 5 | 3 | 1 | 0 | 1 | 20% | 2 | 2 |
-| 6 | 4 | 1 | 0 | 1 | 17% | 3 | 3 |
-| 7 | 4 | 1 | 1 | 1 | 29% | 3 | 3 |
-| 8 | 5 | 1 | 1 | 1 | 25% | 3 | 3 |
+| 6 | 3 | 1 | 1 | 1 | 33% | 3 | 2 |
+| 7 | 4 | 1 | 1 | 1 | 29% | 3 | 2 |
+| 8 | 5 | 1 | 1 | 1 | 25% | 3 | 2 |
+
+**Crew size is 2 at every count (D9), and evil is 2 from six players up (C4).** One evil in six, with only a pair in the halls, is too thin to threaten anyone.
 
 Notes:
-- 6 players is the awkward count (1 evil feels thin, 2 feels brutal). Compensate by making the Expedition harder rather than adding a second traitor.
+- 6 players at 33% evil is above the genre's 25–30% band, and that is deliberate: with only a pair acting, an evil player who is never picked contributes almost nothing, so the second traitor is buying *coverage*, not power. Watch it in playtest — this is the count most likely to need a change.
 - Below 6, consider this a tutorial/warm-up configuration rather than the real game.
 - Outsider count should eventually be a *range* the Showrunner picks from (BotC style) so evil can bluff "there must be a Glitched" without anyone able to disprove it.
 
@@ -491,9 +506,9 @@ This is my strongest recommendation in the document.
 
 When you die, your robot is dragged off, and you're **promoted to a verified viewer**. On your phone you get a chat handle and an avatar. You:
 
-- Keep **one vote** for the rest of the game, usable once (straight from BotC)
 - **Can post into the stream chat** — which is on the TV, which everyone reads
 - Keep talking out loud in the room, because you're sitting right there
+- **No ghost vote in v1** *(resolves C1)*, and **no UI in the mansion at all** — `party-loop.md`'s "no ghost phone UI" holds for the robot; the chat is the show's audience, not a ghost interface. The BotC-style single vote is a later A/B, not a v1 feature.
 
 ### 10.2 Why this is the right answer
 
