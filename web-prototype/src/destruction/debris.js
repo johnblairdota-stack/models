@@ -418,38 +418,13 @@ function timberChunk() {
   return paint(g, 0xb59a72, 0x5d5140, (nx) => 1 - step(0.35, 0.85, Math.abs(nx)), 0.17);
 }
 
-/** Smash-lab furniture chips. Stepped 6-connected cluster, AABB 0.16×0.12×0.10. */
+/** Smash-lab furniture chips. White vertices so instanceColor is the Meshy sample. */
 function furnChip() {
-  const parts = [
-    { p: [0.00, 0.00, 0.00], s: [0.10, 0.08, 0.07] },
-    { p: [0.055, 0.018, 0.018], s: [0.07, 0.06, 0.055] },
-    { p: [-0.045, -0.012, 0.02], s: [0.065, 0.07, 0.05] },
-    { p: [0.02, 0.038, -0.022], s: [0.06, 0.05, 0.075] },
-    { p: [-0.02, -0.032, -0.028], s: [0.05, 0.042, 0.055] },
-    { p: [0.068, -0.02, -0.008], s: [0.042, 0.085, 0.04] },
-    { p: [-0.055, 0.03, -0.015], s: [0.045, 0.04, 0.06] },
-  ];
-  const pos = [];
-  const idx = [];
-  let base = 0;
-  for (const part of parts) {
-    const g = new THREE.BoxGeometry(part.s[0], part.s[1], part.s[2]);
-    const pr = g.attributes.position;
-    for (let i = 0; i < pr.count; i++) {
-      pos.push(pr.getX(i) + part.p[0], pr.getY(i) + part.p[1], pr.getZ(i) + part.p[2]);
-    }
-    const id = g.index;
-    for (let i = 0; i < id.count; i++) idx.push(id.getX(i) + base);
-    base += pr.count;
-    g.dispose();
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setIndex(idx);
-  const col = new Float32Array((pos.length / 3) * 3);
+  const g = new THREE.BoxGeometry(0.16, 0.12, 0.10);
+  const n = g.attributes.position.count;
+  const col = new Float32Array(n * 3);
   col.fill(1);
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  g.computeVertexNormals();
   return g;
 }
 

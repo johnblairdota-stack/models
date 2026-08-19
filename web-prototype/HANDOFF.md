@@ -224,7 +224,7 @@ or darken *that*, never add occlusion in the barrier shader.
 
 ### Queued, in the order I would take them
 
-0. 🪑 **Smash lab is a live parallel track HANDOFF never named.** `FURNSMASH.bat` → `?view=furn.smash`. Bar = Teardown **play** (plates on the floor), not 148s colour. **r38 REVERTED** (brown disc). **r39** carve solid only, no AABB air plug. Last colour critic **r37 PASS**. Not on the 37-piece board.
+0. 🪑 **Smash lab SHIPPED r13** (player freeze 2026-08-19). `FURNSMASH.bat` → `?view=furn.smash`. AABB slices, box chips, hold 0.20, carve-group plate colour. Colour loop and r14–r37 closed. Do not resume unless asked. Not on the 37-piece board.
 1. `critic-dig-8` (`docs/design/dig-what-it-could-be.md`) ranked six directions. **C5 (the sag) is
    built — destruction §11; C6's aim half is `reach-1`. C3 (the frame survives the cladding) is the
    next it ranked and is not started.** Six of the eight look questions in destruction §10 are open

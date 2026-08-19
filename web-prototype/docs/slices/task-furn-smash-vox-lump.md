@@ -1,6 +1,6 @@
 # Slice plan: lumpy islands, not AABB tiles (r15)
 
-**Status:** CRITIQUED — PASS (not WOWED). Irregular islands YES on chaise/settee/desk/table-round/crate; fireplace NO. Colour held. #1: fireplace leave is still a cream bite plus crumbs.
+**Status:** SUPERSEDED — John asked for r14 after trying r15. Carve flood / stepped chip / unclamp / early tumble are off.
 
 **Bar:** `refs/teardown/yt-ign-52s-plank-tumble.png`,
 `yt-house-145s-table-island.png`, `yt-house-240s-chunks-tumble.png`,

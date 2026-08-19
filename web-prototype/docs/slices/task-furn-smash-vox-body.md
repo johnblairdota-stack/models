@@ -1,6 +1,6 @@
 # Slice plan: body colour, not highlight (r13)
 
-**Status:** CRITIQUED — WEAK. Plates match: settee NO, chaise NO, desk NO, table-round YES, fireplace NO. #1: chaise still dusty-rose tiles (`#9d6868`) off black-red velvet (`#360b0f`).
+**Status:** SHIPPED r13 — player freeze 2026-08-19. Darkest chromatic surface in the bite; skip inner. Colour loop closed.
 
 **Bar:** `refs/teardown/yt-house-240s-chunks-tumble.png`,
 `yt-house-148s-sledge-hole.png`, `yt-ign-52s-plank-tumble.png`,

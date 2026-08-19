@@ -6,13 +6,15 @@
  * fully enclosed at voxelize, inset behind the Meshy. Shell props (crate):
  * skin clip + plank chips, no interior cubes. Thin / camera: no voxel body.
  * Airborne payout is AABB islands (docs/slices/task-furn-smash-vox-islands.md).
+ * SHIPPED r13 (player freeze 2026-08-19). Do not resume the colour/plug loop.
  */
 
 import * as THREE from 'three';
 import { FURN_STAGE } from './furnprop.js';
 
-const CELL = 0.05;
-const MAX_AXIS = 48;
+const CELL = 0.08;
+const MAX_AXIS = 24;
+const NBR = [[-1, 0, 0], [1, 0, 0], [0, -1, 0], [0, 1, 0], [0, 0, -1], [0, 0, 1]];
 const _v = new THREE.Vector3();
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -122,37 +124,14 @@ function splitHuge(cells, cell) {
   return [a, b];
 }
 
-function floodCells(cells, nx, ny) {
-  if (cells.length < 2) return [cells];
-  const byI = new Map();
-  for (const c of cells) byI.set(c.i, c);
-  const vis = new Set();
+function clusterCarve(cells) {
+  if (cells.length < 8) return [cells];
+  const k = Math.max(2, Math.min(5, Math.round(cells.length / 22)));
+  const sorted = cells.slice().sort((a, b) => a.x - b.x || a.z - b.z || a.y - b.y);
+  const step = Math.ceil(sorted.length / k);
   const groups = [];
-  for (const start of cells) {
-    if (vis.has(start.i)) continue;
-    const q = [start];
-    vis.add(start.i);
-    const g = [];
-    for (let qi = 0; qi < q.length; qi++) {
-      const c = q[qi];
-      g.push(c);
-      const ix = c.i % nx;
-      const iy = Math.floor(c.i / nx) % ny;
-      const iz = Math.floor(c.i / (nx * ny));
-      const tryN = (nx2, ny2, nz2) => {
-        const ni = idx(nx2, ny2, nz2, nx, ny);
-        const n = byI.get(ni);
-        if (!n || vis.has(ni)) return;
-        vis.add(ni);
-        q.push(n);
-      };
-      tryN(ix - 1, iy, iz); tryN(ix + 1, iy, iz);
-      tryN(ix, iy - 1, iz); tryN(ix, iy + 1, iz);
-      tryN(ix, iy, iz - 1); tryN(ix, iy, iz + 1);
-    }
-    groups.push(g);
-  }
-  return groups;
+  for (let i = 0; i < sorted.length; i += step) groups.push(sorted.slice(i, i + step));
+  return groups.filter((g) => g.length);
 }
 
 function capGroups(groups, maxN) {
@@ -173,33 +152,6 @@ function liftTint(r, g, b) {
     return { r: Math.min(1, r * k), g: Math.min(1, g * k), b: Math.min(1, b * k) };
   }
   return { r, g, b };
-}
-
-function lumaOf(r, g, b) {
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-
-function bodyTintFrom(rgb, skin, inner, fallback) {
-  const pool = [];
-  for (let i = 0; i < skin.length; i++) {
-    if (!skin[i] || inner[i]) continue;
-    const r = rgb[i * 3] / 255;
-    const gc = rgb[i * 3 + 1] / 255;
-    const b = rgb[i * 3 + 2] / 255;
-    if (r + gc + b < 0.04) continue;
-    const luma = lumaOf(r, gc, b);
-    const chroma = Math.max(r, gc, b) - Math.min(r, gc, b);
-    if (luma > 0.58 && chroma < 0.28) continue;
-    pool.push({ r, g: gc, b, luma, chroma });
-  }
-  if (!pool.length) return fallback;
-  const chromatic = pool.filter((s) => s.chroma >= 0.04);
-  const use = chromatic.length ? chromatic : pool;
-  let best = use[0];
-  for (let i = 1; i < use.length; i++) {
-    if (use[i].luma < best.luma) best = use[i];
-  }
-  return { r: best.r, g: best.g, b: best.b };
 }
 
 function copyRgb(rgb, dst, src) {
@@ -322,13 +274,13 @@ function voxelize(root, mode) {
   const nx = Math.max(1, Math.min(MAX_AXIS, Math.ceil(size.x / cell)));
   const ny = Math.max(1, Math.min(MAX_AXIS, Math.ceil(size.y / cell)));
   const nz = Math.max(1, Math.min(MAX_AXIS, Math.ceil(size.z / cell)));
-  cell = Math.max(size.x / nx, size.y / ny, size.z / nz, 0.04);
+  cell = Math.max(size.x / nx, size.y / ny, size.z / nz, 0.045);
   box.expandByScalar(cell * 0.35);
   box.getSize(size);
   const nx2 = Math.max(1, Math.min(MAX_AXIS, Math.ceil(size.x / cell)));
   const ny2 = Math.max(1, Math.min(MAX_AXIS, Math.ceil(size.y / cell)));
   const nz2 = Math.max(1, Math.min(MAX_AXIS, Math.ceil(size.z / cell)));
-  cell = Math.max(size.x / nx2, size.y / ny2, size.z / nz2, 0.04);
+  cell = Math.max(size.x / nx2, size.y / ny2, size.z / nz2, 0.045);
   const origin = box.min.clone();
   const skin = new Uint8Array(nx2 * ny2 * nz2);
   const rgb = new Uint8Array(nx2 * ny2 * nz2 * 3);
@@ -454,16 +406,14 @@ function voxelize(root, mode) {
     }
     tr = 140; tg = 100; tb = 70; tn = 1;
   }
-  const rawAvg = tn > 0
-    ? { r: tr / (tn * 255), g: tg / (tn * 255), b: tb / (tn * 255) }
+  const avgTint = tn > 0
+    ? liftTint(tr / (tn * 255), tg / (tn * 255), tb / (tn * 255))
     : { r: 0.45, g: 0.32, b: 0.22 };
-  const avgTint = tn > 0 ? liftTint(rawAvg.r, rawAvg.g, rawAvg.b) : rawAvg;
   const fill = mode !== 'shell';
   const built = rebuildOcc(skin, rgb, nx2, ny2, nz2, { fill });
   const inner = fill ? markInner(built.occ, nx2, ny2, nz2) : new Uint8Array(built.occ.length);
-  const bodyTint = bodyTintFrom(rgb, skin, inner, rawAvg);
   return {
-    skin, occ: built.occ, inner, rgb, avgTint, bodyTint,
+    skin, occ: built.occ, inner, rgb, avgTint,
     nx: nx2, ny: ny2, nz: nz2, origin, cell,
     count: skinCount, initial: skinCount, span,
   };
@@ -541,22 +491,6 @@ export class FurnVoxelBody {
     for (let i = 0; i < this.grid.inner.length; i++) if (this.grid.inner[i]) innerN++;
     if (this.mode === 'solid' && innerN < 8) this.mode = 'shell';
     this.carveR = Math.min(0.58, Math.max(0.28, 0.32 * this.grid.span));
-    this.solid = new Uint8Array(this.grid.occ);
-    {
-      const g = this.grid;
-      let x0 = g.nx, y0 = g.ny, z0 = g.nz, x1 = -1, y1 = -1, z1 = -1;
-      for (let iz = 0; iz < g.nz; iz++) {
-        for (let iy = 0; iy < g.ny; iy++) {
-          for (let ix = 0; ix < g.nx; ix++) {
-            if (!this.solid[idx(ix, iy, iz, g.nx, g.ny)]) continue;
-            if (ix < x0) x0 = ix; if (ix > x1) x1 = ix;
-            if (iy < y0) y0 = iy; if (iy > y1) y1 = iy;
-            if (iz < z0) z0 = iz; if (iz > z1) z1 = iz;
-          }
-        }
-      }
-      this.solidBox = x1 >= 0 ? { x0, y0, z0, x1, y1, z1 } : null;
-    }
     this.hitBox = new THREE.Box3().setFromObject(o.root);
     this.hitBox.expandByScalar(0.12);
     this.prop.hitBox = this.hitBox;
@@ -597,14 +531,15 @@ export class FurnVoxelBody {
 
     this.cut = null;
     if (this.mode === 'solid') {
-      const cutS = g.cell * 1.0;
+      const cutS = g.cell * 0.98;
       const cutGeo = new THREE.BoxGeometry(cutS, cutS, cutS);
       const nVert = cutGeo.attributes.position.count;
       const white = new Float32Array(nVert * 3);
       white.fill(1);
       cutGeo.setAttribute('color', new THREE.BufferAttribute(white, 3));
-      const cutMat = new THREE.MeshBasicMaterial({
-        color: 0xffffff, vertexColors: true,
+      const cutMat = new THREE.MeshStandardMaterial({
+        color: 0xffffff, roughness: 0.78, metalness: 0.02,
+        vertexColors: true, emissive: 0x3a3a3a, emissiveIntensity: 0.06,
       });
       this.cut = new THREE.InstancedMesh(cutGeo, cutMat, g.occ.length);
       this.cut.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -616,32 +551,42 @@ export class FurnVoxelBody {
     }
   }
 
-  _pickSkinColor(_cells) {
+  _pickSkinColor(cells) {
     const g = this.grid;
-    return g.bodyTint ?? g.avgTint ?? { r: 0.45, g: 0.32, b: 0.22 };
+    const inner = this.inner ?? g.inner;
+    const fallback = g.avgTint ?? { r: 0.45, g: 0.32, b: 0.22 };
+    const pool = [];
+    for (const s of cells) {
+      if (inner?.[s.i]) continue;
+      const r = g.rgb[s.i * 3] / 255;
+      const gc = g.rgb[s.i * 3 + 1] / 255;
+      const b = g.rgb[s.i * 3 + 2] / 255;
+      if (r + gc + b < 0.04) continue;
+      const luma = 0.2126 * r + 0.7152 * gc + 0.0722 * b;
+      const chroma = Math.max(r, gc, b) - Math.min(r, gc, b);
+      if (luma > 0.58 && chroma < 0.28) continue;
+      pool.push({ r, g: gc, b, luma, chroma });
+    }
+    if (!pool.length) return fallback;
+    const chromatic = pool.filter((s) => s.chroma >= 0.04);
+    const use = chromatic.length ? chromatic : pool;
+    let best = use[0];
+    for (let i = 1; i < use.length; i++) {
+      if (use[i].luma < best.luma) best = use[i];
+    }
+    return { r: best.r, g: best.g, b: best.b };
   }
 
   _cellColor(i) {
     const g = this.grid;
-    let tint = g.bodyTint ?? g.avgTint ?? { r: 0.45, g: 0.32, b: 0.22 };
-    if (g.rgb) {
-      const r = g.rgb[i * 3] / 255;
-      const gc = g.rgb[i * 3 + 1] / 255;
-      const b = g.rgb[i * 3 + 2] / 255;
-      if (r + gc + b > 0.04) tint = { r, g: gc, b };
+    let r = g.rgb[i * 3] / 255;
+    let gc = g.rgb[i * 3 + 1] / 255;
+    let b = g.rgb[i * 3 + 2] / 255;
+    if (r + gc + b < 0.04) {
+      const t = g.avgTint ?? { r: 0.45, g: 0.32, b: 0.22 };
+      r = t.r; gc = t.g; b = t.b;
     }
-    const luma = lumaOf(tint.r, tint.g, tint.b);
-    const chroma = Math.max(tint.r, tint.g, tint.b) - Math.min(tint.r, tint.g, tint.b);
-    if (chroma < 0.20 && luma >= 0.08) {
-      return { r: 76 / 255, g: 60 / 255, b: 44 / 255 };
-    }
-    if (luma >= 0.16) return tint;
-    const k = 0.18 / Math.max(luma, 0.01);
-    return {
-      r: Math.min(1, tint.r * k),
-      g: Math.min(1, tint.g * k),
-      b: Math.min(1, tint.b * k),
-    };
+    return liftTint(r, gc, b);
   }
 
   _rebuildOcc() {
@@ -655,20 +600,33 @@ export class FurnVoxelBody {
     const g = this.grid;
     if (!this.cut || this.mode !== 'solid') return;
     const d = this._dummy;
+    const inset = g.cell * 0.35;
     let n = 0;
     for (let iz = 0; iz < g.nz; iz++) {
       for (let iy = 0; iy < g.ny; iy++) {
         for (let ix = 0; ix < g.nx; ix++) {
           const i = idx(ix, iy, iz, g.nx, g.ny);
-          if (!this.carved[i]) continue;
+          if (!g.inner[i] || !g.occ[i]) continue;
+          let ox = 0, oy = 0, oz = 0, exposed = false;
+          for (const [dx, dy, dz] of NBR) {
+            const jx = ix + dx, jy = iy + dy, jz = iz + dz;
+            if (jx < 0 || jy < 0 || jz < 0 || jx >= g.nx || jy >= g.ny || jz >= g.nz) continue;
+            if (!this.carved[idx(jx, jy, jz, g.nx, g.ny)]) continue;
+            exposed = true;
+            ox -= dx;
+            oy -= dy;
+            oz -= dz;
+            break;
+          }
+          if (!exposed) continue;
           if (n >= g.occ.length) continue;
           d.position.set(
-            g.origin.x + (ix + 0.5) * g.cell,
-            g.origin.y + (iy + 0.5) * g.cell,
-            g.origin.z + (iz + 0.5) * g.cell,
+            g.origin.x + (ix + 0.5) * g.cell + ox * inset,
+            g.origin.y + (iy + 0.5) * g.cell + oy * inset,
+            g.origin.z + (iz + 0.5) * g.cell + oz * inset,
           );
           d.rotation.set(0, 0, 0);
-          d.scale.set(0.90, 0.90, 0.90);
+          d.scale.set(1, 1, 1);
           d.updateMatrix();
           this.cut.setMatrixAt(n, d.matrix);
           const c = this._cellColor(i);
@@ -687,9 +645,9 @@ export class FurnVoxelBody {
     if (!cells.length) return;
     const plate = aabbOf(cells, this.grid.cell);
     const plank = this.mode === 'shell';
-    let w = Math.min(0.95, Math.max(0.18, plate.w));
-    let h = Math.min(0.70, Math.max(0.14, plate.h));
-    let t = Math.min(0.22, Math.max(0.06, plate.t));
+    let w = Math.min(0.58, Math.max(0.22, plate.w));
+    let h = Math.min(0.42, Math.max(0.16, plate.h));
+    let t = Math.min(0.11, Math.max(0.06, plate.t));
     if (plank) {
       w = Math.max(0.32, w);
       h = Math.max(0.07, h);
@@ -708,8 +666,7 @@ export class FurnVoxelBody {
       w: wPass, h: hPass, t: tPass,
       normal: freeFall ? _up : nrm,
       spread: freeFall ? 0.9 : 0.7,
-      hold: freeFall ? 0.08 : 0.05,
-      spinScale: 1.85,
+      hold: freeFall ? 0.10 : 0.20,
       sag: 0,
       color: plank ? undefined : col,
     });
@@ -889,8 +846,8 @@ export class FurnVoxelBody {
           const z = g.origin.z + (iz + 0.5) * g.cell;
           const dx = x - hit.x, dy = y - hit.y, dz = z - hit.z;
           if (dx * dx + dy * dy + dz * dz > r2) continue;
-          if (!g.skin[i] && !g.occ[i]) continue;
           this.clip[i] = 0;
+          if (!g.skin[i] && !g.occ[i]) continue;
           this.carved[i] = 1;
           g.occ[i] = 0;
           if (g.skin[i]) {
@@ -926,8 +883,8 @@ export class FurnVoxelBody {
               const z = g.origin.z + (iz + 0.5) * g.cell;
               const dx = x - best.x, dy = y - best.y, dz = z - best.z;
               if (dx * dx + dy * dy + dz * dz > r2b) continue;
-              if (!g.skin[i] && !g.occ[i]) continue;
               this.clip[i] = 0;
+              if (!g.skin[i] && !g.occ[i]) continue;
               this.carved[i] = 1;
               g.occ[i] = 0;
               if (!g.skin[i]) continue;
@@ -948,7 +905,7 @@ export class FurnVoxelBody {
 
     const air = [];
     if (removed.length) {
-      for (const slice of floodCells(removed, g.nx, g.ny)) {
+      for (const slice of clusterCarve(removed)) {
         for (const part of splitHuge(slice, g.cell)) {
           air.push({ cells: part, nrm, freeFall: false });
         }
@@ -965,7 +922,7 @@ export class FurnVoxelBody {
 
     if (removed.length || islands.length) {
       this.dust?.burst?.(hit, Math.min(22, 8 + Math.floor((removed.length + islands.length) * 0.1)), {
-        speed: 2.0, life: 0.8, size: 0.2, rise: 0.65, bright: 0.55, brightVar: 0.18,
+        speed: 2.0, life: 0.8, size: 0.2, rise: 0.65,
       });
     }
 

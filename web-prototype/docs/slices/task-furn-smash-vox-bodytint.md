@@ -1,6 +1,6 @@
 # Slice plan: plate colour is the prop body (r14)
 
-**Status:** CRITIQUED — r14 WEAK. Body tint paid (chaise/settee/fireplace/desk/table-round YES); leftover heaps ignored. #1 AABB slabs, not a Teardown island.
+**Status:** SUPERSEDED — John asked for r13 after trying r14. Per-prop `bodyTint` is off.
 
 **Bar:** `refs/teardown/yt-house-240s-chunks-tumble.png`,
 `yt-house-148s-sledge-hole.png`, `yt-ign-52s-plank-tumble.png`,
