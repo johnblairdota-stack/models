@@ -1,9 +1,9 @@
 {
   "artboards": [
-    { "file": "Before.dc.html", "x": 0,    "y": 0,   "w": 390, "h": 844, "title": "Today — NO SIGNAL" },
-    { "file": "Main.dc.html",   "x": 500,  "y": 0,   "w": 390, "h": 844, "title": "The Sound Desk" },
-    { "file": "Wide.dc.html",   "x": 990,  "y": 0,   "w": 390, "h": 844, "title": "WIDE gain" },
-    { "file": "Legend.dc.html", "x": 1480, "y": 0,   "w": 720, "h": 700, "title": "Reading the desk" },
+    { "file": "Before.dc.html", "x": 0,    "y": 0,   "w": 390, "h": 844, "title": "Today — NO SIGNAL (guide's phone)" },
+    { "file": "Main.dc.html",   "x": 500,  "y": 0,   "w": 390, "h": 844, "title": "The Sound Desk (guide's phone)" },
+    { "file": "Wide.dc.html",   "x": 990,  "y": 0,   "w": 390, "h": 844, "title": "WIDE gain (guide's phone)" },
+    { "file": "Legend.dc.html", "x": 1480, "y": 0,   "w": 720, "h": 760, "title": "Reading the desk" },
 
     { "file": "Ambiguous.dc.html", "x": 0,   "y": 1010, "w": 390, "h": 844, "title": "Honest error 1 — bearing only" },
     { "file": "Masked.dc.html",    "x": 500, "y": 1010, "w": 390, "h": 844, "title": "Honest error 2 — masked" },
@@ -12,14 +12,14 @@
     { "file": "TV.dc.html", "x": 1480, "y": 1010, "w": 1280, "h": 720, "title": "The same second, on television" }
   ],
   "annotations": [
-    { "id": "row-top", "x": 0, "y": -150, "w": 880,
-      "text": "TODAY vs THE DESK, same instant.\n\nThe left phone is the shipped screen, reproduced from show-phone.html. Its honest error is 38.7 / 27.3 / 16.0 % at one, two and three cameras — against a 15-25 % target — and its only two inputs are the win condition and a constant welded shut at 62°.\n\nThe right phone never goes blank. It shows what the house HEARD." },
-    { "id": "row-legend", "x": 1480, "y": -150, "w": 720,
-      "text": "Ring = how loud (loudness x 14 m, the Hunter's own hearing range). Core = how well you know where.\n\nThose two are independent, which is the whole trick: a very loud noise you cannot place, and a quiet one you can, are different readings." },
+    { "id": "row-top", "x": 0, "y": -170, "w": 880,
+      "text": "TODAY vs THE DESK, same second, one camera lit.\n\nLeft is the shipped screen, reproduced from show-phone.html — including its 4:3 map box, which letterboxes a 27 x 45 m house into the middle third. Its honest error is 38.7 / 27.3 / 16.0 % at one, two and three cameras, against a 15-25 % target, and its only two inputs are the win condition and a constant welded shut at 62 degrees.\n\nRight never goes blank. It shows what the house HEARD." },
+    { "id": "row-legend", "x": 1480, "y": -170, "w": 720,
+      "text": "HOW LOUD is the ring, and the metres beside the label — loudness x 14 m, the Hunter's own hearing range.\nHOW WELL YOU KNOW WHERE is the core: a dot inside coverage, a band outside it.\n\nThe two are independent, which is the trick: a very loud noise you cannot place and a quiet one you can are different readings. That is why the band carries metres too.\n\nOne camera lights TWO rooms (coverage.js ROOMS_PER_CAM), so the plans here show four rooms dark at one camera and two at two." },
     { "id": "row-errors", "x": 0, "y": 860, "w": 1380,
-      "text": "THE THREE WAYS AN HONEST GUIDE IS WRONG — all physical, all pointable-at afterwards.\n\nThat is what buys the deniable lie: a guide who says CLEAR into one of these screens is doing what most honest guides do most of the time. Together they hold the error at 26 / 23 / 20 %, in band from episode 2 — and the 20 % is a FLOOR no number of cameras removes, because a Hunter lying in wait makes no sound and a sprinting robot cannot hear one." },
+      "text": "THE THREE WAYS AN HONEST GUIDE IS WRONG — all physical, all pointable-at afterwards.\n\nThat is what buys the deniable lie: a guide who says CLEAR into one of these screens is doing what most honest guides do most of the time.\n\nThe proposed tuning is 26 / 23 / 20 %, in band from episode 2, with the 20 % as a floor no number of cameras removes — because a Hunter lying in wait makes no sound and a sprinting robot cannot hear one. PROPOSED, not measured: three duty cycles have to be measured first, and one is a stop-ship. If the Hunter's stationary fraction reads under 0.10 the floor collapses and full coverage is an oracle again." },
     { "id": "row-tv", "x": 1480, "y": 860, "w": 1280,
-      "text": "AND THIS IS THE ARGUMENT.\n\nThe crash is already public — captions.js ships LOUD CRASH - {ROOM} and broadcast §3 forbids cutting the audio. For the first time the table can say \"you had the same crash I did, in the room you sent him into\" — and the runner can alibi the guide from something eight people watched: \"she was at RUN, of course he couldn't hear.\"\n\nNO SIGNAL's deepest flaw was never the blank screen. It was that the guide's evidence was unshared, so there was nothing to argue over." }
+      "text": "AND THIS IS THE ARGUMENT.\n\nThe crash is already public — captions.js ships LOUD CRASH — {ROOM} and broadcast §3 forbids cutting the audio. For the first time the table can say \"you had the same crash I did, in the room you sent him into\" — and the runner can alibi the guide from something eight people watched: \"she was at RUN, of course he couldn't hear.\"\n\nNO SIGNAL's deepest flaw was never the blank screen. It was that the guide's evidence was unshared, so there was nothing to argue over." }
   ],
   "launch": { "view": "canvas" }
 }

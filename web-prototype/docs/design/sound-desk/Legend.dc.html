@@ -11,12 +11,13 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { margin: 0; background: #0b0d12; font-family: ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif; }
     a { color: #e0b23c; } a:hover { color: #f0cf6a; }
+    button { font-family: inherit; -webkit-tap-highlight-color: transparent; cursor: default; }
   </style>
 </helmet>
-<div style="box-sizing:border-box;width:720px;height:700px;background:#0b0d12;color:#f2f4f8;padding:30px;font:400 16px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;display:flex;flex-direction:column;gap:24px">
+<div style="box-sizing:border-box;width:720px;height:760px;background:#0b0d12;color:#f2f4f8;padding:30px;font:400 16px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;display:flex;flex-direction:column;gap:24px">
   <div>
     <h3 style="font:600 12px/1 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#8b93a3;margin:0 0 6px">Reading the desk</h3>
-    <div style="font:400 16px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;color:#8b93a3">Two encodings, and they are independent. The <b style="color:#e0b23c">ring</b> is how loud it was — loudness × 14 m, the range the Hunter itself hears at. The <b style="color:#e0b23c">core</b> is how well you know where: a dot inside camera coverage, a band of bearing and range outside it. A room with a camera in it sits a shade lighter and carries a lens.</div>
+    <div style="font:400 16px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;color:#8b93a3">Two encodings, independent. <b style="color:#e0b23c">How loud</b> — the ring, and the metres beside the label: loudness × 14 m, the range the Hunter itself hears at. <b style="color:#e0b23c">How well you know where</b> — a dot on the metre with the room's name inside camera coverage, a band of bearing and range outside it. A room with a camera sits a shade lighter and carries a lens; one camera lights two rooms.</div>
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
     <div style="background:#161b25;border:1px solid #262d3d;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:10px">
@@ -24,19 +25,20 @@
         <circle cx="0" cy="0" r="7.7" fill="none" stroke="#e0b23c" stroke-width="1.25" stroke-dasharray="3 3" vector-effect="non-scaling-stroke" opacity="0.5" />
         <circle cx="0" cy="0" r="3.5" fill="none" stroke="#e0b23c" stroke-width="1" vector-effect="non-scaling-stroke" opacity="0.32" />
         <circle cx="0" cy="0" r="0.85" fill="#e0b23c" />
-        <text x="1.6" y="-0.9" fill="#e0b23c" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif" font-size="1.5" font-weight="700" letter-spacing="0.14">STEP</text>
+        <text x="1.5" y="-0.8" fill="#e0b23c" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif" font-size="1.45" font-weight="700" letter-spacing="0.1" paint-order="stroke" stroke="#0d1017" stroke-width="0.8" stroke-linejoin="round">STEP · 8 m</text>
+        <text x="0" y="9.4" fill="#8b93a3" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif" font-size="1.25" font-weight="600" letter-spacing="0.06" text-anchor="middle">THE EAST STUDY</text>
       </svg>
       <div style="font:700 17px/1.2 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif">Placed</div>
       <div style="font:400 14px/1.4 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;color:#8b93a3">A camera has that room. The mark sits on the metre and carries the room's name.</div>
     </div>
     <div style="background:#161b25;border:1px solid #262d3d;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:10px">
       <svg viewBox="-11 -11 22 22" width="100%" height="150" style="display:block;background:#0d1017;border-radius:10px">
-        <path d="M -5.32 -3.73 A 6.5 6.5 0 0 1 5.32 -3.73 L 7.78 -5.45 A 9.5 9.5 0 0 0 -7.78 -5.45 Z" fill="#e0b23c" fill-opacity="0.14" stroke="#e0b23c" stroke-width="1.25" stroke-dasharray="4 3" vector-effect="non-scaling-stroke" opacity="0.72" transform="translate(0 5.5)" />
-        <text x="0" y="-1.4" fill="#e0b23c" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif" font-size="1.45" font-weight="700" letter-spacing="0.1" text-anchor="middle" paint-order="stroke" stroke="#0d1017" stroke-width="0.7" stroke-linejoin="round">CRASH</text>
-        <path d="M 0 -1.5 L 1.15 1.15 L 0 0.5 L -1.15 1.15 Z" fill="#4cc27a" transform="translate(0 5.5)" />
+        <path d="M -2.01 -6.18 A 6.5 6.5 0 0 1 2.01 -6.18 L 2.94 -9.03 A 9.5 9.5 0 0 0 -2.94 -9.03 Z" fill="#e0b23c" fill-opacity="0.14" stroke="#e0b23c" stroke-width="1.25" stroke-dasharray="4 3" vector-effect="non-scaling-stroke" opacity="0.72" transform="translate(0 5.5)" />
+        <text x="0" y="-4.9" fill="#e0b23c" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif" font-size="1.45" font-weight="700" letter-spacing="0.1" text-anchor="middle" paint-order="stroke" stroke="#0d1017" stroke-width="0.8" stroke-linejoin="round">CRASH · 18 m</text>
+        <path d="M 0 -1.5 L 1.15 1.15 L 0 0.5 L -1.15 1.15 Z" fill="#3aa0e4" transform="translate(0 5.5)" />
       </svg>
       <div style="font:700 17px/1.2 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif">Bearing only</div>
-      <div style="font:400 14px/1.4 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;color:#8b93a3">No camera. A band across the plan, usually two rooms wide, carrying no name at all.</div>
+      <div style="font:400 14px/1.4 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;color:#8b93a3">No camera. A band across the plan, usually two rooms wide, carrying no name — but still carrying how loud it was.</div>
     </div>
   </div>
   <div>
