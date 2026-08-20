@@ -1,0 +1,25 @@
+{
+  "artboards": [
+    { "file": "Before.dc.html", "x": 0,    "y": 0,   "w": 390, "h": 844, "title": "Today — NO SIGNAL" },
+    { "file": "Main.dc.html",   "x": 500,  "y": 0,   "w": 390, "h": 844, "title": "The Sound Desk" },
+    { "file": "Wide.dc.html",   "x": 990,  "y": 0,   "w": 390, "h": 844, "title": "WIDE gain" },
+    { "file": "Legend.dc.html", "x": 1480, "y": 0,   "w": 720, "h": 700, "title": "Reading the desk" },
+
+    { "file": "Ambiguous.dc.html", "x": 0,   "y": 1010, "w": 390, "h": 844, "title": "Honest error 1 — bearing only" },
+    { "file": "Masked.dc.html",    "x": 500, "y": 1010, "w": 390, "h": 844, "title": "Honest error 2 — masked" },
+    { "file": "Silent.dc.html",    "x": 990, "y": 1010, "w": 390, "h": 844, "title": "Honest error 3 — the floor" },
+
+    { "file": "TV.dc.html", "x": 1480, "y": 1010, "w": 1280, "h": 720, "title": "The same second, on television" }
+  ],
+  "annotations": [
+    { "id": "row-top", "x": 0, "y": -150, "w": 880,
+      "text": "TODAY vs THE DESK, same instant.\n\nThe left phone is the shipped screen, reproduced from show-phone.html. Its honest error is 38.7 / 27.3 / 16.0 % at one, two and three cameras — against a 15-25 % target — and its only two inputs are the win condition and a constant welded shut at 62°.\n\nThe right phone never goes blank. It shows what the house HEARD." },
+    { "id": "row-legend", "x": 1480, "y": -150, "w": 720,
+      "text": "Ring = how loud (loudness x 14 m, the Hunter's own hearing range). Core = how well you know where.\n\nThose two are independent, which is the whole trick: a very loud noise you cannot place, and a quiet one you can, are different readings." },
+    { "id": "row-errors", "x": 0, "y": 860, "w": 1380,
+      "text": "THE THREE WAYS AN HONEST GUIDE IS WRONG — all physical, all pointable-at afterwards.\n\nThat is what buys the deniable lie: a guide who says CLEAR into one of these screens is doing what most honest guides do most of the time. Together they hold the error at 26 / 23 / 20 %, in band from episode 2 — and the 20 % is a FLOOR no number of cameras removes, because a Hunter lying in wait makes no sound and a sprinting robot cannot hear one." },
+    { "id": "row-tv", "x": 1480, "y": 860, "w": 1280,
+      "text": "AND THIS IS THE ARGUMENT.\n\nThe crash is already public — captions.js ships LOUD CRASH - {ROOM} and broadcast §3 forbids cutting the audio. For the first time the table can say \"you had the same crash I did, in the room you sent him into\" — and the runner can alibi the guide from something eight people watched: \"she was at RUN, of course he couldn't hear.\"\n\nNO SIGNAL's deepest flaw was never the blank screen. It was that the guide's evidence was unshared, so there was nothing to argue over." }
+  ],
+  "launch": { "view": "canvas" }
+}
