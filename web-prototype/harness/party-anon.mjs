@@ -32,6 +32,8 @@
 
 import { createRoom } from '../src/party/room.js';
 import { FAILURE_FIELDS, FAILURE_KINDS, isFailure, makeEvent, VIS } from '../src/party/events.js';
+import { allCaptions, LOWER_THIRD } from '../src/party/captions.js';
+import { KIND } from '../src/party/director.js';
 
 let pass = 0, fail = 0, skip = 0;
 const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' · ' + d : ''}`); } else { fail++; console.log(`  FAIL ${n}${d ? ' · ' + d : ''}`); } return c; };
@@ -138,7 +140,37 @@ function findPositional(payload, crewSize) {
 }
 
 // ---------------------------------------------------------------- A5 · the TV caption sweep
-skipped('A5 caption sweep', 'the Director exists (src/party/director.js) but has no renderer adapter, so there are no DOM captions to sweep. Browser arm lands with the shot solvers');
+/**
+ * 🚨 THIS WAS A SKIP UNTIL THE RENDERER ADAPTER EXISTED, AND IT IS NOW A SWEEP OF THE WHOLE
+ * OUTPUT SPACE RATHER THAN OF WHATEVER A PLAYTHROUGH HAPPENED TO SHOW.
+ *
+ * The old note read *"there are no DOM captions to sweep. Browser arm lands with the shot
+ * solvers."* They have landed — and the shape they landed in is better than a DOM sweep: the
+ * lower third and the shot bug are CLOSED GENERATORS (`src/party/captions.js`,
+ * `src/party/shots.js`), so `allCaptions()` is every caption the television can ever show. A
+ * screenshot proves something about one evening; this proves it about all of them.
+ *
+ * It is pointed at THIS game's real roster and real deal, not a synthetic one, so a caption that
+ * happened to contain a dealt role name would be caught here even if `shot-solver` H8's fixture
+ * missed it. The DOM half is `shot-solver` H12, which renders the same strings in real Chromium.
+ */
+{
+  const caps = allCaptions();
+  const roles = [...new Set(truth.seats.map((x) => x.role))];
+  // Whole words: "ba(llroo)m" contains the player "Roo", and a sweep that cries wolf on the room
+  // list is a sweep somebody switches off. A7d below proves it still catches the real thing.
+  const word = (text, n) => new RegExp(`(^|[^\\p{L}])${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^\\p{L}]|$)`, 'iu').test(text);
+  const needles = [...roster.map((p) => p.name), ...roster.map((p) => p.id), ...roles, 'evil', 'good'];
+  const hit = caps.filter((c) => needles.some((n) => word(c, n)));
+  t('A5 · the entire caption bank, swept against this game\'s roster and deal, names nobody',
+    hit.length === 0, hit.join(' / ') || `${caps.length} captions × ${needles.length} needles — §6.6`);
+  t('A5b · and the bank speaks for every event kind the Director emits, so none falls through',
+    KIND.every((k) => k in LOWER_THIRD),
+    `${KIND.length} kinds, ${caps.length} captions`);
+  t('A5c · the one kind with no caption at all is `progress` — §6.8\'s progress-bar ban',
+    LOWER_THIRD.progress === null && LOWER_THIRD.blow !== null,
+    'blows land; a wall never reads STAGE 2 OF 4');
+}
 
 // ---------------------------------------------------------------- A6 · the scanner's own arm
 {
@@ -162,6 +194,11 @@ skipped('A5 caption sweep', 'the Director exists (src/party/director.js) but has
   const perPlayer = { ...base, accuracy: 0.83, who: 'p3' };
   const extra = Object.keys(perPlayer).filter((k) => !FAILURE_FIELDS.includes(k));
   t('A7c control · a per-player accuracy stat turns A1 red', extra.length > 0, extra.join(', '));
+
+  const word = (text, n) => new RegExp(`(^|[^\\p{L}])${n}([^\\p{L}]|$)`, 'iu').test(text);
+  t('A7e control · A5\'s word-boundary sweep still catches a name spliced into a caption',
+    word('LOUD CRASH — EAST GALLERY (VIC)', 'Vic') && !word('LOUD CRASH — THE BALLROOM', 'Roo'),
+    'finds "VIC", ignores the "Roo" inside "ballroom"');
 
   let threw = false;
   try { makeEvent('task.miss', VIS.PUBLIC, { ...base, who: 'p3' }); } catch { threw = true; }
