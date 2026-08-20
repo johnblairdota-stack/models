@@ -13,6 +13,14 @@
  * blindness the game does not have.
  */
 import { writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+/* Write beside this file, never beside the shell. Run from the repo root once, this scattered
+   eight artboards across web-prototype/ that then had to be diffed one by one to prove none of
+   them was the newer copy. */
+const HERE = dirname(fileURLToPath(import.meta.url));
+const out = (f, s) => writeFileSync(resolve(HERE, f), s);
 
 const HOUSE = [
   { id: 'gallery',  x0: -13.6, x1: 13.6, z0: -31.0, z1: -24.3, label: 'THE LONG GALLERY' },
@@ -165,7 +173,7 @@ const phone = (inner) => page(390, 844, inner);
 // ------------------------------------------------------------------ the artboards
 // Coverage is 2 rooms per camera. One camera = two lit rooms; two cameras = four.
 
-const W = (f, s) => writeFileSync(f, s);
+const W = out;
 const CAM1 = ['study_e', 'service'];
 const CAM2 = ['study_e', 'service', 'gallery', 'chapel'];
 
