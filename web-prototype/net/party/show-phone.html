@@ -62,6 +62,10 @@
   .two button{margin-top:0}
   .hide{display:none!important}
   .note{color:var(--dim);font-size:13px;margin-top:10px;line-height:1.45}
+  /* 🚨 THE DARK CARD — round §1's phase table, the `Phones` column, where three rows read "dark". */
+  .down{font:700 26px/1.15 ui-sans-serif;letter-spacing:.06em;text-transform:uppercase;text-align:center;
+        color:var(--dim);padding:26px 8px 8px}
+  .down + .say{text-align:center;padding-bottom:22px}
   .warn{color:var(--warn)} .bad{color:var(--gone)} .good{color:var(--live)}
 
   /* the card */
@@ -213,12 +217,12 @@
     EXPEDITION: () => amGuide() ? 'You can see what the cameras can see. Tell them.'
       : amRunner() ? 'Your guide is looking. Then it is your call.'
       : 'Watch the television.',
-    RECAP: 'Watch the television.',
+    RECAP: 'Phones down. Watch the television.',
     DEBRIEF: 'Talk. Out loud, to the room.',
     RECKONING: 'Nominate once, or keep it. Three stand at most.',
     VOTE: 'More than half the living, or nobody swings. Abstaining protects them.',
     EXECUTION: 'Nobody says what they were.',
-    VERDICT: 'Watch the television.',
+    VERDICT: 'Phones down. Watch the television.',
     REUNION: 'It is over. Look up.',
   };
 
@@ -349,9 +353,40 @@
       return;
     }
 
+    /**
+     * 🚨 THREE PHASES ARE DARK AND THE PHONE HAD CONTROLS ON ALL THREE. Round §1's phase table has
+     * a `Phones` column and it reads **dark** for RECAP, EXECUTION and VERDICT; bible **P2** says
+     * why in one line: *"After an Expedition, crew phones go dark: no logs, no replay, no notes.
+     * What you remember and can convince the room of is the only record."* What shipped was the
+     * claim text box on every phase that had nothing else to show — a keyboard, on eight phones,
+     * during the twenty seconds the recap reel is playing.
+     *
+     * ⚠️ AND THE CLAIM BOX IS THE WORST THING TO PUT THERE, NOT A HARMLESS DEFAULT. It hands the
+     * guide twenty idle seconds holding a PRODUCIBLE alibi — a written, timestamped, publishable
+     * story composed while the evidence is still on screen — which attacks the one unwitnessed
+     * asset the whole deduction rests on (D13). A map here would be worse still and was the
+     * earlier advice; this reverses it.
+     *
+     * The ROLE tab stays, because §2.3 makes it persistent *"in any phase"* and it is hold-to-
+     * reveal, so it is a thing you can check rather than a thing left on screen. Nothing else.
+     */
+    if (DARK.includes(p)) {
+      box.innerHTML = '<div class="card"><div class="down">Phones down — talk</div>'
+        + '<div class="say">' + esc(DARK_SAY[p]) + '</div></div>';
+      return;
+    }
+
     box.innerHTML = claimCard();
     wireClaim();
   }
+
+  /** Round §1's phase table, `Phones` column: the rows that read "dark". */
+  const DARK = ['RECAP', 'EXECUTION', 'VERDICT'];
+  const DARK_SAY = {
+    RECAP: 'The recap is on the television. Nothing on this phone will remember it for you.',
+    EXECUTION: 'Nobody says what they were.',
+    VERDICT: 'Cameras and incidents, on the television.',
+  };
 
   // ---------------------------------------------------------------- the guide's map
   /**
