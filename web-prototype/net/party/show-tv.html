@@ -214,15 +214,29 @@
         '<div class="sub"><b>' + esc(nameOf(x.target)) + '</b> — put up by ' + esc(nameOf(x.nominator)) + '</div>').join('');
     },
     VOTE: () => big('Vote.', 'More than half the living, or nobody swings. Abstaining protects them.'),
+    /**
+     * 🚨 THE EXECUTIONER IS THE ONLY THING ON THIS PAGE THAT COMES FROM AN EVENT RATHER THAN THE
+     * FRAME, AND IT HAS TO. `vote.js`'s `executioner()` already resolves the single nominator and
+     * the SHOWRUNNER fallback, and `session.js` logs the answer PUBLIC on `player.executed` — but
+     * the answer is not on the frame, because a nominator who was TAKEN this episode is not the
+     * nominator who swings, and no field on the frame records that substitution. Deriving it here
+     * from `nominations[]` would be the television computing game truth, which this page does not
+     * do. So it reads the one event that carries it. See `onEvent` for why that is a whitelist.
+     */
     EXECUTION: () => {
       const ex = frame.tally && frame.tally.executed;
-      return big('<span class="bad">' + esc(nameOf(ex)) + '</span>', 'The sledgehammer. Nobody says what they were.');
+      const by = execution && execution.id === ex ? execution.executioner : null;
+      return big('<span class="bad">' + esc(nameOf(ex)) + '</span> voted out',
+        by ? 'Nominated by ' + esc(swingerName(by)) + ' — who swings. Nobody says what they were.'
+          : 'The sledgehammer. Nobody says what they were.');
     },
     VERDICT: () => big(status(), (frame.cameras || {}).unlocked + ' cameras live · ' + (frame.incident || {}).alarms + ' incidents'),
     REUNION: () => reunionStage(),
   };
 
   const big = (a, b) => '<div class="big">' + a + '</div><div class="sub">' + esc(b) + '</div>';
+  /** `executioner()` returns a playerId or the string SHOWRUNNER when the nominator was taken. */
+  const swingerName = (id) => (id === 'SHOWRUNNER' ? 'nobody left standing — the Showrunner' : nameOf(id));
   const wing = () => ((frame.expedition || {}).room || '—');
   const nameOf = (id) => { const p = ((frame && frame.players) || []).find((x) => x.id === id); return p ? p.name : '—'; };
   const status = () => {
@@ -239,6 +253,26 @@
         + (p.believedTheyWere && p.believedTheyWere !== p.role
             ? '<span class="sub">believed ' + esc(p.believedTheyWere) + '</span>' : '')
         + '<span class="al">' + esc(p.alignment) + '</span></div>').join('') + '</div>';
+  }
+
+  // ---------------------------------------------------------------- the event stream
+  /**
+   * 🚨 A WHITELIST, AND IT MUST NEVER BECOME A SWITCHBOARD. This socket receives every PUBLIC
+   * event in the game, and `call.made` — the guide's callout, in full, with a name on it — is one
+   * of them. Broadcast §6.9 forbids that ever being on-screen text, so a handler that rendered
+   * "whatever arrived" would undo the row that keeps it off the frame, from the other direction.
+   * One event type is read here. Adding a second is a decision about what television shows, not a
+   * refactor.
+   *
+   * ⚠️ REPLAYS ARRIVE THE SAME WAY. A television that reconnects mid-show is caught up through
+   * `replayFor` with `replay:true` on every frame, so this must be idempotent — it is, because it
+   * stores the last swing rather than accumulating.
+   */
+  let execution = null;
+  function onEvent(ev) {
+    if (!ev || ev.type !== 'player.executed') return;
+    execution = ev.data;
+    if (frame) render();
   }
 
   // ---------------------------------------------------------------- the clock
@@ -294,6 +328,7 @@
       if (m.t === 'hello') { code = m.code; joinUrl = m.url; renderLobby(); }
       if (m.t === 'roster') { seats = m.players; started = m.started; renderLobby(); if (started) render(); }
       if (m.t === 'state') { frame = m.frame; started = true; render(); }
+      if (m.t === 'event') onEvent(m.ev);
       if (m.t === 'reunion') { special = { ...m.special, outcome: m.outcome }; render(); }
       if (m.t === 'notice' && !m.ok) { $('startHint').textContent = m.why; }
     };
