@@ -29,7 +29,7 @@
  */
 
 import http from 'node:http';
-import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
@@ -51,9 +51,17 @@ const rigServer = http.createServer((req, res) => {
 });
 await new Promise((r) => rigServer.listen(RIG_PORT, '127.0.0.1', r));
 
+/**
+ * ⚠️ THE SAME FALLBACK `shot-solver` H12 USES, FOR THE SAME REASON. Playwright's own default path
+ * points at a browser this container does not have, so an unset `RRR_CHROME` failed with an
+ * install instruction rather than running — on a machine where a Chromium is sitting right there.
+ * `undefined` still means "let Playwright decide" when neither is present.
+ */
+const CHROME = process.env.RRR_CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+
 const browser = await chromium.launch({
   headless: !HEADED,
-  executablePath: process.env.RRR_CHROME || undefined,
+  executablePath: existsSync(CHROME) ? CHROME : undefined,
   args: ['--disable-dev-shm-usage', '--mute-audio', '--force-device-scale-factor=1'],
 });
 const page = await browser.newPage({ viewport: { width: 1480, height: 1420 } });
