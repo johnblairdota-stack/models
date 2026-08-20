@@ -26,7 +26,7 @@
  * ones and the gate takes four seconds instead of half an hour.
  */
 
-import { startShow, playerIdOf, seedFrom } from '../net/party/show.mjs';
+import { startShow, playerIdOf, seatNoOf, seedFrom } from '../net/party/show.mjs';
 import { MAX_PHONES } from '../net/party/lobby.mjs';
 import { PHASE } from '../src/party/phases.js';
 import { CALL, MOVE_CHOICE } from '../src/party/session.js';
@@ -373,12 +373,83 @@ t('X3 arm · the show played to the Reunion over real sockets',
   await s2.close();
 }
 
+// ---------------------------------------------------------------- X11 · the solo traitor
+/**
+ * 🚨 AT FOUR AND FIVE PLAYERS THERE IS EXACTLY ONE TRAITOR, AND THEIR OWN PHONE TOLD THEM THEY
+ * WERE GOOD. `show-phone.html` inferred alignment from `Array.isArray(you.teammates)`. At 6-8 the
+ * Production Panel has somebody on it, the array is non-empty and the guess holds. At 4-5 the
+ * array is EMPTY, `project()`'s prune legitimately drops it — an empty array carries nothing and
+ * shipping one would be a shape that varies with the deal — and the inference collapses to GOOD.
+ *
+ * `you.alignment` was in the frame the whole time, rowed `self`, unread. This is not a display
+ * bug: a player who reads that card plays the entire evening for the other side, and the Reunion
+ * is the first they hear of it.
+ *
+ * ⚠️ IT NEEDS ITS OWN SHOW BECAUSE THE ONE ABOVE HAS EIGHT PHONES IN IT. Every other assertion in
+ * this file is about a full table, and a full table is exactly the size at which this bug is
+ * invisible.
+ */
+{
+  const s3 = startShow({ port: PORT + 2, code: 'solo', stamp: 1700000000002 });
+  await sleep(100);
+  const tv3 = await open2(PORT + 2, '?role=tv');
+  const five = [];
+  for (let i = 0; i < 5; i++) {
+    const p = await open2(PORT + 2);
+    p.send({ t: 'join', name: `R${i}`, token: null, boot: 500 });
+    five.push(p);
+  }
+  await sleep(250);
+  tv3.send({ t: 'start' });
+  await sleep(300);
+
+  const truth3 = s3.sessionNow().truth();
+  const armed = truth3.evil.length === 1;
+  t('X11 arm · five players, and the deck dealt exactly one traitor',
+    armed, `${truth3.evil.length} in Production — this bug cannot exist at 6-8`);
+
+  const frames = five[seatNoOf(truth3.evil[0])].frames();
+  const f = frames[frames.length - 1] || {};
+  const you = f.you || {};
+  t('X11 · the sole traitor\'s own frame carries the answer — `you.alignment`',
+    you.alignment === 'evil', `you = ${JSON.stringify(you)}`);
+  t('X11b · and it carries no `teammates`, because an empty Production Panel is pruned',
+    !('teammates' in you), 'the field the page used to read is simply not there');
+
+  const html = await (await fetch(`http://127.0.0.1:${PORT + 2}/p`)).text();
+  // Comments name the old expression on purpose, so they come off before the scan — the same
+  // trick `live-session` L1 uses on `session.js`.
+  const body = html.replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+  t('X11c · and the card reads that field, inferring alignment from nothing else',
+    /you\.alignment\s*===\s*'evil'/.test(body) && !/Array\.isArray\(you\.teammates\)/.test(body),
+    'the served page, not a copy of it');
+
+  // 🚨 THE CONTROL IS THE SHIPPED BUG EVALUATED AGAINST THIS EXACT FRAME. If this returned true
+  // the frame would not be the trap and X11 would be asserting nothing.
+  t('X11 control · the old rule, run on that very frame, hands them the GOOD card',
+    Array.isArray(you.teammates) === false && you.alignment === 'evil',
+    'Array.isArray(you.teammates) === false while alignment === "evil"');
+  t('X11 control · and at eight it did NOT, which is why this survived — the same rule, the full table',
+    Array.isArray((phones[seatNoOf(sess.truth().evil[0])].frames().slice(-1)[0] || {}).you?.teammates),
+    'two in Production, non-empty array, the guess holds');
+
+  t('X11d · the word is spelled out on the card, never colour alone — §2.3 and §6',
+    /You are PRODUCTION/.test(body) && /You are GOOD/.test(body),
+    'a red glyph on a black card in a dark lounge is a hint, not a message');
+
+  for (const p of five) p.close();
+  tv3.close();
+  await s3.close();
+}
+
 function open2(port, query = '') {
   return new Promise((resolve) => {
     const ws = new WebSocket(`ws://127.0.0.1:${port}/${query}`);
     const msgs = [];
     const box = { ws, msgs, send: (o) => ws.send(JSON.stringify(o)),
       of: (type) => msgs.filter((m) => m.t === type),
+      frames: () => msgs.filter((m) => m.t === 'state').map((m) => m.frame),
       close: () => { try { ws.close(); } catch { /* gone */ } } };
     ws.onmessage = (e) => { const m = JSON.parse(e.data); msgs.push(m); if (m.t === 'ping') box.send({ t: 'pong', at: m.at }); };
     ws.onopen = () => resolve(box);

@@ -186,11 +186,22 @@
   }
 
   // ---------------------------------------------------------------- the card
+  /**
+   * 🚨 ALIGNMENT COMES FROM `you.alignment`, WHICH WAS SITTING IN THE FRAME UNREAD WHILE THIS
+   * INFERRED IT FROM `Array.isArray(you.teammates)`. At 6-8 players there are two in Production so
+   * the array is non-empty and the guess held. At 4-5 there is exactly ONE — the array is empty,
+   * `project()`'s prune legitimately deletes an empty array from the frame, and the sole traitor's
+   * own phone told them they were GOOD. Not a display bug: a player who reads that card plays the
+   * whole evening for the other side.
+   *
+   * ⚠️ AND THE WORD IS SPELLED OUT, NEVER COLOUR ALONE — §2.3, and §6's accessibility rule. Red
+   * text on a black card in a dark lounge is not a message, it is a hint.
+   */
   function showCard() {
     const you = (frame && frame.you) || {};
+    const evil = you.alignment === 'evil';
     $('cardRole').textContent = you.role || '—';
-    $('cardAlign').textContent = 'You are';
-    const evil = Array.isArray(you.teammates);
+    $('cardAlign').textContent = evil ? 'You are PRODUCTION' : 'You are GOOD';
     $('cardSay').innerHTML = evil
       ? '<span class="bad">You are Production.</span> Your job is to lose the show without ever being the reason.'
       : 'Light the cameras. Nobody will tell you if you are right.';
