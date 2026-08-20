@@ -209,7 +209,7 @@
   // ---------------------------------------------------------------- the controls
   const SAY = {
     PREMIERE: 'Read your card, then put the phone down. Everything after this happens out loud.',
-    CASTING: () => 'Who goes into the ' + wing() + '? Pick a runner and a guide.',
+    CASTING: () => 'Who goes into the ' + wing() + '? Two taps: your runner first, then your guide.',
     EXPEDITION: () => amGuide() ? 'You can see what the cameras can see. Tell them.'
       : amRunner() ? 'Your guide is looking. Then it is your call.'
       : 'Watch the television.',
@@ -233,20 +233,38 @@
     const p = frame.phase;
     const acted = frame.you && frame.you.acted;
 
+    /**
+     * 🚨 SEQUENTIAL, ONE LIST — round §2, in its own words: *"Every living player makes exactly two
+     * taps: first tap = their runner pick, second tap = their guide pick."* This shipped as two
+     * separate labelled lists, which is a different ballot: it asks the table to hold two parallel
+     * questions at once, and it puts the same eight names on screen twice on a 390px phone, so the
+     * guide list is below the fold and half the room never scrolls to it.
+     *
+     * 🚨 THE SUBMIT IS ATOMIC AND THAT IS THE POINT OF THE BUTTON. Two taps that each sent a
+     * message would let the bell catch a ballot with a runner and no guide — a half-vote nobody
+     * cast, scoring one person and not the other. `CONFIRM PAIR` sends both picks in one message
+     * or sends nothing, so the ballot the server tallies is always a ballot somebody finished.
+     */
     if (p === 'CASTING') {
-      box.innerHTML = '<div class="card"><h3>Runner</h3>' + peopleButtons('r', pickRunner) + '</div>'
-        + '<div class="card" style="margin-top:10px"><h3>Guide</h3>' + peopleButtons('g', pickGuide) + '</div>'
-        + '<button class="big stop" id="sendCast"' + (pickRunner && pickGuide ? '' : ' disabled') + '>'
-        + (acted ? 'Change your pick' : 'Lock it in') + '</button>';
+      const full = !!(pickRunner && pickGuide);
+      box.innerHTML = '<div class="card"><h3>' + (pickRunner ? (full ? 'Your pair' : 'Now your guide') : 'First, your runner') + '</h3>'
+        + castButtons(full) + '</div>'
+        + '<button class="big stop" id="sendCast"' + (full ? '' : ' disabled') + '>'
+        + (acted ? 'Change your pair' : 'Confirm pair') + '</button>'
+        + '<div class="note">Two taps: the first is who runs, the second is who guides. '
+        + 'Nothing is sent until you confirm — and nobody sees your ballot until the bell.</div>';
       for (const b of box.querySelectorAll('[data-pick]')) {
         b.onclick = () => {
-          const [slot, id] = b.dataset.pick.split('|');
-          if (slot === 'r') pickRunner = (pickRunner === id ? null : id); else pickGuide = (pickGuide === id ? null : id);
-          if (pickRunner && pickRunner === pickGuide) { if (slot === 'r') pickGuide = null; else pickRunner = null; }
+          const id = b.dataset.pick.split('|')[1];
+          if (pickRunner === id) pickRunner = null;
+          else if (pickGuide === id) pickGuide = null;
+          else if (!pickRunner) pickRunner = id;
+          else if (!pickGuide) pickGuide = id;
           controls();
         };
       }
-      $('sendCast').onclick = () => act({ t: 'cast', runner: pickRunner, guide: pickGuide });
+      // One message, both picks, or no message at all.
+      $('sendCast').onclick = () => { if (pickRunner && pickGuide) act({ t: 'cast', runner: pickRunner, guide: pickGuide }); };
       return;
     }
 
@@ -270,8 +288,10 @@
           + (frame.call && frame.call.said
             ? '<div class="card" style="margin-top:10px"><div class="say">You called <b>' + esc(frame.call.said) + '</b>.</div></div>'
             : '<div class="two" style="margin-top:10px">'
-              + '<button class="big go" id="cl">CLEAR</button><button class="big stop" id="hd">HOLD</button></div>');
+              + '<button class="big go" id="cl">CLEAR</button><button class="big stop" id="hd">HOLD</button></div>')
+          + refuseCard();
         if ($('cl')) { $('cl').onclick = () => act({ t: 'call', call: 'CLEAR' }); $('hd').onclick = () => act({ t: 'call', call: 'HOLD' }); }
+        wireRefuse();
         drawMap(f);
         return;
       }
@@ -296,7 +316,9 @@
               : '<div class="two" style="margin-top:10px"><button class="big go" id="gogo">GO</button>'
                 + '<button class="big" id="wait">WAIT</button></div>')
           : '<div class="card"><div class="say">Waiting for your guide.</div></div>';
+        box.innerHTML += refuseCard();
         if ($('gogo')) { $('gogo').onclick = () => act({ t: 'move', move: 'GO' }); $('wait').onclick = () => act({ t: 'move', move: 'WAIT' }); }
+        wireRefuse();
         return;
       }
       box.innerHTML = claimCard();
@@ -414,6 +436,26 @@
   }
   const pushDrive = () => { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'drive', heading, detent })); };
 
+  /**
+   * 🚨 REFUSE THE CHAIR — round §2. *"Once per game, a player voted into a chair may REFUSE THE
+   * CHAIR. Public, attributed, permanent, and logged. The runner-up in that slot takes it."*
+   *
+   * `ballot.js`'s `refuse()` has been implemented and gated since it was written and was
+   * unreachable, because `refuse` was absent from `session.js`'s INPUT list — so this button is
+   * the last quarter of a feature that was three-quarters built. It is offered only while the
+   * chair is still unused: once you have called it or moved, the chair has been spent.
+   */
+  function refuseCard() {
+    const mine = ((frame && frame.players) || []).find((x) => x.id === iAm());
+    if (!mine || mine.refused) return '';
+    if (frame.you && frame.you.acted) return '';
+    return '<button class="kill" id="refuse" style="margin-top:10px">Refuse the chair</button>'
+      + '<div class="note">Once a game, and the runner-up takes it. Everyone is told it was you.</div>';
+  }
+  function wireRefuse() {
+    if ($('refuse')) $('refuse').onclick = () => act({ t: 'refuse' });
+  }
+
   /** The claim plate — published once, publicly, permanently. Available whenever nothing else is. */
   function claimCard() {
     const mine = ((frame && frame.players) || []).find((p) => p.id === iAm());
@@ -441,6 +483,24 @@
   };
   const swatch = (id) => '<span class="sw" style="background:' + colourOf(id) + '"></span>';
   const wing = () => ((frame && frame.expedition) || {}).room || 'house';
+
+  /**
+   * The casting ballot's one list. A name already taken shows the chair it holds and stays live so
+   * it can be taken back; every other name goes flat once both chairs are full, because a third
+   * tap that silently reassigned a chair is the mis-tap §2.6 calls the most expensive input error
+   * in the game.
+   */
+  function castButtons(full) {
+    return living().map((p) => {
+      const role = pickRunner === p.id ? 'RUNNER' : pickGuide === p.id ? 'GUIDE' : null;
+      return '<button data-pick="c|' + p.id + '"' + (role ? ' class="on"' : '')
+        + (full && !role ? ' disabled' : '') + '>'
+        + swatch(p.id) + esc(p.name)
+        + (role ? '<span class="say warn" style="margin-left:auto">▶ ' + role + '</span>'
+          : p.claim ? '<span class="say" style="margin-left:auto">“' + esc(p.claim) + '”</span>' : '')
+        + '</button>';
+    }).join('');
+  }
 
   function peopleButtons(slot, chosen, excludeSelf) {
     return living().filter((p) => !(excludeSelf && p.id === iAm())).map((p) =>

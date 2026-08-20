@@ -24,7 +24,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { createSession, CALL, MOVE_CHOICE, LOBBY, GUIDE_TILT_DEG } from '../src/party/session.js';
+import { createSession, CALL, MOVE_CHOICE, LOBBY, GUIDE_TILT_DEG, INPUT } from '../src/party/session.js';
 import { PHASE, SECONDS, orderFor, EPISODE_CAP, reckoningSeconds, RECKONING_CAP } from '../src/party/phases.js';
 import { OUTCOME } from '../src/party/win.js';
 import { ROOMS } from '../src/party/coverage.js';
@@ -377,6 +377,112 @@ const R = play({ taps: engaged });
   t('L13c control · every announcement is followed by a departure to the SAME room',
     announced.length === begun.length && announced.every((a, i) => a.data.room === begun[i].data.room),
     `${announced.length} announced, ${begun.length} departed, rooms matched`);
+}
+
+// ---------------------------------------------------------------- L15 · REFUSE THE CHAIR
+/**
+ * 🚨 THE FEATURE WAS THREE-QUARTERS BUILT AND ENTIRELY UNREACHABLE. `ballot.js:87 refuse()` is
+ * implemented and gated by `cast-ballot` B7, and `refuse` was absent from `session.js`'s INPUT
+ * list and had no `case`, so nothing in the running game could call it. A gate on the pure
+ * function passes happily while the move does not exist — which is exactly the gap this file was
+ * written to cover, and the reason L15 drives the session rather than the ballot.
+ *
+ * Round §2: *"Once per game, a player voted into a chair may REFUSE THE CHAIR. Public, attributed,
+ * permanent, and logged. The runner-up in that slot takes it."*
+ */
+{
+  /** Drive to the first EXPEDITION and hand the session back, untouched. */
+  function toExpedition({ castSeed = 1, worldSeed = 2 } = {}) {
+    const s = createSession({ count: 8, castSeed, worldSeed, send: () => {} });
+    let now = 0;
+    s.start(now);
+    for (let i = 0; i < 500 && s.state.phase !== PHASE.EXPEDITION; i++) {
+      const alive = s.state.players.filter((p) => p.alive).map((p) => p.id);
+      if (s.state.phase === PHASE.CASTING) {
+        for (let k = 0; k < alive.length; k++) {
+          s.input(alive[k], { t: 'cast', runner: alive[(k + 1) % alive.length], guide: alive[(k + 2) % alive.length] });
+        }
+      }
+      now += 1000;
+      s.tick(now);
+    }
+    return s;
+  }
+
+  const s = toExpedition();
+  const before = { ...s.state.pair };
+  const r = s.input(before.guide, { t: 'refuse' });
+  const ev = s.log.all().filter((e) => e.type === 'cast.refused');
+  t('L15 · a player handed a chair can refuse it, and the runner-up takes it',
+    r.ok === true && s.state.pair.guide !== before.guide && s.state.pair.runner === before.runner,
+    `${before.guide} refused the guide chair → ${s.state.pair.guide}`);
+  t('L15b · it is public, attributed and names the replacement — §2',
+    ev.length === 1 && ev[0].vis === 'PUBLIC' && ev[0].data.refuser === before.guide
+      && ev[0].data.replacement === s.state.pair.guide,
+    ev.length ? `${ev[0].vis} · ${JSON.stringify(ev[0].data)}` : 'nothing was logged');
+  t('L15c · the replacement really holds the chair — the socket\'s seatRole moved with it',
+    s.sockets.find((x) => x.playerId === s.state.pair.guide).seatRole === 'guide'
+      && s.sockets.find((x) => x.playerId === before.guide).seatRole === null,
+    'and the refuser holds nothing');
+  t('L15d · the refuser is not billed for an expedition they did not go on',
+    s.state.history[before.guide].expeditions === 0 && s.state.history[s.state.pair.guide].expeditions === 1,
+    'the tiebreak ladder reads this, so a refusal must not count as a turn');
+
+  // ---- the controls
+  /**
+   * ⚠️ ONCE PER GAME HAS TO BE ASSERTED IN A LATER EPISODE, AND THE OBVIOUS VERSION IS VACUOUS.
+   * Asking the same player to refuse twice in the SAME expedition is refused for the wrong reason
+   * — they no longer hold a chair, so "you were not cast" answers it and the once-per-game rule is
+   * never consulted. So this drives a second episode and puts them back in a chair first.
+   */
+  {
+    const s4 = createSession({ count: 8, castSeed: 4, worldSeed: 9, send: () => {} });
+    let now = 0, refuser = null, second = null;
+    s4.start(now);
+    const alive = () => s4.state.players.filter((p) => p.alive).map((p) => p.id);
+    for (let i = 0; i < 4000 && second === null; i++) {
+      if (s4.state.phase === PHASE.CASTING) {
+        // Everyone names the same pair, so the chair lands where this control needs it.
+        const target = refuser || alive()[0];
+        const other = alive().find((id) => id !== target);
+        for (const id of alive()) s4.input(id, { t: 'cast', runner: target, guide: other });
+      }
+      if (s4.state.phase === PHASE.EXPEDITION) {
+        if (!refuser) {
+          refuser = s4.state.pair.runner;
+          s4.input(refuser, { t: 'refuse' });
+        } else if (s4.state.pair.runner === refuser || s4.state.pair.guide === refuser) {
+          second = s4.input(refuser, { t: 'refuse' });
+        }
+        s4.input(s4.state.pair.guide, { t: 'call', call: CALL.CLEAR });
+        s4.input(s4.state.pair.runner, { t: 'move', move: MOVE_CHOICE.GO });
+      }
+      now += 1000;
+      s4.tick(now);
+    }
+    t('L15 control · once per game — cast into a chair again, the same player is refused',
+      second !== null && second.ok === false && /already refused/.test(second.why || ''),
+      second ? `${refuser}: "${second.why}"` : 'the control never got them back into a chair — NOT ARMED');
+    t('L15 control arm · and the flag that refuses them is on the frame, permanently',
+      s4.state.players.filter((p) => p.refused).map((p) => p.id).join(',') === refuser,
+      `players[].refused = ${refuser}`);
+  }
+  const seated = s.state.players.find((p) => p.id !== s.state.pair.runner && p.id !== s.state.pair.guide);
+  t('L15b control · a player who was not cast has no chair to refuse',
+    s.input(seated.id, { t: 'refuse' }).ok === false, s.input(seated.id, { t: 'refuse' }).why);
+
+  const s2 = toExpedition();
+  s2.input(s2.state.pair.guide, { t: 'call', call: CALL.CLEAR });
+  t('L15c control · and the window shuts once the chair has been used',
+    s2.input(s2.state.pair.guide, { t: 'refuse' }).ok === false,
+    s2.input(s2.state.pair.guide, { t: 'refuse' }).why);
+
+  // 🚨 THE BUG ITSELF, AS AN ASSERTION. The verb existed, the rule existed, the gate on the rule
+  // was green — and the list that decides what a phone may send did not mention it.
+  const s3 = toExpedition();
+  t('L15d control · an unlisted verb is still refused — L15 is the INPUT list working',
+    s3.input(s3.state.pair.guide, { t: 'recuse' }).ok === false && INPUT.includes('refuse'),
+    `INPUT = ${INPUT.join(', ')}`);
 }
 
 // ---------------------------------------------------------------- L14 · the callout is spoken

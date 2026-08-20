@@ -37,7 +37,7 @@ import { ROOMS, hunterVisibleToGuide } from './coverage.js';
 import { guideSight } from './darkrun.js';
 import { HOUSE } from './houseplan.js';
 import { applyTake, resolveContact, MODE, PLATE } from './taken.js';
-import { tallyCasting } from './ballot.js';
+import { tallyCasting, refuse as refuseChair } from './ballot.js';
 import { tallyVote, executioner, nominate as proposeNomination, reckoningClosed, NO_ONE } from './vote.js';
 import { foldWin, OUTCOME } from './win.js';
 import { PHASE, SECONDS, orderFor, reckoningSeconds, EPISODE_CAP } from './phases.js';
@@ -45,7 +45,13 @@ import { PHASE, SECONDS, orderFor, reckoningSeconds, EPISODE_CAP } from './phase
 export const LOBBY = 'LOBBY';
 
 /** What a phone may send, and when. Anything else is refused with a reason the phone can show. */
-export const INPUT = ['cast', 'claim', 'call', 'move', 'nominate', 'vote'];
+/**
+ * ⚠️ `refuse` WAS MISSING FROM THIS LIST AND THAT IS THE WHOLE OF WHY REFUSAL DID NOT EXIST.
+ * `ballot.js:87 refuse()` has been implemented, gated (`cast-ballot` B7) and unreachable since it
+ * was written: no `case 'refuse'` below, no row in this array, so the one move round §2 gives a
+ * player who is handed a chair they do not want was a function nobody could call.
+ */
+export const INPUT = ['cast', 'claim', 'call', 'move', 'nominate', 'refuse', 'vote'];
 
 /** The expedition's two answers, and the two the pair give. */
 export const CALL = { CLEAR: 'CLEAR', HOLD: 'HOLD' };
@@ -132,7 +138,9 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
       // about them"*. The announcement here is harmless — who was taken is already a PUBLIC event
       // — but the SHAPE rule is what catches the ones that are not, so the data changed and the
       // gate did not.
-      alive: true, taken: false, claim: null, plate: PLATE.UNDECLARED,
+      // `refused` is here from frame one and false, for the same reason `taken` is: a frame that
+      // grows a field the moment somebody uses their once-per-game move has announced it twice.
+      alive: true, taken: false, refused: false, claim: null, plate: PLATE.UNDECLARED,
     })),
     pair: { runner: null, guide: null },
     lastPair: { runner: null, guide: null },
@@ -163,6 +171,14 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
   let sim = null;
   let reported = null;              // the outcome the house produced, if it has produced one
   let takenThisEpisode = [];
+  /**
+   * This episode's ballots, kept so `refuse()` can re-tally the slot from the SAME votes rather
+   * than from a fresh election. Deliberately not in `state`: a per-voter ballot list on a frame
+   * would air the sealed half of §2 ("ballots are sealed until the bell") to every phone.
+   */
+  let lastBallots = [];
+  /** What each chair's holder looked like BEFORE casting incremented them, so a refusal can undo it. */
+  let castUndo = new Map();
   let queue = [];                        // phases still to run in this episode
   let episodeOpen = false;               // see `advance` — episode 1 has no VERDICT to hang this on
 
@@ -351,23 +367,32 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
   }
 
   // ---------------------------------------------------------------- resolutions
+  /** Point every socket's `seatRole` at the current pair. The only writer of that field. */
+  function seatTheCrew() {
+    for (const s of sockets) {
+      s.seatRole = s.playerId === state.pair.runner ? 'runner'
+        : s.playerId === state.pair.guide ? 'guide' : null;
+    }
+  }
+
   function resolveCasting() {
     const alive = living();
     // 🚨 A PHONE THAT NEVER TAPPED STILL CASTS A BALLOT, AND IT IS AN ABSTENTION RATHER THAN A
     // DEFAULT PICK. `tallyCasting` ignores null slots, so silence lowers no one's score — the
     // alternative (auto-voting for a neighbour) would let a dead battery decide who runs.
     const ballots = alive.map((id) => ({ voter: id, ...(pending.cast.get(id) || { runner: null, guide: null }) }));
+    lastBallots = ballots;
     const cast = tallyCasting({
       ballots, living: alive, history: state.history,
       lastPair: state.lastPair, ep: state.episode, matchSeed: worldSeed,
     });
     state.pair = { runner: cast.runner, guide: cast.guide };
+    castUndo = new Map();
     for (const id of [cast.runner, cast.guide]) {
+      castUndo.set(id, { ...state.history[id] });
       state.history[id].expeditions++; state.history[id].lastEp = state.episode;
     }
-    for (const s of sockets) {
-      s.seatRole = s.playerId === cast.runner ? 'runner' : s.playerId === cast.guide ? 'guide' : null;
-    }
+    seatTheCrew();
     record(makeEvent('cast.ballot', VIS.PUBLIC, {
       episode: state.episode, runner: cast.runner, guide: cast.guide,
       tiebreaks: cast.tiebreaks, abstained: ballots.filter((b) => !b.runner && !b.guide).length,
@@ -562,6 +587,60 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
         if (msg.move !== MOVE_CHOICE.GO && msg.move !== MOVE_CHOICE.WAIT) return { ok: false, why: 'GO or WAIT' };
         pending.moveChoice = msg.move;
         pending.acted.add(playerId);
+        broadcast();
+        return { ok: true };
+      }
+      /**
+       * 🚨 REFUSE THE CHAIR — round §2, and the one player move in this file that UNDOES a public
+       * result rather than adding to one. *"Once per game, a player voted into a chair may REFUSE
+       * THE CHAIR. Public, attributed, permanent, and logged. The runner-up in that slot takes
+       * it."*
+       *
+       * ⚠️ THE REPLACEMENT COMES OUT OF THE SAME BALLOTS, NEVER OUT OF A SECOND ELECTION.
+       * `ballot.js`'s `refuse()` re-tallies the slot with the refuser struck off, so the answer is
+       * the runner-up the table already voted for — and a table that has to vote twice because
+       * somebody said no has been stalled by one person, which is the thing §2 spends its whole
+       * tiebreak ladder avoiding.
+       *
+       * ⚠️ THE WINDOW CLOSES WHEN YOU ACT. You may refuse after seeing your flyover — that is a
+       * deniable, interesting play and §2 calls it *"a lovely thing for a good player to do at
+       * exactly the wrong moment"* — but not after you have called it or moved, because then the
+       * chair has already been used and refusing it is just erasing what you did with it.
+       */
+      case 'refuse': {
+        if (state.phase !== PHASE.EXPEDITION) return { ok: false, why: 'no chair to refuse' };
+        const slot = playerId === state.pair.runner ? 'runner'
+          : playerId === state.pair.guide ? 'guide' : null;
+        if (!slot) return { ok: false, why: 'you were not cast' };
+        if (p.refused) return { ok: false, why: 'you have already refused a chair this game' };
+        if (pending.acted.has(playerId)) return { ok: false, why: 'too late — you have already acted' };
+        // The other chair's holder is out of the running: one player cannot take both.
+        const other = slot === 'runner' ? state.pair.guide : state.pair.runner;
+        const pool = alive.filter((id) => id !== other && id !== playerId);
+        if (!pool.length) return { ok: false, why: 'nobody else can take it' };
+        const r = refuseChair({
+          slot, refuser: playerId,
+          ballots: lastBallots, living: alive.filter((id) => id !== other),
+          history: state.history, lastPair: state.lastPair, ep: state.episode, matchSeed: worldSeed,
+        });
+        if (!r.replacement) return { ok: false, why: 'nobody else can take it' };
+
+        p.refused = true;
+        // The refuser did not go; the replacement did. The history the tiebreak ladder reads has
+        // to say so, or refusing a chair would count as having taken one — and `lastEp` is
+        // RESTORED rather than decremented, because "how long since you last went" is not a
+        // number you can arrive at by subtraction.
+        if (castUndo.has(playerId)) state.history[playerId] = { ...castUndo.get(playerId) };
+        castUndo.set(r.replacement, { ...state.history[r.replacement] });
+        state.history[r.replacement].expeditions += 1;
+        state.history[r.replacement].lastEp = state.episode;
+        state.pair[slot] = r.replacement;
+        if (slot === 'guide') state.call = { by: r.replacement, said: null };
+        seatTheCrew();
+        record(makeEvent('cast.refused', VIS.PUBLIC, {
+          slot, refuser: playerId, replacement: r.replacement, episode: state.episode,
+        }));
+        record(makeEvent('cast.pair', VIS.PUBLIC, { runner: state.pair.runner, guide: state.pair.guide }));
         broadcast();
         return { ok: true };
       }

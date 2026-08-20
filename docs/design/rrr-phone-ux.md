@@ -40,6 +40,7 @@ The runner therefore plays the way a console player does: **eyes on the screen, 
 | 8 | **GUIDE** | Expedition | 1 |
 | 9 | **DEAD / CHAT** | after being taken or executed | the dead |
 | 10 | **PRODUCTION PANEL** | persistent tab, any phase | evil |
+| 11 | **REFUSE THE CHAIR** | Expedition, before you act | the runner and the guide |
 
 Screens 3, 5 and 10 are **tabs over whatever is current**, not phases — a player must be able to re-read their role or check a teammate's claim draft mid-vote. 4 is the home state; the phone returns to it whenever nothing else is asked of it.
 
@@ -84,7 +85,16 @@ A list of 8 preset one-liners ("Sound Guy", "I was watching the north hall") plu
 
 ### 2.6 VOTE — three variants, one layout
 A grid of player cards (silhouette, name, published claim, alive/dead). Tap selects, the card raises and everything else dims; a full-width **hold-to-confirm** bar at the bottom fills over 600 ms and locks in. Locked state shows your choice and a small UNDO that is live until the phase clock's last 5 s.
-- **CASTING** — pick the pair. Two selections allowed; the bar reads `CONFIRM PAIR`.
+- **CASTING** — pick the pair from **one list, in order**: the first tap names your runner and the
+  second names your guide, which is `rrr-social-round.md` §2's ballot in its own words (*"exactly
+  two taps: first tap = their runner pick, second tap = their guide pick"*). A name already taken
+  shows the chair it holds and can be tapped again to give it back; every other name goes flat once
+  both chairs are full, so a third tap can never silently reassign a chair. The bar reads `CONFIRM
+  PAIR`, and **the submit is atomic**: both picks travel in one message or neither does. Two taps
+  that each sent a message would let the bell catch a ballot with a runner and no guide — a
+  half-vote nobody cast, scoring one player and not the other. *Two parallel labelled lists, which
+  is what shipped first, is a different ballot: it asks for two answers at once and puts the same
+  eight names on a 390 px screen twice, so the guide list is below the fold.*
 - **NOMINATION** — one selection, plus a full-width `NOMINATE NOBODY`.
 - **VERDICT** — the nominee is shown large; two buttons, `EXECUTE` and `SPARE`, plus `ABSTAIN`. Hold-to-confirm as above.
 
@@ -107,6 +117,24 @@ Per **C1**: no mansion UI, ever. A chat column with a 24 px composer and a **TIP
 A tab, not a screen — available over any other screen via a persistent bottom-strip button that is **visually identical to the ROLE tab for good players** (an observer must not be able to tell from across the room which tab a player just opened). Contents, read-only, per §7.5: each teammate's name, true role, **live claim draft**, and remaining once-per-game abilities. No input controls of any kind, no chat.
 
 *Cheap v1:* teammate names + roles only, published claims, refreshed on phase change.
+
+### 2.11 REFUSE THE CHAIR
+Not a screen — a single full-width red button at the bottom of the **RUNNER** and **GUIDE** sheets,
+with the note *"Once a game, and the runner-up takes it. Everyone is told it was you."* It is
+`rrr-social-round.md` §2's refusal: public, attributed, permanent, logged, once per game, and the
+replacement is re-tallied from **the same ballots** rather than by a second election — the runner-up
+the table already voted for. A table that has to vote twice because one person said no has been
+stalled by one person, which is what §2's tiebreak ladder exists to prevent.
+
+**The window shuts when you act.** The button is offered from the moment the pair is announced until
+you call it or move; after that the chair has been spent and refusing it is only erasing what you
+did with it. Refusing *after* reading your flyover is legal and interesting — §2 calls refusal *"a
+lovely thing for a good player to do at exactly the wrong moment"* — and it is deniable, because
+nobody else knows what the flyover said.
+
+`players[].refused` is on every player row from frame one and is public, so the flag never appears
+the moment somebody uses it. The rule lives in `ballot.js:refuse()`; `session.js`'s INPUT list is
+what makes it reachable, and `live-session` L15 asserts both halves.
 
 ---
 

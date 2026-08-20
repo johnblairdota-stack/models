@@ -154,12 +154,14 @@ await beat('casting', 'Casting the pair', 'The wing is announced BEFORE anyone i
   + 'argument is about a specific job rather than a popularity contest. Two taps each: who runs, who guides.');
 
 const alive0 = () => show.sessionNow().state.players.filter((p) => p.alive);
+// One list, two taps: the first names the runner and the second the guide — round §2. Nothing is
+// sent until CONFIRM PAIR, so the tally never sees half a ballot.
 for (let i = 0; i < 8; i++) {
   const runner = NAMES[2], guide = NAMES[5];
   const btns = ph(i).locator('[data-pick]');
   await btns.filter({ hasText: runner }).first().click().catch(() => {});
   await sleep(60);
-  await btns.filter({ hasText: guide }).nth(1).click().catch(() => {});
+  await btns.filter({ hasText: guide }).first().click().catch(() => {});
   await sleep(60);
   await ph(i).locator('#sendCast').click().catch(() => {});
   await sleep(80);
@@ -235,6 +237,18 @@ await beat('casting-2', 'A chair is empty', 'The evicted player is struck throug
 
 await waitPhase(PHASE.EXPEDITION);
 await labelChairs();
+await beat('chair', 'A chair you did not ask for', 'The guide\'s sheet carries REFUSE THE CHAIR — '
+  + 'round §2, once a game, public and permanent. It is offered only while the chair is unused: '
+  + 'call it or move and the offer is gone, because the chair has been spent.');
+
+const stR = show.sessionNow().state;
+await ph(Number(stR.pair.guide.slice(1)) - 1).locator('#refuse').click().catch(() => {});
+await sleep(800);
+await labelChairs();
+await beat('refused', 'Refused, and the runner-up takes it', 'The replacement comes out of the SAME '
+  + 'ballots rather than a second election — the runner-up the table already voted for. Nobody has '
+  + 'to vote twice because one person said no.');
+
 const st2 = show.sessionNow().state;
 const g2 = Number(st2.pair.guide.slice(1)) - 1, r2 = Number(st2.pair.runner.slice(1)) - 1;
 await ph(g2).locator('#cl').click().catch(() => {});

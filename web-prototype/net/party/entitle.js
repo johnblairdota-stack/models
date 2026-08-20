@@ -75,6 +75,10 @@ export const MATRIX = [
   // only stop the circle drawing a hunter mark instead of a sledgehammer. This field was written
   // by `applyTake` and silently dropped by deny-by-default for as long as it has existed —
   // caught by `session.js` reporting `unrowed` rather than discarding it like `room.js` did.
+  // §2's refusal is *"public, attributed, permanent"* in its own words, so the flag is `all` and
+  // is on every row from frame one — a field that appears the moment somebody uses their
+  // once-per-game move has announced it a second time, in shape.
+  ['players[].refused',        'all'],
   ['players[].taken',          'all'],
   // 'players[].alignment'               NO ROW. Nobody, ever, pre-REUNION.
   // 'players[].role'                    NO ROW. Ditto.
