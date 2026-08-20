@@ -1,0 +1,18 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html",   "x": 0,    "y": 0,    "w": 1620, "h": 940,  "title": "The ballot" },
+    { "file": "Desk.dc.html",   "x": 0,    "y": 1140, "w": 940,  "h": 1110, "title": "1 — The Sound Desk" },
+    { "file": "Ledger.dc.html", "x": 1060, "y": 1140, "w": 940,  "h": 1110, "title": "2 — The Tripwire Ledger" },
+    { "file": "Window.dc.html", "x": 2120, "y": 1140, "w": 940,  "h": 1110, "title": "3 — The Window" },
+    { "file": "Ghost.dc.html",  "x": 3180, "y": 1140, "w": 940,  "h": 1110, "title": "4 — The Ghost" }
+  ],
+  "annotations": [
+    { "id": "how-to-read", "x": 0, "y": -220, "w": 900,
+      "text": "The guide's screen currently says NO SIGNAL for roughly 55% of the calls they make, and the mechanic has no knob — its difficulty is a function of the win condition and one constant welded shut at 62 degrees.\n\nThese are four different answers to \"what is a guide FOR\". Each sheet below carries its own case AND its own killer, in a red box, because a set where only the favourite gets a case made for it is a rigged vote.\n\nEvery screen is drawn at true 390 x 844 with the shipped controller's own tokens, over the real 27 x 45 m house from houseplan.js." },
+    { "id": "the-honest-bit", "x": 1740, "y": -220, "w": 780,
+      "text": "WHERE I ACTUALLY LAND, and why it is not a landslide:\n\nThe Sound Desk wins on the axis I think matters most — arguability — because it is the only one that moves the guide onto evidence the room already partly holds. But it is the only one with an UNMEASURED number underneath it, and if the Hunter's stationary duty cycle reads under 0.10 it stops working.\n\nThe Tripwire Ledger is the better game for the guide and the worse game for everyone else's patience.\n\nThe Window is not really competing — it stacks on top of any of the others, and should be read as a second decision, not a rival." },
+    { "id": "row-sheets", "x": 0, "y": 2290, "w": 1500,
+      "text": "Read left to right: what the guide DOES, how an honest guide is WRONG (this is the whole game — the lie and the honest mistake have to look identical from the sofa), how the TABLE argues afterwards, what it COSTS, and what KILLS it." }
+  ],
+  "launch": { "view": "canvas" }
+}
