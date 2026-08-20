@@ -19,6 +19,7 @@
 import { createRoom } from '../src/party/room.js';
 import { sessionSeconds, episodeSeconds, orderFor, PHASE, EPISODE_CAP, reckoningSeconds, RECKONING_CAP } from '../src/party/phases.js';
 import { OUTCOME } from '../src/party/win.js';
+import { ROOMS } from '../src/party/coverage.js';
 
 let pass = 0, fail = 0;
 const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' Â· ' + d : ''}`); } else { fail++; console.log(`  FAIL ${n}${d ? ' Â· ' + d : ''}`); } return c; };
@@ -27,7 +28,7 @@ const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' Â
 {
   const r = createRoom({ count: 8, castSeed: 1, worldSeed: 1, send: () => {}, emit: () => {} });
   r.start();
-  const out = r.playMatch({ hunterRoom: 'cellar' });
+  const out = r.playMatch({ hunterRoom: ROOMS[5] });
   const phases = new Set(r.log.all().filter((e) => e.type.startsWith('phase.')).map((e) => e.type.slice(6)));
   t('R0 arm Â· a match runs every phase and reaches a verdict',
     !!out && phases.has('CASTING') && phases.has('EXPEDITION') && phases.has('VERDICT'),
@@ -42,7 +43,7 @@ const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' Â
     for (let seed = 0; seed < 60; seed++) {
       const r = createRoom({ count, castSeed: seed * 17 + count, worldSeed: seed + 1, send: () => {}, emit: () => {} });
       r.start();
-      const out = r.playMatch((ep) => ({ hunterRoom: ['cellar', 'gallery', 'hall'][ep % 3], takeRunner: (seed + ep) % 3 === 0 }));
+      const out = r.playMatch((ep) => ({ hunterRoom: [ROOMS[5], ROOMS[1], ROOMS[4]][ep % 3], takeRunner: (seed + ep) % 3 === 0 }));
       ran++;
       outcomes[out] = (outcomes[out] || 0) + 1;
       if (!out || out === OUTCOME.RENEWED) bad = `count=${count} seed=${seed} ended on ${out}`;
@@ -77,7 +78,7 @@ const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' Â
     `${episodeSeconds(1)}s vs ${episodeSeconds(2)}s`);
 
   const r = createRoom({ count: 8, castSeed: 2, worldSeed: 2, send: () => {}, emit: () => {} });
-  r.start(); r.playEpisode({ hunterRoom: 'cellar' });
+  r.start(); r.playEpisode({ hunterRoom: ROOMS[5] });
   const seen = r.log.all().filter((e) => e.type.startsWith('phase.')).map((e) => e.type.slice(6));
   t('R3c Â· and the room honours it', !seen.includes('RECKONING') && seen.includes('VERDICT'), seen.join('/'));
 }
@@ -86,7 +87,7 @@ const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' Â
 {
   const r = createRoom({ count: 8, castSeed: 8, worldSeed: 3, send: () => {}, emit: () => {} });
   r.start();
-  r.playEpisode({ hunterRoom: 'cellar' });
+  r.playEpisode({ hunterRoom: ROOMS[5] });
   const living = r.state.players.filter((p) => p.alive).map((p) => p.id);
   const target = living[2], accuser = living[0];
   r.playEpisode({
@@ -107,7 +108,7 @@ const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' Â
 {
   const r = createRoom({ count: 8, castSeed: 8, worldSeed: 3, send: () => {}, emit: () => {} });
   r.start();
-  r.playEpisode({ hunterRoom: 'cellar' });
+  r.playEpisode({ hunterRoom: ROOMS[5] });
   const living = r.state.players.filter((p) => p.alive).map((p) => p.id);
   const target = living[2];
   // Exactly half the living vote â€” one short of a strict majority.

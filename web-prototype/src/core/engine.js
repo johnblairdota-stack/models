@@ -217,7 +217,11 @@ export class Engine {
       freeRun: (on = true) => { this._freeRun = !!on; },
       // What a screenshot taken right now would be a picture of. Anything that must be
       // reproducible should be able to assert on these two numbers.
-      simState: () => ({ frame: this.frame, elapsed: this.elapsed, parked: this._parked }),
+      // `pendingWork` is here because a view that leaves it above zero parks the loop for ever
+      // and `settle()` never resolves — which reads from the outside as a slow renderer rather
+      // than a stuck one. Cost: one integer on a debug object.
+      simState: () => ({ frame: this.frame, elapsed: this.elapsed, parked: this._parked,
+        pendingWork: this._pendingWork, settleTargets: this._settleTargets.length }),
       // OFF BY DEFAULT, and nothing in the game ever turns it on — see `setSilhouette`.
       silhouette: (on = true, bg) => this.setSilhouette(on, bg),
       redraw: (raw = false) => (raw ? this.renderRaw() : this.pipeline.render(this.elapsed * 1000)),

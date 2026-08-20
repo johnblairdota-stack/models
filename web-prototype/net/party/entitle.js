@@ -89,6 +89,9 @@ export const MATRIX = [
   // argument about a specific job rather than a popularity contest.
   ['expedition.room',          'all'],
   ['expedition.outcome',       'all'],
+  // Is a mansion attached? The runner's phone shows a throttle when there is one and GO/WAIT
+  // when there is not, so it has to be told — and the whole table may know which it is playing.
+  ['expedition.live',          'all'],
   // ⚠️ THE GUIDE'S CALL IS PUBLIC AND ATTRIBUTED. At the table they say it out loud; putting it
   // on the record is what gives DEBRIEF something to chew on, and what makes a lie cost something
   // later. What is NOT public is whether it was TRUE — that needs the Hunter's room, which has no
@@ -111,6 +114,13 @@ export const MATRIX = [
   ['flyover.marks[].kind',     'guide'],
   ['flyover.hunter',           'guide'],
   ['flyover.room',             'guide'],   // named only when actually seen; null otherwise
+  // The floor plan the marks are drawn on. `guide` rather than `all` — see houseplan.js's header:
+  // the outline is not a secret, but an `all` row is a minimap one CSS rule from the television.
+  ['flyover.plan[].id',        'guide'],
+  ['flyover.plan[].x0',        'guide'],
+  ['flyover.plan[].x1',        'guide'],
+  ['flyover.plan[].z0',        'guide'],
+  ['flyover.plan[].z1',        'guide'],
 
   // ---- incidents. A count, never a list (party-anon A4).
   ['incident.alarms',          'all'],

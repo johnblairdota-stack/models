@@ -64,6 +64,15 @@ export const GRADE = Object.freeze({
 /** A STING never gets closer than this. The Hunter is a silhouette a real camera saw, not a portrait. */
 export const STING_MIN_RANGE = 6.0;
 
+/**
+ * 📏 `player.js:1474`'s number, and it is what keeps the near plane off the surface the boom hit.
+ * Without it a boom that stops exactly ON a wall renders the wall's inside face filling the frame
+ * — which is what the first wired screenshot showed: a perfectly composed shot of dark plaster
+ * under a perfectly correct broadcast overlay, because the runner had just stepped through a
+ * doorway and the lens was still in the room behind them.
+ */
+export const BOOM_STANDOFF = 0.30;
+
 /** Seam fillers, and what each one puts on the screen instead of the house. */
 export const CARDS = Object.freeze({
   REACTION: 'circle',        // the nameplate rail, blown up — the room reacting to itself
@@ -100,13 +109,25 @@ function boomPose(pivot, yaw, rig, probe) {
   const dir = v(-Math.sin(yaw) * Math.cos(rig.pitch), -Math.sin(rig.pitch), -Math.cos(yaw) * Math.cos(rig.pitch));
   const right = v(Math.cos(yaw), 0, -Math.sin(yaw));
   const anchor = add(pivot, scale(right, rig.shoulder));
-  // Behind the subject: the boom runs OPPOSITE the way they face.
-  const back = scale(dir, -1);
+  /**
+   * 🚨 `dir` ALREADY POINTS BEHIND THE SUBJECT. DO NOT NEGATE IT.
+   *
+   * `player.js`'s forward is `(sin yaw, cos yaw)` — stated at `:1806` where the lead uses exactly
+   * that — and `ThirdPersonCamera`'s `dirAt(pitch)` is `(-sin·cos p, -sin p, -cos·cos p)`, i.e.
+   * the NEGATIVE of forward with the pitch folded in. The rig then probes along it
+   * (`castRay(from, dirAt(pitch), distance)`) and places the eye at the far end, so
+   * `eye = pivot + dir · dist` puts the camera behind and slightly above the shoulder.
+   *
+   * The first draft here flipped the sign "to go behind them" and put the lens IN FRONT of the
+   * runner, in a doorway, against a wall — a perfectly composed frame of damask wallpaper under a
+   * perfectly correct broadcast overlay. Nothing threw, and `H6` still passed because it only
+   * compared boom LENGTHS. `H6b` now asserts the side.
+   */
   // ⚠️ THE BOOM IS PULLED IN BY THE WORLD, NOT PUSHED THROUGH IT. `ThirdPersonCamera.update` does
   // exactly this and it is the reason the shipped camera does not clip a wall in a corridor.
-  const clear = probe.boom ? probe.boom(anchor, back, rig.distance) : rig.distance;
-  const dist = Math.max(0.35, Math.min(rig.distance, clear));
-  return { eye: add(anchor, scale(back, dist)), at: pivot, dist };
+  const clear = probe.boom ? probe.boom(anchor, dir, rig.distance) : rig.distance;
+  const dist = Math.max(0.35, Math.min(rig.distance, clear - BOOM_STANDOFF));
+  return { eye: add(anchor, scale(dir, dist)), at: pivot, dist };
 }
 
 /**

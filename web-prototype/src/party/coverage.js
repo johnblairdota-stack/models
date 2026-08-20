@@ -30,8 +30,22 @@
  * No THREE, no DOM.
  */
 
-/** The prototype's six spaces (`src/game/spaces.js`, "All six spaces dig and hold John's minute"). */
-export const ROOMS = ['ballroom', 'gallery', 'study', 'chapel', 'hall', 'cellar'];
+/**
+ * 🏚️ **THE HOUSE'S OWN SIX SPACES, BY THEIR OWN IDS.**
+ *
+ * 🚨 THESE USED TO BE INVENTED, AND THE INVENTION SURVIVED UNTIL THE EXPEDITION WAS WIRED UP.
+ * The party mode named its rooms before there was a mansion to name — `hall` and `cellar` do not
+ * exist in `spaces.js` at all, and `study` is ambiguous between the two studies. Every coverage
+ * number, every camera roster and every caption was therefore about a house nobody could walk
+ * through. They are the engine's `SPACES` ids now, and `expedition-wire` E1 pins them to
+ * `spaces.js` so the two can never drift again.
+ *
+ * ⚠️ DECLARED HERE RATHER THAN IMPORTED, BECAUSE `spaces.js` IMPORTS THREE. This module has to
+ * run in a worker and in bare node — that is the whole reason the coverage rules are testable —
+ * so the list is stated and the GATE does the importing. A pure module that reached for the
+ * engine would take `party-sim`, `guide-coverage` and `party-isolation` down with it.
+ */
+export const ROOMS = ['ballroom', 'gallery', 'study_w', 'study_e', 'service', 'chapel'];
 
 /** Each camera covers two rooms. Two is the number that puts the mid-game in T3's band — see §BAND. */
 export const ROOMS_PER_CAM = 2;

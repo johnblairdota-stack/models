@@ -31,6 +31,7 @@
 
 import { createRoom } from '../src/party/room.js';
 import { audienceFor, entitled } from '../net/party/entitle.js';
+import { ROOMS } from '../src/party/coverage.js';
 
 const SEEDS = [11, 12, 13, 14, 15];
 const COUNT = 8;
@@ -67,7 +68,7 @@ function capture(leak) {
       leak,
     });
     room.start();
-    room.playEpisode({ hunterRoom: 'cellar' });
+    room.playEpisode({ hunterRoom: ROOMS[5] });
     // Episode two takes the runner, so I7 has a death to assert about.
     room.playEpisode({ hunterRoom: 'gallery', takeRunner: true });
     runs.push({ seed, tape, truth: room.truth(), log: room.log.all(), sockets: room.sockets.map((s) => ({ ...s })) });

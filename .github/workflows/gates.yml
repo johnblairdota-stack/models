@@ -1,10 +1,18 @@
 # Run Robot Run — the party-mode gates, on every push and pull request.
 #
-# ⚠️ NO `npm install`, AND THAT IS THE POINT RATHER THAN AN OPTIMISATION.
-# Every module under `web-prototype/src/party/` is pure — no THREE, no DOM, no engine — and
-# every gate under `web-prototype/harness/` is bare node against those modules. The socket gate
-# uses node's built-in `WebSocket` client against a zero-dependency RFC6455 server, so nothing
-# here needs the dependency tree that `vite`/`three` would pull in.
+# ⚠️ IT INSTALLS NOW, AND THE REASON IS ONE ASSERTION.
+# This workflow deliberately had no `npm install` for as long as every party module was pure —
+# no THREE, no DOM, no engine — and every gate was bare node against them. That property still
+# holds for twenty-two of the twenty-three gates and must keep holding: `src/party/*` runs in a
+# worker, in bare node and on a phone, which is the whole reason `party-sim` can play a thousand
+# matches and `party-isolation` can answer a question about a filter without a deploy.
+#
+# `expedition-wire` is the exception, and it earns it. E1 holds the party mode's six room names
+# against `src/game/spaces.js` — the file that knows the real floor plan and imports THREE. It
+# was written because the mode had spent months computing coverage, camera rosters and captions
+# for a house with a `hall` and a `cellar` in it, neither of which the mansion has. Nothing could
+# catch that without the engine on disk. An install is 19 packages and about three seconds; a
+# hidden-role game grading itself against an imaginary building is forever.
 #
 # That matters because a gate nobody runs is a comment. `harness/party-isolation.mjs` is the one
 # whose red should block a merge outright — a phone receiving another player's role is a
@@ -33,6 +41,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+
+      # `npm ci` rather than `npm install`: the lockfile is committed, so CI resolves exactly what
+      # a developer resolved and a gate cannot go green on a different `three`.
+      - name: install
+        run: npm ci --no-audit --no-fund
 
       # The project's own build gate. A backtick inside a `/* glsl */` template literal
       # terminates the JS string and takes the whole build down — HANDOFF.md records this

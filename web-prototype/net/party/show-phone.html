@@ -210,10 +210,15 @@
         // 🚨 THE READING IS SHOWN EXACTLY AS IT ARRIVES, INCLUDING THE ABSENCE. "No signal" is not
         // an error state — it is a guide who genuinely does not know, and it is the only reason
         // a lie and an honest mistake look the same from the sofa.
+        // The map, when the house is real. Marks and the floor plan arrive together and only for
+        // a socket the matrix entitles — this page does no filtering and must never start.
+        const map = (f.plan && f.plan.length)
+          ? '<canvas id="map" style="width:100%;aspect-ratio:4/3;background:#0d1017;border-radius:12px;margin-bottom:10px"></canvas>'
+          : '';
         const read = f.hunter
           ? '<div class="big bad" style="font:700 26px/1 ui-sans-serif">HUNTER — ' + esc(f.room || '?') + '</div>'
           : '<div class="big" style="font:700 26px/1 ui-sans-serif;color:var(--dim)">NO SIGNAL</div>';
-        box.innerHTML = '<div class="card"><h3>Your cameras</h3>' + read
+        box.innerHTML = '<div class="card"><h3>Your cameras</h3>' + map + read
           + '<div class="note">' + (f.hunter ? 'A live camera has it.'
             : 'Nothing on the ' + wing() + '. That is not the same as empty.') + '</div></div>'
           + (frame.call && frame.call.said
@@ -221,10 +226,17 @@
             : '<div class="two" style="margin-top:10px">'
               + '<button class="big go" id="cl">CLEAR</button><button class="big stop" id="hd">HOLD</button></div>');
         if ($('cl')) { $('cl').onclick = () => act({ t: 'call', call: 'CLEAR' }); $('hd').onclick = () => act({ t: 'call', call: 'HOLD' }); }
+        drawMap(f);
         return;
       }
       if (amRunner()) {
         const said = frame.call && frame.call.said;
+        // 🚨 A LIVE HOUSE MEANS A THROTTLE, NOT A BUTTON. With the mansion attached the runner's
+        // decision is not "go or wait" once — it is a speed, continuously, against a Hunter that
+        // hears them. `player.js:638` is `noise = speed / MOVE.run`, so the ring under the stick
+        // IS the noise, and choosing RUN while it is close is loud, on camera, and completely
+        // deniable as panic. That is the runner's whole dual-use verb under D13.
+        if (frame.expedition && frame.expedition.live && said) { box.innerHTML = driveCard(); wireDrive(); return; }
         box.innerHTML = said
           ? '<div class="card"><h3>' + esc(nameOf(frame.call.by)) + ' says</h3>'
             + '<div style="font:700 34px/1 ui-monospace,Menlo,monospace" class="' + (said === 'CLEAR' ? 'good' : 'warn') + '">'
@@ -267,6 +279,89 @@
     box.innerHTML = claimCard();
     wireClaim();
   }
+
+  // ---------------------------------------------------------------- the guide's map
+  /**
+   * 🚨 THE MAP DRAWS WHAT ARRIVED AND NOTHING MORE. If `marks` holds no hunter, the guide does not
+   * know where it is — there is no last-known ghost drawn here, no decayed blob, no "probably
+   * around here". `darkrun.js` has a `ghost()` for that and it is deliberately not wired: an
+   * honest guide who cannot see must have nothing to point at, or the deniable mistake the whole
+   * design rests on stops being available to them.
+   */
+  function drawMap(f) {
+    const c = $('map');
+    if (!c || !f.plan) return;
+    const dpr = Math.min(2, devicePixelRatio || 1);
+    const w = c.clientWidth, h = Math.round(w * 0.75);
+    c.width = w * dpr; c.height = h * dpr;
+    const g = c.getContext('2d'); g.scale(dpr, dpr);
+    const xs = f.plan.flatMap((r) => [r.x0, r.x1]), zs = f.plan.flatMap((r) => [r.z0, r.z1]);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs), z0 = Math.min(...zs), z1 = Math.max(...zs);
+    const pad = 10, k = Math.min((w - pad * 2) / (x1 - x0), (h - pad * 2) / (z1 - z0));
+    const px = (x) => pad + (x - x0) * k, pz = (z) => pad + (z - z0) * k;
+    g.clearRect(0, 0, w, h);
+    for (const r of f.plan) {
+      g.fillStyle = '#161b25'; g.strokeStyle = '#2a3244'; g.lineWidth = 1;
+      g.fillRect(px(r.x0), pz(r.z0), (r.x1 - r.x0) * k, (r.z1 - r.z0) * k);
+      g.strokeRect(px(r.x0), pz(r.z0), (r.x1 - r.x0) * k, (r.z1 - r.z0) * k);
+    }
+    for (const m of f.marks || []) {
+      g.beginPath();
+      g.arc(px(m.x), pz(m.z), m.kind === 'hunter' ? 7 : 5, 0, Math.PI * 2);
+      g.fillStyle = m.kind === 'hunter' ? '#e4483a' : '#4cc27a';
+      g.fill();
+    }
+  }
+
+  // ---------------------------------------------------------------- the runner's stick
+  let heading = 0, detent = 0, driveTimer = null;
+  const DETENTS = ['STILL', 'CREEP', 'WALK', 'RUN'];
+  function driveCard() {
+    return '<div class="card"><h3>Drive</h3>'
+      + '<canvas id="stick" style="width:100%;aspect-ratio:1/1;background:#0d1017;border-radius:16px;touch-action:none"></canvas>'
+      + '<div class="note">Drag to steer. The ring is how far your noise carries.</div></div>'
+      + '<div class="card" style="margin-top:10px"><h3>Throttle</h3>'
+      + DETENTS.map((d, i) => '<button data-det="' + i + '"' + (i === detent ? ' class="on"' : '') + '>' + d + '</button>').join('')
+      + '</div>';
+  }
+  function wireDrive() {
+    for (const b of document.querySelectorAll('[data-det]')) {
+      b.onclick = () => { detent = +b.dataset.det; controls(); pushDrive(); };
+    }
+    const c = $('stick');
+    if (!c) return;
+    const set = (e) => {
+      const r = c.getBoundingClientRect();
+      const t = e.touches ? e.touches[0] : e;
+      // Screen up is -Y and world north is +Z, so the stick's Y is negated exactly once, here.
+      heading = Math.atan2(t.clientX - (r.left + r.width / 2), -(t.clientY - (r.top + r.height / 2)));
+      paintStick(); pushDrive();
+    };
+    c.addEventListener('pointerdown', (e) => { c.setPointerCapture(e.pointerId); set(e); });
+    c.addEventListener('pointermove', (e) => { if (c.hasPointerCapture(e.pointerId)) set(e); });
+    paintStick();
+    if (driveTimer) clearInterval(driveTimer);
+    driveTimer = setInterval(pushDrive, 250);       // a held heading still has to arrive
+  }
+  function paintStick() {
+    const c = $('stick'); if (!c) return;
+    const dpr = Math.min(2, devicePixelRatio || 1), w = c.clientWidth, h = w;
+    c.width = w * dpr; c.height = h * dpr;
+    const g = c.getContext('2d'); g.scale(dpr, dpr);
+    const cx = w / 2, cy = h / 2, R = w * 0.42;
+    g.clearRect(0, 0, w, h);
+    // The noise ring: `audibleRange(noise) = 14 * noise` metres, drawn to the same scale as the
+    // stick so a detent's cost is a size rather than a number.
+    const noise = [0, 0.90 / 5.20, 2.55 / 5.20, 1][detent];
+    g.beginPath(); g.arc(cx, cy, Math.max(4, R * noise), 0, Math.PI * 2);
+    g.fillStyle = 'rgba(228,72,58,0.16)'; g.fill();
+    g.strokeStyle = 'rgba(228,72,58,0.5)'; g.stroke();
+    g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2); g.strokeStyle = '#2a3244'; g.stroke();
+    g.beginPath(); g.moveTo(cx, cy);
+    g.lineTo(cx + Math.sin(heading) * R, cy - Math.cos(heading) * R);
+    g.strokeStyle = '#e0b23c'; g.lineWidth = 4; g.stroke();
+  }
+  const pushDrive = () => { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'drive', heading, detent })); };
 
   /** The claim plate — published once, publicly, permanently. Available whenever nothing else is. */
   function claimCard() {

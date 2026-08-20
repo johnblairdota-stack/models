@@ -42,6 +42,9 @@ export const SITE_HALF_ANGLE = 0.62;
 export const SITE_DROP = 0.45;
 export const SITE_INSET = 0.55;
 
+/** `player.js:1616`'s `BOOM_R`. The boom is not a line; see `probe.boom` below. */
+export const BOOM_RADIUS = 0.35;
+
 /**
  * Map the party mode's six room names onto the built house.
  *
@@ -118,21 +121,51 @@ export function createRig({ camera, room, subjects, unlocked, worldSeed, spaces 
       return all.filter((s) => s.camIndex < n);
     },
 
-    /** How far a boom gets. The room's own ray, so the broadcast camera clips what the game clips. */
+    /**
+     * How far a boom gets. The room's own ray, so the broadcast camera clips what the game clips.
+     *
+     * 🚨 THE BOOM HAS A WIDTH, AND ASKING WITH ONE RAY IS THE BUG THE SHIPPED RIG ALREADY FIXED.
+     * `player.js:1616` is `BOOM_R = 0.35`, described there as *"how wide the boom is when it asks
+     * what is behind it; 0 restores the single-ray test"* — and it exists because a single ray
+     * threads an open doorway while the lens, offset to the shoulder, ends up behind the plaster
+     * beside it. That is exactly what the first wired renders showed: a runner stepping through
+     * D1, the boom finding clear air down the middle of the door, and the television cutting to a
+     * close-up of a wall.
+     *
+     * So the question is asked with a bundle — the centre line and four offsets at the boom's
+     * radius — and the shortest answer wins. Five `blocksSight` calls a frame against one camera.
+     */
     boom(from, dir, maxLen) {
       if (!room || !room.blocksSight) return maxLen;
-      _a.set(from.x, from.y, from.z);
-      _b.set(from.x + dir.x * maxLen, from.y + dir.y * maxLen, from.z + dir.z * maxLen);
-      // A coarse bisection rather than a second raycaster: `blocksSight` is the only sight
-      // authority in the engine and this asks it the same question at shorter lengths.
-      if (!room.blocksSight(_a, _b)) return maxLen;
-      let lo = 0, hi = maxLen;
-      for (let i = 0; i < 6; i++) {
-        const mid = (lo + hi) / 2;
-        _b.set(from.x + dir.x * mid, from.y + dir.y * mid, from.z + dir.z * mid);
-        if (room.blocksSight(_a, _b)) hi = mid; else lo = mid;
+      // Two axes perpendicular to the boom, so the bundle is a cross rather than a line.
+      const up = { x: 0, y: 1, z: 0 };
+      const rx = dir.y * up.z - dir.z * up.y, ry = dir.z * up.x - dir.x * up.z, rz = dir.x * up.y - dir.y * up.x;
+      const rl = Math.hypot(rx, ry, rz) || 1;
+      const R = { x: rx / rl, y: ry / rl, z: rz / rl };
+      const U = { x: R.y * dir.z - R.z * dir.y, y: R.z * dir.x - R.x * dir.z, z: R.x * dir.y - R.y * dir.x };
+      const offsets = [
+        { x: 0, y: 0, z: 0 },
+        { x: R.x * BOOM_RADIUS, y: R.y * BOOM_RADIUS, z: R.z * BOOM_RADIUS },
+        { x: -R.x * BOOM_RADIUS, y: -R.y * BOOM_RADIUS, z: -R.z * BOOM_RADIUS },
+        { x: U.x * BOOM_RADIUS, y: U.y * BOOM_RADIUS, z: U.z * BOOM_RADIUS },
+        { x: -U.x * BOOM_RADIUS, y: -U.y * BOOM_RADIUS, z: -U.z * BOOM_RADIUS },
+      ];
+      let best = maxLen;
+      for (const o of offsets) {
+        const ox = from.x + o.x, oy = from.y + o.y, oz = from.z + o.z;
+        _a.set(ox, oy, oz);
+        _b.set(ox + dir.x * best, oy + dir.y * best, oz + dir.z * best);
+        if (!room.blocksSight(_a, _b)) continue;
+        let lo = 0, hi = best;
+        for (let i = 0; i < 6; i++) {
+          const mid = (lo + hi) / 2;
+          _b.set(ox + dir.x * mid, oy + dir.y * mid, oz + dir.z * mid);
+          if (room.blocksSight(_a, _b)) hi = mid; else lo = mid;
+        }
+        best = Math.min(best, lo);
+        if (best <= 0.01) break;
       }
-      return lo;
+      return best;
     },
 
     /** In this camera's room, inside its cone, and not behind something. All three, in that order. */

@@ -20,6 +20,7 @@
  */
 
 import { startServer, CAPACITY, makeCode } from '../net/party/local.mjs';
+import { ROOMS } from '../src/party/coverage.js';
 
 const PORT = 5197;
 let pass = 0, fail = 0;
@@ -72,7 +73,7 @@ t('S1 · nine distinct seats and nine distinct tokens',
 // ---------------------------------------------------------------- drive a real game over the wire
 conns[0].send({ t: 'start' });
 await sleep(60);
-conns[0].send({ t: 'episode', opts: { hunterRoom: 'cellar' } });
+conns[0].send({ t: 'episode', opts: { hunterRoom: ROOMS[5] } });
 await sleep(60);
 conns[0].send({ t: 'episode', opts: { hunterRoom: 'gallery', takeRunner: true } });
 await sleep(200);

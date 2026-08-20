@@ -319,7 +319,14 @@ const R = play({ taps: engaged });
     const truthRoom = new Set(p.s.log.all().filter((e) => e.type === 'hunter.placed').map((e) => e.data.room));
     for (const [id, frames] of p.tape) {
       for (const f of frames) {
-        const blob = JSON.stringify(f);
+        // 🚨 THE FLOOR PLAN IS EXEMPT, AND L9d BELOW IS WHY THAT IS SAFE. `flyover.plan` names all
+        // six rooms on every single frame, so it trivially "contains" the Hunter's — and contains
+        // exactly as much information about the Hunter as a printed map does, which is none. The
+        // exemption is only sound because the plan is INVARIANT; L9d asserts that, so a plan that
+        // ever started varying with the Hunter would turn red rather than hide behind this.
+        const scan = { ...f };
+        if (scan.flyover) scan.flyover = { ...scan.flyover, plan: undefined };
+        const blob = JSON.stringify(scan);
         const named = ROOMS.filter((r) => truthRoom.has(r) && blob.includes(`"${r}"`));
         if (!named.length) continue;
         // The ONLY legitimate carrier is a guide who can actually see it, under flyover.room.
@@ -337,6 +344,18 @@ const R = play({ taps: engaged });
     guideSaw, `blind strip ${(4.8 / Math.tan(GUIDE_TILT_DEG * Math.PI / 180)).toFixed(2)}m at ${GUIDE_TILT_DEG}°`);
   t('L9c · and was blind to it sometimes — which is what makes a lie deniable', guideBlind,
     'coverage and the blind strip, compounded');
+
+  // The exemption's licence. A plan that varied could smuggle the answer L9 exists to protect.
+  const plans = new Set();
+  for (const p of [play({ castSeed: 3, worldSeed: 21, taps: engaged })]) {
+    for (const frames of p.tape.values()) {
+      for (const f of frames) if (f.flyover?.plan) plans.add(JSON.stringify(f.flyover.plan));
+    }
+  }
+  t('L9d · the floor plan is byte-identical on every frame it appears on',
+    plans.size === 1, `${plans.size} distinct plans across the whole show`);
+  t('L9d control · and it really did appear, so L9d is not counting an empty set',
+    plans.size > 0 && JSON.parse([...plans][0]).length === 6, `${plans.size ? JSON.parse([...plans][0]).length : 0} rooms`);
 }
 
 // ---------------------------------------------------------------- L13 · the wing comes first

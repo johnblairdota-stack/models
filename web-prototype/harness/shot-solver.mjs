@@ -26,7 +26,7 @@
 
 import { readFileSync, existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
-import { solve, isFiller, CARDS, BODYCAM_RIG, WORK_RIG, FOV, STING_MIN_RANGE, bugFor, camWall } from '../src/party/shots.js';
+import { solve, isFiller, CARDS, BODYCAM_RIG, WORK_RIG, FOV, STING_MIN_RANGE, BOOM_STANDOFF, bugFor, camWall } from '../src/party/shots.js';
 import { captionFor, allCaptions, LOWER_THIRD, ROOM_LABEL, railFor, showBug, segmentClock, CAPTION_FIELDS } from '../src/party/captions.js';
 import { TEN_FOOT, SIZES_VH, INK } from '../src/ui/broadcast.js';
 import { ROOMS } from '../src/party/coverage.js';
@@ -197,8 +197,44 @@ const ROLE_NAMES = ['cameraOp', 'soundie', 'fixer', 'producer', 'continuity', 's
   const dist = (s) => Math.hypot(s.eye.x - s.at.x, s.eye.y - s.at.y, s.eye.z - s.at.z);
   t('H6 · the world pulls the boom in rather than the shot pushing through it',
     dist(b) < dist(a), `${dist(a).toFixed(2)}m open → ${dist(b).toFixed(2)}m against a wall`);
+  /**
+   * 🚨 THE SIDE, NOT JUST THE LENGTH. H6 compares boom distances and passes whichever way the
+   * boom points — which is how a BODYCAM that placed its lens in front of the runner's face
+   * shipped and was only caught by looking at a screenshot. Forward is `(sin yaw, cos yaw)`
+   * (`player.js:1806`); a camera behind the subject has a negative dot product with it.
+   */
+  for (const [name, rig] of [['BODYCAM', 'BODYCAM'], ['WORK', 'WORK']]) {
+    const p = open.pose('p1');
+    const sh = solve(rig, { subjectId: 'p1', probe: open });
+    const fwd = { x: Math.sin(p.yaw), z: Math.cos(p.yaw) };
+    const toEye = { x: sh.eye.x - p.x, z: sh.eye.z - p.z };
+    const dot = fwd.x * toEye.x + fwd.z * toEye.z;
+    t(`H6b · the ${name} eye is BEHIND the subject, not in front of their face`, dot < 0,
+      `dot(forward, eye-subject) = ${dot.toFixed(2)} · positive means the lens is in the wall they are walking at`);
+  }
+  t('H6b control · the dot product would catch a flipped boom — a camera one metre ahead reads positive',
+    (() => { const p = open.pose('p1'); const f = { x: Math.sin(p.yaw), z: Math.cos(p.yaw) };
+      return f.x * f.x + f.z * f.z > 0.9; })(),
+    'forward is a unit vector, so a lens placed along it dots to +1');
+
   t('H6 control · with nothing in the way it sits at the shipped distance',
     Math.abs(dist(a) - BODYCAM_RIG.distance) < 0.5, `${dist(a).toFixed(2)}m vs ${BODYCAM_RIG.distance}m`);
+  /**
+   * The near plane must not sit ON the surface the boom hit — `player.js:1474`.
+   *
+   * ⚠️ THE EXPECTED NUMBER IS A HYPOTENUSE, NOT THE BOOM LENGTH. The boom runs from an anchor
+   * offset to the SHOULDER, so eye-to-subject is `hypot(alongBoom, shoulder)`. The first version
+   * of this compared against the boom length alone, read 0.90 against a limit of 0.80, and failed
+   * correct code — the missing 0.10 was the 0.42m shoulder, which is in every shot by design.
+   */
+  const wantAxial = 1.1 - BOOM_STANDOFF;
+  const wantEye = Math.hypot(wantAxial, BODYCAM_RIG.shoulder);
+  t('H6c · a blocked boom stops short of the blocker by the shipped standoff',
+    dist(b) <= wantEye + 1e-6,
+    `blocker at 1.10m → ${wantAxial.toFixed(2)}m of boom, ${dist(b).toFixed(2)}m to the eye across a ${BODYCAM_RIG.shoulder}m shoulder`);
+  t('H6c control · and without the standoff it would sit further out',
+    Math.hypot(1.1, BODYCAM_RIG.shoulder) > dist(b),
+    `${Math.hypot(1.1, BODYCAM_RIG.shoulder).toFixed(2)}m vs ${dist(b).toFixed(2)}m`);
 }
 
 // ---------------------------------------------------------------- H7 · THE SHOT BUG SWEEP

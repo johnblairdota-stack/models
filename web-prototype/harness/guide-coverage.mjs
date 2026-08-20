@@ -103,7 +103,7 @@ function honestErrorAt(unlocked, gated = true) {
   const tape = {};
   const r = createRoom({ count: 8, castSeed: 4, worldSeed: 7, send: (id, f) => { (tape[id] = tape[id] || []).push(f); } });
   r.start();
-  r.playEpisode({ hunterRoom: 'cellar' });   // cam1 covers it
+  r.playEpisode({ hunterRoom: ROOMS[5] });   // cam1 covers it
   r.playEpisode({ hunterRoom: 'gallery' });  // cam3 does, but only once unlocked
   // ⚠️ THE GUIDE IS WHOEVER THE BALLOT CAST, NOT phone-1. An earlier draft hard-coded the seat
   // and went green only for as long as the pair was picked by seat index; the moment casting

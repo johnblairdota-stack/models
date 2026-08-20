@@ -32,10 +32,17 @@
 
 import { ROOMS } from './coverage.js';
 
-/** Rooms are the only nouns a caption may contain, and these are their on-air names. */
+/**
+ * Rooms are the only nouns a caption may contain, and these are their on-air names.
+ *
+ * ⚠️ THE NAMES ARE THE HOUSE'S, NOT THE BROADCAST'S. `spaces.js` already gives every space a
+ * display name — THE LONG GALLERY, THE SERVICE PASSAGE — and a second set invented here would
+ * mean the television calling a room something the level designer never called it. Pinned to the
+ * engine by `expedition-wire` E1.
+ */
 export const ROOM_LABEL = Object.freeze({
-  ballroom: 'THE BALLROOM', gallery: 'EAST GALLERY', study: 'THE STUDY',
-  chapel: 'THE CHAPEL', hall: 'THE GREAT HALL', cellar: 'THE CELLAR',
+  ballroom: 'THE BALLROOM', gallery: 'THE LONG GALLERY', study_w: 'THE WEST STUDY',
+  study_e: 'THE EAST STUDY', service: 'THE SERVICE PASSAGE', chapel: 'THE CHAPEL',
 });
 
 /**

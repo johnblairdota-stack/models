@@ -17,6 +17,7 @@
 import { createRoom } from '../src/party/room.js';
 import { visibleTo } from '../src/party/log.js';
 import { VIS } from '../src/party/events.js';
+import { ROOMS } from '../src/party/coverage.js';
 
 let pass = 0, fail = 0;
 const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' · ' + d : ''}`); } else { fail++; console.log(`  FAIL ${n}${d ? ' · ' + d : ''}`); } return c; };
@@ -29,7 +30,7 @@ const runs = SEEDS.map((seed) => {
     send: () => {}, emit: (id, ev) => { (seen[id] = seen[id] || []).push(ev); },
   });
   r.start();
-  r.playEpisode({ hunterRoom: 'cellar' });
+  r.playEpisode({ hunterRoom: ROOMS[5] });
   r.playEpisode({ hunterRoom: 'gallery', takeRunner: true });
   return { r, seen };
 });

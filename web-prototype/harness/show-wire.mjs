@@ -268,6 +268,72 @@ t('X3 arm · the show played to the Reunion over real sockets',
     'a refusal is between one phone and the server');
 }
 
+// ---------------------------------------------------------------- X10 · the mansion's socket
+/**
+ * 🚨 THE SIMULATOR IS A CONNECTION WITH NO IDENTITY, AND THAT IS THE ENTIRE SAFETY ARGUMENT FOR
+ * LETTING IT MOVE A ROBOT. `role=sim` gets a wing, a camera count, a seed and an episode number.
+ * It has no seat, no token, no `you` block and no roster — so a 3D client that is one day
+ * rewritten, or run on somebody's laptop across the room, has nothing to leak however careless it
+ * is. Everything it may send is checked by `session.simReport`, which takes numbers and an
+ * outcome and refuses the rest.
+ */
+{
+  const s3 = startShow({ port: PORT + 2, code: 'house', stamp: 1700000000002 });
+  await sleep(100);
+  const tv3 = await open2(PORT + 2, '?role=tv');
+  const ph3 = [];
+  for (let i = 0; i < 5; i++) {
+    const p = await open2(PORT + 2);
+    p.send({ t: 'join', name: `R${i}`, token: null, boot: 500 });
+    ph3.push(p);
+  }
+  await sleep(200);
+  const sim = await open2(PORT + 2, '?role=sim');
+  await sleep(100);
+  tv3.send({ t: 'start' });
+  await sleep(200);
+  const sess3 = s3.sessionNow();
+  sess3.skip(Date.now());                       // PREMIERE → CASTING
+  await sleep(150);
+  sess3.skip(Date.now());                       // CASTING → EXPEDITION
+  await sleep(250);
+
+  const brief = [...sim.msgs].reverse().find((m) => m.t === 'brief');
+  t('X10 arm · the simulator was briefed when the expedition opened',
+    !!brief && typeof brief.wing === 'string', JSON.stringify(brief));
+  t('X10 · the brief is a wing, a camera count, a seed and an episode — and nothing else',
+    brief && Object.keys(brief).sort().join(',') === 'cameras,episode,t,wing,worldSeed',
+    Object.keys(brief || {}).join(','));
+  t('X10b · the simulator has no seat, no token and no `you` block on its whole wire',
+    !/token/i.test(JSON.stringify(sim.msgs)) && !sim.msgs.some((m) => m.t === 'seated' || m.frame?.you),
+    `${sim.msgs.length} frames scanned`);
+
+  // ---- the report goes in
+  sim.send({ t: 'sim', runner: { x: 3, z: -12, room: 'study_w', noise: 0.4 },
+    hunter: { x: 8, z: -20, room: 'study_e', wallDist: 5.5, state: 'PATROL' } });
+  await sleep(150);
+  t('X10c · a position report reached the session', s3.sessionNow().wired() === true);
+
+  // ---- the stick
+  const st = sess3.state;
+  const runnerSeat = Number(st.pair.runner.slice(1)) - 1;
+  const otherSeat = ph3.findIndex((_, i) => i !== runnerSeat);
+  ph3[otherSeat].send({ t: 'drive', heading: 1.2, detent: 3 });
+  await sleep(150);
+  const refused = ph3[otherSeat].msgs.filter((m) => m.t === 'refused');
+  t('X10d · a phone that is not the runner cannot drive the robot',
+    refused.some((r) => /not the runner/.test(r.why)), refused.map((r) => r.why).join(' / ') || 'NOT REFUSED');
+  const before = sim.msgs.filter((m) => m.t === 'drive').length;
+  ph3[runnerSeat].send({ t: 'drive', heading: 1.2, detent: 2 });
+  await sleep(150);
+  t('X10e · and the runner\'s stick reaches the mansion, relayed rather than applied',
+    sim.msgs.filter((m) => m.t === 'drive').length === before + 1,
+    'the server has no physics and does not pretend to');
+
+  sim.close(); tv3.close(); for (const p of ph3) p.close();
+  await s3.close();
+}
+
 // ---------------------------------------------------------------- X8 · the report
 {
   const rep = await (await fetch(`http://127.0.0.1:${PORT}/report`)).json();
@@ -311,7 +377,9 @@ function open2(port, query = '') {
   return new Promise((resolve) => {
     const ws = new WebSocket(`ws://127.0.0.1:${port}/${query}`);
     const msgs = [];
-    const box = { ws, msgs, send: (o) => ws.send(JSON.stringify(o)), close: () => { try { ws.close(); } catch {} } };
+    const box = { ws, msgs, send: (o) => ws.send(JSON.stringify(o)),
+      of: (type) => msgs.filter((m) => m.t === type),
+      close: () => { try { ws.close(); } catch { /* gone */ } } };
     ws.onmessage = (e) => { const m = JSON.parse(e.data); msgs.push(m); if (m.t === 'ping') box.send({ t: 'pong', at: m.at }); };
     ws.onopen = () => resolve(box);
     ws.onerror = () => resolve(box);

@@ -35,6 +35,7 @@ import { makeEvent, VIS } from './events.js';
 import { createLog, visibleTo } from './log.js';
 import { ROOMS, hunterVisibleToGuide } from './coverage.js';
 import { guideSight } from './darkrun.js';
+import { HOUSE } from './houseplan.js';
 import { applyTake, resolveContact, MODE, PLATE } from './taken.js';
 import { tallyCasting } from './ballot.js';
 import { tallyVote, executioner, nominate as proposeNomination, reckoningClosed, NO_ONE } from './vote.js';
@@ -113,8 +114,19 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
 
   // Per-phase input buckets. Cleared on every transition, so a stale tap can never carry over.
   let pending = { cast: new Map(), votes: new Map(), acted: new Set() };
-  /** The Hunter's room. Seeded, never rowed in the matrix, never sent to anyone. */
+  /** The Hunter's room. Never rowed in the matrix, never sent to anyone. */
   let hunterRoom = null;
+  /**
+   * 🛰️ WHAT THE TELEVISION IS SIMULATING, WHEN THERE IS ONE.
+   *
+   * Null means M3's stub — no mansion attached, the expedition resolves from a seeded room
+   * comparison, and every gate that predates the wiring still runs. Non-null means a real robot
+   * in a real house, and the numbers below are the only things this process takes from that
+   * screen: positions, a room, a distance from a wall. **No verdict, and no identity.** The TV
+   * is authoritative about where a robot is and knows nothing about what a robot is.
+   */
+  let sim = null;
+  let reported = null;              // the outcome the house produced, if it has produced one
   let takenThisEpisode = [];
   let queue = [];                        // phases still to run in this episode
   let episodeOpen = false;               // see `advance` — episode 1 has no VERDICT to hang this on
@@ -142,7 +154,7 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
       incident: { ...state.incident },
       nominations: state.nominations.map((n) => ({ ...n })),
       call: { ...state.call },
-      expedition: { ...state.expedition },
+      expedition: { ...state.expedition, live: sim != null },
     };
     if (state.tally) base.tally = { counts: { ...state.tally.counts }, threshold: state.tally.threshold, executed: state.tally.executed };
     if (!sock.isTV) {
@@ -158,14 +170,23 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
 
   /** What the guide's screen shows, and the only place the Hunter's room can escape into a frame. */
   function sightForGuide() {
-    const covered = hunterVisibleToGuide({ worldSeed, unlocked: state.cameras.unlocked, hunterRoom });
-    // The Hunter's distance from the nearest wall, seeded per episode. In the mansion this is
-    // geometry; here it is the same distribution over the same blind strip.
-    const wallDistance = (hash(worldSeed, 'wall', state.episode) % 800) / 100;   // 0.00 – 7.99 m
+    // 🚨 THE ROOM AND THE DISTANCE COME FROM THE HOUSE WHEN THERE IS ONE, AND THE VERDICT NEVER
+    // DOES. `guideSight` is `darkrun.js`'s and stays the single authority on what a guide can
+    // see; all the mansion supplies is geometry it is the only thing in a position to know.
+    const room = sim ? sim.hunter.room : hunterRoom;
+    const covered = hunterVisibleToGuide({ worldSeed, unlocked: state.cameras.unlocked, hunterRoom: room });
+    const wallDistance = sim
+      ? sim.hunter.wallDist
+      // No mansion: the same distribution over the same blind strip, seeded per episode.
+      : (hash(worldSeed, 'wall', state.episode) % 800) / 100;
     const sight = guideSight({ covered, wallDistance, tiltDeg: GUIDE_TILT_DEG, storeyH: STOREY_H });
-    const marks = [{ x: 1.5, z: -2.0, kind: 'you' }];
-    if (sight.seen) marks.push({ x: 7.0, z: 3.0, kind: 'hunter' });
-    return { hunter: sight.seen, room: sight.seen ? hunterRoom : null, marks };
+    const marks = sim
+      ? [{ x: sim.runner.x, z: sim.runner.z, kind: 'you' }]
+      : [{ x: 1.5, z: -2.0, kind: 'you' }];
+    if (sight.seen) marks.push(sim ? { x: sim.hunter.x, z: sim.hunter.z, kind: 'hunter' } : { x: 7.0, z: 3.0, kind: 'hunter' });
+    // The plan travels with the marks so the guide's phone needs no second fetch and no copy of
+    // its own — one message, one source, and it arrives only for a socket entitled to marks.
+    return { hunter: sight.seen, room: sight.seen ? room : null, marks, plan: HOUSE.map((r) => ({ ...r })) };
   }
 
   const ctxFor = (sock) => ({
@@ -218,6 +239,7 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
       // Seeded per episode so a replay of the same match is the same match. The Hunter is placed
       // only now — the wing is public from CASTING, but where the Hunter stands never is.
       hunterRoom = ROOMS[hash(worldSeed, 'hunter', state.episode) % ROOMS.length];
+      sim = null; reported = null;      // last episode's house is not this episode's
       const target = state.expedition.room;
       state.call = { by: state.pair.guide, said: null };
       record(makeEvent('expedition.begun', VIS.PUBLIC, {
@@ -317,15 +339,24 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
   function resolveExpedition() {
     const said = state.call.said;
     const move = pending.acted.has(state.pair.runner) ? pending.moveChoice : MOVE_CHOICE.WAIT;
-    const hunterHere = hunterRoom === state.expedition.room;
+    // 🚨 WHERE THE HUNTER WAS IS THE HOUSE'S ANSWER WHEN THERE IS A HOUSE. Without this the
+    // server would grade the episode against a room it invented while the television showed
+    // something else — and the DEBRIEF argument would be about a game nobody played.
+    const hunterHere = (sim ? sim.hunter.room : hunterRoom) === state.expedition.room;
     let outcome;
 
-    if (move !== MOVE_CHOICE.GO) {
+    // A wired expedition is decided by what happened in the mansion: contact, the terminal, or
+    // the clock. A stubbed one is decided by the room comparison M3 shipped.
+    if (reported) {
+      outcome = reported;
+    } else if (move !== MOVE_CHOICE.GO) {
       outcome = 'held';
     } else if (hunterHere) {
       outcome = 'taken';
     } else {
       outcome = 'lit';
+    }
+    if (outcome === 'lit') {
       state.cameras.unlocked += 1;
       record(makeEvent('run.camera_lit', VIS.PUBLIC, { camera: state.cameras.unlocked, episode: state.episode }));
     }
@@ -541,6 +572,36 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
       if (now >= state.clock.endsAt || closedEarly()) { advance(now); return true; }
       return false;
     },
+
+    /**
+     * 🛰️ THE TELEVISION'S REPORT. Accepted only during EXPEDITION, and only the fields named.
+     *
+     * ⚠️ THE OUTCOME IS RECORDED, NOT APPLIED. It is used when the phase closes, through the same
+     * `resolveExpedition` that grades a stubbed one, so a house that reports early cannot skip
+     * the call, the log entries or the win check.
+     */
+    simReport(msg = {}) {
+      if (state.phase !== PHASE.EXPEDITION) return { ok: false, why: 'no expedition running' };
+      if (msg.t === 'sim' && msg.runner && msg.hunter) {
+        sim = {
+          runner: { x: +msg.runner.x || 0, z: +msg.runner.z || 0, room: msg.runner.room ?? null, noise: +msg.runner.noise || 0 },
+          hunter: { x: +msg.hunter.x || 0, z: +msg.hunter.z || 0, room: msg.hunter.room ?? null,
+            wallDist: Number.isFinite(msg.hunter.wallDist) ? msg.hunter.wallDist : 99 },
+        };
+        // Only the guide's frame changes on a position tick, and only if they have the sight.
+        const g = socketOf.get(state.pair.guide);
+        if (g) pushTo(g);
+        return { ok: true };
+      }
+      if (msg.t === 'expedition' && ['lit', 'taken', 'held'].includes(msg.outcome)) {
+        reported = msg.outcome;
+        return { ok: true };
+      }
+      return { ok: false, why: `unknown report "${msg.t}"` };
+    },
+
+    /** Is a real house driving this expedition, or is it the stub? Instruments ask; nobody else. */
+    wired: () => sim != null,
 
     /** The host's skip. Only ever shortens a phase — it can never resolve one differently. */
     skip(now) {

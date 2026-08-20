@@ -264,8 +264,17 @@ if (!process.env.RRR_SHOOT_PORT && !(await portOpen(PORT))) {
 // ---------------------------------------------------------------- browser
 // Headless Chromium normally falls back to SwiftShader, which is far too slow to judge
 // either the look or the frame rate. These flags force real ANGLE/D3D11 in headless.
+/**
+ * ⚠️ `RRR_CHROME` LETS A MACHINE POINT AT A CHROMIUM PLAYWRIGHT DID NOT DOWNLOAD. Some
+ * environments ship a browser and block `npx playwright install`; without this the harness dies
+ * with "please run npx playwright install" on a box that has a perfectly good Chromium sitting
+ * at a known path. Unset, nothing changes and Playwright resolves its own browser as before.
+ */
+const EXEC = process.env.RRR_CHROME || undefined;
+
 const browser = await chromium.launch({
   headless: !flag('headed'),
+  ...(EXEC ? { executablePath: EXEC } : {}),
   args: [
     '--use-angle=d3d11',
     '--enable-unsafe-webgpu',

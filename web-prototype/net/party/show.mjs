@@ -67,6 +67,21 @@ export function seedFrom(...parts) {
 export function startShow({ port = 5183, code = makeCode(), stamp = Date.now() } = {}) {
   const lobby = createLobby(code);
   let show = null;                       // { session, castSeed, worldSeed, startedAt }
+  let simSock = null;                    // the mansion, when one is attached
+
+/**
+ * 🚨 THE SIMULATOR'S BRIEF IS FOUR FIELDS, AND THE SHORTNESS IS THE POINT. A wing, a camera
+ * count, a world seed and an episode number. No roster, no seats, no alignment — a 3D client
+ * that never receives an identity cannot leak one however it is written, and this is the only
+ * message it is ever sent.
+ */
+  const briefFor = (session) => ({
+    t: 'brief',
+    wing: session.state.expedition.room,
+    cameras: session.state.cameras.unlocked,
+    worldSeed: session.state.worldSeed,
+    episode: session.state.episode,
+  });
 
   // ---------------------------------------------------------------- delivery
   const sockFor = (socketId) => (socketId === 'tv' ? lobby.tv : lobby.seats.get(socketId)?.sock);
@@ -131,8 +146,17 @@ export function startShow({ port = 5183, code = makeCode(), stamp = Date.now() }
     if (!key) return sock.destroy();
     wsAccept(sock, key);
 
-    const isTV = new URL(req.url, 'http://x').searchParams.get('role') === 'tv';
+    const role = new URL(req.url, 'http://x').searchParams.get('role');
+    const isTV = role === 'tv';
+    const isSim = role === 'sim';
     let seat = null;
+
+    if (isSim) {
+      simSock = sock;
+      note(lobby, 'sim.connected');
+      // The simulator is told the wing and the camera count and NOTHING about who anyone is.
+      if (show) send(sock, briefFor(show.session));
+    }
 
     if (isTV) {
       lobby.tv = sock;
@@ -189,7 +213,36 @@ export function startShow({ port = 5183, code = makeCode(), stamp = Date.now() }
       }
       if (m.t === 'skip' && isTV && show) { show.session.skip(now); return; }
 
+      /**
+       * 🛰️ THE MANSION'S REPORT, AND THE ONE PLACE IT IS ALLOWED IN.
+       *
+       * `role=sim` is the television's 3D half — `src/views/expedition.js` — and it is the only
+       * connection permitted to move a robot. It is NOT a player: it has no seat, no token and no
+       * `you` block, and `session.simReport` takes positions and an outcome from it and nothing
+       * else. Roles never travel this way, in either direction.
+       */
+      if ((m.t === 'sim' || m.t === 'expedition') && (isSim || isTV) && show) {
+        show.session.simReport(m);
+        return;
+      }
+
       // ---- a tap from a phone
+      /**
+       * 🎮 THE RUNNER'S STICK. Relayed to the simulator, never applied here — the server has no
+       * physics and must not pretend to. It checks one thing, which is the thing that matters:
+       * that the phone sending it is THIS episode's runner.
+       */
+      if (m.t === 'drive' && seat && show) {
+        const st = show.session.state;
+        if (st.phase !== PHASE.EXPEDITION) return;
+        if (playerIdOf(seat.seat) !== st.pair.runner) {
+          send(sock, { t: 'refused', why: 'you are not the runner', was: 'drive' });
+          return;
+        }
+        send(simSock, { t: 'drive', heading: m.heading, detent: m.detent });
+        return;
+      }
+
       if (m.t === 'act' && seat && show) {
         const r = show.session.input(playerIdOf(seat.seat), m.msg || {});
         // ⚠️ A REFUSAL GOES BACK TO THE PHONE THAT SENT IT. A controller that silently ignores you
@@ -200,6 +253,7 @@ export function startShow({ port = 5183, code = makeCode(), stamp = Date.now() }
 
     const bye = () => {
       if (isTV && lobby.tv === sock) { lobby.tv = null; note(lobby, 'tv.dropped'); }
+      if (isSim && simSock === sock) { simSock = null; note(lobby, 'sim.dropped'); }
       if (seatDrop(lobby, seat, sock)) pushRoster();
     };
     sock.on('close', bye);
@@ -218,6 +272,7 @@ export function startShow({ port = 5183, code = makeCode(), stamp = Date.now() }
     const st = show.session.state;
     if (st.phase !== lastPhase) {
       lastPhase = st.phase;
+      if (st.phase === PHASE.EXPEDITION) send(simSock, briefFor(show.session));
       if (st.phase === PHASE.REUNION) {
         // 🚨 THE REUNION IS THE SAME REPLAY WITH THE FILTER OFF. `log.reunion()` IS `log.all()`,
         // and this is the first moment anything unfiltered has left this process.

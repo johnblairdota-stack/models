@@ -4025,7 +4025,13 @@ export default async function view(args = {}) {
  * made the 78 it was constructed with dead code that read like a decision. The breathing is
  * now a MULTIPLIER on the table's value, so the table is the single source of truth.
  */
-function makeLightRig(L, o = {}) {
+/**
+ * ⚠️ EXPORTED FOR `views/expedition.js`, WHICH LIGHTS THE SAME HOUSE. Not a general-purpose API —
+ * it takes this file's five-light rig and the per-space table in `spaces.js`. A second rig built
+ * beside it would make the party mode's mansion a visibly different building from the survival
+ * mode's, which is the one thing an edit must never do.
+ */
+export function makeLightRig(L, o = {}) {
   const LERP = 0.35;
   /**
    * 🆕 **`?aim=box` — THE ABLATION FOR THE 2026-08-09 RE-AIM, AND IT IS PERMANENT ON PURPOSE.**
