@@ -141,6 +141,9 @@ export const VIEWS = [
     module: () => import('./views/light-shaft.js') },
 
   // ---------------- the game ----------------
+  { id: 'party.premiere', group: 'game', title: 'Prime Time — the cold open',
+    bar: 'eight robots walk in from the corridors and take a chair; the only moment the table learns which body is which name',
+    module: () => import('./views/premiere.js') },
   { id: 'party.expedition', group: 'game', title: 'Prime Time — the expedition',
     bar: 'the ninety seconds in the house, cut by the Director, driven from a phone',
     module: () => import('./views/expedition.js') },
