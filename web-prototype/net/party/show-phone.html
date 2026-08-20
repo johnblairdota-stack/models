@@ -230,7 +230,12 @@
         return;
       }
       if (amRunner()) {
-        const said = frame.call && frame.call.said;
+        // 🚨 THE RUNNER IS NOT SHOWN THE WORD, AND THAT IS BROADCAST §6.9 RATHER THAN AN OMISSION.
+        // *"The guide talks out loud, in the room. That is the game."* The phone knows only that
+        // the guide has spoken — `call.said` is not on this frame at all — so GO and WAIT unlock
+        // on a fact about the clock, and what to do about it is something the runner has to have
+        // heard, and can later be argued with about having heard.
+        const said = frame.call && frame.call.made;
         // 🚨 A LIVE HOUSE MEANS A THROTTLE, NOT A BUTTON. With the mansion attached the runner's
         // decision is not "go or wait" once — it is a speed, continuously, against a Hunter that
         // hears them. `player.js:638` is `noise = speed / MOVE.run`, so the ring under the stick
@@ -238,9 +243,9 @@
         // deniable as panic. That is the runner's whole dual-use verb under D13.
         if (frame.expedition && frame.expedition.live && said) { box.innerHTML = driveCard(); wireDrive(); return; }
         box.innerHTML = said
-          ? '<div class="card"><h3>' + esc(nameOf(frame.call.by)) + ' says</h3>'
-            + '<div style="font:700 34px/1 ui-monospace,Menlo,monospace" class="' + (said === 'CLEAR' ? 'good' : 'warn') + '">'
-            + esc(said) + '</div><div class="note">Waiting costs the camera. It does not cost you.</div></div>'
+          ? '<div class="card"><h3>' + esc(nameOf(frame.pair && frame.pair.guide)) + ' has called it</h3>'
+            + '<div class="say">Out loud, to the room. Nothing on this phone will repeat it.</div>'
+            + '<div class="note">Waiting costs the camera. It does not cost you.</div></div>'
             + (acted ? '<div class="card" style="margin-top:10px"><div class="say">Locked in.</div></div>'
               : '<div class="two" style="margin-top:10px"><button class="big go" id="gogo">GO</button>'
                 + '<button class="big" id="wait">WAIT</button></div>')

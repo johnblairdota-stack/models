@@ -92,12 +92,21 @@ export const MATRIX = [
   // Is a mansion attached? The runner's phone shows a throttle when there is one and GO/WAIT
   // when there is not, so it has to be told — and the whole table may know which it is playing.
   ['expedition.live',          'all'],
-  // ⚠️ THE GUIDE'S CALL IS PUBLIC AND ATTRIBUTED. At the table they say it out loud; putting it
-  // on the record is what gives DEBRIEF something to chew on, and what makes a lie cost something
-  // later. What is NOT public is whether it was TRUE — that needs the Hunter's room, which has no
-  // row anywhere and never will before the Reunion.
-  ['call.by',                  'all'],
-  ['call.said',                'all'],
+  // 🚨 THE GUIDE'S CALL IS SPOKEN, NEVER PRINTED — broadcast §6.9, in its own words: *"Never show
+  // the runner's private prompts or the guide's callouts as on-screen text. The guide talks out
+  // loud, in the room. That is the game."* Both rows here were `all`, and the television printed
+  // CLEAR at sixty-eight pixels in the middle of the circle, which is the same sentence the guide
+  // was supposed to have to say themselves — and a permanent, unambiguous, re-readable record of
+  // it for the DEBRIEF that was supposed to argue about what was said.
+  //
+  // ⚠️ THE RECORD IS NOT AFFECTED AND THAT IS THE POINT. `call.made` is still a PUBLIC log event
+  // carrying `by` and `said`, so the Reunion, the Director and every query over the log see the
+  // call in full. What comes off is the FRAME — the thing that becomes on-screen text.
+  //
+  // `call.by` has no row at all: it is `pair.guide`, which is already public, so the only thing
+  // it ever added to a frame was a second name to print.
+  ['call.made',                'all'],    // that the guide has spoken. The clock, not the callout
+  ['call.said',                'guide'],  // and their own controller says it back to them alone
 
   // ---- the reckoning and the ballot
   ['nominations[].nominator',  'all'],

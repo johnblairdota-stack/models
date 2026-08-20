@@ -59,8 +59,9 @@
          width:min(46%,640px);display:flex;flex-direction:column;gap:clamp(6px,1vh,14px)}
   .stage .big{font:700 clamp(20px,2.6vw,44px)/1.1 ui-sans-serif;letter-spacing:.02em}
   .stage .sub{font:400 clamp(12px,1.2vw,20px)/1.4 ui-sans-serif;color:var(--dim)}
-  .stage .call{font:700 clamp(28px,4vw,68px)/1 ui-monospace,Menlo,monospace;letter-spacing:.1em}
-  .clear{color:var(--live)} .hold{color:var(--warn)} .bad{color:var(--gone)}
+  /* No `.call` rule, deliberately — see the EXPEDITION stage below and broadcast §6.9. A style
+     for it is half of a reintroduction. */
+  .clear{color:var(--live)} .bad{color:var(--gone)}
 
   footer{display:flex;align-items:center;justify-content:space-between;gap:20px;
          font:600 clamp(11px,1.05vw,17px)/1 ui-sans-serif;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
@@ -182,12 +183,21 @@
     PREMIERE: () => big('Check your phone.', 'Your card is private. Read it, then put the phone face down.'),
     CASTING: () => big('Who runs, and who guides?',
       'The ' + wing() + ' wing. Two taps each — argue about the job, not the person.'),
+    /**
+     * 🚨 THE CALL IS NEVER PRINTED HERE — broadcast §6.9. *"Never show the runner's private
+     * prompts or the guide's callouts as on-screen text. The guide talks out loud, in the room.
+     * That is the game."* This used to print CLEAR at sixty-eight pixels across the middle of the
+     * circle, which did the guide's talking for them and left the DEBRIEF arguing with a caption
+     * instead of with each other. The television says only that the guide has spoken — the frame
+     * no longer carries what they said (`entitle.js`, `call.said` → `guide`), so there is nothing
+     * on this page to print even by accident.
+     */
     EXPEDITION: () => {
       const c = frame.call || {};
-      if (!c.said) return big('Into the ' + wing() + '.', nameOf(frame.pair && frame.pair.guide) + ' is watching the cameras.');
-      return '<div class="sub">' + esc(nameOf(c.by)) + ' called</div>'
-        + '<div class="call ' + (c.said === 'CLEAR' ? 'clear' : 'hold') + '">' + esc(c.said) + '</div>'
-        + '<div class="sub">' + esc(nameOf(frame.pair && frame.pair.runner)) + ' decides.</div>';
+      const guide = nameOf(frame.pair && frame.pair.guide);
+      if (!c.made) return big('Into the ' + wing() + '.', guide + ' is watching the cameras.');
+      return big(esc(guide) + ' has called it.',
+        'Out loud, in the room. ' + nameOf(frame.pair && frame.pair.runner) + ' decides.');
     },
     RECAP: () => {
       const o = (frame.expedition || {}).outcome;

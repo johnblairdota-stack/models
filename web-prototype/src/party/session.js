@@ -200,7 +200,9 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
       cameras: { ...state.cameras },
       incident: { ...state.incident },
       nominations: state.nominations.map((n) => ({ ...n })),
-      call: { ...state.call },
+      // §6.9: whether the guide has spoken is public; WHAT they said is theirs and the room's,
+      // out loud. `call.said` is rowed `guide`, so it survives projection onto one phone only.
+      call: { made: state.call.said != null, said: state.call.said },
       expedition: { ...state.expedition, live: sim != null },
     };
     if (state.tally) base.tally = { counts: { ...state.tally.counts }, threshold: state.tally.threshold, executed: state.tally.executed };

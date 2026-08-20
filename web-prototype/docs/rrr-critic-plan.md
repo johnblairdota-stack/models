@@ -44,6 +44,17 @@ touching: if §6.9 forbids airing the call live, both rows come off the public f
 stops printing it; the Reunion still has it, because `log.reunion() === log.all()`. If §6.9
 permits it, leave it and record why here. Do not guess — read the doc.
 
+**Resolved: §6.9 forbids it, and both rows came off.** The doc is unambiguous — *"Never show the
+runner's private prompts or the guide's callouts as on-screen text. The guide talks out loud, in
+the room. That is the game."* The build broke it on both screens at once: the television printed
+CLEAR at sixty-eight pixels across the middle of the circle and the runner's phone printed it
+again under the guide's name. What ships now: `call.by` has **no row at all** (it was `pair.guide`
+with a second name attached), `call.said` is rowed `guide` so the caller's own controller can say
+it back to them and no other socket can, and a new `call.made` boolean is rowed `all` — that the
+guide has spoken is the shooting clock, and the runner's GO/WAIT has to unlock on something. The
+log is untouched: `call.made` is still a PUBLIC event carrying `by` and `said` in full, so the
+Reunion and every query over the log still see the call. `live-session` L14 holds the line.
+
 ### A2 — Note 2, the executioner beat. Free, and the TV throws it away.
 
 `src/party/vote.js:90 executioner()` already returns exactly the nominator John describes, with

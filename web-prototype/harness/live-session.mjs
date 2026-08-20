@@ -379,6 +379,42 @@ const R = play({ taps: engaged });
     `${announced.length} announced, ${begun.length} departed, rooms matched`);
 }
 
+// ---------------------------------------------------------------- L14 · the callout is spoken
+/**
+ * 🚨 BROADCAST §6.9, WHICH THE BUILD BROKE ON BOTH SCREENS AT ONCE: *"Never show the runner's
+ * private prompts or the guide's callouts as on-screen text. The guide talks out loud, in the
+ * room. That is the game."* `call.by` and `call.said` were rowed `all`, the television printed
+ * CLEAR at sixty-eight pixels across the middle of the circle and the runner's phone printed it
+ * again — so the one sentence the guide had to say themselves was said for them, permanently,
+ * in writing, for the DEBRIEF to re-read instead of argue about.
+ *
+ * ⚠️ THE LOG IS NOT WHAT THIS IS ABOUT. `call.made` is still a PUBLIC event carrying `by` and
+ * `said` in full, because the Reunion and every query over the log need it. What may not happen
+ * is the FRAME carrying it, because a frame is what becomes text on a screen.
+ */
+{
+  let leak = null, guideGotIt = false, everyoneKnows = 0;
+  for (const [id, frames] of R.tape) {
+    for (const f of frames) {
+      if (!f.call) continue;
+      if (f.call.made) everyoneKnows++;
+      if (f.call.said == null) continue;
+      const sock = R.s.sockets.find((x) => x.id === id);
+      if (sock && !sock.isTV && f.pair && f.pair.guide === sock.playerId) { guideGotIt = true; continue; }
+      leak = `${id} · phase ${f.phase} · call.said = "${f.call.said}"`;
+    }
+  }
+  t('L14 · what the guide said is on no frame but the guide\'s own — §6.9', leak === null,
+    leak || `${R.tape.size} sockets, every frame scanned`);
+  t('L14b arm · the guide\'s own phone DID get it, so L14 is not passing on a field nobody has',
+    guideGotIt, 'their controller says their call back to them, and to nobody else');
+  t('L14c · that a call HAS been made is still public — the clock, not the callout',
+    everyoneKnows > 0, `${everyoneKnows} frames carry call.made`);
+  t('L14 control · the matrix says the same thing out loud',
+    audienceFor('call.said') === 'guide' && audienceFor('call.made') === 'all' && audienceFor('call.by') === null,
+    'call.said → guide · call.made → all · call.by → no row');
+}
+
 // ---------------------------------------------------------------- L10 · you.acted is yours alone
 {
   let bad = null;
