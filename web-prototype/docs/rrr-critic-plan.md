@@ -98,6 +98,24 @@ text box. A map at RECAP would be worse still: it gives the guide twenty idle se
 array is empty, `project()`'s prune legitimately deletes it, and the traitor reads GOOD.
 `you.alignment` is sitting in the frame, unread. Read it.
 
+### Half A is built. Three places where what shipped is wider than the item as written.
+
+**A0 also sealed `task.miss`.** The item says to fix the counter, and the counter is fixed — it
+counts noise from the runner's throttle, the Hunter's own prowling and the guide's blunder, so a
+delta of 1 is consistent with three histories. But `task.miss` was `VIS.PUBLIC` and fires **if and
+only if the call was wrong**, which is the same lie detector one layer down and on the wire of
+every phone in the room. Leaving it would have made A0 cosmetic — the counter ambiguous and the
+packet beside it decisive — so it is SEALED. Nothing public is lost: a wrong CLEAR is already
+witnessed as a take, and a wrong HOLD is a room nobody entered and nobody heard.
+
+**A6 also darkened `EXECUTION` and `VERDICT`.** The item names RECAP, and round §1's `Phones`
+column reads **dark** for all three. Fixing only the row the critic happened to read would have
+left the identical bug two rows down.
+
+**`room.js:219` was left alone, and it did not need changing.** It emits two `noise.emitted` events
+at 1.25 and 0.62 and adds 2. Against the new `INCIDENT_LOUD = 0.60` that is exactly what the
+session's rule would compute, so the fixture path already agrees with the shipped semantics.
+
 ## Half B — the NO SIGNAL replacement. Recommendation only; not queued.
 
 Held for John. It changes the deception engine, and it is the one place where building the
