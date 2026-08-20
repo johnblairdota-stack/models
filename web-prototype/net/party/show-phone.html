@@ -111,6 +111,14 @@
   const KEY = 'rrr.show.token.' + CODE, NKEY = 'rrr.show.name.' + CODE;
 
   let ws = null, seat = null, frame = null, me = null, backoff = 500, wantJoin = false, reported = false;
+  /**
+   * 🚨 THE WHOLE ROSTER, NOT JUST MY OWN SEAT. The `roster` message has always carried a colour
+   * for every player and this page kept only its own, so every swatch on every sheet except the
+   * bar at the top drew `#8b93a3` — and a grey dot beside a name is not neutral, it is a phone
+   * and a television DISAGREEING about who is who in a game where the nameplate rail is how you
+   * refer to people out loud. Same array the TV draws its circle from, same colours.
+   */
+  let roster = [];
   let pickRunner = null, pickGuide = null, lastPhase = null;
 
   $('name').value = localStorage.getItem(NKEY) || '';
@@ -273,7 +281,7 @@
       if (!noms.length) { box.innerHTML = '<div class="card"><div class="say">Nobody was nominated. Nothing to vote on.</div></div>'; return; }
       box.innerHTML = '<div class="card"><h3>Execute</h3>'
         + noms.map((n) => '<button data-vote="' + n.target + '">'
-          + '<span class="sw" style="background:' + colourOf(n.target) + '"></span>' + esc(nameOf(n.target))
+          + swatch(n.target) + esc(nameOf(n.target))
           + '<span class="say" style="margin-left:auto">by ' + esc(nameOf(n.nominator)) + '</span></button>').join('')
         + '<button data-vote="NO_ONE">Abstain — protect them all</button>'
         + '<div class="note">You can change it until the clock runs out. Nothing is shown until then.</div></div>';
@@ -386,14 +394,21 @@
     $('pub').onclick = () => { const v = $('claim').value.trim(); if (v) act({ t: 'claim', claim: v }); };
   }
 
-  const colourOf = (id) => { const p = ((frame && frame.players) || []).find((x) => x.id === id);
-    return (seat && p && p.seat === seat.seat) ? seat.colour : '#8b93a3'; };
+  const colourOf = (id) => {
+    const p = ((frame && frame.players) || []).find((x) => x.id === id);
+    if (!p) return '#8b93a3';
+    const r = roster.find((x) => x.seat === p.seat);
+    // The seat's own colour is authoritative before the first roster lands, and identical after.
+    return (r && r.colour) || (seat && p.seat === seat.seat ? seat.colour : '#8b93a3');
+  };
+  const swatch = (id) => '<span class="sw" style="background:' + colourOf(id) + '"></span>';
   const wing = () => ((frame && frame.expedition) || {}).room || 'house';
 
   function peopleButtons(slot, chosen, excludeSelf) {
     return living().filter((p) => !(excludeSelf && p.id === iAm())).map((p) =>
       '<button data-pick="' + slot + '|' + p.id + '"' + (chosen === p.id ? ' class="on"' : '') + '>'
-      + esc(p.name) + (p.claim ? '<span class="say" style="margin-left:auto">“' + esc(p.claim) + '”</span>' : '')
+      + swatch(p.id) + esc(p.name)
+      + (p.claim ? '<span class="say" style="margin-left:auto">“' + esc(p.claim) + '”</span>' : '')
       + '</button>').join('');
   }
 
@@ -431,9 +446,13 @@
         $('joinCard').classList.add('hide'); setState('connected');
       }
       if (m.t === 'full') { $('go').disabled = true; $('go').textContent = 'Room is full'; }
-      if (m.t === 'roster' && seat) {
-        const mine = m.players.find((x) => x.seat === seat.seat);
-        if (mine) { $('me').textContent = mine.name; $('rt').textContent = mine.rtt == null ? '' : mine.rtt + 'ms'; }
+      if (m.t === 'roster') {
+        roster = m.players || [];
+        if (seat) {
+          const mine = roster.find((x) => x.seat === seat.seat);
+          if (mine) { $('me').textContent = mine.name; $('rt').textContent = mine.rtt == null ? '' : mine.rtt + 'ms'; }
+        }
+        if (frame) render();
       }
       if (m.t === 'state') { frame = m.frame; render(); }
       if (m.t === 'refused') { $('refused').innerHTML = '<span class="warn">' + esc(m.why) + '</span>'; }
