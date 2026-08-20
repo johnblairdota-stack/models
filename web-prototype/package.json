@@ -39,7 +39,8 @@
     "party:show": "node net/party/show.mjs",
     "gate:shot-solver": "node harness/shot-solver.mjs",
     "gate:expedition-wire": "node harness/expedition-wire.mjs",
-    "party:house": "vite --port 5178 --strictPort"
+    "party:house": "vite --port 5178 --strictPort",
+    "storyboard": "node harness/storyboard.mjs"
   },
   "dependencies": {
     "three": "^0.180.0",

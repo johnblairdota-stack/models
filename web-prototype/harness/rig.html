@@ -1,0 +1,106 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>PRIME TIME — the whole table at once</title>
+<!--
+  🔬 THE TABLE RIG — one television and eight real phones, on one screen.
+
+  🚨 THIS IS AN INSTRUMENT AND IT MUST NEVER BE SERVED BY THE PARTY SERVER. It shows every phone
+  at once, which means every role card at once — by construction the single largest information
+  leak that could exist in this project. It lives in `harness/`, is served by the harness's own
+  static server, and `net/party/show.mjs` has no route to it. A convenience route on the party
+  server would be one URL away from ending somebody's evening.
+
+  🚨 EACH PHONE IS RENDERED AT A REAL PHONE'S SIZE AND THEN SCALED DOWN, NOT SQUASHED INTO A BOX.
+  The first version sized the iframes to whatever space the grid had, which made every pane a
+  scrolled window onto the middle of a page — the vote sheet showed one nominee because the other
+  had scrolled off the top. A pane that crops is worse than no pane: it looks like a screenshot of
+  the product and is a screenshot of a viewport nobody will ever have. 390x844 is an iPhone 14;
+  `transform: scale()` shrinks the picture and keeps the layout.
+
+  Every pane is the shipped page — `show-tv.html` and `show-phone.html` in iframes, each holding
+  its own socket, each frame projected through the real matrix. Nothing here is a mock.
+-->
+<style>
+  :root{ --ink:#f2f4f8; --dim:#8b93a3; --bg:#07090d; --edge:#232937; --phoneW:390px; --phoneH:844px; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);width:100vw;height:100vh;overflow:hidden;
+       font:400 13px/1.3 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;
+       display:flex;flex-direction:column;gap:14px;padding:16px 18px}
+  header{display:flex;align-items:flex-start;justify-content:space-between;gap:30px;flex:none}
+  h1{font:700 13px/1 ui-sans-serif;letter-spacing:.3em;text-transform:uppercase;color:var(--dim);padding-top:4px}
+  .beat{text-align:right;max-width:110ch}
+  .beat b{font:700 22px/1 ui-sans-serif;letter-spacing:.08em;text-transform:uppercase}
+  .beat span{display:block;font:400 14px/1.5 ui-sans-serif;color:var(--dim);margin-top:6px}
+
+  .stage{flex:none;display:flex;justify-content:center}
+  .tvbox{width:1420px;height:800px;border:1px solid var(--edge);border-radius:10px;overflow:hidden;background:#0b0d12}
+  .tvbox iframe{border:0;display:block;width:1420px;height:800px}
+
+  .rack{flex:1;min-height:0;display:flex;gap:10px;justify-content:center;align-items:flex-start}
+  .slot{display:flex;flex-direction:column;gap:5px;align-items:center}
+  .cap{display:flex;justify-content:space-between;align-items:baseline;width:var(--w);
+       font:600 10px/1 ui-sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+  .cap b{color:var(--ink);font-size:12px;letter-spacing:.06em}
+  .cap .role{color:#e0b23c}
+  /* 🚨 THE CAPTION NEVER PRINTS AN ALIGNMENT. The rig knows it — it is driving the game — and
+     putting it here would make every frame of the sheet a spoiler for whoever reads it. */
+  .screen{width:var(--w);height:var(--h);border:1px solid var(--edge);border-radius:10px;
+          overflow:hidden;background:#0b0d12;position:relative}
+  .screen iframe{border:0;display:block;width:var(--phoneW);height:var(--phoneH);
+                 transform-origin:0 0;position:absolute;top:0;left:0}
+</style>
+
+<header>
+  <h1>Run Robot Run · Prime Time — table rig</h1>
+  <div class="beat"><b id="beat">—</b><span id="note"></span></div>
+</header>
+
+<div class="stage"><div class="tvbox"><iframe id="tv" src="about:blank"></iframe></div></div>
+<div class="rack" id="rack"></div>
+
+<script>
+(function () {
+  const q = new URLSearchParams(location.search);
+  const base = q.get('show') || 'http://127.0.0.1:5183';
+  const names = (q.get('names') || 'Vic,Sam,Jo,Kit,Roo,Ali,Mo,Ben').split(',');
+  document.getElementById('tv').src = base + '/';
+
+  const PW = 390, PH = 844;
+  const scale = +(q.get('scale') || 0.56);
+  const rack = document.getElementById('rack');
+  for (let i = 0; i < 8; i++) {
+    const slot = document.createElement('div');
+    slot.className = 'slot';
+    slot.style.setProperty('--w', Math.round(PW * scale) + 'px');
+    slot.style.setProperty('--h', Math.round(PH * scale) + 'px');
+    const cap = document.createElement('div');
+    cap.className = 'cap';
+    cap.innerHTML = '<b>' + names[i] + '</b><span class="role" id="r' + i + '"></span>';
+    const screen = document.createElement('div');
+    screen.className = 'screen';
+    const f = document.createElement('iframe');
+    f.id = 'p' + i;
+    f.style.transform = 'scale(' + scale + ')';
+    /**
+     * 🚨 EACH PANE GETS ITS OWN STORAGE NAMESPACE VIA `?c=`, OR ALL EIGHT ARE THE SAME PLAYER.
+     * The phone keys its seat token as `rrr.show.token.<c>`, and eight iframes on one origin share
+     * one `localStorage` — so the first run of this rig had every phone reclaim Vic's token and
+     * the television sat at "1 OF 4 NEEDED" with eight panes all reading "Vic". That is an
+     * artefact of putting eight phones in one browser, which is what this instrument does and
+     * what a party never does; the namespace is the honest way to say so.
+     */
+    f.src = base + '/p?c=rig' + i;
+    screen.appendChild(f);
+    slot.append(cap, screen);
+    rack.appendChild(slot);
+  }
+  window.__rig = {
+    beat: (title, note) => {
+      document.getElementById('beat').textContent = title;
+      document.getElementById('note').textContent = note || '';
+    },
+    chair: (i, text) => { const e = document.getElementById('r' + i); if (e) e.textContent = text || ''; },
+    tvstate: () => {},
+  };
+})();
+</script>
