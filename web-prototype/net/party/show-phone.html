@@ -7,9 +7,13 @@
   📱 THE CONTROLLER. Under D13 the runner's view is on the television, so the phone is never a
   window into the game — it is the private half: your card, and the four taps only you can make.
 
-  🚨 THE CARD IS BEHIND A DELIBERATE SECOND TAP. Eight people are sitting shoulder to shoulder on a
-  sofa, and a role permanently on screen is a role the person beside you has read. It opens, it
-  closes, and it closes itself when the phase changes.
+  🚨 THE CARD IS HOLD-TO-REVEAL, WHICH IS `rrr-phone-ux.md` §2.3 VERBATIM: *"the card is blurred
+  until a finger is held on it, so a neighbour's glance at an unattended phone reveals nothing.
+  Releasing re-blurs after 400 ms."* This shipped as the doc's own *cheap v1* — tap to open, tap to
+  close — and the comment here defended that as the design, which it never was. A tap-to-open card
+  is readable by the person beside you for exactly as long as its owner is distracted, and eight
+  people on a sofa is a room built out of distraction. A held finger is a card nobody else can read
+  and nobody can forget to put away.
 
   🚨 THIS PAGE IS NOT TOLD WHAT IT IS NOT ENTITLED TO. There is no filtering here and there must
   never be — `project()` on the server decides, and the fields simply are not in the frame. If a
@@ -67,7 +71,14 @@
   .mates .m{display:flex;gap:8px;align-items:baseline;font-size:16px;margin-top:6px}
   .mates .m b{color:var(--evil)}
   .flag{position:fixed;inset:0;background:var(--bg);z-index:9;padding:28px 20px;display:flex;
-        flex-direction:column;justify-content:center;gap:18px}
+        flex-direction:column;justify-content:center;gap:18px;touch-action:none}
+  /* §2.3. The blur is the resting state and `lit` is the exception, so a script that never runs
+     leaves the card unreadable rather than open — the safe direction to fail in. */
+  #cardFace{filter:blur(16px);transition:filter .16s ease;user-select:none;-webkit-user-select:none}
+  .flag.lit #cardFace{filter:none}
+  .holdnote{font:600 13px/1.4 ui-sans-serif;letter-spacing:.18em;text-transform:uppercase;
+            color:var(--dim);text-align:center}
+  .flag.lit .holdnote{color:var(--live)}
 </style>
 
 <div class="bar" id="bar">
@@ -88,18 +99,20 @@
   <div class="phase"><h2 id="ph">—</h2><span class="t" id="clock"></span></div>
   <div class="card" style="margin-top:12px"><div class="say" id="say">…</div></div>
   <div id="controls"></div>
-  <button id="cardBtn" style="margin-top:14px">🎴 <span>Your card</span></button>
+  <!-- §2.3's persistent ROLE tab: it reopens the card in any phase, and it is never a reveal. -->
+  <button id="cardBtn" style="margin-top:14px">🎴 <span>Your card — hold to read</span></button>
   <div class="note" id="refused"></div>
 </div>
 
-<!-- the card, full screen, one tap away and one tap gone -->
+<!-- the card, full screen, blurred until a finger is held on it — §2.3 -->
 <div class="flag hide" id="cardView">
-  <div>
+  <div id="cardFace">
     <div class="align" id="cardAlign">You are</div>
     <div class="role" id="cardRole">—</div>
     <div class="say" id="cardSay"></div>
     <div class="mates hide" id="cardMates"></div>
   </div>
+  <div class="holdnote" id="holdNote">Hold anywhere to read</div>
   <button class="big" id="cardClose">Close</button>
 </div>
 
@@ -128,8 +141,33 @@
     $('go').disabled = true; $('go').textContent = 'Taking a seat…';
     if (ws && ws.readyState === 1) join();
   };
-  $('cardBtn').onclick = () => { showCard(); $('cardView').classList.remove('hide'); };
-  $('cardClose').onclick = () => $('cardView').classList.add('hide');
+  // ---------------------------------------------------------------- the card, held
+  /**
+   * 🚨 §2.3, AND THE 400 ms IS THE SPEC'S NUMBER RATHER THAN A FEEL ONE. *"Releasing re-blurs
+   * after 400 ms."* The delay exists so a finger that slips off the glass mid-read does not snap
+   * the card shut, which would train people to press harder and longer — the opposite of what
+   * this is for.
+   *
+   * ⚠️ POINTER EVENTS, NOT `touchstart`, AND `setPointerCapture` IS WHAT MAKES RELEASE RELIABLE.
+   * Without capture a finger that drifts off the element never delivers `pointerup` to it, and
+   * the card stays lit on a phone lying face-up on a sofa arm — precisely the failure the blur
+   * exists to prevent.
+   */
+  let reblur = null;
+  const lit = (on) => {
+    clearTimeout(reblur);
+    if (on) return $('cardView').classList.add('lit');
+    reblur = setTimeout(() => $('cardView').classList.remove('lit'), 400);
+  };
+  $('cardBtn').onclick = () => { showCard(); lit(false); $('cardView').classList.remove('hide'); };
+  $('cardClose').onclick = (e) => { e.stopPropagation(); lit(false); $('cardView').classList.add('hide'); };
+  $('cardView').addEventListener('pointerdown', (e) => {
+    if (e.target.id === 'cardClose') return;
+    e.preventDefault();
+    try { $('cardView').setPointerCapture(e.pointerId); } catch (_) {}
+    lit(true);
+  });
+  for (const ev of ['pointerup', 'pointercancel']) $('cardView').addEventListener(ev, () => lit(false));
 
   const act = (msg) => ws && ws.readyState === 1 && ws.send(JSON.stringify({ t: 'act', msg }));
 
@@ -421,6 +459,7 @@
     $('say').textContent = typeof s === 'function' ? s() : (s || '');
     if (frame.phase !== lastPhase) {
       // The card closes itself on every phase change — nobody has to remember to put it away.
+      $('cardView').classList.remove('lit');
       $('cardView').classList.add('hide');
       pickRunner = pickGuide = null;
       lastPhase = frame.phase;

@@ -130,9 +130,22 @@ await beat('premiere', 'The premiere', 'Cards are dealt. The TV says only "check
 
 for (let i = 0; i < 8; i++) { await ph(i).locator('#cardBtn').click(); await sleep(120); }
 await sleep(500);
-await beat('cards', 'Eight private cards', 'Each phone shows only its own. Production see each other '
-  + 'and their teammates\' real roles; everyone else sees a name and a job. The Glitched is shown a '
-  + 'role they do not have and is never told otherwise.');
+await beat('cards', 'Eight private cards, all blurred', 'The card is hold-to-reveal (phone UX §2.3). '
+  + 'Open, it is a blur — so a neighbour\'s glance at an unattended phone gets nothing, and nobody has '
+  + 'to remember to put it away.');
+
+// 🚨 A REAL FINGER, NOT A DISPATCHED EVENT. `page.mouse.down()` after `hover()` goes through the
+// iframe's transform and produces the same `pointerdown` a thumb does, so this beat proves the
+// hold works rather than proving a synthetic event was accepted.
+await ph(0).locator('#cardView').hover();
+await page.mouse.down();
+await sleep(400);
+await beat('card-held', 'One finger, one card', 'Vic is holding theirs. Everyone else\'s is still a '
+  + 'blur. Release and it re-blurs after 400 ms — Production see each other and their teammates\' '
+  + 'real roles; everyone else sees a name and a job. The Glitched is shown a role they do not have '
+  + 'and is never told otherwise.');
+await page.mouse.up();
+await sleep(500);
 
 // ---------------------------------------------------------------- 3 · casting
 await skip();
