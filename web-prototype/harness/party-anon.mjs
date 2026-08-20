@@ -25,12 +25,22 @@
  * seat — and names the culprit by POSITION. Any array whose length is the crew size is an
  * accusation with the serial number filed off.
  *
+ * 🚨 **A8 IS THE ONE ASSERTION HERE THAT IS ABOUT INFORMATION RATHER THAN ABOUT SHAPE, AND IT
+ * LIVES IN THIS FILE BECAUSE IT IS THE SAME CONTRACT.** A1-A4 ask *"does this payload name
+ * anybody?"* — and a payload can pass all four while being a perfect index of one player's
+ * honesty. `incident.alarms` was exactly that: rowed `all`, printed permanently in the corner of
+ * the television, and incremented in one place only, if and only if the guide's call had been
+ * wrong. Anonymous by shape, an accusation by arithmetic. So A8 asks the question the shape
+ * checks cannot: **given the number the table can see, is more than one history still possible?**
+ *
  * 🚨 **A6 IS THE SCANNER'S OWN ARM.** A scanner that never finds attribution anywhere is
  * indistinguishable from a scanner that cannot find attribution. So A6 points it at the Reunion,
  * where attribution is the entire point, and REQUIRES it to go red.
  */
 
 import { createRoom } from '../src/party/room.js';
+import { createSession, CALL, MOVE_CHOICE, INCIDENT_LOUD } from '../src/party/session.js';
+import { PHASE } from '../src/party/phases.js';
 import { FAILURE_FIELDS, FAILURE_KINDS, isFailure, makeEvent, VIS } from '../src/party/events.js';
 import { allCaptions, LOWER_THIRD } from '../src/party/captions.js';
 import { KIND } from '../src/party/director.js';
@@ -179,6 +189,116 @@ function findPositional(payload, crewSize) {
   const reunion = { roll: truth.seats.map((s) => ({ name: `Robot ${s.seat + 1}`, role: s.role, alignment: s.alignment })) };
   const hit = findIdentity(reunion, roster);
   t('A6 · the scanner CAN find attribution — it goes red on a Reunion reveal', hit !== null, hit || 'scanner is blind');
+}
+
+// ---------------------------------------------------------------- A8 · the counter's entropy
+/**
+ * Drive whole shows on a fake clock and read, per episode, the two numbers that matter: what the
+ * public counter moved by, and whether the guide's call was in fact wrong.
+ *
+ * ⚠️ `misled` IS RECOVERED FROM THE SEALED STREAM, WHICH IS THE ONLY HONEST WAY TO GET IT. The
+ * Hunter's room is `hunter.placed`, SEALED; the wing is public; the call is public. The gate is
+ * allowed to know all three because the gate is the Reunion. The table is not, and A8 is the
+ * assertion that the public number does not hand it over anyway.
+ */
+function sweepEpisodes({ seeds = 12, stepMs = 5000, maxSteps = 4000 } = {}) {
+  const POLICY = [
+    ['always CLEAR', () => CALL.CLEAR],
+    ['always HOLD', () => CALL.HOLD],
+    ['alternating', (s) => (s.state.episode % 2 ? CALL.CLEAR : CALL.HOLD)],
+  ];
+  const out = [];
+  for (let seed = 1; seed <= seeds; seed++) {
+    for (const [, call] of POLICY) {
+      const s = createSession({ count: 8, castSeed: seed, worldSeed: seed * 3, send: () => {} });
+      let now = 0;
+      s.start(now);
+      for (let i = 0; i < maxSteps && s.state.phase !== PHASE.REUNION; i++) {
+        const alive = s.state.players.filter((p) => p.alive).map((p) => p.id);
+        switch (s.state.phase) {
+          case PHASE.CASTING:
+            for (let k = 0; k < alive.length; k++) {
+              s.input(alive[k], { t: 'cast', runner: alive[(k + 1) % alive.length], guide: alive[(k + 2) % alive.length] });
+            }
+            break;
+          case PHASE.EXPEDITION:
+            s.input(s.state.pair.guide, { t: 'call', call: call(s) });
+            s.input(s.state.pair.runner, { t: 'move', move: MOVE_CHOICE.GO });
+            break;
+          case PHASE.RECKONING:
+            if (!s.state.nominations.length) s.input(alive[0], { t: 'nominate', target: alive[1] });
+            break;
+          case PHASE.VOTE:
+            for (const id of alive) s.input(id, { t: 'vote', choice: alive[1] });
+            break;
+          default: break;
+        }
+        now += stepMs;
+        s.tick(now);
+      }
+      const log = s.log.all();
+      const at = (type, f = (e) => e.data.episode) => new Map(log.filter((e) => e.type === type).map((e) => [f(e), e.data]));
+      const hunter = at('hunter.placed');
+      const wing = at('expedition.begun');
+      const called = at('call.made');
+      let prev = 0, ep = 0;
+      for (const v of log.filter((e) => e.type === 'verdict.aired')) {
+        ep += 1;
+        const delta = v.data.alarms - prev;
+        prev = v.data.alarms;
+        const said = called.get(ep)?.said;
+        if (!said) continue;                       // a silent guide made no call to be wrong about
+        const here = hunter.get(ep)?.room === wing.get(ep)?.room;
+        out.push({ delta, misled: (said === CALL.CLEAR && here) || (said === CALL.HOLD && !here) });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * The property, as a function, so the control can run the SAME predicate over the shipped bug.
+ *
+ *   collide — two episodes with the SAME delta and OPPOSITE `misled`. Without this the number is
+ *             a lie detector: read the delta, know whether the guide was straight.
+ *   spread  — two episodes with DIFFERENT deltas and the SAME `misled`. Without this the number
+ *             is a lie detector in the other direction: it moves for nothing else, so any change
+ *             at all is the guide.
+ */
+function entropy(eps) {
+  const collide = eps.some((a) => eps.some((b) => a.delta === b.delta && a.misled !== b.misled));
+  const spread = eps.some((a) => eps.some((b) => a.delta !== b.delta && a.misled === b.misled));
+  return { collide, spread, ok: collide && spread };
+}
+const histogram = (eps) => {
+  const k = {};
+  for (const e of eps) k[`Δ${e.delta}/${e.misled ? 'wrong' : 'straight'}`] = (k[`Δ${e.delta}/${e.misled ? 'wrong' : 'straight'}`] || 0) + 1;
+  return Object.keys(k).sort().map((x) => `${x}×${k[x]}`).join(' ');
+};
+
+{
+  const eps = sweepEpisodes();
+  const deltas = new Set(eps.map((e) => e.delta));
+  t('A8 arm · a seeded sweep of whole shows produced episodes of both kinds to compare',
+    eps.length > 40 && eps.some((e) => e.misled) && eps.some((e) => !e.misled) && deltas.size > 1,
+    `${eps.length} episodes · deltas {${[...deltas].sort().join(',')}} · threshold ${INCIDENT_LOUD}`);
+
+  const E = entropy(eps);
+  t('A8 · the same alarm delta occurs with the guide straight AND with the guide wrong', E.collide,
+    E.collide ? histogram(eps) : 'the delta names the guide — bible §5.6, R14 Fatal');
+  t('A8b · and the delta moves for reasons that are not the guide at all', E.spread,
+    E.spread ? 'the runner\'s throttle and the house\'s own prowling move it too'
+      : 'nothing but the call can move the counter');
+
+  // 🚨 THE CONTROL IS THE SHIPPED BUG, RUN THROUGH THE SAME PREDICATE. `incident.alarms += 1`
+  // inside `if (misled)` and nowhere else is a delta of exactly one when the call was wrong and
+  // exactly zero when it was not. A8 must be red on that series or it is asserting nothing.
+  const singleSource = eps.map((e) => ({ delta: e.misled ? 1 : 0, misled: e.misled }));
+  const C = entropy(singleSource);
+  t('A8 control · restore the single-source increment and A8 goes red', !C.collide,
+    `single-source series: ${histogram(singleSource)}`);
+  t('A8b control · and A8b goes red on it too — a one-source counter has no other reason to move',
+    !C.spread, `collide ${C.collide} · spread ${C.spread}`);
 }
 
 // ---------------------------------------------------------------- A7 · the controls

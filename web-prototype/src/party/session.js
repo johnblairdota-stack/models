@@ -69,6 +69,41 @@ export const GUIDE_TILT_DEG = 62;
 export const STOREY_H = 4.80;
 
 /**
+ * 🚨 **THE INCIDENT COUNT IS PHYSICS, NOT A VERDICT ON THE GUIDE — AND IT WAS THE OTHER THING
+ * ONCE, WHICH DELETED THE GAME.**
+ *
+ * `incident.alarms` used to increment in exactly one place: when the guide's call turned out to
+ * be wrong. It is rowed `all` (`entitle.js`) and printed permanently in the corner of the
+ * television, so the number WAS a public read-out of whether the guide had lied — or,
+ * indistinguishably, been honestly wrong. Either way the deniable HOLD this file's own comment
+ * calls uncatchable was catchable by arithmetic, from the sofa, by anyone watching the corner of
+ * the screen. The anonymity gates could not see it: `events.js`'s closed schema and `party-anon`
+ * A1-A4 check the SHAPE of attribution, and a perfectly anonymous number can still be a perfect
+ * index of one player's honesty.
+ *
+ * So the counter counts what round §4 says it counts — *"over this episode's log: `noise.emitted`
+ * with `loud ≥ INCIDENT_LOUD`"* — across every source that makes a noise: the runner's throttle,
+ * the Hunter's own prowling, and the guide's blunder. A delta of 1 is now consistent with three
+ * different histories and a delta of 2 with three more, which is the property `party-anon` A8
+ * asserts and the property the mode is built on. Bible §5.6: *"a number, with no attribution ...
+ * nobody knows which were malice."*
+ *
+ * ⚠️ THE SEALED ATTRIBUTION IS UNCHANGED AND MUST STAY THAT WAY. Every emission below still
+ * records `causedBy` on a `VIS.SEALED` `noise.emitted`, in the same stream, so the Reunion's
+ * *Loudest Robot* needs no second source. Public count, sealed cause — one mechanism.
+ */
+export const INCIDENT_LOUD = 0.60;
+
+/** The guide's wrong call, in gunshots. `noiseplan.js`'s ruler: 0.62 carries 8.7 m. */
+export const MISS_LOUD = 0.62;
+
+/** STILL / CREEP / WALK / RUN, in `player.js`'s own units — `noise = speed / MOVE.run`. */
+export const THROTTLE = Object.freeze([0, 0.17, 0.49, 1.00]);
+
+/** The house on its own: four draws either side of the threshold, so the world is genuinely noisy. */
+export const PROWL = Object.freeze([0.20, 0.45, 0.62, 1.10]);
+
+/**
  * @param {object} o
  * @param {number} o.count
  * @param {number} o.castSeed        NEVER transmitted. cast.js's header.
@@ -143,6 +178,18 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
     }
     return stored;
   };
+
+  /**
+   * One physical noise, on the record. The cause is SEALED and the COUNT is public — §4, and the
+   * whole of T5 in one function. Every increment of `incident.alarms` in this file goes through
+   * here, so no future caller can quietly make the counter mean something else again.
+   */
+  function emitNoise({ loud, room, causedBy = null, sourceType }) {
+    record(makeEvent('noise.emitted', VIS.SEALED, { causedBy, loud, room, sourceType }));
+    // §4 excludes `PICK` — the lock work itself is the job, and a job nobody can do quietly is
+    // not deduction fuel. Everything else that clears the threshold is an incident.
+    if (loud >= INCIDENT_LOUD && sourceType !== 'PICK') state.incident.alarms += 1;
+  }
 
   function fullFor(sock) {
     const base = {
@@ -362,19 +409,43 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
     }
     state.expedition.outcome = outcome;
 
+    // ---- the noise bus. Three sources, and the counter cannot tell them apart. See INCIDENT_LOUD.
+    //
+    // 🚨 THE RUNNER'S OWN THROTTLE IS THE FIRST SOURCE, AND UNDER D13 IT IS THE ONLY MOVE AN EVIL
+    // RUNNER HAS. `player.js:638` is `noise = speed / MOVE.run`, so RUN is 1.0 and an incident,
+    // WALK is 0.49 and is not — choosing RUN while the Hunter is close is loud, on television, and
+    // completely deniable as panic. With a mansion attached the number is the one the house
+    // measured; without one the throttle was never on screen, so it is drawn from the same four
+    // detents, seeded per episode.
+    const runnerLoud = sim ? sim.runner.noise
+      : move === MOVE_CHOICE.GO ? THROTTLE[1 + hash(worldSeed, 'throttle', state.episode) % 3]
+        : THROTTLE[hash(worldSeed, 'throttle', state.episode) % 2];
+    emitNoise({ loud: runnerLoud, room: state.expedition.room, causedBy: state.pair.runner, sourceType: 'SPRINT' });
+
+    // 🚨 THE SECOND SOURCE IS NOBODY'S, AND THAT ROW IS MANDATORY. Bible §6.1 marks *idle
+    // curiosity* "low, **random**", non-negotiable, and P5 says it plainly: *"if every incident
+    // traced to a player, we'd have no game."* The Hunter wanders and investigates empty rooms on
+    // its own schedule, and it is heard doing it.
+    emitNoise({
+      loud: PROWL[hash(worldSeed, 'prowl', state.episode) % PROWL.length],
+      room: sim ? sim.hunter.room : hunterRoom, causedBy: null, sourceType: 'PROWL',
+    });
+
     // The call was wrong if it pointed the runner at the Hunter, or away from a clear room.
     const misled = (said === CALL.CLEAR && hunterHere) || (said === CALL.HOLD && !hunterHere);
     if (misled) {
-      // T5: the failure event names a room and a loudness. It never names the culprit — the
-      // closed schema in `events.js` makes that a construction error rather than a code review.
-      record(makeEvent('task.miss', VIS.PUBLIC, {
-        kind: 'call', room: state.expedition.room, phaseTick: state.tick, loudness: 0.62,
+      // 🚨 SEALED, AND IT WAS PUBLIC, WHICH MADE THE COUNTER'S FIX COSMETIC. `task.miss` fires if
+      // and only if the guide's call was wrong, so a PUBLIC one is the same lie detector as the
+      // old single-source counter, one layer down and still on the wire — invisible on the
+      // television and one devtools panel from the sofa. Nothing public is lost by sealing it:
+      // a wrong CLEAR is already witnessed as `player.taken`, and a wrong HOLD is a room nobody
+      // entered and nobody heard. T5: the failure event names a room and a loudness and never the
+      // culprit — the closed schema in `events.js` keeps that a construction error.
+      record(makeEvent('task.miss', VIS.SEALED, {
+        kind: 'call', room: state.expedition.room, phaseTick: state.tick, loudness: MISS_LOUD,
       }));
-      state.incident.alarms += 1;
       // Attribution, sealed, in the same stream — so the Reunion needs no second source.
-      record(makeEvent('noise.emitted', VIS.SEALED, {
-        causedBy: state.pair.guide, loud: 0.62, room: state.expedition.room,
-      }));
+      emitNoise({ loud: MISS_LOUD, room: state.expedition.room, causedBy: state.pair.guide, sourceType: 'MISS' });
     }
 
     takenThisEpisode = [];
