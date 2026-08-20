@@ -95,7 +95,7 @@ function makeRunner(pos) {
  */
 const PANIC = 12, PANIC_HOLD = 6;
 
-function expedition({ seed, stage, flee = true }) {
+function expedition({ seed, stage, flee = true, capDetent = 3 }) {
   const rng = lcg(seed);
   const noise = new NoiseBus();
   const hunter = new HunterAI({
@@ -154,7 +154,7 @@ function expedition({ seed, stage, flee = true }) {
     } else leg = { x: terminal.x, z: terminal.z };
 
     const dTerm = Math.hypot(terminal.x - runner.root.position.x, terminal.z - runner.root.position.z);
-    const detent = panicking ? 3 : dTerm > 9 ? 3 : dTerm > 3.5 ? 2 : dTerm > TERMINAL_REACH ? 1 : 0;
+    const detent = Math.min(capDetent, panicking ? 3 : dTerm > 9 ? 3 : dTerm > 3.5 ? 2 : dTerm > TERMINAL_REACH ? 1 : 0);
     const want = DETENT[detent].speed;
     const dx = leg.x - runner.root.position.x, dz = leg.z - runner.root.position.z;
     const dl = Math.hypot(dx, dz) || 1;
@@ -239,6 +239,22 @@ console.log('\n=== where the stationary seconds come from (all runs pooled, sile
   for (const [k, v] of Object.entries(tot).sort((a, b) => b[1] - a[1])) {
     console.log(`  ${k.padEnd(9)}  ${(v / T * 100).toFixed(1).padStart(6)}%         ${((still[k] ?? 0) / v * 100).toFixed(1).padStart(6)}%          ${((still[k] ?? 0) / T * 100).toFixed(2).padStart(6)}%`);
   }
+}
+
+// ------------------------------------------------------------------ the control arms
+console.log('\n=== CONTROL ARMS · same measurement, different runner ===');
+const arms = {
+  'A  competent (flees, RUN)   ': { flee: true,  capDetent: 3 },
+  'B  shipped solo director    ': { flee: false, capDetent: 3 },
+  'C  cautious (never above WALK)': { flee: true, capDetent: 2 },
+};
+for (const [name, o] of Object.entries(arms)) {
+  const rr = [];
+  for (const stage of [1, 2, 3]) for (const seed of SEEDS) rr.push(expedition({ seed, stage, ...o }));
+  const v = rr.map((r) => r.acc.byThresh.silent / r.acc.time);
+  const ends = rr.filter((r) => r.acc.end.why === 'taken').length;
+  const lens = rr.map((r) => r.acc.end.at);
+  console.log(`  ${name}  s: min ${Math.min(...v).toFixed(3)}  median ${q(v, 0.5).toFixed(3)}  mean ${mean(v).toFixed(3)}  max ${Math.max(...v).toFixed(3)}   taken ${ends}/${rr.length}  median segment ${q(lens, 0.5).toFixed(1)}s`);
 }
 
 const trace = process.argv.indexOf('--trace');
