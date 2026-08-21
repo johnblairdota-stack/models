@@ -31,6 +31,8 @@ import { ROOMS } from '../src/party/coverage.js';
 import { NO_ONE } from '../src/party/vote.js';
 import { applyTake, applyEviction } from '../src/party/taken.js';
 import { audienceFor } from '../net/party/entitle.js';
+import { visibleTo } from '../src/party/log.js';
+import { VIS } from '../src/party/events.js';
 
 let pass = 0, fail = 0;
 const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' · ' + d : ''}`); } else { fail++; console.log(`  FAIL ${n}${d ? ' · ' + d : ''}`); } return c; };
@@ -601,9 +603,19 @@ const R = play({ taps: engaged });
  * again — so the one sentence the guide had to say themselves was said for them, permanently,
  * in writing, for the DEBRIEF to re-read instead of argue about.
  *
- * ⚠️ THE LOG IS NOT WHAT THIS IS ABOUT. `call.made` is still a PUBLIC event carrying `by` and
- * `said` in full, because the Reunion and every query over the log need it. What may not happen
- * is the FRAME carrying it, because a frame is what becomes text on a screen.
+ * 🚨 **AND THE FRAME WAS ONLY HALF OF IT.** `record()` emits the raw stored event to every socket
+ * `visibleTo` accepts, and `call.made` was PUBLIC carrying `{by, said, episode}` — so the row that
+ * took the callout off the frame left the exact word, with a name on it, on all eight phones'
+ * event wires. `expedition.ended` then repeated it thirty seconds later, also PUBLIC. `session.js`
+ * had already sealed `task.miss` two functions away on the argument that a PUBLIC event is
+ * *"invisible on the television and one devtools panel from the sofa"*: identical risk, identical
+ * wire, opposite conclusion. That argument is the right one, so the word is SEALED now and the
+ * FACT — that the guide spoke, and who they are — stays PUBLIC and attributable, which is what
+ * the DEBRIEF actually argues over.
+ *
+ * ⚠️ SEALED IS DELAYED, NOT DELETED. `log.reunion()` IS `log.all()`, so L14g asserts the Reunion
+ * can still say what was called — the property `party-log` L4 states for the stream as a whole,
+ * restated here for the one event this section is about.
  */
 {
   let leak = null, guideGotIt = false, everyoneKnows = 0;
@@ -626,6 +638,59 @@ const R = play({ taps: engaged });
   t('L14 control · the matrix says the same thing out loud',
     audienceFor('call.said') === 'guide' && audienceFor('call.made') === 'all' && audienceFor('call.by') === null,
     'call.said → guide · call.made → all · call.by → no row');
+
+  // ---- the EVENT wire, which is the other half and was wide open
+  /**
+   * One predicate, used by the assertion, by its arm and by its control — a predicate stated
+   * twice is a predicate that drifts. "Carries the word" is deliberately broader than "is
+   * `call.said`": it catches any event, of any type, whose payload contains a CLEAR or a HOLD.
+   */
+  const carriesTheWord = (ev) => {
+    const d = (ev && ev.data) || {};
+    return Object.values(d).some((v) => v === CALL.CLEAR || v === CALL.HOLD);
+  };
+  const delivered = [...R.events.entries()].flatMap(([id, evs]) => evs.map((ev) => [id, ev]));
+  {
+    const said = delivered.filter(([, ev]) => carriesTheWord(ev));
+    t('L14d · and the guide\'s word is on no socket\'s EVENT wire either — not even the guide\'s own',
+      said.length === 0,
+      said.length ? `${said[0][0]} received ${said[0][1].type} = ${JSON.stringify(said[0][1].data)}`
+        : `${delivered.length} events delivered across ${R.events.size} sockets, none carrying CLEAR or HOLD`);
+    t('L14e arm · the sweep is looking at a real wire — the guide DID call it, every episode',
+      delivered.length > 20 && R.s.log.all().filter((e) => e.type === 'call.said').length > 0,
+      `${R.s.log.all().filter((e) => e.type === 'call.said').length} calls made · ${delivered.length} events delivered`);
+    t('L14f · and `call.made` still reaches the room, attributed — the fact, not the word',
+      delivered.some(([, ev]) => ev.type === 'call.made' && ev.data.by && !('said' in ev.data)),
+      `the DEBRIEF gets a name and a moment; ${delivered.filter(([, ev]) => ev.type === 'call.made').length} deliveries`);
+    const reunion = R.s.log.reunion();
+    t('L14g · the Reunion can still say what was called — sealed is delayed, not deleted',
+      reunion.length === R.s.log.all().length
+        && reunion.some((e) => e.type === 'call.said' && (e.data.said === CALL.CLEAR || e.data.said === CALL.HOLD)),
+      `reunion() === all() at ${reunion.length} entries, and ${reunion.filter((e) => e.type === 'call.said').length} of them are callouts`);
+
+    /**
+     * 🚨 THE CONTROL IS THE SHIPPED BUG, RUN THROUGH THE SAME PREDICATE AND THE SAME `visibleTo`.
+     * It takes the REAL log this show wrote and re-classes the callout PUBLIC — which is exactly
+     * what `session.js` did — then asks the shipped filter who would have received it. Nothing
+     * here is hand-written: the events are the ones the session recorded, the filter is the one
+     * that ships, and the predicate is the one L14d used.
+     */
+    const ctxOf = (sk) => ({ playerId: sk.playerId, alignment: sk.alignment, isTV: sk.isTV });
+    const republished = R.s.log.all()
+      .filter((e) => e.type === 'call.said')
+      .map((e) => ({ ...e, vis: VIS.PUBLIC }));
+    const wouldReach = [];
+    for (const ev of republished) {
+      for (const sk of R.s.sockets) if (visibleTo(ev, ctxOf(sk)) && carriesTheWord(ev)) wouldReach.push(sk.id);
+    }
+    t('L14 control · re-class the callout PUBLIC, as it shipped, and it reaches every socket — L14d goes red',
+      republished.length > 0 && new Set(wouldReach).size === R.s.sockets.length,
+      `${republished.length} callouts would have been delivered to ${new Set(wouldReach).size}/${R.s.sockets.length} sockets, television included`);
+    t('L14 control b · and the same filter refuses them while they are SEALED, so L14d is the seal and not the sweep',
+      R.s.log.all().filter((e) => e.type === 'call.said')
+        .every((ev) => R.s.sockets.every((sk) => !visibleTo(ev, ctxOf(sk)))),
+      'the only difference between the two runs above is the word SEALED');
+  }
 }
 
 // ---------------------------------------------------------------- L10 · you.acted is yours alone

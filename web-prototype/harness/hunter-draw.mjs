@@ -93,6 +93,9 @@ function sweep({ seeds = 80, stepMs = 5000, maxSteps = 4000 } = {}) {
       const by = (type) => new Map(log.filter((e) => e.type === type).map((e) => [e.data.episode, e.data]));
       const placed = by('hunter.placed');
       const begun = by('expedition.begun');
+      // The callout is SEALED and off `expedition.ended` — see `session.js`'s `call` input. The
+      // gate is the Reunion, so it reads the sealed stream and joins by episode.
+      const spoke = by('call.said');
       // Every `player.taken` in the log came from the expedition — `resolveVote` filters the
       // event out for an execution, which is `player.executed` and nothing else.
       const takenIds = new Set(log.filter((e) => e.type === 'player.taken').map((e) => e.data.id));
@@ -101,11 +104,12 @@ function sweep({ seeds = 80, stepMs = 5000, maxSteps = 4000 } = {}) {
         const b = begun.get(ep);
         if (!b) continue;
         const here = placed.get(ep)?.room === b.room;
+        const said = spoke.get(ep)?.said ?? null;
         rows.push({
           seed, ep, wing: b.room, hunterRoom: placed.get(ep)?.room, here,
-          said: e.data.said, move: e.data.move, outcome: e.data.outcome,
+          said: spoke.get(ep)?.said ?? null, move: e.data.move, outcome: e.data.outcome,
           runner: b.runner, runnerTaken: takenIds.has(b.runner) && e.data.outcome === 'taken',
-          misled: (e.data.said === CALL.CLEAR && here) || (e.data.said === CALL.HOLD && !here),
+          misled: (said === CALL.CLEAR && here) || (said === CALL.HOLD && !here),
         });
       }
     }

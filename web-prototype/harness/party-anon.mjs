@@ -240,7 +240,8 @@ function sweepEpisodes({ seeds = 12, stepMs = 5000, maxSteps = 4000 } = {}) {
       const at = (type, f = (e) => e.data.episode) => new Map(log.filter((e) => e.type === type).map((e) => [f(e), e.data]));
       const hunter = at('hunter.placed');
       const wing = at('expedition.begun');
-      const called = at('call.made');
+      // The word lives on the SEALED `call.said` now — the gate is the Reunion and may read it.
+      const called = at('call.said');
       let prev = 0, ep = 0;
       for (const v of log.filter((e) => e.type === 'verdict.aired')) {
         ep += 1;

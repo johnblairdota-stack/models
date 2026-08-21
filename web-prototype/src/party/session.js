@@ -616,8 +616,12 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
         for (const e of events) record(makeEvent(e.type, e.vis, e.data));
       }
     }
+    // ⚠️ NO `said` ON THIS ONE EITHER, AND IT WAS THE SAME LEAK ONE FUNCTION ALONG. Sealing
+    // `call.said` at the moment the guide speaks buys nothing if the episode's closing PUBLIC
+    // event repeats the word thirty seconds later. The outcome, the move and the room are what
+    // the table witnessed; the callout is `call.said`, sealed, and the Reunion reads both.
     record(makeEvent('expedition.ended', VIS.PUBLIC, {
-      outcome, said, move, room: state.expedition.room, episode: state.episode,
+      outcome, move, room: state.expedition.room, episode: state.episode,
     }));
   }
 
@@ -720,9 +724,33 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
         if (msg.call !== CALL.CLEAR && msg.call !== CALL.HOLD) return { ok: false, why: 'CLEAR or HOLD' };
         state.call.said = msg.call;
         pending.acted.add(playerId);
-        // The table hears the guide speak; the log records what they said, publicly and
-        // attributably. DEBRIEF has nothing to chew on otherwise.
-        record(makeEvent('call.made', VIS.PUBLIC, { by: playerId, said: msg.call, episode: state.episode }));
+        /**
+         * 🚨 **THE FACT IS PUBLIC AND THE WORD IS SEALED, AND IT USED TO BE ONE EVENT CARRYING
+         * BOTH.** `entitle.js` took `call.said` off the FRAME on broadcast §6.9's authority —
+         * *"the guide talks out loud, in the room. That is the game"* — and `record()` went on
+         * emitting the raw stored event to every socket `visibleTo` accepts, so a PUBLIC
+         * `call.made` put the exact word, with the guide's name on it, on all eight phones' event
+         * wires. The sentence the guide was supposed to have to say themselves was still being
+         * said for them, permanently, in writing, one devtools panel from the sofa.
+         *
+         * ⚠️ THIS FILE HAD ALREADY MADE THE OPPOSITE DECISION TWO FUNCTIONS AWAY AND THE TWO
+         * COULD NOT BOTH BE RIGHT. `task.miss` was sealed on the argument that *"a PUBLIC one is
+         * the same lie detector ... invisible on the television and one devtools panel from the
+         * sofa"*. Identical risk, identical wire, opposite conclusion. The `task.miss` argument
+         * is the correct one and this is it applied consistently.
+         *
+         * ⚠️ THE PUBLIC RECORD IS NOT LOST, WHICH IS WHY THIS IS TWO EVENTS RATHER THAN A
+         * DELETION. That the guide has spoken, and who they are, is public and attributable — the
+         * DEBRIEF needs a clock and a name to argue about, and both are here. What comes off the
+         * wire is the CLEAR or the HOLD, which is the only part §6.9 protects.
+         *
+         * ⚠️ AND THE REUNION STILL HAS IT. `log.reunion()` is `log.all()` — the same stream with
+         * the filter off — so a SEALED entry is a delayed reveal rather than a deleted one. The
+         * two event names mirror the two matrix rows exactly: `call.made` is `all`, `call.said`
+         * is one phone now and the whole room at the end.
+         */
+        record(makeEvent('call.made', VIS.PUBLIC, { by: playerId, episode: state.episode }));
+        record(makeEvent('call.said', VIS.SEALED, { by: playerId, said: msg.call, episode: state.episode }));
         broadcast();
         return { ok: true };
       }
