@@ -268,7 +268,7 @@ export default async function view(args = {}) {
   function sit(c, k) {
     const b = c.bones;
     const yaw = c.avatar.root.rotation.y;
-    _fwd.set(Math.sin(yaw), 0, Math.cos(yaw));          // "+Z forward", as `player.js:1806` has it
+    _fwd.set(Math.sin(yaw), 0, Math.cos(yaw));          // "+Z forward", as `player.js:900` has it
     _thigh.copy(_fwd).setY(-0.18).normalize();          // a dead-level thigh reads as a mannequin
     aimBone(c.bones.upL, b.loL, _thigh, k);             // thighs first: aiming one moves its shin
     aimBone(b.upR, b.loR, _thigh, k);

@@ -4,7 +4,10 @@
  *
  *   node harness/task-deck.mjs
  *
- * `rrr-task-deck.md` §5.2.1. The Task Contract is what stops the deck degenerating into a bag of
+ * `rrr-task-deck.md` §1, *"The Task Contract, amended for pairs"* — NOT §5.2.1, which is a section
+ * of the BIBLE. That doc runs §1-§5 and says in its own opening line that it *"replaces §5.2.2 of
+ * `rrr-social-deception-mode.md` and amends §5.2.1"*, so citing it by the number it amends points
+ * a reader at the text it supersedes. The Task Contract is what stops the deck degenerating into a bag of
  * minigames as it grows past five, and a contract nobody checks is a comment.
  *
  * 🚨 **T4 IS PENDING ON THREE TASKS AND THIS FILE SAYS SO BY NAME.** The noise bus carries placed

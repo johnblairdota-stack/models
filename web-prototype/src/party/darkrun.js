@@ -55,7 +55,7 @@ export const noiseFor = (speed) => Math.min(1, speed / MOVE.run);
  */
 export const audibleRange = (noise) => (noise < HUNTER_SENSE.hearFloor ? 0 : HUNTER_SENSE.hearRange * noise);
 
-/** The fastest a robot can move and still be inaudible. Below the CREEP detent — see `SILENT_BAND`. */
+/** The fastest a robot can move and still be inaudible. Below the CREEP detent — see `silentCrossing`. */
 export const SILENT_SPEED = HUNTER_SENSE.hearFloor * MOVE.run;
 
 /**
@@ -68,9 +68,27 @@ export const SILENT_SPEED = HUNTER_SENSE.hearFloor * MOVE.run;
  * violated: *"success should require some noise, so silence is not a strategy."*
  *
  * The detented stick has no notch in that band. STILL is silent and goes nowhere; CREEP is the
- * slowest thing that moves and is already audible at 2.42 m. **The exploit is unreachable, not
- * patched.** `dark-run` D4 asserts both halves — that the band exists on a continuous stick, and
- * that no detent lands in it.
+ * slowest thing that moves, and the ENGINE now delivers it at the speed this table names — 0.900
+ * m/s measured on a real `Player` over a full 90 s expedition, noise 0.173, **audible at 2.42 m**.
+ * That is outside the Hunter's `reach` (2.05) and well outside the 1.00 m at which a stage-3
+ * Hunter and the runner are already touching, so the runner is heard before it can be grabbed.
+ * The wire cannot reopen the band either: `views/expedition.js` accepts a detent only under
+ * `Number.isInteger` and clamps it to `[0, 3]`, so a hostile phone has no way to send a magnitude
+ * between the notches. **The exploit is unreachable, not patched.** `dark-run` D4 asserts both
+ * halves — that the band exists on a continuous stick (D4a), and that no detent DELIVERS a speed
+ * in it (D4b, D4b2).
+ *
+ * ⚠️ **THIS ARGUMENT WAS VOID FOR AS LONG AS THE PARTY MODE HAD EXISTED, AND THE SENTENCE ABOVE IS
+ * ONLY TRUE AS OF `761d4ca`.** It is recorded here because the failure was in the *form* of the
+ * argument, not in the arithmetic. The old D4 read `audibleRange(noiseFor(DETENT[1].speed))` —
+ * this file's table checked against this file's table — while what actually decides reachability
+ * is what `Player` does with the stick. `_stepGround` applied the stick's magnitude twice (the
+ * direction vector already carried it), so shipped CREEP ran at **0.318 m/s, audible at 0.86 m**:
+ * inside `HUNTER_SENSE.peripheral` (3.6), inside `reach` (2.05), and inside the stage-3 Hunter's
+ * own body. It crossed **28.6 m** in ninety seconds against the 14.04 m budget this block calls
+ * unacceptable. WALK and RUN send a stick of 1.0 and 1.0² is 1.0, which is why nothing else in the
+ * codebase ever saw it. A safety argument that quotes a constant instead of measuring the body is
+ * not a safety argument; D4 measures the body now, and D4d replays the bug as its control.
  */
 export const silentCrossing = (seconds) => SILENT_SPEED * seconds;
 

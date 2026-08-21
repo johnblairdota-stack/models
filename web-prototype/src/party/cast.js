@@ -1,7 +1,7 @@
 /**
  * THE CAST — who is good, who is Production, and what nobody may be told.
  *
- * `docs/design/rrr-roles.md` §8 is the table; this file is the table in code, and
+ * `docs/design/rrr-roles.md` §3 is the table; this file is the table in code, and
  * `harness/role-deal.mjs` is the argument for every number in it.
  *
  * ⚠️ THE COMPOSITION TABLE IS AUTHORITATIVE OVER THE ROLES DOC'S "which cards go in the bag"
@@ -55,7 +55,17 @@ export const ROLES = {
 };
 
 /**
- * `docs/design/rrr-roles.md` §8. Every row sums to its count, and `minion + producer` is
+ * `docs/design/rrr-roles.md` §3, *"Player-count table"*.
+ *
+ * ⚠️ THIS CITED "§8" TWICE, AND `rrr-roles.md` HAS NO §8 — IT RUNS §1-§6. The number 8 belongs to
+ * the BIBLE (`rrr-social-deception-mode.md` §8), whose table `rrr-roles.md` §3 exists to override
+ * and which `COMPOSITION` below contradicts on purpose. So the citation named the superseded
+ * document's section while pointing at the superseding one, which is the worst of both: a reader
+ * who follows it finds no §8, and a reader who guesses finds the table this file deliberately does
+ * not implement. `win.js` cites the same table as §3 and is right — two files in one package
+ * disagreeing about the number of the table they both read.
+ *
+ * Every row sums to its count, and `minion + producer` is
  * 1 at 4-5 and 2 at 6-8 — bible D14, settled, and above the genre's 25-30% band at six on
  * purpose.
  *

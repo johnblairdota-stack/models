@@ -17,7 +17,7 @@
  * with only a pair in the halls, a second traitor buys COVERAGE rather than power. R1 asserts
  * the table so the argument cannot drift back into prose.
  *
- * 🚨 **AND IT REPORTS A CONTRADICTION IT DID NOT FIX.** `rrr-roles.md` §8's "which cards go in
+ * 🚨 **AND IT REPORTS A CONTRADICTION IT DID NOT FIX.** `rrr-roles.md` §3's "which cards go in
  * the bag" says 8 players draw "2 more informed" on top of three guaranteed informed roles —
  * five against the table's four, which deals a NINTH card into an eight-player game. The table
  * is authoritative because it is self-consistent and matches D14. R1 is what makes the prose's

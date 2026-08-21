@@ -38,12 +38,30 @@ export const WIN_TARGETS = {
  * only here; `dealCast` asks for it rather than keeping a copy, and `win-machine` W10 asserts
  * there is no second copy left to drift.
  *
- * ⚠️ THE DOCS DISAGREE AND THIS FOLLOWS THE ONE THAT OWNS THE MACHINE. `rrr-social-round.md` §6 is
- * unambiguous — *"`cameraTarget` = 3 at 4–5 players, 4 at 6–8"* — and its own scope contract gives
- * it *"the win machine"*. `rrr-roles.md` §3's player-count table says 2/2/2/3/3 and argues for the
- * six-player row on purpose; the bible §8 says 2/2/3/3/3. Three tables, three answers. Reported,
- * not silently reconciled — and W8b pins this one to §6's words so a future edit has to argue
- * with the doc rather than with a number.
+ * ⚠️ THE DOCS DISAGREE AND THIS FOLLOWS THE ONE THAT OWNS THE MACHINE. **THIS IS THE ONE PLACE THE
+ * THREE-WAY CONFLICT IS WRITTEN DOWN IN FULL; everything else that mentions it points here.** All
+ * three, with where each comes from — the docs are at the REPO ROOT, one level above
+ * `web-prototype/` — see `web-prototype/docs/design/README.md`:
+ *
+ * ```
+ *   3/3/4/4/4  `WIN_TARGETS` above          ← docs/design/rrr-social-round.md §6, L148, verbatim:
+ *                                             "`cameraTarget` = 3 at 4–5 players, 4 at 6–8"
+ *   2/2/2/3/3  docs/design/rrr-roles.md §3  ← L84-89, column "Cameras to win"
+ *   2/2/3/3/3  the bible, §8                ← docs/design/rrr-social-deception-mode.md L493-499,
+ *                                             column "**Locks to win**"
+ * ```
+ *
+ * ⚠️ THE BIBLE'S ROW IS NOT EVEN COUNTING THE SAME THING. §8's column is *Locks* — the Exit Vault
+ * objective that `rrr-prototype-audit.md` §5.1 recommends dropping outright in favour of camera
+ * unlocks (*"Drop the locks"*). It is listed here because it gets cited as a camera authority, not
+ * because it is one. `rrr-roles.md` §3 IS about cameras and argues its six-player row on purpose
+ * (*"6 players wins on 2 cameras, not 3"*, L103) — that one is a real disagreement.
+ *
+ * §6 wins because its own scope contract (L5) claims *"the win machine"* by name. Reported, not
+ * silently reconciled: choosing between 3/3/4/4/4 and `rrr-roles.md`'s 2/2/2/3/3 is a design call
+ * and nobody in code gets to make it. W8b pins this one to §6's words so a future edit has to argue
+ * with the doc rather than with a number, and `guide-coverage` C5 prints what the gap costs the
+ * guide (1 dead camera light at 4-5p, 2 at 6-8p).
  */
 export const camerasNeeded = (count) => {
   const w = WIN_TARGETS[count];

@@ -12,11 +12,24 @@
  *   · `WeaponSystem.onWallHit` — declared at `weapons.js:35`, fired at `:191` on **every** blow,
  *     and set by nobody
  *   · `FurnProp.onBreak` — declared at `furnprop.js:76`, fired at `:207`/`:220`/`:243`/`:346`
- *     and from the voxel path at `furn-voxels.js:995`
+ *     and from the voxel path at `furn-voxels.js:952`
  *
  * So this is a subscriber, not a patch. `views/game.js`, `wall.js`, `weapons.js` and `furnprop.js`
- * are untouched, and the survival mode is byte-identical because nothing attaches this there —
- * the same shape as `taken.js`: one engine, two rulesets, no branch inside the engine.
+ * are untouched.
+ *
+ * 🚨 **AND IT IS NOT ATTACHED IN THE PARTY MODE EITHER. `attachPartyNoise` HAS NO CALL SITE
+ * OUTSIDE `harness/party-noise.mjs`** — nothing in `src/` or `net/` imports this file. Everything
+ * below is written, correct and gated; none of it runs in a game. Until something calls it, the
+ * three emissions this file is named for do not happen and three of the deck's five tasks fail
+ * Task Contract T4 in play.
+ *
+ * ⚠️ **THIS PARAGRAPH USED TO END "the survival mode is byte-identical because nothing attaches
+ * this there".** Every word of that is true and the sentence is a trap: it draws a contrast with a
+ * party mode that does not attach it either, so a reader arriving from `tasks.js`'s *"the three
+ * that did not are built — see `noiseplan.js`"* lands on what reads as confirmation. Neither file
+ * was lying; between them they described a wire that does not exist. The survival mode is
+ * byte-identical because nothing attaches this ANYWHERE — which is the same shape as `taken.js`'s
+ * `onKill` comment, and it went unexamined for the same reason.
  *
  * ---------------------------------------------------------------------------------------------
  * 🚨 LOUDNESS IS IN GUNSHOTS AND THE CALIBRATION IS `BREACH_NOISE`, NOT A NEW SCALE.

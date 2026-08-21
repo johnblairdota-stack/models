@@ -6,13 +6,29 @@
  * `harness/task-deck.mjs` checks it rather than trusting a prose table.
  *
  * ---------------------------------------------------------------------------------------------
- * ✅ ALL FIVE NOW SATISFY T4. The three that did not are built — see `src/party/noiseplan.js`.
+ * 🚨 THREE OF THE FIVE STILL DO NOT SATISFY T4 IN A RUNNING GAME. THE FIX IS WRITTEN AND NOT
+ * YET ATTACHED.
  * ---------------------------------------------------------------------------------------------
- * T4 says failure must be audible, and until 2026-08-19 the bus carried **placed events only**
- * (`noise.js:14-22`) with just two callers emitting, so a failed breach, a smashed antique and a
- * shorted camera were all silent. `noiseplan.js` closes it by subscribing to two hooks that
- * already existed and were unassigned — `WeaponSystem.onWallHit` and `FurnProp.onBreak` — so no
- * owned file was edited and the survival mode is byte-identical.
+ * T4 says failure must be audible, and the bus carries **placed events only** (`noise.js:14-22`)
+ * with just two callers emitting, so a failed breach, a smashed antique and a shorted camera are
+ * all silent. `noiseplan.js` is the subscriber that closes it — `WeaponSystem.onWallHit` and
+ * `FurnProp.onBreak`, two hooks that already existed and were unassigned — and it is correct,
+ * gated by `party-noise`, and **called by nobody**.
+ *
+ * ⚠️ **`attachPartyNoise` HAS NO CALL SITE OUTSIDE `harness/party-noise.mjs`. NOTHING IN `src/` OR
+ * `net/` IMPORTS `noiseplan.js` AT ALL** — the only mentions of it in `src/` are this comment and
+ * two others like it. In a running expedition the sole thing on the noise bus is the runner's own
+ * body, which means a saboteur can fail a breach, smash an antique or short a Tally and pay
+ * nothing. That is precisely the condition T4 exists to forbid.
+ *
+ * ⚠️ **THIS HEADER USED TO OPEN "✅ ALL FIVE NOW SATISFY T4 … THE THREE THAT DID NOT ARE BUILT",
+ * AND IT POINTED AT `noiseplan.js` AS THE PROOF.** `noiseplan.js`'s own header then said the
+ * survival mode is byte-identical *"because nothing attaches this there"* — true, and read as
+ * confirmation that something attaches it HERE. Two files each vouching for the other about a
+ * function neither of them calls. **Built and wired are different claims and this file made the
+ * first one while meaning to make the second.** The `built: true` flags in the `noise` records
+ * below are the same mistake in data form; correcting those is a behaviour change and belongs to
+ * whoever owns `task-deck` K4, which passes today because it reads them.
  *
  * No THREE, no DOM.
  */

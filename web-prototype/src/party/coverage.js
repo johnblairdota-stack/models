@@ -29,7 +29,8 @@
  * 6-8, and coverage is total from the SECOND light — because the establishing camera is one of
  * only three that exist. So full coverage arrives one or two lights BEFORE the objective does,
  * and it does not make the guide an oracle when it gets there: the blind strip holds the honest
- * error at 16%. Both halves are measured in §BAND below and gated by `guide-coverage` C5.
+ * error at 15.9%, inside T3's 15-25% band. Both halves are measured in §BAND below; `guide-coverage`
+ * C2b/C2d gate the band and C5 gates the gap between saturation and the objective.
  *
  * No THREE, no DOM.
  */
@@ -127,31 +128,39 @@ export function hunterVisibleToGuide({ worldSeed, unlocked, hunterRoom }) {
  *     P(seen) = coverage x (1 - P(inside the blind strip))
  *
  * With the wall distance drawn uniformly over [0, 8) m the strip takes 31.9% of draws, so at FULL
- * coverage the honest error is **16.0%, not 0%** — the guide never becomes an oracle, which is the
+ * coverage the honest error is **15.9%, not 0%** — the guide never becomes an oracle, which is the
  * property the mode rests on and which coverage alone could not deliver.
  *
  * ⚠️ THE OLD NUMBERS IN THIS COMMENT WERE ALSO OFF BY ONE CAMERA. Coverage is asked about
  * `camerasLive(lit)`, not about `lit` — the establishing camera is live from frame one — so a
  * curve indexed by the scoreboard's count reads one column to the left of the game's.
  *
- * Measured through the shipped composition (`guide-coverage` C2):
+ * Measured through the shipped composition, and these are `guide-coverage`'s own printed numbers
+ * rather than a restatement of them (C2; the middle column is the term that makes the difference):
  *
  * ```
- *   lit 0 -> 1 live cam  · coverage  33.3% · honest error 38.6%
- *   lit 1 -> 2 live cams · coverage  66.7% · honest error 27.2%
- *   lit 2 -> 3 live cams · coverage 100.0% · honest error 16.0%
- *   lit 3 -> 4 live cams · coverage 100.0% · honest error 16.0%
- *   lit 4 -> 5 live cams · coverage 100.0% · honest error 16.0%
+ *   lit 0 -> 1 live cam  · coverage  33.3% · sees the Hunter 22.9% · honest error 38.5%
+ *   lit 1 -> 2 live cams · coverage  66.7% · sees the Hunter 45.6% · honest error 27.2%
+ *   lit 2 -> 3 live cams · coverage 100.0% · sees the Hunter 68.2% · honest error 15.9%
+ *   lit 3 -> 4 live cams · coverage 100.0% · sees the Hunter 68.2% · honest error 15.9%
+ *   lit 4 -> 5 live cams · coverage 100.0% · sees the Hunter 68.2% · honest error 15.9%
  * ```
  *
  * 🚨 **THE TAIL IS FLAT AND THE OBJECTIVE RUNS INTO IT.** `ROOMS.length / ROOMS_PER_CAM` is 3, so
  * three cameras exist, and the establishing camera is one of them — coverage is total from the
- * SECOND light onward while `WIN_TARGETS` asks for three or four. The last one or two lights of
- * the objective buy the guide nothing at all. That is a design decision about the camera table
- * and three documents disagree about it, so nothing here has been changed to paper over it:
- * `guide-coverage` C5 measures the gap, prints it, and pins it so it cannot widen unnoticed.
+ * SECOND light onward while `WIN_TARGETS` asks for three (4-5p) or four (6-8p). State it as the
+ * count it is, because "one or two" is the kind of phrasing a number hides behind:
  *
- * T3 wants 15-25%. The band is entered at the second light and held for the rest of the show.
+ *     **1 DEAD CAMERA LIGHT AT A 4-5 PLAYER TABLE. 2 AT A 6-8 PLAYER TABLE.**
+ *
+ * A dead light still wins the match — it buys the GUIDE nothing, because there is no sixth room
+ * left to reveal. That is a design decision about the camera table and three documents disagree
+ * about it (`win.js`'s `WIN_TARGETS` header records all three), so nothing here has been changed
+ * to paper over it: `guide-coverage` C5 measures the gap, prints the dead lights by table size,
+ * and pins them so they cannot widen unnoticed.
+ *
+ * T3 wants 15-25%. The band is entered at the second light and held for the rest of the show —
+ * and full coverage is **not** an oracle, which is the half of this that is good news.
  */
 
 /** Coverage alone, with no blind strip. The FIRST of the two sources, and never the whole answer. */
