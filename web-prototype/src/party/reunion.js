@@ -273,13 +273,13 @@ export function awards(log, { alignmentOf }) {
     if (still.length === 1) {
       return {
         winner: still[0], value: best, sharedWith: [],
-        tiebreak: `${tied.length} robots tied — §7.1 breaks it on expeditions cast, and they were on ${most} of them`,
+        tiebreak: `a ${tied.length}-way tie, broken on §7.1's count of expeditions cast: ${most}`,
         tieSeqs: pairSeqs(still[0]),
       };
     }
     return {
       winner: still[0], value: best, sharedWith: still.slice(1),
-      tiebreak: `shared — ${still.length} robots tied, and ${most} expedition${most === 1 ? '' : 's'} each could not separate them`,
+      tiebreak: `a ${still.length}-way tie that ${most} expedition${most === 1 ? '' : 's'} each could not separate, so they share it`,
       tieSeqs: still.flatMap(pairSeqs),
     };
   }
@@ -340,7 +340,7 @@ export function awards(log, { alignmentOf }) {
     if (r) {
       const n = accused(r.winner).length;
       grant('Best Liar', r,
-        `${alive(r.winner).length} episodes on Production, and the room pointed at them ${n === 0 ? 'not once' : `${n} time(s)`}`,
+        `${alive(r.winner).length} episodes on Production, and the room pointed at them ${n === 0 ? 'not once' : n === 1 ? 'once' : `${n} times`}`,
         // ⚠️ THE CITATION IS THE WHOLE SEASON AND EVERY DEATH ON PRODUCTION, NOT JUST THIS
         // ROBOT'S. The claim is comparative — *survived longest while least accused* — so a
         // citation that named only the winner's episodes could not be re-derived from: on that
@@ -366,7 +366,7 @@ export function awards(log, { alignmentOf }) {
     const r = top(guides, (id) => rows.filter((x) => x.guide === id).length, 1);
     if (r && r.value > 0) {
       grant('The Liar in the Ear', r,
-        `said CLEAR into the room the Hunter was standing in, ${r.value} time(s)`,
+        `said CLEAR into the room the Hunter was standing in${r.value === 1 ? '' : `, ${r.value} times`}`,
         [], rows.filter((x) => x.guide === r.winner || r.sharedWith.includes(x.guide)).flatMap((x) => x.querySeq));
     }
   }
