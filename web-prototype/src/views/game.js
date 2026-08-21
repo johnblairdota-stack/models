@@ -1541,6 +1541,46 @@ export default async function view(args = {}) {
   hunter.onDoor = (door) => {
     hud.say?.(`SOMETHING IS AT ${door.name}`, '#ffb648', 2.4, hud.RANK.wound);
   };
+
+  /**
+   * 🥊 **THE STAGGER BREAK REACHES THE PLAYER, AND UNTIL NOW IT DID NOT REACH ANYTHING.**
+   *
+   * `HunterAI.stagger`'s header calls the break *"the only way out of a corner the player actually
+   * has"*, and `hunter-ai.js` fired `this.onStagger?.(...)` on a field that was never declared —
+   * an optional call on `undefined`, so it has been a silent no-op for its whole life.
+   * `grep -rn onStagger src/ harness/ net/ docs/` found the one call and nothing else. Exactly the
+   * shape of `hunter.onKill`, which had the same problem and cost a whole class of party bug.
+   *
+   * It cannot be read where the shot lands: `weapons.hitBody` calls `body.hunter?.stagger(...)`,
+   * which returns nothing, and the break fires on only SOME of those calls — `stun >= STUN_BREAK`
+   * with `_breakLock` expired. So the one moment the player's answer to being cornered actually
+   * WORKS was indistinguishable, from the outside, from the shots that did not.
+   *
+   * ⚠️ **AND THE ESCALATION IS THE HALF THAT HAS TO BE FELT.** `_breakChain` is the fight's
+   * economy: each break in a chain locks out the next for `BREAK_LOCK + BREAK_LOCK_STEP × n`
+   * seconds, which is what stops "hold the left mouse button" from being an unloseable strategy —
+   * the exact bug `stagger`'s header records. A player who cannot see the price rising cannot make
+   * the decision the price exists to force, so the second break onward says so.
+   *
+   * ⚠️ THE CALLOUT COUNTS BREAKS, NOT `stunResist`, AND THAT IS MEASURED RATHER THAN PREFERRED.
+   * `stunResist` rises `RESIST_PER_BREAK` at the break and then RECOVERS at `RESIST_RECOVER` per
+   * second, and the lock is at least 3.4 s — so at every break in a chain it reads back the SAME
+   * 0.34 (`engine-take` K7b has the trace). A percentage that never changes is worse than no
+   * number; the lock is what actually grows, 3.4 s → 5.0 s → 6.6 s.
+   *
+   * ⚠️ `RANK.wound`, NOT `alarm()`, for `onDoor`'s reason: the alarm vocabulary belongs to the
+   * hunter having committed to YOU. A hunter that has just been knocked off you is the opposite
+   * of that, and spending the alarm here would make one signal mean two things.
+   */
+  hunter.onStagger = (breakChain) => {
+    hud.say?.(breakChain <= 1
+      ? 'IT BREAKS OFF — GO'
+      : `IT BREAKS OFF — ${breakChain} IN A ROW, AND IT IS LEARNING`,
+    '#8fd8f0', 1.8, hud.RANK.wound);
+    // The heaviest low crack the house owns, at the stage a shattering beam uses. There is no
+    // authored stagger cue in `audio.js`; this is a reuse and is said to be one.
+    playWallStage(3);
+  };
   let _bangSaid = 0;
   hunter.onBang = ({ door, panel, progress, through }) => {
     const d = Math.hypot(panel.root.position.x - player.pos.x, panel.root.position.z - player.pos.z);

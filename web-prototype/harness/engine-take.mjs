@@ -499,5 +499,99 @@ const fx = (n) => (n == null ? 'never' : n.toFixed(2));
     `shipped speeds {${[...new Set(shipped.rows.map((r) => r.speed))].join(',')}} vs {${[...new Set(fixed.rows.map((r) => r.speed))].join(',')}} of ${HUNTER_SPEED.slice(1).join('/')}`);
 }
 
+
+// ---------------------------------------------------------------- K7 · the other silent hook
+/**
+ * 🚨 **THIS FILE EXISTS BECAUSE `hunter.onKill` HAD NO SUBSCRIBER. THERE WAS A SECOND ONE.**
+ *
+ * `HunterAI.stagger` fired `this.onStagger?.(this._breakChain, this.stunResist, this)` on a field
+ * that was NEVER DECLARED — an optional call on `undefined`, a silent no-op for its whole life —
+ * and `grep -rn onStagger src/ harness/ net/ docs/` returned that one line and nothing else. The
+ * header three lines above it calls the break *"the only way out of a corner the player actually
+ * has"*.
+ *
+ * It is the same shape as `onKill` and it is a hook for the same reason: `stagger()` is reached
+ * through `weapons.hitBody` → `body.hunter?.stagger(...)`, which returns nothing, and the break
+ * fires on only SOME of those calls. The fact is unreachable from the call site, so it needs a
+ * channel. (`WeaponSystem.onBodyHit`, found dead in the same sweep, is NOT that — `hitBody`
+ * returns `{socket, item}` to its caller on the same call, so it was a duplicate and was deleted.
+ * K7c holds both halves of that decision.)
+ */
+{
+  const { STUN_BREAK } = { STUN_BREAK: Number((AI_SRC.match(/const STUN_BREAK = ([\d.]+);/) || [])[1]) };
+  t('K7 arm · the break threshold is readable from the shipped source',
+    Number.isFinite(STUN_BREAK) && STUN_BREAK > 0, `STUN_BREAK = ${STUN_BREAK}`);
+
+  /** Shoot a real Hunter until it breaks off, the way the nail gun does. */
+  function breakItOff({ shots = 40, dmg = 26 }) {
+    let seed = 21;
+    const rng = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+    const centre = room.anchor('gallery.mid');
+    const h = new HunterAI({
+      room, scene: new THREE.Scene(), rng,
+      position: new THREE.Vector3(centre.x, 0, centre.z), bangPolicy: 'off',
+    });
+    const fired = [];
+    h.onStagger = (chain, resist, self) => fired.push({
+      chain, resist, self: self === h, state: h.state, lock: h._breakLock,
+    });
+    const dir = new THREE.Vector3(1, 0, 0);
+    for (let i = 0; i < shots; i++) {
+      h.stagger(dmg, dir, h.root.position.clone());
+      for (let k = 0; k < 8; k++) h.update(DT, i * 0.13 + k * DT);
+    }
+    return { fired, resist: h.stunResist, chain: h._breakChain };
+  }
+
+  const run = breakItOff({});
+  t('K7 · a real stagger break fires `onStagger`, with the escalation on it',
+    run.fired.length >= 2
+    && run.fired.every((f) => f.self && Number.isFinite(f.chain) && Number.isFinite(f.resist)),
+    `${run.fired.length} breaks · chain ${run.fired.map((f) => f.chain).join(',')}`
+    + ` · resist ${run.fired.map((f) => f.resist.toFixed(2)).join(',')}`);
+
+  /**
+   * ⚠️ THE PRICE IS THE LOCK, NOT THE RESISTANCE, AND THE FIRST DRAFT OF THIS ASSERTION GOT IT
+   * WRONG. `stunResist` climbs `RESIST_PER_BREAK` at the break and then RECOVERS at
+   * `RESIST_RECOVER` per second (`hunter-ai.js:1448`), and `BREAK_LOCK` is at least 3.4 s — so by
+   * the next break it is back where it started and a "resist is rising" test measures nothing.
+   * What actually escalates within a chain is `_breakLock`, `BREAK_LOCK + BREAK_LOCK_STEP × n`,
+   * which is the seconds of cornered the second break buys you less of than the first.
+   */
+  t('K7b · and the price really does climb, which is the half a player has to be able to feel',
+    run.fired.every((f, i) => i === 0 || (f.chain > run.fired[i - 1].chain && f.lock > run.fired[i - 1].lock)),
+    `chain ${run.fired.map((f) => f.chain).join('→')} · lock `
+    + `${run.fired.map((f) => f.lock.toFixed(1) + 's').join('→')} · resist reads `
+    + `${run.fired.map((f) => f.resist.toFixed(2)).join('/')} at each break because it recovers between them`);
+
+  t('K7 control · the hook was undeclared, so an unsubscribed Hunter is silent and throws nothing',
+    (() => {
+      let seed = 21;
+      const rng = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+      const h = new HunterAI({ room, scene: new THREE.Scene(), rng, position: room.spawn.hunter.clone(), bangPolicy: 'off' });
+      const declared = 'onStagger' in h && h.onStagger === null;
+      for (let i = 0; i < 20; i++) { h.stagger(26, new THREE.Vector3(1, 0, 0), h.root.position.clone()); for (let k = 0; k < 8; k++) h.update(DT, i * 0.13 + k * DT); }
+      return declared;
+    })(),
+    'it is a declared field now — `?.()` on an undefined one is why this went unnoticed for its whole life');
+
+  // ---- K7c · the two calls, in the source
+  {
+    const strip = (x) => x.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const game = strip(readFileSync(new URL('../src/views/game.js', import.meta.url), 'utf8'));
+    const wep = strip(readFileSync(new URL('../src/game/weapons.js', import.meta.url), 'utf8'));
+    t('K7c · `views/game.js` subscribes — it is the mode whose player can cause a break',
+      /hunter\.onStagger\s*=/.test(game),
+      'the party runner has no weapon, so there is nothing for it to subscribe to');
+    t('K7c2 · and `WeaponSystem.onBodyHit` is gone rather than left announcing into nothing',
+      !/onBodyHit/.test(wep) && /return \{ kind: 'body', point, body, socket, item \}/.test(wep),
+      'the caller already gets `{socket, item}` back from `hitBody` on the same call');
+    t('K7c control · and the scan would find either of them coming back',
+      /hunter\.onStagger\s*=/.test('hunter.onStagger = () => {};')
+      && /onBodyHit/.test(strip(readFileSync(new URL('../src/game/weapons.js', import.meta.url), 'utf8'))) === false,
+      'the weapons scan is over the stripped source, so the note that records the deletion does not satisfy it');
+  }
+}
+
 console.log(`\nengine-take: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -236,6 +236,22 @@ export class HunterAI {
     this.onKill = null;
     /** (fromState, hunter) — fired ONCE the frame it stops considering and starts coming. */
     this.onCommit = null;
+    /**
+     * 🥊 **(breakChain, stunResist, hunter) — THE STAGGER BREAK LANDED.**
+     *
+     * `stagger()`'s own header calls this *"the only way out of a corner the player actually has"*,
+     * and it was FIRED WITHOUT EVER BEING DECLARED: `this.onStagger?.(...)` on an undefined field
+     * is a silent no-op, and `grep -rn onStagger src/ harness/ net/ docs/` returned that one line.
+     * So the mechanic the fight is built around announced itself into nothing.
+     *
+     * ⚠️ IT CANNOT BE READ AT THE CALL SITE, WHICH IS WHY IT IS A HOOK AND NOT A RETURN VALUE.
+     * `stagger()` is reached through `weapons.hitBody` → `body.hunter?.stagger(...)`, which returns
+     * nothing, and the break only happens on SOME of those calls — `stun >= STUN_BREAK` and
+     * `_breakLock <= 0`. Same shape as `onKill`: a fact produced deep inside a call nobody can see
+     * the inside of. `_breakChain` and `stunResist` travel with it because they are the economy —
+     * each break costs more than the last, and a player who cannot feel that cannot play it.
+     */
+    this.onStagger = null;
 
     // ---- 🚪 the door work. See `_summon`.
     /**

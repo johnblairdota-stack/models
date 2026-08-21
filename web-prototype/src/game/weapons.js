@@ -33,7 +33,22 @@ export class WeaponSystem {
     this.rng = o.rng ?? (() => 0.5);
     this.bodies = [];                 // { rig, root, radius, height, team }
     this.onWallHit = null;
-    this.onBodyHit = null;
+    /**
+     * 🚨 **`onBodyHit` USED TO BE HERE AND HAS BEEN DELETED RATHER THAN SUBSCRIBED, WHICH IS THE
+     * OPPOSITE CALL FROM `HunterAI.onStagger` AND FOR A STATED REASON.**
+     *
+     * It fired `(body, socket, item, weapon)` at the end of `hitBody` and had no subscriber in
+     * `src/`, `harness/` or `net/`. A hook with no subscriber is either a wiring bug (`onKill`,
+     * `onStagger` — both fixed) or a duplicate channel, and this one is the second: `hitBody`
+     * RETURNS `{ kind: 'body', point, body, socket, item }` on the same call, `fire()` propagates
+     * it to its own caller, and every site that could have subscribed already receives the whole
+     * fact synchronously. That is exactly what `onKill` does NOT have — a kill is produced deep
+     * inside `hunter.update`, where no caller can see the inside of the call, which is why one is
+     * a hook and the other was a second way of saying the same thing.
+     *
+     * Deleting it is the honest half of the same sweep: a dead hook that cannot tell you anything
+     * new is a place a future reader will wire a listener and get a duplicate event.
+     */
 
     this.tracers = new Tracers(o.scene, o.maxTracers ?? 48);
     this.scene = o.scene ?? null;
@@ -214,7 +229,6 @@ export class WeaponSystem {
       impulse: _v.copy(dir).multiplyScalar(1.4 * power).setY(1.9 + power * 0.9).clone(),
       spin: _v2.set((this.rng() - 0.5) * 7, (this.rng() - 0.5) * 7, (this.rng() - 0.5) * 9).clone(),
     });
-    this.onBodyHit?.(body, socket, item, weapon);
     return { kind: 'body', point, body, socket, item };
   }
 
