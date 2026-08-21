@@ -66,6 +66,7 @@ export function seatJoin(lobby, m, sock) {
   if (existing) {
     existing.sock = sock;
     existing.live = true;
+    existing.lastSeen = Date.now();
     existing.drops++;
     // `bootMs` is NOT overwritten: a reconnect reuses a warm cache and would report a flattering
     // number, and the figure D13 turns on is the COLD one, taken once.
@@ -79,6 +80,14 @@ export function seatJoin(lobby, m, sock) {
   const n = lobby.seats.size;
   const seat = {
     id: `phone-${n}`, seat: n, sock, live: true, drops: 0, rtt: [],
+    /**
+     * 🚨 THE LAST TIME THIS CHAIR SAID ANYTHING, WHICH IS THE ONLY EVIDENCE THERE IS THAT SOMEBODY
+     * IS STILL SITTING IN IT. `live` used to be cleared by `seatDrop` alone, and `seatDrop` fires
+     * on socket close — but a battery death, a phone dropped in a bag or a walk out of range sends
+     * no FIN, and node's default TCP keepalive is two hours against a 33-minute show. `show.mjs`'s
+     * `AWAY_MS` sweep reads this; see its header for what was being counted in the meantime.
+     */
+    lastSeen: Date.now(),
     name: (m.name || `Robot ${n + 1}`).slice(0, 14),
     colour: COLOURS[n % COLOURS.length],
     token: crypto.randomBytes(8).toString('hex'),

@@ -60,6 +60,28 @@ const page = (f) => readFileSync(join(HERE, f), 'utf8');
 /** How often the clock is looked at. Nothing depends on the interval — `tick` takes the time. */
 export const TICK_MS = 250;
 
+/**
+ * 🚨 **HOW LONG A CHAIR MAY SAY NOTHING BEFORE THE ROOM STOPS COUNTING IT.**
+ *
+ * `s.live` was cleared by `seatDrop` and by nothing else, and `seatDrop` fires on socket close. A
+ * battery death, a phone dropped into a bag, a walk out of range: none of those send a FIN. There
+ * was no keepalive, no `lastPong` and no timeout anywhere in this process — `rtt` was pushed and
+ * read only by `report()` — so a phone that answered no pings at all stayed `live: true` with
+ * `drops: 0` and was counted by `begin()`, dealt a role, and put into a vote threshold that then
+ * needed every remaining real voter. Node's default TCP keepalive is two hours; the show is 33
+ * minutes. **The server was already sending the evidence four times a second and throwing it
+ * away.**
+ *
+ * ⚠️ SIX SECONDS, AND THE DOC'S NUMBER IS NOT THE RIGHT ONE HERE. `rrr-netplay.md` §8 says three
+ * missed beats of a 5 s heartbeat; this server's beat is `TICK_MS`, so the same rule literally
+ * applied would be 750 ms and would call a phone dead for backgrounding itself for a moment. Six
+ * seconds is twenty-four missed beats — long enough that no foreground phone reaches it, short
+ * enough that the host pressing START twenty seconds later is counting the room and not the guest
+ * list. A seat that goes quiet is marked away, not dropped: its token still buys the chair back,
+ * and one frame from it — a pong will do — brings it straight back onto the rail.
+ */
+export const AWAY_MS = 6000;
+
 export const MIN_PLAYERS = Math.min(...Object.keys(COMPOSITION).map(Number));
 
 /** Seat 0 is `p1`. `cast.js` numbers players from one and seats from zero; this is the only bridge. */
@@ -114,7 +136,8 @@ export function seedFrom(...parts) {
  * out of this file has to compile against the same signature to reproduce the old arithmetic.
  * Nothing below reads it.
  */
-export function startShow({ port = 5183, code = makeCode(), stamp = Date.now(), hostKey = null } = {}) {
+export function startShow({ port = 5183, code = makeCode(), stamp = Date.now(), hostKey = null,
+  awayMs = AWAY_MS } = {}) {
   const lobby = createLobby(code);
   let show = null;                       // { session, castSeed, worldSeed, startedAt }
   let simSock = null;                    // the mansion, when one is attached
@@ -350,8 +373,14 @@ export function startShow({ port = 5183, code = makeCode(), stamp = Date.now(), 
       simSock = sock;
       lastCams = null;
       note(lobby, 'sim.connected');
-      // The simulator is told the wing and the camera count and NOTHING about who anyone is.
-      send(sock, { t: 'lease', granted: true, hostKey: lease.key });
+      /**
+       * ⚠️ NOTHING IS SENT BACK TO ACKNOWLEDGE THE GRANT, AND THAT IS ON PURPOSE. `rrr-netplay.md`
+       * §3 has the room reply `lease{granted, resumeSpec}` — but on this transport the mansion is
+       * the frame `show-tv.html` mounts, and it is handed the key by the page that mounts it. A
+       * `{t:'lease'}` frame would be an envelope with no reader, which is the exact shape
+       * `wire-parity` P1/P5 exist to reject: it went red on this line the day it was written.
+       * The simulator is told the wing and the camera count and NOTHING about who anyone is.
+       */
       if (show) { send(sock, briefFor(show.session)); pushCams(show.session, { force: true }); }
     }
 
@@ -383,6 +412,19 @@ export function startShow({ port = 5183, code = makeCode(), stamp = Date.now(), 
 
     readFrames(sock, (m) => {
       const now = Date.now();
+
+      /**
+       * 🚨 ANY FRAME IS PROOF OF LIFE, NOT JUST A PONG — and a phone that comes back does not have
+       * to wait for the next sweep to be a player again. `AWAY_MS`'s header has the rest.
+       */
+      if (holds()) {
+        seat.lastSeen = now;
+        if (!seat.live) {
+          seat.live = true;
+          note(lobby, 'seat.returned', { seat: seat.seat, name: seat.name });
+          pushRoster();
+        }
+      }
 
       if (m.t === 'join' && !privileged) {
         /**
@@ -525,7 +567,18 @@ export function startShow({ port = 5183, code = makeCode(), stamp = Date.now(), 
   let lastPhase = null;
   const beat = setInterval(() => {
     const now = Date.now();
-    for (const s of lobby.seats.values()) if (s.live) send(s.sock, { t: 'ping', at: now });
+    // Every chair with a socket still open, not just the ones currently counted — a seat that has
+    // gone quiet has to be able to answer, or being marked away would be a one-way door.
+    for (const s of lobby.seats.values()) send(s.sock, { t: 'ping', at: now });
+    let wentQuiet = false;
+    for (const s of lobby.seats.values()) {
+      if (s.live && now - s.lastSeen > awayMs) {
+        s.live = false;
+        note(lobby, 'seat.silent', { seat: s.seat, name: s.name, quietMs: now - s.lastSeen });
+        wentQuiet = true;
+      }
+    }
+    if (wentQuiet) pushRoster();
     if (!show) return;
     show.session.tick(now);
     // A camera lit mid-show has to reach the house that is drawing it — see `pushCams`.

@@ -49,7 +49,7 @@
 import { readFileSync, writeFileSync, unlinkSync, readdirSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { startShow, seedFrom } from '../net/party/show.mjs';
+import { startShow, seedFrom, TICK_MS } from '../net/party/show.mjs';
 import { MAX_PHONES } from '../net/party/lobby.mjs';
 import { PHASE } from '../src/party/phases.js';
 import { dealCast, EVIL } from '../src/party/cast.js';
@@ -108,10 +108,11 @@ function open(port, query = '') {
       text: () => JSON.stringify(msgs),
       close: () => { try { ws.close(); } catch { /* gone */ } },
     };
+    box.answers = true;   // a phone that has stopped answering sends nothing at all — no FIN either
     ws.onmessage = (e) => {
       const m = JSON.parse(e.data);
       msgs.push(m);
-      if (m.t === 'ping') box.send({ t: 'pong', at: m.at });
+      if (m.t === 'ping' && box.answers) box.send({ t: 'pong', at: m.at });
     };
     ws.onopen = () => resolve(box);
     ws.onerror = () => resolve(box);
@@ -509,7 +510,7 @@ const lease = await leaseProbe({ startShow }, LEASE_PORT, 'lese');
 
   t('W5a · the unauthenticated `?role=sim` claim is refused with a reason, and told nothing else',
     lease.cheatSim.of('denied').length === 1 && lease.cheatSim.of('brief').length === 0
-    && lease.cheatSim.of('lease').length === 0 && lease.cheatSim.msgs.length === 1,
+    && lease.cheatSim.msgs.length === 1,
     JSON.stringify(lease.cheatSim.msgs));
   t('W5b · so `worldSeed` — every episode\'s Hunter room through `pick` — never reaches it',
     seedsIn(lease.cheatSim.text()).length === 0 && !lease.cheatSim.text().includes('worldSeed'),
@@ -545,9 +546,9 @@ const lease = await leaseProbe({ startShow }, LEASE_PORT, 'lese');
     hunter: { x: 2, z: 2, room: 'chapel', wallDist: 1 } });
   await sleep(150);
   t('W6 · a claim carrying the key is granted, is briefed, and IS the mansion',
-    realSim.of('lease').length === 1 && realSim.of('brief').length === 1
+    realSim.of('denied').length === 0 && realSim.of('brief').length === 1
     && realSim.of('brief')[0].worldSeed === lease.sess.state.worldSeed && lease.sess.wired() === true,
-    `lease granted · brief wing ${realSim.of('brief')[0]?.wing} · session.wired() ${lease.sess.wired()}`);
+    `not refused · brief wing ${realSim.of('brief')[0]?.wing} · session.wired() ${lease.sess.wired()}`);
 
   const secondTV = await open(LEASE_PORT, `?role=tv&key=${lease.h.hostKey}`);
   await sleep(180);
@@ -827,6 +828,124 @@ disp.thief.close(); disp.sim.close();
 for (const p of disp.phones) p.close();
 disp.tv.close();
 await disp.h.close();
+
+// ---------------------------------------------------------------- W9 · the phone that went quiet
+/**
+ * 🚨 **A PHONE THAT DIES SILENTLY IS NOT A PHONE THAT CLOSED A SOCKET.** `s.live` was cleared by
+ * `seatDrop` alone and `seatDrop` fires on close; a battery death, a bag or a walk out of range
+ * sends no FIN, and node's default TCP keepalive is two hours against a 33-minute show. There was
+ * no keepalive, no `lastPong` and no timeout in the process — `rtt` was pushed and read only by
+ * `report()` — so a phone that answered nothing was still `live: true`, `drops: 0`, dealt a role
+ * by `begin()` and counted in a threshold the room then could not reach.
+ *
+ * ⚠️ THE SOCKET IS LEFT OPEN ON PURPOSE. Closing it would be `seatDrop`'s case, which already
+ * worked; the case that did not is the one where the wire is fine and nobody is holding the phone.
+ */
+async function quietProbe(mod, port, code, { awayMs = 400 } = {}) {
+  const h = mod.startShow({ port, code, awayMs });
+  await sleep(120);
+  const tv = await open(port, '?role=tv');
+  const phones = [];
+  for (let i = 0; i < 5; i++) {
+    const p = await open(port);
+    p.send({ t: 'join', name: `R${i + 1}`, token: null, boot: 500 });
+    phones.push(p);
+  }
+  await sleep(240);
+  const seatedAll = h.lobby.seats.size;
+  const live = () => [...h.lobby.seats.values()].filter((x) => x.live).length;
+  const rosterRow = (seat) => (tv.of('roster').slice(-1)[0]?.players || []).find((r) => r.seat === seat);
+
+  // One phone stops answering. Its socket stays open — that is the whole point.
+  const ghost = phones[2];
+  const ghostSeat = ghost.of('seated')[0].seat;
+  ghost.answers = false;
+  await sleep(awayMs * 4);
+  const awayRow = rosterRow(ghostSeat);
+  const liveWhileAway = live();
+
+  // It answers again, from the same socket, without reconnecting.
+  ghost.answers = true;
+  ghost.send({ t: 'pong', at: Date.now() });
+  await sleep(TICK_MS * 3);
+  const liveAfterReturn = live();
+  const backRow = rosterRow(ghostSeat);
+
+  // And then it goes for good, before the host presses START.
+  ghost.answers = false;
+  await sleep(awayMs * 4);
+  const liveBeforeBell = live();
+  tv.send({ t: 'start' });
+  await sleep(240);
+  const sess = h.sessionNow();
+
+  return { h, tv, phones, ghost, ghostSeat, seatedAll, sess,
+    awayRow, backRow, liveWhileAway, liveAfterReturn, liveBeforeBell,
+    dealt: sess ? sess.state.players.length : 0,
+    silentNotes: h.lobby.events.filter((e) => e.type === 'seat.silent').length,
+    returnedNotes: h.lobby.events.filter((e) => e.type === 'seat.returned').length,
+    socketStillOpen: ghost.ws.readyState === 1 };
+}
+
+const QUIET_PORT = 5260;
+const QUIET_CTL_PORT = 5261;
+const quiet = await quietProbe({ startShow }, QUIET_PORT, 'quit');
+{
+  t('W9 arm · five phones were seated and one of them stopped answering with its socket open',
+    quiet.seatedAll === 5 && quiet.socketStillOpen && quiet.ghostSeat >= 0,
+    `seat ${quiet.ghostSeat} went quiet · its socket is still open (readyState 1), so this is not a close`);
+  t('W9 · the server notices the silence it was already measuring four times a second',
+    quiet.silentNotes >= 1 && quiet.liveWhileAway === 4,
+    `${quiet.silentNotes} seat.silent event(s) · ${quiet.liveWhileAway} of ${quiet.seatedAll} chairs still counted`);
+  t('W9b · the television is told, so the rail and the room agree about who is here',
+    quiet.awayRow && quiet.awayRow.live === false,
+    `roster row for seat ${quiet.ghostSeat}: live ${quiet.awayRow?.live}`);
+  t('W9c · one frame brings it back on the same socket — away is not a one-way door',
+    quiet.liveAfterReturn === 5 && quiet.backRow?.live === true && quiet.returnedNotes >= 1,
+    `${quiet.liveAfterReturn} live after a single pong · roster row live ${quiet.backRow?.live}`);
+  t('W9d · and a chair still quiet at the bell is cast around, not dealt to',
+    quiet.liveBeforeBell === 4 && quiet.dealt === 4,
+    `${quiet.dealt} roles dealt · threshold floor(${quiet.dealt}/2)+1 = ${Math.floor(quiet.dealt / 2) + 1} of ${quiet.dealt} people actually in the room`);
+}
+
+// ---------------------------------------------------------------- W9 control
+{
+  const ctl6 = controlOf('quiet', [
+    [[
+      '    let wentQuiet = false;',
+      '    for (const s of lobby.seats.values()) {',
+      '      if (s.live && now - s.lastSeen > awayMs) {',
+      '        s.live = false;',
+      "        note(lobby, 'seat.silent', { seat: s.seat, name: s.name, quietMs: now - s.lastSeen });",
+      '        wentQuiet = true;',
+      '      }',
+      '    }',
+      '    if (wentQuiet) pushRoster();',
+      '',
+    ].join('\n'), ''],
+  ]);
+  t('W9 control arm · the edit that removes the silence sweep applied',
+    ctl6.applied, ctl6.missed.length ? `did not apply: ${ctl6.missed.join(' | ')}` : 'nothing clears `live` but a socket close again');
+
+  const mod = await ctl6.load();
+  const bad = await quietProbe(mod, QUIET_CTL_PORT, 'qctl');
+  const row = bad.awayRow;
+  t('W9 control · the phone that answered nothing is still live, with no drops recorded against it',
+    bad.liveWhileAway === 5 && bad.liveBeforeBell === 5 && row && row.live === true && row.drops === 0,
+    `roster row for seat ${bad.ghostSeat}: live ${row?.live}, drops ${row?.drops}`);
+  t('W9d control · so it is dealt a role, and the threshold counts a phone nobody is holding',
+    bad.dealt === 5,
+    `${bad.dealt} roles for 4 people in the room · floor(5/2)+1 = 3 of 4 real voters, and one card in a bag`);
+
+  for (const p of bad.phones) p.close();
+  bad.tv.close();
+  await bad.h.close();
+  ctl6.rm();
+}
+
+for (const p of quiet.phones) p.close();
+quiet.tv.close();
+await quiet.h.close();
 
 // ---------------------------------------------------------------- W4 · and it still comes home
 /**

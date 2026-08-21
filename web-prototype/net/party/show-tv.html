@@ -628,10 +628,12 @@
        * people arguing about the wifi. It reuses the outage slot, in the outage's voice, and it
        * does NOT reconnect — coming back would take the lease straight back off the new screen.
        */
-      if (m.t === 'moved' || m.t === 'denied') {
-        moved = true;
-        $('net').textContent = m.t === 'moved' ? 'THIS SHOW MOVED TO ANOTHER SCREEN' : 'THIS SHOW IS ALREADY ON THE AIR';
-      }
+      // The server's own words, in the outage slot's voice — this screen has no vocabulary of its
+      // own for either case, and inventing one here would mean two wordings for one event. Two
+      // branches rather than one `||`, because `wire-parity` reads a branch's fields by slicing
+      // between `m.t ===` tests and a doubled test leaves the first slice empty.
+      if (m.t === 'moved') { moved = true; $('net').textContent = String(m.why || '').toUpperCase(); }
+      if (m.t === 'denied') { moved = true; $('net').textContent = String(m.why || '').toUpperCase(); }
     };
     ws.onclose = () => {
       if (moved) return;
