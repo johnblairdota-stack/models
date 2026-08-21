@@ -397,6 +397,37 @@ const ROLE_NAMES = ['cameraOp', 'soundie', 'fixer', 'producer', 'continuity', 's
   }
 }
 
+// ---------------------------------------------------------------- H14 · the boom is never on the Hunter
+/**
+ * 🚨 **MEASURED: THE BROADCAST CAMERA WAS ON THE HUNTER FOR 82% OF THE ROUND, AT 2.22 m.**
+ *
+ * `views/expedition.js` fed every hunter state change with `subjectId: 'hunter'` and BODYCAM
+ * frames whatever subject it is handed, so a 90 s expedition ran 73 s of shoulder camera on the
+ * monster — under `STING_MIN_RANGE` on 100% of those frames — while the runner the Debrief is
+ * about got sixteen. The view no longer names it as a subject; this is the half that holds when
+ * some future caller does.
+ */
+{
+  const probe = fixture({ place: { p1: 'gallery', hunter: 'study_w' } });
+  const refused = ['BODYCAM', 'WORK'].filter((id) => solve(id, { subjectId: 'hunter', probe }) === null);
+  t('H14 · a shoulder camera cannot be put on the Hunter, whatever asks for it',
+    refused.length === 2, `${refused.join('/')} return null · §6.2 "only as a silhouette a real camera can actually see"`);
+  t('H14 control · the same call frames a runner standing in the same house, so H14 is the identity and not the pose',
+    !!solve('BODYCAM', { subjectId: 'p1', probe })?.eye && !!probe.pose('hunter'),
+    'the Hunter has a pose; the solver refuses to use it');
+  t('H14b · and it is the declared hunter id that is refused, not the literal string',
+    solve('BODYCAM', { subjectId: 'p1', probe, hunterId: 'p1' }) === null
+    && !!solve('BODYCAM', { subjectId: 'hunter', probe, hunterId: 'p1' })?.eye,
+    'rename the Hunter and the refusal follows it');
+  t('H14c · the Hunter still reaches the screen the one way §6.2 allows it to',
+    (() => {
+      const s = solve('STING', { subjectId: 'p1', probe });
+      if (!s) return false;
+      const d = Math.hypot(s.eye.x - s.at.x, s.eye.y - s.at.y, s.eye.z - s.at.z);
+      return d >= STING_MIN_RANGE;
+    })(), `a STING from an unlocked camera, at or beyond ${STING_MIN_RANGE} m`);
+}
+
 // ---------------------------------------------------------------- H13 · the television shows the house
 /**
  * 🚨 **THE PAGE SIX OF EIGHT PLAYERS WATCH DID NOT CONTAIN THE EXPEDITION.**

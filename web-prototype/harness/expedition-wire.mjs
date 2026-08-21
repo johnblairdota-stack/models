@@ -28,13 +28,14 @@
  * asserted from the pure side — a SKIP is never a PASS.
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { SPACES, ANCHORS } from '../src/game/spaces.js';
 import { ROOMS, coveredRooms } from '../src/party/coverage.js';
 import { HOUSE, EXTENT, roomAt } from '../src/party/houseplan.js';
 import { ROOM_LABEL } from '../src/party/captions.js';
-import { TERMINAL_AT, TERMINAL_REACH, EXPEDITION_SECONDS } from '../src/views/expedition.js';
+import { TERMINAL_AT, TERMINAL_REACH, EXPEDITION_SECONDS, TELL_FOR_STATE, tellFor } from '../src/views/expedition.js';
+import { KIND } from '../src/party/director.js';
 import { DETENT, noiseFor, audibleRange, SILENT_SPEED } from '../src/party/darkrun.js';
 import { MOVE, HUNTER_SENSE } from '../src/game/rules.js';
 import { createSession, CALL, MOVE_CHOICE } from '../src/party/session.js';
@@ -44,6 +45,17 @@ import { audienceFor } from '../net/party/entitle.js';
 let pass = 0, fail = 0, skip = 0;
 const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' · ' + d : ''}`); } else { fail++; console.log(`  FAIL ${n}${d ? ' · ' + d : ''}`); } return c; };
 const skipped = (n, why) => { skip++; console.log(`  SKIP ${n} · ${why} — SKIP is not a PASS`); };
+
+/**
+ * The Hunter states this file has decided say nothing on the bus, and WHY, so that a new state in
+ * the AI arrives here as a red line rather than as an unannounced silence:
+ *
+ *   PATROL   nothing is happening
+ *   SEARCH   it is giving up — see E8b
+ *   BANG · BREACH · GROW   authored moments with their own hooks (`onBang`, `onDoor`, `onStage`),
+ *                          which carry the room and the progress a state name does not
+ */
+const SILENT_STATES = ['PATROL', 'SEARCH', 'BANG', 'BREACH', 'GROW'];
 
 // ---------------------------------------------------------------- E1 · one house
 {
@@ -261,6 +273,52 @@ const engaged = (s) => {
   t('E6d · in a room no camera watches the guide sees nothing, however open the floor',
     darkFrame?.flyover?.hunter === false,
     `${dark} is dark at one unlock · 9.0m from any wall and still NO SIGNAL`);
+}
+
+// ---------------------------------------------------------------- E8 · what the Hunter's states say
+/**
+ * 🚨 **THE TELEVISION WAS ANNOUNCING THE OPPOSITE OF WHAT HAD HAPPENED, ABOUT THE WRONG PERSON.**
+ *
+ * The view mapped `ALERT || SEARCH → hunter_alert` and `PURSUE || HUNT || STALK → hunter_commit`,
+ * and fed both with `subjectId: 'hunter'`. Three things were wrong at once, and each is asserted
+ * here rather than remembered:
+ *
+ *   · **SEARCH is the give-up state.** `hunter-ai.js:711` enters it when awareness has fallen
+ *     BELOW `alertAt` and it is sweeping a last known point. It was captioned "SOMETHING HEARD
+ *     THAT" — and, being rank 3, it pinned the camera for the sweep.
+ *   · **STALK is not a commitment.** The commitment is the `onCommit` latch, which the AI builds
+ *     precisely so the moment is announced once and cannot flicker.
+ *   · **the subject is the runner.** 82% of a 90 s expedition was a shoulder camera on the
+ *     monster at 2.22 m.
+ *
+ * The state names are read out of `hunter-ai.js` itself, so a state added to the AI with no
+ * decision taken about it here fails this gate rather than airing whatever it happens to hit.
+ */
+{
+  const src = readFileSync(new URL('../src/game/hunter-ai.js', import.meta.url), 'utf8');
+  const states = [...new Set([...src.matchAll(/this\.state\s*=\s*'([A-Z_]+)'/g)].map((m) => m[1]))].sort();
+  t('E8 arm · the Hunter\'s states were read out of the AI, not listed here', states.length >= 6, states.join(' '));
+
+  const undecided = states.filter((s) => !(s in TELL_FOR_STATE) && !SILENT_STATES.includes(s));
+  t('E8 · every state the AI can enter has a decision — a tell, or deliberate silence',
+    undecided.length === 0, undecided.length ? `no decision for ${undecided.join(', ')}` : `${states.length} states, all accounted for`);
+
+  t('E8b · SEARCH says nothing, because SEARCH is the Hunter giving up',
+    tellFor('SEARCH', 1) === null && tellFor('PATROL', 1) === null,
+    'it was "SOMETHING HEARD THAT" at rank 3, which is a lie that also held the camera');
+
+  t('E8c · and every tell that IS emitted is an event about the runner',
+    states.every((s) => { const e = tellFor(s, 1); return !e || e.subjectId === 'runner'; })
+    && tellFor('ATTACK', 1).subjectId === 'runner',
+    'the Hunter is what happened; the runner is who it happened to');
+
+  t('E8 control · the mapping really does distinguish states, so E8b is not a function that always returns null',
+    tellFor('ALERT', 1)?.kind === 'hunter_alert' && tellFor('ATTACK', 1)?.kind === 'grab',
+    `ALERT → ${tellFor('ALERT', 1).kind} · ATTACK → ${tellFor('ATTACK', 1).kind}`);
+
+  const strayKind = Object.values(TELL_FOR_STATE).filter((k) => !KIND.includes(k));
+  t('E8d · and every kind it emits is one of §1.2\'s twelve, which has no room for a new one',
+    strayKind.length === 0, strayKind.join(', ') || Object.values(TELL_FOR_STATE).join(' '));
 }
 
 // ---------------------------------------------------------------- E7 · who may see the map

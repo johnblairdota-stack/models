@@ -149,6 +149,22 @@ export function solve(shotId, { subjectId, probe, hunterId = 'hunter' } = {}) {
   }
 
   if (shotId === 'BODYCAM' || shotId === 'WORK') {
+    /**
+     * 🚨 **THE BOOM NEVER GOES ON THE HUNTER. MEASURED: IT WAS ON IT FOR 82% OF THE ROUND.**
+     *
+     * `views/expedition.js` fed every hunter state change with `subjectId: 'hunter'`, and BODYCAM
+     * takes whatever subject it is handed — so a 90 s expedition ran 73 s of third-person camera
+     * on the monster at a mean camera-to-subject distance of **2.22 m**, under 6 m on 100% of
+     * those frames, while the runner the Debrief is about got 16 s.
+     *
+     * `STING_MIN_RANGE = 6.0` twelve lines above says why that is not a tuning matter: *"a
+     * close-up turns a silhouette into a character model and hands the audience a monster reveal
+     * the game has not earned"* — §6.2, §6.3. The STING obeys it and gets 1.4-2.8 s; the shot
+     * that broke it got seventy. So the range rule is enforced where a pose is produced rather
+     * than only where a camera is chosen: there is now no argument list that puts a shoulder
+     * camera on the Hunter. It appears through a STATIC's frustum, at distance, or not at all.
+     */
+    if (subjectId === hunterId) return null;
     const p = probe.pose(subjectId);
     if (!p) return null;
     const rig = shotId === 'WORK' ? WORK_RIG : BODYCAM_RIG;

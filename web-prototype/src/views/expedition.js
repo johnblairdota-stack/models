@@ -63,6 +63,32 @@ export const TERMINAL_AT = Object.freeze({
   study_e: 'study_e.north', service: 'service.mid', chapel: 'chapel.centre',
 });
 
+/**
+ * `hunter-ai.js`'s state ladder, mapped onto `director.js`'s closed list of kinds. **Absent means
+ * silent**, and the absences are the load-bearing half: PATROL is nothing happening, BREACH and
+ * GROW announce themselves through their own authored hooks rather than through a state
+ * comparison, and SEARCH is the state where it is GIVING UP — `hunter-ai.js:711` enters it when
+ * awareness has fallen below `alertAt` and it is sweeping a last known point. Captioning that
+ * "SOMETHING HEARD THAT", as this did, told the room the opposite of what had happened.
+ */
+export const TELL_FOR_STATE = Object.freeze({
+  ALERT: 'hunter_alert', STALK: 'hunter_alert',
+  PURSUE: 'hunter_commit', HUNT: 'hunter_commit',
+  ATTACK: 'grab',
+});
+
+/**
+ * 🚨 **EVERY HUNTER TELL IS AN EVENT ABOUT THE RUNNER.** The Hunter is what happened; the runner
+ * is who it happened to, and who the audience is watching while it does. Feeding these with
+ * `subjectId: 'hunter'` put a shoulder camera on the monster for 82% of a 90-second expedition.
+ * Exported with the table so `expedition-wire` can hold the whole mapping — kind AND subject —
+ * without a browser.
+ */
+export const tellFor = (state, t, runnerId = 'runner') => {
+  const kind = TELL_FOR_STATE[state];
+  return kind ? { kind, subjectId: runnerId, t } : null;
+};
+
 /** How close counts as reaching it. A robot's arm, not a pixel. */
 export const TERMINAL_REACH = 2.2;
 /** `phases.js` SECONDS[EXPEDITION]. Restated nowhere — see `EXPEDITION_SECONDS` below. */
@@ -345,6 +371,7 @@ export default async function view(args = {}) {
   const _camDir = new THREE.Vector3();
   const feed = (kind, subjectId, t) => director.feed({ kind, subjectId, t, camerasUnlocked, world: {} });
 
+
   engine.onUpdate((dt, t) => {
     if (outcome) return;
     // The one thing `onKill` needs and cannot be handed: the simulation's clock, for the caption
@@ -373,12 +400,30 @@ export default async function view(args = {}) {
       feed('place', 'runner', t);
     }
     if (player.noise > 0.55) feed('noise', 'runner', t);
+    /**
+     * 🚨 **A HUNTER EVENT IS ABOUT THE RUNNER. THE SUBJECT IS WHO THE AUDIENCE IS WATCHING, NOT
+     * WHAT CAUSED THE EVENT — AND GETTING THAT BACKWARDS COST THE RUNNER 74 SECONDS.**
+     *
+     * These three lines fed `subjectId: 'hunter'`, so the arbiter scored shots ON the Hunter and
+     * BODYCAM framed it from 2.22 m: **82% of a 90 s expedition was a third-person camera on the
+     * monster**, under `shots.js`'s own `STING_MIN_RANGE` on 100% of those frames, while the
+     * person the whole Debrief is about was on screen for sixteen seconds. `shots.js` now refuses
+     * the pose outright as a second line of defence; this is the first.
+     *
+     * ⚠️ SEARCH IS NOT AN ALERT — IT IS THE STATE WHERE IT IS GIVING UP. `hunter-ai.js:711` enters
+     * SEARCH when awareness has fallen BELOW `alertAt` and it is sweeping the last known point.
+     * Captioning that "SOMETHING HEARD THAT" told the room the opposite of what happened, and
+     * firing a rank-3 event on it pinned the camera for the sweep. It emits nothing at all now.
+     *
+     * ⚠️ AND STALK IS NOT A COMMITMENT. The commitment is `onCommit` — the latch `hunter-ai.js`
+     * spends a page building precisely so that "it has stopped considering and started coming" is
+     * announced ONCE and cannot flicker. It is wired below; the state ladder no longer guesses.
+     */
     const hs = hunter.state;
     if (hs !== lastState) {
       lastState = hs;
-      if (hs === 'ALERT' || hs === 'SEARCH') feed('hunter_alert', 'hunter', t);
-      if (hs === 'PURSUE' || hs === 'HUNT' || hs === 'STALK') feed('hunter_commit', 'hunter', t);
-      if (hs === 'ATTACK') feed('grab', 'runner', t);
+      const ev = tellFor(hs, t);
+      if (ev) feed(ev.kind, ev.subjectId, ev.t);
     }
     director.tick(t);
 
