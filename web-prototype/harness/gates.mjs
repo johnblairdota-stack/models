@@ -62,9 +62,15 @@
  * `hunter-draw` 23.4 s, `shot-solver` 17.2 s — so a four-wide pool takes the suite from ~146 s to
  * ~44 s measured. Every server-spawning gate already binds a distinct hardcoded port
  * (`show-wire` 5195 · `join-spike` 5196 · `party-sockets` 5197 · `expedition-wire` 5243 ·
- * `shot-solver` 5188/5241/5242/5244) and **`shot-solver` is the only member that launches
+ * `shot-solver` 5188/5241/5242/5244 · `party-surface` 5251/5253) and **`shot-solver` is the only
+ * member that launches
  * Chromium** (CDP 9377 and 9378, sequentially, under a pid-scoped profile), so no two pool slots
  * can ever want the same port. Check that before adding a gate that binds anything.
+ *
+ * ⚠️ The ports are fixed, so **two people running the suite on the same box collide.** Seen once:
+ * `party-surface` died `EADDRINUSE 5251` in the pool while another agent was running that same
+ * gate, and passed alone seconds later. That is not the pool's doing and the pool cannot fix it;
+ * it is the price of hardcoded ports, and worth knowing before you read such a failure as a bug.
  *
  * 🚨 **A KILLED GATE MUST NOT LEAVE A BROWSER ALIVE.** A run interrupted mid-flight used to leave
  * Chromium holding its CDP port; the *next* run then lost the bind while `/json/list` answered
