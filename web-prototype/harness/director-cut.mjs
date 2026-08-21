@@ -22,14 +22,36 @@
 
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { createDirector, SHOTS, RANK, rankOf, MIN_HOLD, MAX_HOLD, LIVE_RANK, poolFor } from '../src/party/director.js';
+import { createDirector, SHOTS, KIND, RANK, rankOf, MIN_HOLD, MAX_HOLD, LIVE_RANK, poolFor } from '../src/party/director.js';
 
 let pass = 0, fail = 0;
 const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' · ' + d : ''}`); } else { fail++; console.log(`  FAIL ${n}${d ? ' · ' + d : ''}`); } return c; };
 
 const LIVE = SHOTS.filter((s) => s.live).map((s) => s.id);
-const RANK4 = ['terminal', 'cam_unlock', 'grab', 'taken', 'task_result'];
-const ALL_KINDS = ['place', 'blow', 'noise', 'progress', 'hunter_alert', 'hunter_commit', 'channel_open', ...RANK4];
+
+/**
+ * ⚠️ **THESE WERE TWO HAND-WRITTEN COPIES OF `director.js`'s OWN TABLES, AND BOTH FAILED
+ * OPEN.**
+ *
+ * `RANK4` was a literal list of five kinds. B6c checked that every kind ON THE LIST is rank 4 and
+ * never the reverse — so a sixth rank-4 kind added to `RANK` would never be generated, never be
+ * fed to a Director, and **never be checked by B1**, which is this file's one stated hard
+ * contract. The list would still have been green.
+ *
+ * `ALL_KINDS` restated the twelve-entry `KIND` enum, and the feed drew from it with
+ * `ALL_KINDS[Math.floor(rand() * 7)]` — a hardcoded 7 against a list whose length is 12. It
+ * happened to land on the seven sub-rank-4 kinds because of the order somebody typed them in;
+ * reorder `KIND` upstream and the sweep silently stops feeding kinds while staying green.
+ *
+ * Both come off `director.js` now. `LOWER` is derived rather than sliced, so the 12% rank-4
+ * weighting survives, and B0b asserts the feed really reaches every kind in the enum.
+ */
+const rank4Of = (kinds, rank) => kinds.filter((k) => (rank[k] ?? 1) === 4);
+/** Rank 4 as `RANK` itself declares it, minus what `KIND` admits — anything left is a hole. */
+const rank4Holes = (kinds, rank) => Object.keys(rank).filter((k) => rank[k] === 4 && !kinds.includes(k));
+const RANK4 = rank4Of(KIND, RANK);
+const LOWER = KIND.filter((k) => rankOf(k) < 4);
+const ALL_KINDS = KIND;
 
 /**
  * A synthetic expedition: `n` events over `secs`, deterministic.
@@ -54,7 +76,7 @@ function expedition({ seed = 1, secs = 90, perMin = 20, subjects = ['p1', 'p2'],
   const fed = [];
   for (let i = 0; i < n; i++) {
     time += secs / n;
-    const kind = rand() < 0.12 ? RANK4[Math.floor(rand() * RANK4.length)] : ALL_KINDS[Math.floor(rand() * 7)];
+    const kind = rand() < 0.12 ? RANK4[Math.floor(rand() * RANK4.length)] : LOWER[Math.floor(rand() * LOWER.length)];
     fed.push({
       t: time, kind, subjectId: subjects[Math.floor(rand() * subjects.length)],
       camerasUnlocked: cams,
@@ -77,6 +99,24 @@ function expedition({ seed = 1, secs = 90, perMin = 20, subjects = ['p1', 'p2'],
   t('B0 arm · a synthetic expedition produces a varied edit',
     d.cuts().length > 10 && kinds.size >= 5 && new Set(d.cuts().map((c) => c.shotId)).size >= 3,
     `${d.cuts().length} shots · ${new Set(d.cuts().map((c) => c.shotId)).size} distinct`);
+}
+
+// ---------------------------------------------------------------- B0b · the feed is the whole enum
+/**
+ * 🚨 **THE SWEEP BELOW IS ONLY WORTH ITS GREEN IF IT FEEDS EVERY KIND THE GAME HAS.** The old draw
+ * indexed a twelve-entry list with `rand() * 7`. It reached the right seven by accident of typing
+ * order, and one reorder upstream would have quietly cost it kinds — with nothing going red.
+ */
+{
+  const fedKinds = new Set();
+  for (let s2 = 0; s2 < 40; s2++) for (const e of expedition({ seed: s2 }).fed) fedKinds.add(e.kind);
+  t('B0b arm · the derived tables are non-empty and the feed reaches every kind in `KIND`',
+    KIND.length > 0 && RANK4.length > 0 && LOWER.length > 0
+      && fedKinds.size === KIND.length && KIND.every((k) => fedKinds.has(k)),
+    `${fedKinds.size}/${KIND.length} kinds fed · ${RANK4.length} at rank 4 · ${LOWER.length} below it`);
+  t('B0b control · the old `rand() * 7` draw could not have reached them all',
+    new Set(Array.from({ length: 4000 }, (_, i) => ALL_KINDS[i % 7])).size < KIND.length,
+    `a 7-wide index over a ${KIND.length}-entry table reaches ${new Set(Array.from({ length: 4000 }, (_, i) => ALL_KINDS[i % 7])).size}`);
 }
 
 // ---------------------------------------------------------------- B1 · rank 4 never off-screen
@@ -337,7 +377,28 @@ function expedition({ seed = 1, secs = 90, perMin = 20, subjects = ['p1', 'p2'],
     `chi2=${biased.toFixed(1)} — the test can see a bias, so its green means something`);
 
   t('B6c control · rank 4 really is the top of the table',
-    Math.max(...Object.values(RANK)) === 4 && RANK4.every((k) => rankOf(k) === 4));
+    Math.max(...Object.values(RANK)) === 4 && RANK4.length > 0 && RANK4.every((k) => rankOf(k) === 4),
+    `${RANK4.length} kinds at the top: ${RANK4.join(', ')}`);
+
+  /**
+   * 🚨 **AND THE OTHER DIRECTION, WHICH IS THE ONE THAT WAS MISSING.** B6c above checks that every
+   * kind on the rank-4 list really is rank 4. It never checked that every rank-4 kind is ON the
+   * list — so a sixth one added to `RANK` would never be generated, never fed, and never seen by
+   * B1, *"rank 4 is never off-screen"*, this file's one hard contract. Green either way.
+   */
+  t('B6d · the rank-4 list is the WHOLE of rank 4 — nothing in `RANK` is left out of `KIND`',
+    rank4Holes(KIND, RANK).length === 0,
+    rank4Holes(KIND, RANK).join(', ') || `all ${RANK4.length} rank-4 kinds are legal events`);
+  // The mutation, and the arm that says it is a mutation: `reveal` must not already be a kind, or
+  // the control would be adding nothing and passing on the shipped table.
+  const withSixth = { ...RANK, reveal: 4 };
+  t('B6d mutation arm · `reveal` is not already in the shipped tables — the control is not a no-op',
+    !(KIND.includes('reveal')) && !('reveal' in RANK), 'a kind nobody has declared');
+  t('B6d control · add a sixth rank-4 kind upstream and both halves notice',
+    rank4Of([...KIND, 'reveal'], withSixth).length === RANK4.length + 1
+      && rank4Of([...KIND, 'reveal'], withSixth).includes('reveal')
+      && rank4Holes(KIND, withSixth).join() === 'reveal',
+    'derived: the list grows · declared-but-not-a-kind: reported as a hole');
 }
 
 console.log(`\ndirector-cut: ${pass} passed, ${fail} failed`);
