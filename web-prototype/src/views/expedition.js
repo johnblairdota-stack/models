@@ -8,7 +8,7 @@ import { Player } from '../game/player.js';
 import { WeaponSystem } from '../game/weapons.js';
 import { HunterAI } from '../game/hunter-ai.js';
 import { buildTestRoom } from '../game/room.js';
-import { makeLightRig } from './game.js';
+import { makeLightRig } from '../lighting/space-rig.js';
 import { PANELS } from '../game/spaces.js';
 import { NoiseBus } from '../game/noise.js';
 import { MOVE } from '../game/rules.js';

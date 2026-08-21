@@ -7,7 +7,7 @@ import { chairCircle } from '../world/props.js';
 import { estateMaterials } from '../world/materials-local.js';
 import { createMeshAvatar } from '../characters/mesh-avatar.js';
 import { unit4hMaterials } from '../materials/surfaces/robot.js';
-import { makeLightRig } from './game.js';
+import { makeLightRig } from '../lighting/space-rig.js';
 
 /**
  * 🎬 **PARTY.PREMIERE — eight robots walk into the ballroom and take a chair.**
