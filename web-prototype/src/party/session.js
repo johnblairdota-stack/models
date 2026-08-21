@@ -369,9 +369,15 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
     return { hunter: sight.seen, room: sight.seen ? room : null, marks, plan: HOUSE.map((r) => ({ ...r })) };
   }
 
+  /**
+   * ⚠️ NO `ownerId`, AND ITS ABSENCE IS THE POINT. This used to pass `ownerId: sock.playerId`,
+   * which is the socket naming itself the owner of whatever it is handed — a tautology that made
+   * `self` mean *"not the television"* and left the whole `you.*` block of the matrix inert.
+   * `project()` reads the owner off the frame's own `you.id` now, so the data says whose panel it
+   * is and this function cannot claim otherwise. `entitled`'s header has the full story.
+   */
   const ctxFor = (sock) => ({
-    playerId: sock.playerId, alignment: sock.alignment, isTV: sock.isTV,
-    seatRole: sock.seatRole, ownerId: sock.playerId,
+    playerId: sock.playerId, alignment: sock.alignment, isTV: sock.isTV, seatRole: sock.seatRole,
   });
 
   /** Send one socket the frame it is entitled to right now. The only place `send` is called. */
@@ -845,6 +851,11 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
       if (sock) pushTo(sock);
     },
     socketFor: (playerId) => socketOf.get(playerId),
+    /** The frame before the filter. Belongs to the gate — see `room.js`'s copy for why. */
+    unprojected: (socketId) => {
+      const sock = sockets.find((x) => x.id === socketId);
+      return sock ? fullFor(sock) : null;
+    },
     input,
 
     /** Open the show. PREMIERE deals the cards and gives everyone time to read them. */

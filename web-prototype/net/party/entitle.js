@@ -188,13 +188,28 @@ export function keyPaths(obj, prefix = '', out = []) {
 
 /**
  * Does `ctx` satisfy `aud`?
+ *
+ * 🚨 `ownerId` IS WHO THE `you` PANEL BELONGS TO, AND UNTIL `project()` STARTED SETTING IT FROM
+ * THE FRAME IT WAS A FIELD NOTHING EVER DISAGREED WITH. Every caller passed `ownerId:
+ * sock.playerId` — the socket's own id — so `ownerId === playerId` was a tautology and `self`
+ * decayed to *"not the television"*. Since the television carries no `you` key at all, the whole
+ * `you.*` block of the matrix was inert: `you.role`, `you.roleLine`, `you.alignment` and
+ * `you.teammates[].id` could all be widened to `all` at once and the entire suite stayed green.
+ * Alignment and the Production roster are the two most sensitive values in the game, and the
+ * rows that guard them were decoration. `party-isolation` I10-I10c is what makes them load-bearing.
+ *
  * @param {{playerId:string, alignment:string, isTV:boolean, seatRole:('runner'|'guide'|null), ownerId:string|null}} ctx
  */
 export function entitled(aud, ctx) {
   switch (aud) {
     case 'all':    return true;
     case 'tv':     return ctx.isTV;
-    case 'self':   return !ctx.isTV && (ctx.ownerId == null || ctx.ownerId === ctx.playerId);
+    // ⚠️ AN UNOWNED PANEL IS NOBODY'S, NOT EVERYBODY'S. This read `ownerId == null || ownerId ===
+    // playerId`, so a `you` block that names no owner was granted to every phone in the room.
+    // Deny-by-default is the whole discipline of this file and the null case was the one place it
+    // was inverted. Nothing outside `you.*` is rowed `self`, so requiring a stated owner costs
+    // nothing and closes the case where a frame grows a panel without saying whose it is.
+    case 'self':   return !ctx.isTV && ctx.ownerId != null && ctx.ownerId === ctx.playerId;
     case 'evil':   return !ctx.isTV && ctx.alignment === 'evil';
     case 'guide':  return !ctx.isTV && ctx.seatRole === 'guide';
     case 'runner': return !ctx.isTV && ctx.seatRole === 'runner';
@@ -220,6 +235,13 @@ export function entitled(aud, ctx) {
  */
 export function project(full, ctx) {
   const unrowed = [];
+  // 🚨 THE FRAME SAYS WHOSE PANEL IT IS; THE CALLER DOES NOT GET TO. `you.id` is the owner, and it
+  // is read here — before any filtering — so that `self` is a comparison rather than a tautology.
+  // A frame that arrives carrying somebody else's `you` therefore loses every `self` field on it,
+  // on every socket including its nominal recipient, instead of being waved through because the
+  // caller happened to name itself the owner. See `entitled`'s header for what that used to cost.
+  const owner = ownerOf(full);
+  const eff = owner === undefined ? ctx : { ...ctx, ownerId: owner };
   const walk = (node, prefix) => {
     if (node === null || typeof node !== 'object') return node;
     if (Array.isArray(node)) return node.map((v) => walk(v, prefix + '[]'));
@@ -230,11 +252,22 @@ export function project(full, ctx) {
       if (v !== null && typeof v === 'object') { out[k] = walk(v, path); continue; }
       const aud = audienceFor(path);
       if (aud === null) { unrowed.push(path); continue; }
-      if (entitled(aud, ctx)) out[k] = v;
+      if (entitled(aud, eff)) out[k] = v;
     }
     return out;
   };
   return { frame: prune(walk(full, '')), unrowed };
+}
+
+/**
+ * Whose `you` panel is this frame carrying? `undefined` when the frame declares nothing — the
+ * television's frame has no `you` key, and a caller-supplied `ownerId` still stands for it.
+ */
+export function ownerOf(full) {
+  if (!full || typeof full !== 'object') return undefined;
+  const you = full.you;
+  if (!you || typeof you !== 'object' || Array.isArray(you)) return undefined;
+  return you.id ?? null;
 }
 
 /** Recursively delete objects and arrays that filtering emptied. See `project`'s header. */

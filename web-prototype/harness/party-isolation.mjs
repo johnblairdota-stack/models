@@ -23,6 +23,14 @@
  * error (`_limb1-rule.mjs` L27-34). It asserts against what a socket ACTUALLY GOT, never
  * against what the server meant to send.
  *
+ * ⚠️ I2 WALKS WHAT ARRIVED, AND I10 WALKS WHAT WAS ASKED FOR. Every transcript on this
+ * transport is already filtered and already addressed to its owner, so the `you.*` rows — role,
+ * the card's own line, ALIGNMENT, and the Production roster — were never once evaluated against a
+ * socket that was not the panel's owner. All four were flipped to `all` at once and this suite
+ * came back 584 passed, 0 failed. I10 reads the frame BEFORE the filter (`room.js`'s
+ * `unprojected`) and holds one player's panel up against the television and against every other
+ * phone in every chair it could be sitting in.
+ *
  * ⚠️ I2 AND I3 ARE A PAIR AND NEITHER IS SUFFICIENT. `you.role` has a row and its audience is
  * `self`, so a frame that puts SOMEBODY ELSE'S role under `you.role` satisfies I2 completely —
  * right key, wrong value. That is control 1, and it is I3's job. I2 catches a wrong key; I3
@@ -30,7 +38,7 @@
  */
 
 import { createRoom } from '../src/party/room.js';
-import { audienceFor, entitled } from '../net/party/entitle.js';
+import { audienceFor, entitled, project } from '../net/party/entitle.js';
 import { ROOMS } from '../src/party/coverage.js';
 import { SCRIPT } from '../src/party/roles.js';
 
@@ -72,7 +80,10 @@ function capture(leak) {
     room.playEpisode({ hunterRoom: ROOMS[5] });
     // Episode two takes the runner, so I7 has a death to assert about.
     room.playEpisode({ hunterRoom: 'gallery', takeRunner: true });
-    runs.push({ seed, tape, truth: room.truth(), log: room.log.all(), sockets: room.sockets.map((s) => ({ ...s })) });
+    // The frames BEFORE the filter, for I10. Nothing on the transport looks like these — see
+    // `room.js`'s `unprojected` for why the gate has to ask for them rather than build them.
+    const panels = room.sockets.map((s) => ({ sock: { ...s }, full: room.unprojected(s.id) }));
+    runs.push({ seed, tape, truth: room.truth(), log: room.log.all(), panels, sockets: room.sockets.map((s) => ({ ...s })) });
   }
   return runs;
 }
@@ -83,7 +94,7 @@ function capture(leak) {
  */
 function suite(runs) {
   const d = {};
-  const ok = { I1: true, I2: true, I3: true, I3b: true, I4: true, I4b: true, I5: true, I6: true, I7: true, I8: true };
+  const ok = { I1: true, I2: true, I3: true, I3b: true, I4: true, I4b: true, I5: true, I6: true, I7: true, I8: true, I10: true, I10b: true, I10c: true };
 
   for (const run of runs) {
     const seatOf = new Map(run.truth.seats.map((s) => [s.id, s]));
@@ -292,6 +303,113 @@ function suite(runs) {
         }
       }
     }
+    // ---- I10 the `you` panel is ONE PLAYER'S, and the matrix has to say so to a hostile context
+    /**
+     * 🚨 **THE ROWS THAT GUARD ALIGNMENT AND THE PRODUCTION ROSTER WERE DECORATION.**
+     *
+     * `self` was `!isTV && (ownerId == null || ownerId === playerId)`, and every caller passed
+     * `ownerId: sock.playerId` — the socket naming itself the owner of whatever it was handed. So
+     * for a phone `self` meant only *"not the television"*, and the television's frame has no
+     * `you` key at all. Both halves of the row were therefore unreachable: `you.role`,
+     * `you.roleLine`, `you.alignment` and `you.teammates[].id` were flipped to `all` **at once**
+     * and the full suite came back 584 passed, 0 failed. Nothing moved.
+     *
+     * The transcripts cannot see it, because a transcript is already filtered and already
+     * addressed to its owner. So this reads the frame BEFORE the filter and holds one player's
+     * panel up against every socket that is not theirs — the television, and every other phone in
+     * every chair it could be sitting in. `entitled` and `audienceFor` are the shipped table; the
+     * walk is this file's own, exactly as I2's is.
+     *
+     * ⚠️ THE ONE DECLARED EXCEPTION IS THE PRODUCTION PANEL AND IT IS NAMED HERE RATHER THAN
+     * ASSUMED. `you.teammates[]` is rowed `evil`, so another Production socket satisfies it —
+     * which is I6's exception, already pinned to ground truth. Every other audience — `all`,
+     * `tv`, `guide`, `runner`, `crew` — is a leak the moment it appears under `you.`.
+     */
+    for (const { sock, full } of run.panels) {
+      if (!full) continue;
+      // 🚨 THE TELEVISION HAS NO PANEL, AND THAT IS AN ASSERTION RATHER THAN AN OBSERVATION. It is
+      // the exact shape the hole was waiting for: the `you.*` rows were unreachable BECAUSE the
+      // TV frame had no `you`, so anything that later grew one would have been authorised by the
+      // matrix to print alignment on the wall. Leak 1 writes `you` unconditionally and is caught
+      // here — see I9's expectation table.
+      if (sock.isTV) {
+        if (full.you !== undefined) {
+          ok.I10 = false; d.I10 = d.I10 || `the television's frame carries a you panel: ${paths(full.you).join(', ')}`;
+        }
+        continue;
+      }
+      if (!full.you || typeof full.you !== 'object') continue;
+      const owner = full.you.id;
+      if (owner !== sock.playerId) {
+        ok.I10 = false; d.I10 = d.I10 || `${sock.id}'s panel says it belongs to ${owner}`;
+        continue;
+      }
+      const youPaths = paths(full).filter((p) => p === 'you' || p.startsWith('you.'));
+      if (!youPaths.length) { ok.I10 = false; d.I10 = d.I10 || `${sock.id} panel has no you.* leaves to test`; }
+      for (const p of youPaths) {
+        const aud = audienceFor(p);
+        if (aud === null) continue;                       // I1's business, not this one's
+        // The owner must be able to read their own card, or I10 is passing on a walker that
+        // denies everything.
+        if (!entitled(aud, { playerId: owner, alignment: sock.alignment, isTV: false, seatRole: sock.seatRole, ownerId: owner })) {
+          ok.I10b = false; d.I10b = d.I10b || `${sock.id} · ${p} · audience ${aud} refuses its own owner`;
+        }
+        for (const other of run.sockets) {
+          if (other.playerId === owner) continue;
+          // Every chair the other socket could be sitting in — a `guide` row under `you.` is a
+          // leak whether or not this episode's guide happened to be seated when we looked.
+          for (const chair of [null, 'runner', 'guide']) {
+            const hostile = {
+              playerId: other.playerId, alignment: other.alignment, isTV: other.isTV,
+              seatRole: other.isTV ? null : chair, ownerId: owner,
+            };
+            if (!entitled(aud, hostile)) continue;
+            if (aud === 'evil' && !other.isTV && other.alignment === 'evil') continue;   // the Panel
+            ok.I10 = false;
+            d.I10 = d.I10 || `${p} (audience ${aud}) reaches ${other.id}${other.isTV ? '' : ` as ${chair || 'seated'}`}, and it belongs to ${owner}`;
+          }
+        }
+      }
+    }
+
+    // ---- I10c the projection itself refuses a panel that is not the recipient's
+    /**
+     * I10 asserts the TABLE. This asserts the FILTER, on a frame the transport cannot produce:
+     * one real phone's frame carrying another real phone's real `you`. Before `project()` read
+     * the owner off `you.id`, the recipient's own ctx claimed ownership of whatever arrived and
+     * every `self` field was waved straight through.
+     *
+     * ⚠️ THIS IS THE ONE PLACE IN THIS FILE THAT CALLS `project()`, AND THE DIRECTION OF THE RISK
+     * IS WHY IT IS ALLOWED. The header's rule exists so a bug in the filter cannot pass its own
+     * gate — a gate that reuses the filter to decide what SHOULD have arrived learns nothing. Here
+     * the filter is the subject: the assertion is that it drops something, so a filter that drops
+     * too little goes red and a filter that drops too much trips the arm on the line below.
+     */
+    {
+      const phones = run.panels.filter((x) => !x.sock.isTV && x.full && x.full.you && x.full.you.id);
+      if (phones.length < 2) { ok.I10c = false; d.I10c = d.I10c || 'fewer than two phones to cross'; }
+      for (const me of phones) {
+        const ctx = { playerId: me.sock.playerId, alignment: me.sock.alignment, isTV: false, seatRole: me.sock.seatRole };
+        const mine = project(me.full, ctx).frame;
+        if (!mine.you || !Object.keys(mine.you).length) {
+          ok.I10c = false; d.I10c = d.I10c || `${me.sock.id} lost its own panel — the arm is broken, not the filter`;
+          continue;
+        }
+        for (const them of phones) {
+          if (them === me) continue;
+          const spliced = project({ ...me.full, you: them.full.you }, ctx).frame;
+          const kept = (spliced.you ? paths(spliced.you).map((x) => `you.${x}`) : [])
+            // The Production Panel again, and named rather than assumed: `you.teammates[]` is
+            // rowed `evil`, so two Production sockets share that audience by declaration. Every
+            // other surviving field is one player's panel arriving on another player's phone.
+            .filter((x) => !(audienceFor(x) === 'evil' && me.sock.alignment === 'evil'));
+          if (kept.length) {
+            ok.I10c = false;
+            d.I10c = d.I10c || `${me.sock.id} was handed ${them.sock.id}'s panel and kept ${kept.join(', ')}`;
+          }
+        }
+      }
+    }
   }
   return { ...ok, detail: d };
 }
@@ -334,6 +452,12 @@ t('I6 · only evil sockets get teammates, and the set equals ground truth', R.I6
 t('I7 · a take reveals nothing, and no survivor frame changes shape across it', R.I7,
   R.detail.I7 || 'alignment absent, role absent, shape unchanged');
 t('I8 · the flyover reaches one phone and never the TV', R.I8, R.detail.I8 || 'party-loop.md "Do not" holds');
+t('I10 · no `you.*` row is satisfiable by a socket that is not the panel\'s owner', R.I10,
+  R.detail.I10 || 'alignment, the card and the Production roster refuse the TV and every other chair');
+t('I10b arm · and every one of them still reaches its own owner', R.I10b,
+  R.detail.I10b || 'I10 is not passing on a walker that denies everything');
+t('I10c · and the projection drops a panel that is not the recipient\'s, field by field', R.I10c,
+  R.detail.I10c || '`project()` takes the owner from the frame, never from the caller');
 
 // ---------------------------------------------------------------- I9 · the controls
 /**
@@ -344,10 +468,15 @@ t('I8 · the flyover reaches one phone and never the TV', R.I8, R.detail.I8 || '
  * ⚠️ THE EXPECTED SET IS NAMED PER CONTROL, NOT ASSUMED TO BE ONE, AND TWO CONTROLS TRIP TWO
  * ASSERTIONS BY DESIGN RATHER THAN BY DEFECT.
  *
- *   leak 1 -> I3 + I7. It broadcasts seat 0's role, and seat 0 is the runner episode two takes,
- *            so the same value is caught once by the general sweep and once by the post-death
- *            sweep. I7 IS a narrower I3 scoped to the dead; a leak about a dead player that
- *            tripped only one of them would mean the other had stopped working.
+ *   leak 1 -> I3 + I7 + I10. It broadcasts seat 0's role, and seat 0 is the runner episode two
+ *            takes, so the same value is caught once by the general sweep and once by the
+ *            post-death sweep. I7 IS a narrower I3 scoped to the dead; a leak about a dead player
+ *            that tripped only one of them would mean the other had stopped working.
+ *            I10 is the third, and it was added rather than tolerated: the leak writes `you`
+ *            unconditionally, so the TELEVISION grows a panel. That is precisely the hazard the
+ *            `you.*` rows were supposed to cover and could not — the rows were unreachable
+ *            BECAUSE the TV frame had no `you`, so the first thing to put one there would have
+ *            been waved through by a matrix nobody could falsify.
  *   leak 4 -> I2 + I8. The flyover ban is asserted twice on purpose — once as a matrix row whose
  *            audience is `guide`, once as its own named check — because `party-loop.md` puts it
  *            under *Do not* in its own words and `rrr-gates.md` §2 says of it *"also I8,
@@ -357,8 +486,8 @@ t('I8 · the flyover reaches one phone and never the TV', R.I8, R.detail.I8 || '
  * reddening five assertions because the suite has become noisy — still fails here.
  */
 if (LEAK === 0) {
-  const expect = { 1: ['I3', 'I7'], 2: ['I1'], 3: ['I4b'], 4: ['I2', 'I8'] };
-  const names = ['I1', 'I2', 'I3', 'I3b', 'I4', 'I4b', 'I5', 'I6', 'I7', 'I8'];
+  const expect = { 1: ['I3', 'I7', 'I10'], 2: ['I1'], 3: ['I4b'], 4: ['I2', 'I8'] };
+  const names = ['I1', 'I2', 'I3', 'I3b', 'I4', 'I4b', 'I5', 'I6', 'I7', 'I8', 'I10', 'I10b', 'I10c'];
   for (const n of [1, 2, 3, 4]) {
     const L = suite(capture(n));
     const red = names.filter((k) => !L[k]);

@@ -135,9 +135,9 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
 
   function broadcast() {
     for (const sock of sockets) {
+      // No `ownerId` — `project()` reads it off the frame's `you.id`. See session.js's `ctxFor`.
       const ctx = {
-        playerId: sock.playerId, alignment: sock.alignment, isTV: sock.isTV,
-        seatRole: sock.seatRole, ownerId: sock.playerId,
+        playerId: sock.playerId, alignment: sock.alignment, isTV: sock.isTV, seatRole: sock.seatRole,
       };
       const { frame } = project(fullFor(sock), ctx);
       // 🚨 Leaks 2 and 4 attach AFTER the projection, because that is the shape a real leak
@@ -331,6 +331,24 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       return state.outcome;
     },
     start() { setPhase('LOBBY'); },
+    /**
+     * 🚨 THE FRAME BEFORE THE FILTER. Belongs to the gate; it is never sent anywhere.
+     *
+     * `party-isolation` I10 needs a frame that the transport, by construction, can never carry:
+     * one player's `you` panel held up against a socket that is not theirs. Every observed
+     * transcript is already filtered and already addressed to its owner, so the `you.*` rows of
+     * the matrix were never once evaluated against a hostile context and could be widened to
+     * `all` — alignment, role, the Production roster — with the whole suite staying green.
+     *
+     * ⚠️ THE GATE ASKS FOR THE REAL PRE-FILTER FRAME RATHER THAN BUILDING ONE, because a frame
+     * the gate assembled itself would carry the fields the gate remembered rather than the fields
+     * `fullFor` emits, and a row added tomorrow would go unwalked. It is the same reason
+     * `hunter-draw` drives `createSession` instead of modelling it.
+     */
+    unprojected: (socketId) => {
+      const sock = sockets.find((x) => x.id === socketId);
+      return sock ? fullFor(sock) : null;
+    },
     /** Ground truth. Belongs to the gate and the Reunion. Never to a socket. */
     truth: () => ({
       seats: deal.seats.map((s) => ({ ...s })),
