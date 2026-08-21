@@ -3,7 +3,7 @@ import { estate } from './_studio.js';
 import { WallField } from '../destruction/wall.js';
 import { DebrisSystem } from '../destruction/debris.js';
 import { DustSystem } from '../destruction/dust.js';
-import { LimbField } from '../game/limbs.js';
+import { LimbField, SOCKET_LIMB } from '../game/limbs.js';
 import { Player } from '../game/player.js';
 import { WeaponSystem } from '../game/weapons.js';
 import { HunterAI } from '../game/hunter-ai.js';
@@ -155,6 +155,54 @@ export const tellFor = (state, t, runnerId = 'runner') => {
   return kind ? { kind, subjectId: runnerId, t } : null;
 };
 
+/**
+ * 🦾 **THE FOUR SOCKETS A SHOW HAS TO PUT BACK, AND THE PAIR OF FUNCTIONS THAT DO IT.**
+ *
+ * Exported and taking the player as an argument rather than closing over one, for two reasons.
+ * `views/game.js:421` learned the first the expensive way — a hand-written second list of sockets
+ * is a second thing to forget to update, and the list it kept was missing `shoulderL`, *the first
+ * one `_attack` takes*. So the loadout is READ OFF THE RIG at construction and never restated.
+ *
+ * The second is that `engine-take` K5 has to drive the shipped refit across five real episodes,
+ * and a gate that reimplements the fix it is testing proves only that the gate can be written
+ * twice. These two functions are the ones the view calls and the ones the gate calls.
+ */
+export const LOADOUT_SOCKETS = Object.freeze(['shoulderL', 'shoulderR', 'hipL', 'hipR']);
+
+/** The round-start body, recorded from the rig itself. Call once, at construction. */
+export function recordLoadout(player) {
+  return LOADOUT_SOCKETS
+    .map((s) => ({ socket: s, type: player.rig.sockets[s]?.type ?? 'empty' }))
+    .filter((e) => e.type !== 'empty');
+}
+
+/**
+ * Put that body back. Strip first, then fill — the two halves are a pair and the order matters:
+ * the fill loop skips any socket that is not empty, which is only safe once the strip has
+ * verified by IDENTITY that whatever is still fitted is the right part in the right socket.
+ * (A part scavenged into the wrong side reads `'limb'` on both hips for ever; `game.js`'s
+ * `stripToLoadout` note has the full census.)
+ *
+ * @returns {number} how many sockets were touched — 0 on an undamaged runner, the normal case.
+ */
+export function refitLoadout(player, loadout) {
+  let changed = 0;
+  for (const s of LOADOUT_SOCKETS) {
+    const c = player.rig.sockets[s];
+    if (!c || c.type === 'empty') continue;
+    if (c.type === 'limb' && c.item?.root === player.unit.limbs[SOCKET_LIMB[s]]) continue;
+    // `voluntary` because this is not a wound — unlisted, the trauma response fires on the reset.
+    player.rig.detach(s, { voluntary: true });
+    changed++;
+  }
+  for (const e of loadout) {
+    if (player.rig.occupant(e.socket) !== 'empty') continue;
+    player.rig.refit(e.socket);
+    changed++;
+  }
+  return changed;
+}
+
 /** How close counts as reaching it. A robot's arm, not a pixel. */
 export const TERMINAL_REACH = 2.2;
 /** `phases.js` SECONDS[EXPEDITION]. Restated nowhere — see `EXPEDITION_SECONDS` below. */
@@ -211,6 +259,42 @@ export default async function view(args = {}) {
   player.pos.copy(room.spawn.player[0]);
   player.facing = Math.PI;
   lightRig.snapTo(room.spaceAt(player.pos) ?? room.spaces[0]);
+
+  /**
+   * 🦾 **THE RUNNER'S BODY IS PUT BACK BETWEEN EPISODES, AND IT NEVER WAS — SO A SHOW ENDED WITH
+   * AN IMMOBILE, IMMORTAL ROBOT ON THE BALLROOM FLOOR, REPORTED AS A CLEAN HOLD.**
+   *
+   * The house is loaded once and plays every episode (see `arm()`), and `arm()` re-armed the
+   * clock, both positions, the Director, the caption memory and the Hunter's combat state — and
+   * never touched `player.rig`. `_attack` takes sockets in the fixed order `armL, armR, legL,
+   * legR`, one per episode, so a show degrades on a ratchet nothing releases:
+   *
+   *   after 1 take   armL gone
+   *   after 2        both arms gone
+   *   after 3        `gait: 'limp'`, `canRun: false`, top speed 1.12 m/s — SLOWER than a stage-1
+   *                  Hunter at 2.05, so the runner can no longer outrun it, which is
+   *                  `darkrun.js`'s entire trade
+   *   after 4        `gait: 'down'`, and `Player.update` zeroes the velocity: the phone is inert
+   *
+   * 🚨 **AND THEN IT BECOMES IMMORTAL.** With every socket empty, `_attack` finds no socket and
+   * its `if (!socket) return;` fires BEFORE `this.onKill?.()` — and `onKill` is this mode's only
+   * death test. Measured headless: a committed Hunter, 90 s, 0.40 m separation, a limbless runner
+   * holding RUN — **0 kills, 0.0 s of ATTACK, 0.00 m travelled**. Every later expedition ends
+   * `'held'`, which `session.js` grades as the guide having held correctly. The show reports a
+   * clean hold while the Hunter stands on the robot.
+   *
+   * `views/game.js:421` has had the answer since the skates bug: record the loadout ONCE from the
+   * rig itself rather than restating it as a list, then strip-and-restore. There are no gadgets
+   * and no skates in this mode — the runner is the plain two-armed UNIT-4H — so the strip is the
+   * identity check alone, and `LimbRig.refit()` rebuilds from `unit.limbs`, the one reference a
+   * detach cannot invalidate (including a part the Hunter has absorbed and shrunk into its
+   * shoulder).
+   *
+   * `engine-take` K5 drives four takes through the real Hunter and asserts the fifth still ends
+   * `'taken'`; K5's control removes this call and watches the fifth come back `'held'`.
+   */
+  const LOADOUT = recordLoadout(player);
+  const refitRunner = () => refitLoadout(player, LOADOUT);
 
   const playerBody = {
     root: player.root, rig: player.rig, height: player.height, radius: player.radius,
@@ -486,13 +570,33 @@ export default async function view(args = {}) {
     state.cameras.unlocked = camerasUnlocked;
     window.__rrrExpedition = null;
 
+    // 🦾 THE BODY FIRST — see `refitRunner`. Before the field sweep below, deliberately, exactly
+    // as `game.js`'s `resetRound` orders the same pair: `detach()` drops what it takes off INTO
+    // the field, so stripping first means the same sweep swallows the ejected parts.
+    refitRunner();
+    /**
+     * 🦴 ...AND THE FLOOR. `limbField` was never cleared by `arm()`, so severed limbs accumulated
+     * for the whole show: every arm the Hunter took off in episode one was still lying in the
+     * gallery in episode six, on camera, in a segment that has not happened yet. `LimbField.take`
+     * is the de-list; `hunter._pull` is nulled with it so a half-finished absorb animation is not
+     * still dragging a part this loop has just reclaimed (`game.js:1798`'s line, same reason).
+     */
+    for (const it of [...limbField.items]) {
+      it.root.removeFromParent();
+      it.gadgetObj?.dispose?.(); it.gadgetObj = null;
+      limbField.take(it);
+    }
+    hunter._pull = null;
+
     player.pos.copy(room.spawn.player[0]);
     player.facing = Math.PI;
+    player.vel.set(0, 0, 0);
     heading = player.facing;
     detent = 0;
     lightRig.snapTo(room.spaceAt(player.pos) ?? room.spaces[0]);
 
     hunter.root.position.copy(room.spawn.hunter);
+    hunter.vel.set(0, 0, 0);
     hunter.awareness = 0;
     hunter.state = 'PATROL';
     hunter.target = null;

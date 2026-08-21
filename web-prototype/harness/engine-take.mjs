@@ -66,6 +66,15 @@ const THREE = await import('three');
 const RM = await import(s_('game/room.js'));
 const { HunterAI } = await import(s_('game/hunter-ai.js'));
 const { HUNTER_SENSE, MOVE, WEAPON_RANGE } = await import(s_('game/rules.js'));
+const { Player } = await import(s_('game/player.js'));
+const { LimbField } = await import(s_('game/limbs.js'));
+const { NoiseBus } = await import(s_('game/noise.js'));
+/**
+ * K5 drives the SHIPPED refit rather than a copy of it — `views/expedition.js` exports the two
+ * functions its own `arm()` calls, for exactly this reason. A gate that reimplemented the fix
+ * would prove only that the fix can be written twice.
+ */
+const EXP = await import(s_('views/expedition.js'));
 const room = await RM.buildTestRoom({ work: (p) => p }, {});
 
 /**
@@ -208,6 +217,121 @@ const fx = (n) => (n == null ? 'never' : n.toFixed(2));
     /finish\('taken'[^)]*\)/.test("if (contact < 1.35) finish('taken', t);"));
   t('K4b control · and would notice the subscription going away',
     !/hunter\.onKill\s*=/.test('hunter.setTargets([playerBody]);'));
+}
+
+
+// ---------------------------------------------------------------- K5 · the show, five deep
+/**
+ * 🚨 **A TAKE IS PRODUCIBLE ON EPISODE ONE. THE QUESTION NOBODY ASKED WAS EPISODE FIVE.**
+ *
+ * `party-taken` T3 could not see this and is not at fault for it: it asks
+ * `resolveContact({occupiedSockets: 0})`, a pure function, which correctly answers `'taken'`.
+ * The defect is one layer down and only exists across a segment boundary — `views/expedition.js`
+ * builds ONE `Player` at page load and its `arm()` never touched `player.rig`, so the four
+ * sockets `_attack` takes in the fixed order `armL, armR, legL, legR` came off one per episode
+ * and nothing put them back. By take 3 the runner is `limp`, `canRun: false`, top speed 1.12 m/s
+ * against a stage-1 Hunter at 2.05 — the trade `darkrun.js` calls *the entire decision* is
+ * inverted. By take 4 it is `down` and `Player.update` zeroes its velocity.
+ *
+ * And then it is IMMORTAL, which is the half that reaches the scoreboard: `_attack`'s
+ * `if (!socket) return;` fires BEFORE `this.onKill?.()`, and `onKill` is the mode's only death
+ * test. So every later expedition ends `'held'` — *the guide held correctly* — over a robot lying
+ * on the floor with the Hunter standing on it.
+ *
+ * So this runs the ENGINE five episodes deep: a real `Player`, a real `LimbField`, a real
+ * `HunterAI` in the real house, re-armed between segments exactly as `arm()` re-arms them, and
+ * asks whether the fifth still ends `'taken'`. The control is the same five episodes with the
+ * refit call removed and nothing else changed.
+ */
+{
+  /** One show. `refit` false reproduces exactly what shipped. */
+  function show({ refit, episodes = 5 }) {
+    let seed = 11;
+    const rng = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+    const scene = new THREE.Scene();
+    const field = new LimbField(scene, { rng, floorY: room.floorY, bounds: room.bounds });
+    const player = new Player({ scene, world: room, field, rng, id: 'runner', avatar: null });
+    const LOADOUT = EXP.recordLoadout(player);
+    const body = {
+      root: player.root, rig: player.rig, height: player.height, radius: player.radius,
+      get noise() { return player.noise; },
+    };
+    const hunter = new HunterAI({
+      room, scene, rng, position: room.spawn.hunter.clone(), noise: new NoiseBus(), bangPolicy: 'off',
+    });
+    hunter.setTargets([body]);
+    const centre = room.anchor('ballroom.centre');
+    const out = [];
+    for (let ep = 1; ep <= episodes; ep++) {
+      // ---- `arm()`, the parts of it that touch a body. The refit is the line under test.
+      if (refit) EXP.refitLoadout(player, LOADOUT);
+      for (const it of [...field.items]) { it.root.removeFromParent(); field.take(it); }
+      hunter._pull = null;
+      player.pos.set(centre.x, 0, centre.z); player.facing = Math.PI; player.vel.set(0, 0, 0);
+      hunter.root.position.set(centre.x + 4, 0, centre.z); hunter.vel.set(0, 0, 0);
+      hunter.awareness = 1; hunter.state = 'PURSUE'; hunter.target = body;
+      hunter.contact = 0; hunter.searchTimer = 0; hunter.lastKnown.copy(player.root.position);
+      hunter.resetCombat();
+
+      const limbsAtTop = EXP.LOADOUT_SOCKETS.filter((k) => player.rig.occupant(k) !== 'empty').length;
+      const from = player.pos.clone();
+      let outcome = null, simT = 0, clock = EXP.EXPEDITION_SECONDS, attackFrames = 0;
+      hunter.onKill = () => { if (!outcome) outcome = 'taken'; };
+      for (let i = 0; i < Math.round(EXP.EXPEDITION_SECONDS / DT) && !outcome; i++) {
+        simT = i * DT; clock -= DT;
+        player.aimYaw = 0;
+        player.update(DT, simT, { move: { x: 0, y: 1 }, run: true, aimYaw: 0, aimPitch: 0 });
+        room.update(DT);
+        hunter.update(DT, simT);
+        if (hunter.state === 'ATTACK') attackFrames++;
+        if (!outcome && clock <= 0) outcome = 'held';
+      }
+      out.push({
+        ep, outcome: outcome ?? 'held', t: simT, limbsAtTop,
+        gait: player.caps.gait, canRun: !!player.caps.canRun, topSpeed: MOVE.run * player.caps.speedScale,
+        attack: attackFrames * DT, moved: player.pos.distanceTo(from), fieldLeft: field.items.length,
+      });
+    }
+    return out;
+  }
+
+  const fixed = show({ refit: true });
+  const shipped = show({ refit: false });
+  const row = (r) => `ep${r.ep} ${r.outcome} @${r.t.toFixed(1)}s (${r.limbsAtTop} limbs, ${r.gait})`;
+
+  t('K5 arm · five real episodes were driven, and episode one takes the runner either way',
+    fixed[0].outcome === 'taken' && shipped[0].outcome === 'taken',
+    `fixed ${row(fixed[0])} · shipped ${row(shipped[0])}`);
+
+  t('K5 · the refit puts the body back, so the FIFTH expedition still ends `taken`',
+    fixed.every((r) => r.outcome === 'taken'),
+    fixed.map(row).join(' · '));
+
+  t('K5b · and every episode opens on a whole runner — same limbs, same gait, same top speed',
+    fixed.every((r) => r.limbsAtTop === 4 && r.gait === 'walk' && r.canRun
+      && Math.abs(r.topSpeed - MOVE.run) < 1e-9),
+    `${fixed.map((r) => r.limbsAtTop).join('/')} limbs · top speed ${fixed.map((r) => r.topSpeed.toFixed(2)).join('/')} m/s`);
+
+  t('K5c · and the floor is swept, so last episode\'s severed limbs are not on camera in this one',
+    fixed.every((r) => r.fieldLeft <= 1),
+    `${fixed.map((r) => r.fieldLeft).join('/')} parts left in the field at each segment end`);
+
+  t('K5 control · remove the refit and the fifth expedition comes back `held`',
+    shipped[4].outcome === 'held' && shipped.some((r) => r.outcome === 'taken'),
+    shipped.map(row).join(' · '));
+
+  t('K5b control · because the runner degraded to `down` and stopped moving',
+    shipped[4].gait === 'down' && shipped[4].moved < 0.05 && !shipped[4].canRun,
+    `gait ${shipped.map((r) => r.gait).join(' → ')} · ep5 travelled ${shipped[4].moved.toFixed(2)} m holding RUN`);
+
+  t('K5c control · and the Hunter never entered ATTACK on it — an empty socket returns before `onKill`',
+    shipped[4].attack === 0 && fixed[4].attack > 0,
+    `shipped ep5 ${shipped[4].attack.toFixed(1)}s of ATTACK vs ${fixed[4].attack.toFixed(1)}s with the refit`);
+
+  t('K5d control · so the segment reported the guide having held correctly, five episodes running',
+    shipped.filter((r) => r.outcome === 'held').length >= 1
+    && fixed.filter((r) => r.outcome === 'held').length === 0,
+    `shipped ${shipped.map((r) => r.outcome).join(',')} · fixed ${fixed.map((r) => r.outcome).join(',')}`);
 }
 
 console.log(`\nengine-take: ${pass} passed, ${fail} failed`);

@@ -512,6 +512,24 @@ export class HunterAI {
     // hunter across a freshly-reset house to hammer a panel that `resetRound` has already healed.
     this._clearDoor();
     this._noiseSeq = 0;
+    /**
+     * 🔦 ...AND THE GROWTH ANIMATION, WHICH IS INVISIBLE FROM OUTSIDE FOR THE SAME REASON THE
+     * FOUR ABOVE ARE. A caller that resets `state` to PATROL after an absorb — which is exactly
+     * what a segment boundary does — left `growT` mid-convulsion, `_burst` spent and the eye
+     * flare ADDED TO THE ROOT, so the next segment opened with a patrolling Hunter lit up like
+     * one that had just grown. `_setFlare(false)` is a 2.5 s release and is the wrong tool for a
+     * hard reset; the flare comes off here and now.
+     *
+     * ⚠️ IT CLEARS THE ANIMATION, NOT THE STAGE — `stage` and `absorbed` are the round's memory
+     * of what it has eaten and are not this method's to throw away.
+     */
+    this.growT = 0;
+    this._burst = false;
+    this.growFrom = null;
+    this.growTo = null;
+    this.flare.intensity = 0;
+    this._flareOff = 0;
+    if (this._flareOn) { this._flareOn = false; this.flare.removeFromParent(); }
   }
 
   /**
