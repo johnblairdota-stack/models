@@ -102,6 +102,46 @@ export function seatDrop(lobby, seat, sock) {
 }
 
 /**
+ * 🚨 **THE ROSTER IS FROZEN ONCE, AT THE BELL, AND THE SEATS ARE RENUMBERED. THE ALTERNATIVE WAS
+ * DEALING ROLES TO PHONES THAT HAD GONE HOME.**
+ *
+ * `seatDrop` above marks a seat dead and KEEPS it, which is exactly right while the lobby is a
+ * lobby: the token still buys the chair back, so a phone whose screen locked returns as itself.
+ * But the count that starts the show was `lobby.seats.size`, which counts the dead ones. Eight
+ * people join, three close the browser, and the show deals **eight** roles — some of them to
+ * absent phones — while the execution threshold becomes `floor(8/2)+1 = 5` of the 5 people
+ * actually in the room. That is unanimity, for ever, in a game whose entire third act is a vote.
+ * The television meanwhile prints the LIVE count, so the screen and the session disagreed about
+ * how many people were playing.
+ *
+ * ⚠️ RENUMBERING IS NOT TIDINESS. `show.mjs`'s `playerIdOf(seat)` is the ONLY bridge between a
+ * chair and a dealt role, and `cast.js` deals seats `0..count-1`. Leave a hole at seat 2 of 8 and
+ * seat 7 maps to a `p8` the deal never made — so the seats have to be dense or the bridge is a
+ * lie. Names, tokens, colours and boot times travel with their owner; only the index moves.
+ *
+ * ⚠️ AND THE WINDOW IS THE RULE, STATED: a phone that is away **at the moment the host presses
+ * START** has lost its chair, and one that drops at any point **after** it keeps the chair and
+ * reclaims it by token exactly as before. There is no third answer that is honest. Holding a
+ * chair open for somebody who might come back means starting a show whose vote cannot resolve;
+ * re-dealing when they return means changing everybody's role mid-episode. The show is a
+ * broadcast — it goes out with whoever is in the studio when the light comes on.
+ *
+ * @returns {{kept:number, dropped:Array<{seat:number,name:string}>}}
+ */
+export function freezeRoster(lobby) {
+  const present = [...lobby.seats.values()].sort((a, b) => a.seat - b.seat).filter((s) => s.live);
+  const gone = [...lobby.seats.values()].filter((s) => !s.live).map((s) => ({ seat: s.seat, name: s.name }));
+  lobby.seats.clear();
+  present.forEach((s, i) => {
+    s.seat = i;
+    s.id = `phone-${i}`;
+    lobby.seats.set(s.id, s);
+  });
+  for (const g of gone) note(lobby, 'seat.evicted', { seat: g.seat, name: g.name, reason: 'not in the room at the bell' });
+  return { kept: present.length, dropped: gone };
+}
+
+/**
  * 🚨 WHAT THE TELEVISION IS SENT, AND NOTHING ELSE. Built field by field rather than spread from
  * the seat record — a `...s` here would put every token on a screen eight people photograph, and
  * `join-spike` J9 exists because that is a one-character mistake.

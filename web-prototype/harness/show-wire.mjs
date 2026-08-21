@@ -443,6 +443,132 @@ t('X3 arm · the show played to the Reunion over real sockets',
   await s3.close();
 }
 
+// ---------------------------------------------------------------- X12 · phantom seats
+/**
+ * 🚨 **THE COUNT THAT STARTS THE SHOW WAS THE COUNT OF SEATS EVER OPENED, NOT OF PEOPLE PRESENT.**
+ *
+ * `seatDrop` marks a seat dead and keeps it, which is right — the token still buys it back. But
+ * `begin()` read `lobby.seats.size`, so eight joins and three closed browsers dealt EIGHT roles,
+ * some of them to phones that were not in the room, and set the execution threshold at
+ * `floor(8/2)+1 = 5` of the five people actually voting. Unanimity, for ever, in a game whose
+ * third act is a vote. The television printed the LIVE count the whole time, so the screen and
+ * the session disagreed about how many people were playing and neither of them said so.
+ *
+ * This is the only gate that can see it: `live-session` is handed a `count` and `party-isolation`
+ * never opens a lobby. It takes nine real sockets and a host pressing START.
+ */
+{
+  const s4 = startShow({ port: PORT + 3, code: 'ghst', stamp: 1700000003000 });
+  await sleep(140);
+  const tv4 = await open2(PORT + 3, '?role=tv');
+  await sleep(60);
+  const eight = [];
+  for (let i = 0; i < 8; i++) {
+    const p = await open2(PORT + 3);
+    p.send({ t: 'join', name: `Ghost ${i + 1}`, token: null, boot: 700 });
+    eight.push(p);
+  }
+  await sleep(220);
+  const tokens = eight.map((p) => (p.of('seated')[0] || {}).token);
+  t('X12 arm · eight phones seated, and three of them then close the browser',
+    s4.lobby.seats.size === 8 && tokens.every(Boolean), `${s4.lobby.seats.size} seats`);
+
+  // Seats 1, 4 and 6 go home. Not the last three — a hole in the middle is what breaks the
+  // seat→playerId bridge, and taking the tail would let a renumbering bug pass by luck.
+  for (const i of [1, 4, 6]) eight[i].close();
+  await sleep(220);
+  const liveBefore = [...s4.lobby.seats.values()].filter((x) => x.live).length;
+  t('X12b arm · the server saw all three drops and the roster is down to five live',
+    liveBefore === 5 && s4.lobby.seats.size === 8,
+    `${liveBefore} live of ${s4.lobby.seats.size} seats — the phantoms are still on the books`);
+
+  tv4.send({ t: 'start' });
+  await sleep(300);
+  const sess4 = s4.sessionNow();
+  const st4 = sess4.state;
+
+  t('X12 · the show is cast for the people in the room, not for everyone who ever joined',
+    st4.players.length === 5, `${st4.players.length} players dealt · ${liveBefore} phones present`);
+  t('X12b · so the execution threshold is a real majority rather than unanimity',
+    Math.floor(st4.players.length / 2) + 1 === 3,
+    `${Math.floor(st4.players.length / 2) + 1} of ${st4.players.length} — it was 5 of 5`);
+  t('X12c · the seats closed up, so every chair maps to a role the deal actually made',
+    [...s4.lobby.seats.values()].map((x) => x.seat).sort((a, b) => a - b).join(',') === '0,1,2,3,4'
+      && [...s4.lobby.seats.values()].every((x) => st4.players.some((pl) => pl.id === playerIdOf(x.seat))),
+    'no hole at seat 1, 4 or 6 pointing at a p6/p7/p8 nobody dealt');
+  t('X12d · and the screen agrees with the session — the TV\'s roster is the same five',
+    (tv4.of('roster').slice(-1)[0]?.players || []).length === 5,
+    `${(tv4.of('roster').slice(-1)[0]?.players || []).length} on the rail`);
+
+  // 🚨 THE RENUMBERED PHONES ARE TOLD. A phone still holding its old index reads somebody else's
+  // name and colour off every later roster.
+  const survivors = [0, 2, 3, 5, 7].map((i) => eight[i]);
+  t('X12e · every surviving phone was re-seated with its new index and its own token',
+    survivors.every((p, k) => {
+      const last = p.of('seated').slice(-1)[0];
+      return last && last.seat === k && last.token === tokens[[0, 2, 3, 5, 7][k]];
+    }),
+    survivors.map((p) => p.of('seated').slice(-1)[0]?.seat).join(','));
+  t('X12f · and each of them is receiving frames for the chair it is actually in',
+    survivors.every((p, k) => {
+      const f = p.frames().slice(-1)[0];
+      return f && f.you && f.you.id === playerIdOf(k);
+    }), survivors.map((p) => p.frames().slice(-1)[0]?.you?.id).join(','));
+
+  // 🚨 THE CONTROL IS THE SHIPPED COUNT, TAKEN FROM THIS EXACT LOBBY. `lobby.seats.size` after the
+  // freeze is 5; what the bug read was the number of seats ever opened, which the log still has.
+  const everJoined = s4.lobby.events.filter((e) => e.type === 'seat.joined').length;
+  t('X12 control · the old count, read off this very lobby, would have dealt eight',
+    everJoined === 8 && everJoined !== st4.players.length,
+    `${everJoined} seats ever opened vs ${st4.players.length} people in the room`);
+  t('X12 control · and its threshold would have needed every living voter, every time',
+    Math.floor(everJoined / 2) + 1 >= liveBefore && Math.floor(st4.players.length / 2) + 1 < liveBefore,
+    `${Math.floor(everJoined / 2) + 1} votes from ${liveBefore} phones is unanimity; `
+    + `${Math.floor(st4.players.length / 2) + 1} of ${liveBefore} is a majority`);
+
+  // ---------------------------------------------------------------- X13 · the latecomer
+  /**
+   * The same area, and the cheaper half: a phone that arrives after the bell used to be SEATED —
+   * `catchUp` then found no session socket for it, returned silently, and it sat on a black screen
+   * refusing every tap with "not in this show". A closed door with a reason on it is the honest
+   * answer; the alternative is re-dealing the cast mid-episode, which changes everybody's role.
+   */
+  const late = await open2(PORT + 3);
+  late.send({ t: 'join', name: 'Latecomer', token: null, boot: 500 });
+  await sleep(220);
+  t('X13 · a phone that arrives after the bell is refused, with a reason it can display',
+    !late.of('seated').length && late.of('late').length === 1
+      && typeof late.of('late')[0].why === 'string' && late.of('late')[0].why.length > 8,
+    JSON.stringify(late.of('late')[0] || null));
+  t('X13b · and it took no seat, so the show it could not join is not disturbed by it',
+    s4.lobby.seats.size === 5 && s4.sessionNow().state.players.length === 5,
+    `${s4.lobby.seats.size} seats after the knock`);
+  t('X13 control · the refusal is a black screen otherwise — a seated latecomer gets no frame',
+    !late.frames().length, 'zero frames, which is exactly what being seated would have given it');
+
+  // 🚨 AND THE RECLAIM STILL WORKS, WHICH IS THE HALF THAT MUST NOT REGRESS. A phone that locks
+  // AFTER the bell owns a chair with a role on it. `join-spike` J3 covers the lobby; this covers
+  // the show, where the token buys an alignment.
+  const relockSeat = 3;
+  const relockToken = survivors[relockSeat].of('seated').slice(-1)[0].token;
+  const wasRole = survivors[relockSeat].frames().slice(-1)[0].you.role;
+  survivors[relockSeat].close();
+  await sleep(180);
+  const back = await open2(PORT + 3);
+  back.send({ t: 'join', name: 'Impostor', token: relockToken, boot: 40 });
+  await sleep(260);
+  t('X13c · a phone that locks after the bell still comes back to its own chair and its own card',
+    back.of('seated').length === 1 && back.of('seated')[0].seat === relockSeat
+      && back.frames().slice(-1)[0]?.you?.role === wasRole,
+    `seat ${back.of('seated')[0]?.seat} · role unchanged`);
+  t('X13c control · and it was refused nothing — the token is what separates it from a latecomer',
+    !back.of('late').length && !back.of('full').length);
+
+  for (const p of eight) p.close();
+  late.close(); back.close(); tv4.close();
+  await s4.close();
+}
+
 function open2(port, query = '') {
   return new Promise((resolve) => {
     const ws = new WebSocket(`ws://127.0.0.1:${port}/${query}`);

@@ -36,7 +36,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { makeCode, MAX_PHONES } from './local.mjs';
 import {
-  createLobby, note, send, seatJoin, seatDrop, roster, report,
+  createLobby, note, send, seatJoin, seatDrop, freezeRoster, roster, report,
   lanAddress, wsAccept, readFrames,
 } from './lobby.mjs';
 import { createSession, LOBBY } from '../../src/party/session.js';
@@ -93,10 +93,30 @@ export function startShow({ port = 5183, code = makeCode(), stamp = Date.now() }
     for (const s of lobby.seats.values()) send(s.sock, { t: 'roster', players: r, you: s.seat, started: !!show });
   };
 
+  /**
+   * 🚨 THE SHOW IS CAST FROM WHO IS IN THE ROOM, NOT FROM WHO EVER OPENED THE PAGE. This counted
+   * `lobby.seats.size`, which includes the seats `seatDrop` marks dead and keeps for reclaim — so
+   * eight joins and three closed browsers dealt eight roles, some to nobody, and set the execution
+   * threshold at 5 of the 5 people still present. Unanimity, for ever. `freezeRoster` states the
+   * window and does the renumbering; the check runs on the live count BEFORE anything is evicted,
+   * so a host who presses START too early is told the number and loses nobody's chair.
+   */
   function begin(now) {
-    const count = lobby.seats.size;
     if (show) return { ok: false, why: 'already shooting' };
-    if (!COMPOSITION[count]) return { ok: false, why: `${count} players — the deck runs ${MIN_PLAYERS}-${MAX_PHONES}` };
+    const present = [...lobby.seats.values()].filter((s) => s.live).length;
+    if (!COMPOSITION[present]) return { ok: false, why: `${present} players — the deck runs ${MIN_PLAYERS}-${MAX_PHONES}` };
+    const frozen = freezeRoster(lobby);
+    const count = lobby.seats.size;
+    // 🚨 A RENUMBERED SEAT HAS TO BE TOLD. The phone stores its seat index from `seated` and finds
+    // itself in every later roster by it; a phone still holding seat 5 after the roster closed up
+    // to seven reads somebody else's name, colour and ping off the rail.
+    for (const st of lobby.seats.values()) {
+      send(st.sock, {
+        t: 'seated', seat: st.seat, name: st.name, colour: st.colour, token: st.token,
+        playerId: playerIdOf(st.seat), started: true,
+      });
+    }
+    if (frozen.dropped.length) note(lobby, 'roster.frozen', { kept: frozen.kept, evicted: frozen.dropped.length });
     // 🚨 THE CAST SEED IS DERIVED, NEVER SENT, AND IS RECORDED IN THE REPORT. Derived so a game is
     // replayable from four printed values; never sent because `cast.js`'s header is unambiguous
     // that a client holding it can deal the whole table itself.
@@ -184,6 +204,25 @@ export function startShow({ port = 5183, code = makeCode(), stamp = Date.now() }
       const now = Date.now();
 
       if (m.t === 'join' && !isTV) {
+        /**
+         * 🚨 A LATECOMER IS REFUSED WITH A REASON, NOT SEATED INTO A SHOW THAT HAS NO CARD FOR
+         * THEM. Seating them is what used to happen and it is the worse of the two answers: the
+         * cast was dealt for N players, so there is no `p(N+1)` — `catchUp` finds no session
+         * socket and returns silently, the phone never receives a frame at all, and every tap
+         * comes back `not in this show`. A black screen and eight refusals is not a smaller bug
+         * than a closed door, it is the same bug with the sign taken down. Re-dealing to fit them
+         * in would change everybody else's role mid-episode, which is not a thing a show does.
+         *
+         * ⚠️ THE TOKEN CHECK COMES FIRST, ALWAYS. A phone that locked and came back is not a
+         * latecomer — it owns a chair with a role on it, and `seatJoin` is the one rule that
+         * hands it back.
+         */
+        const mine = m.token && [...lobby.seats.values()].find((st) => st.token === m.token);
+        if (show && !mine) {
+          note(lobby, 'seat.refused', { name: (m.name || '').slice(0, 14), reason: 'already rolling' });
+          send(sock, { t: 'late', why: 'the show has already started' });
+          return sock.end();
+        }
         const r = seatJoin(lobby, m, sock);
         if (r.full) { send(sock, { t: 'full', capacity: MAX_PHONES }); return sock.end(); }
         seat = r.seat;

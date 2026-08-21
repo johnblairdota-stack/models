@@ -591,6 +591,19 @@
         $('joinCard').classList.add('hide'); setState('connected');
       }
       if (m.t === 'full') { $('go').disabled = true; $('go').textContent = 'Room is full'; }
+      /**
+       * 🚨 A CLOSED DOOR WITH A REASON ON IT. The server used to seat a phone that arrived after
+       * the bell, and a seated phone with no card is worse than a refused one: the deal was made
+       * for the people who were in the room, so this phone would never be sent a single frame and
+       * every tap would come back "not in this show". Nothing on the screen would say why.
+       * A phone that locked and came back is not this — it reclaims by token and never gets here.
+       */
+      if (m.t === 'late') {
+        $('go').disabled = true;
+        $('go').textContent = 'Already rolling';
+        $('joinNote').textContent = esc(m.why || 'the show has already started')
+          + ' — you can watch on the television. The next one starts from the lobby.';
+      }
       if (m.t === 'roster') {
         roster = m.players || [];
         if (seat) {
