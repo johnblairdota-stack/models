@@ -1259,19 +1259,63 @@ export class HunterAI {
 
     if (this._pull) this._pullStep(dt);
 
-    if (p >= 1) {
-      const was = this.stage;
-      this.stage = this.growTo;
-      for (const s of [1, 2, 3]) this.rigs[s].root.visible = s === this.stage;
-      this.rigs[this.stage].root.scale.setScalar(1);
-      this.rigs[this.stage].root.position.y = 0;
-      this.flare.intensity = 0;
-      this.flare.position.y = this.height * 0.86;
-      this.radius = 0.30 + this.stage * 0.12;
-      this._burst = false;
-      this.state = this.target ? 'PURSUE' : 'PATROL';
-      this.onStage?.(was, this.stage, this);
-    }
+    if (p >= 1) this._growFinish();
+  }
+
+  /**
+   * The end of a growth: the new body is the body, the flare goes out, the radius follows the
+   * stage, and the round is told it changed character.
+   *
+   * ⚠️ SPLIT OUT OF `_growStep` SO THAT `settleGrowth()` CAN REACH IT. The two callers must land
+   * the SAME set of fields — a second copy of this that forgot `radius` would leave a stage-3
+   * hunter on a stage-1 body, which `game.js`'s `resetRound` has a comment about because it once
+   * shipped: *"a round that reset out of stage 3 kept a 0.66 m body on a stage-1 rig and could not
+   * fit through D7."*
+   */
+  _growFinish(announce = true) {
+    const was = this.stage;
+    this.stage = this.growTo ?? this.stage;
+    for (const s of [1, 2, 3]) this.rigs[s].root.visible = s === this.stage;
+    this.rigs[this.stage].root.scale.setScalar(1);
+    this.rigs[this.stage].root.position.y = 0;
+    this.flare.intensity = 0;
+    this.flare.position.y = this.height * 0.86;
+    this.radius = 0.30 + this.stage * 0.12;
+    this._burst = false;
+    this.growT = 0;
+    this.growFrom = null;
+    this.growTo = null;
+    this.state = this.target ? 'PURSUE' : 'PATROL';
+    if (announce) this.onStage?.(was, this.stage, this);
+  }
+
+  /**
+   * 🚨 **LAND A GROWTH THAT IS STILL IN FLIGHT, BECAUSE IN THE PARTY MODE ONE ALWAYS IS.**
+   *
+   * `_grow` enters GROW and `this.stage = this.growTo` only lands at `p >= 1` inside `_growStep`,
+   * 1.4 seconds of `update` calls later. In `views/game.js` those calls arrive; in the party
+   * expedition they do not. `finish('taken')` is called from inside `onKill`, from inside
+   * `_attack`, from inside `update` — and the next frame the view's loop returns `aftermath()` and
+   * never calls `update` again. Then `arm()` sets `state = 'PATROL'` for the next episode and the
+   * growth is gone.
+   *
+   * Measured across an eight-episode show: **party — stage 1, speed 2.05, `onStage` fired 0
+   * times. `game.js` — stage 3, speed 3.35, `onStage` fired twice.** So `HUNTER_GROWTH`,
+   * `HUNTER_SPEED[2..3]`, the 1.4 s convulsion and the whole growth-of-menace curve were dead in
+   * the mode whose entire audience is watching it happen.
+   *
+   * ⚠️ **SILENT BY DEFAULT.** `onStage` is a sound and a bus event — `playFurnBreak('stone')` and
+   * a `progress` feed. The convulsion belongs to the aftermath of the take that caused it, where
+   * the view keeps ticking a GROWing Hunter precisely so it can air; a caller re-arming the next
+   * segment is landing the arithmetic after the fact and must not put a noise on a television
+   * that is showing a different room.
+   *
+   * @returns {boolean} whether there was a growth to land.
+   */
+  settleGrowth({ announce = false } = {}) {
+    if (this.state !== 'GROW' && this.growTo == null) return false;
+    this._growFinish(announce);
+    return true;
   }
 
   _pullStep(dt) {

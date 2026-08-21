@@ -641,6 +641,22 @@ export default async function view(args = {}) {
     detent = 0;
     lightRig.snapTo(room.spaceAt(player.pos) ?? room.spaces[0]);
 
+    /**
+     * 🩸 **LAND ANY GROWTH THAT IS STILL IN FLIGHT BEFORE ANYTHING ELSE TOUCHES `state`.**
+     *
+     * A take is always the LAST thing that happens in an expedition — `onKill` calls `finish`,
+     * `finish` sets `outcome`, and the next frame the loop returns `aftermath()`. So the absorb
+     * that follows the kill starts a GROW that has 1.4 s of `update` calls to complete and, until
+     * the aftermath began ticking it below, got none: `arm()`'s `state = 'PATROL'` on the line
+     * below this one is where the Hunter's growth used to be thrown away, every episode, for ever.
+     * Measured over eight takes: party mode ended at stage 1 and speed 2.05 where `game.js` ended
+     * at stage 3 and 3.35, with `onStage` — a tell wired last session — never firing once.
+     *
+     * Silent, deliberately: the convulsion is the aftermath's to show, and `settleGrowth`'s own
+     * note says why a sound landing at the top of a different segment is worse than no sound.
+     */
+    hunter.settleGrowth();
+
     hunter.root.position.copy(room.spawn.hunter);
     hunter.vel.set(0, 0, 0);
     hunter.awareness = 0;
@@ -785,6 +801,19 @@ export default async function view(args = {}) {
    */
   function aftermath(dt, t) {
     simT = t;
+    /**
+     * 🩸 **THE ONE THING THAT IS STILL ALLOWED TO MOVE AFTER A TAKE IS THE THING THE TAKE DID TO
+     * THE HUNTER.** §3 wants the aftermath *"in whatever state it is in"*, and the state a take
+     * leaves the Hunter in is mid-convulsion: `_attack` absorbs the limb it just took, and every
+     * third one enters GROW. `HunterAI.update` short-circuits to `_growStep` while that runs and
+     * touches neither perception nor the route, so ticking it here moves nothing across the floor
+     * — it plays the 1.4 s the AI's own header calls *"the moment the round changes character"*,
+     * on the shot the Director is already holding, and fires `onStage` where it means something.
+     *
+     * Without this the growth was discarded at the segment boundary; `arm()`'s `settleGrowth()` is
+     * the belt to this brace, for an aftermath cut short.
+     */
+    if (hunter.state === 'GROW') hunter.update(dt, t);
     debris.update(dt); dust.update(dt); limbField.update?.(dt);
     director.tick(t);
     let cur = director.current();

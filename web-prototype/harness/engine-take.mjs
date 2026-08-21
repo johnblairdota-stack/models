@@ -65,7 +65,7 @@ initBaker({
 const THREE = await import('three');
 const RM = await import(s_('game/room.js'));
 const { HunterAI } = await import(s_('game/hunter-ai.js'));
-const { HUNTER_SENSE, MOVE, WEAPON_RANGE } = await import(s_('game/rules.js'));
+const { HUNTER_SENSE, MOVE, WEAPON_RANGE, HUNTER_SPEED, HUNTER_GROWTH } = await import(s_('game/rules.js'));
 const { Player } = await import(s_('game/player.js'));
 const { LimbField } = await import(s_('game/limbs.js'));
 const { NoiseBus } = await import(s_('game/noise.js'));
@@ -332,6 +332,123 @@ const fx = (n) => (n == null ? 'never' : n.toFixed(2));
     shipped.filter((r) => r.outcome === 'held').length >= 1
     && fixed.filter((r) => r.outcome === 'held').length === 0,
     `shipped ${shipped.map((r) => r.outcome).join(',')} · fixed ${fixed.map((r) => r.outcome).join(',')}`);
+}
+
+
+// ---------------------------------------------------------------- K6 · the Hunter grows
+/**
+ * 🚨 **THE HUNTER NEVER GREW IN PARTY MODE, AND A TELL FIXED LAST SESSION WAS STILL DEAD BECAUSE
+ * OF IT.**
+ *
+ * `finish('taken')` is called from inside `hunter.onKill`, from inside `_attack`, from inside
+ * `hunter.update`. The next frame the view's loop returns `aftermath()` and never calls
+ * `hunter.update` again. `absorb()` has by then entered `_grow` → `state = 'GROW'`, but
+ * `this.stage = this.growTo` only lands at `p >= 1` inside `_growStep`, 1.4 seconds of updates it
+ * was never going to get — and then `arm()` set `state = 'PATROL'` and the growth was gone.
+ *
+ * So `HUNTER_GROWTH`, `HUNTER_SPEED[2..3]`, the 1.4 s convulsion and the entire growth-of-menace
+ * curve were unreachable in the mode whose whole audience is watching it happen — including
+ * `hunter.onStage`, which was wired to `playFurnBreak('stone')` and a `progress` feed and could
+ * never fire. A tell fixed, and still dead for a downstream reason nobody had checked.
+ *
+ * The control is the discard: the identical eight takes with `settleGrowth()` not called and the
+ * aftermath not ticking, which is exactly what shipped.
+ */
+{
+  /**
+   * Eight episodes of absorbs through the real AI. `aftermathTicks` is how many frames the view's
+   * `aftermath()` gets before the segment is re-armed; `settle` is `arm()`'s `settleGrowth()`.
+   */
+  function show({ settle, aftermathSeconds }) {
+    let seed = 9;
+    const rng = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+    const h = new HunterAI({
+      room, scene: new THREE.Scene(), rng, position: room.spawn.hunter.clone(), bangPolicy: 'off',
+    });
+    let stageEvents = 0;
+    const announced = [];
+    h.onStage = (from, to) => { stageEvents++; announced.push(`${from}→${to}`); };
+    const rows = [];
+    for (let ep = 1; ep <= 8; ep++) {
+      // ---- the take: `_attack` absorbs the limb it just took, then the loop stops simulating.
+      h.absorb(null);
+      // ---- `aftermath()`: the ONLY thing still ticked is a Hunter that is mid-convulsion.
+      for (let i = 0; i < Math.round(aftermathSeconds / DT); i++) if (h.state === 'GROW') h.update(DT, i * DT);
+      // ---- `arm()`, in its own order: settle first, then the state reset.
+      if (settle) h.settleGrowth();
+      h.root.position.copy(room.spawn.hunter);
+      h.awareness = 0; h.state = 'PATROL'; h.target = null; h.contact = 0; h.searchTimer = 0;
+      h.resetCombat();
+      rows.push({ ep, absorbed: h.absorbed, stage: h.stage, speed: HUNTER_SPEED[h.stage], radius: h.radius, stageEvents });
+    }
+    return { rows, stageEvents, announced, flareOn: !!h._flareOn };
+  }
+
+  const fixed = show({ settle: true, aftermathSeconds: 4 });
+  const shipped = show({ settle: false, aftermathSeconds: 0 });
+  const want = (n) => (n >= HUNTER_GROWTH.toStage3 ? 3 : n >= HUNTER_GROWTH.toStage2 ? 2 : 1);
+
+  t('K6 arm · eight takes were absorbed by the real AI and the growth table wants two steps',
+    fixed.rows.length === 8 && want(8) === 3 && want(1) === 1,
+    `HUNTER_GROWTH ${JSON.stringify(HUNTER_GROWTH)} · wanted stages ${fixed.rows.map((r) => want(r.absorbed)).join('')}`);
+
+  t('K6 · the Hunter\'s stage survives the segment boundary and rises across a show',
+    fixed.rows.every((r) => r.stage === want(r.absorbed)) && fixed.rows[7].stage === 3,
+    fixed.rows.map((r) => `ep${r.ep}:s${r.stage}/${r.speed}`).join(' '));
+
+  t('K6b · and `onStage` — the tell — fires once per step, with the steps it took',
+    fixed.stageEvents === 2 && fixed.announced.join(',') === '1→2,2→3',
+    `${fixed.stageEvents} events: ${fixed.announced.join(', ')}`);
+
+  t('K6c · and the radius follows the stage, so a grown body is not driving a stage-1 collider',
+    fixed.rows.every((r) => Math.abs(r.radius - (0.30 + r.stage * 0.12)) < 1e-9),
+    fixed.rows.map((r) => r.radius.toFixed(2)).join('/'));
+
+  t('K6d · and the next segment does not open with the eye flare still lit',
+    fixed.flareOn === false, '`resetCombat` takes the flare off rather than releasing it over 2.5 s');
+
+  /**
+   * The belt and the brace are different code paths and both have to hold. The aftermath tick is
+   * what AIRS the convulsion; `settleGrowth()` is what saves the arithmetic when the aftermath is
+   * cut short — a phase change, a disconnect, a segment that ends on the clock a frame later.
+   */
+  const cutShort = show({ settle: true, aftermathSeconds: 0 });
+  t('K6e · an aftermath cut short still lands the stage — `settleGrowth()` is the brace',
+    cutShort.rows.every((r) => r.stage === want(r.absorbed)) && cutShort.rows[7].stage === 3,
+    cutShort.rows.map((r) => `ep${r.ep}:s${r.stage}`).join(' '));
+  t('K6e2 · and it lands it SILENTLY — a growth nobody watched does not get a sound',
+    cutShort.stageEvents === 0 && fixed.stageEvents === 2,
+    `cut short ${cutShort.stageEvents} onStage events at the same 8 takes vs ${fixed.stageEvents} when the aftermath airs it`);
+
+  /**
+   * The behaviour above is `hunter-ai.js`'s and would hold whether or not the view used it. This
+   * is the half that says the view does — and the control is `views/game.js`, a real file that
+   * genuinely does not contain either call because its loop never stops running.
+   */
+  {
+    const strip = (x) => x.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const exp = strip(readFileSync(new URL('../src/views/expedition.js', import.meta.url), 'utf8'));
+    const game = strip(readFileSync(new URL('../src/views/game.js', import.meta.url), 'utf8'));
+    const calls = /hunter\.settleGrowth\(/;
+    const ticks = /hunter\.state === 'GROW'\)\s*hunter\.update\(/;
+    t('K6f · `views/expedition.js` settles the growth when it re-arms, and airs it in the aftermath',
+      calls.test(exp) && ticks.test(exp), 'settleGrowth() in arm() · a GROWing Hunter is ticked in aftermath()');
+    t('K6f control · and the same scan finds neither in `views/game.js`, whose loop never stops',
+      !calls.test(game) && !ticks.test(game),
+      'the survival mode gets its 1.4 s for free, which is why the party mode never did');
+  }
+
+  t('K6 control · discard the growth at the boundary and the Hunter is stage 1 after eight takes',
+    shipped.rows.every((r) => r.stage === 1) && shipped.rows[7].speed === HUNTER_SPEED[1],
+    shipped.rows.map((r) => `ep${r.ep}:s${r.stage}/${r.speed}`).join(' '));
+
+  t('K6b control · so `onStage` never fires at all, and the tell wired for it is unreachable',
+    shipped.stageEvents === 0 && fixed.stageEvents > 0,
+    `party ${shipped.stageEvents}× vs ${fixed.stageEvents}× · speed ${shipped.rows[7].speed} vs ${fixed.rows[7].speed} m/s at the eighth take`);
+
+  t('K6c control · and HUNTER_SPEED[2..3] is dead weight — the whole growth curve is unreachable',
+    new Set(shipped.rows.map((r) => r.speed)).size === 1 && new Set(fixed.rows.map((r) => r.speed)).size === 3,
+    `shipped speeds {${[...new Set(shipped.rows.map((r) => r.speed))].join(',')}} vs {${[...new Set(fixed.rows.map((r) => r.speed))].join(',')}} of ${HUNTER_SPEED.slice(1).join('/')}`);
 }
 
 console.log(`\nengine-take: ${pass} passed, ${fail} failed`);
