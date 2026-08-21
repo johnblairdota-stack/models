@@ -7,7 +7,7 @@
  * 6, and The Fixer cannot be dealt at 8 — 0 appearances in 40,000 deals each, across two unrelated
  * seed families, and structurally 0 rather than merely unobserved (C1b).
  *
- *   node harness/evidence/_cast-table.mjs        (~5 min: 300k deals + ~17.5k full matches)
+ *   node harness/evidence/_cast-table.mjs        (~12 min: 1.1M deals + 33k full matches)
  *
  * `src/party/cast.js` carries `COMPOSITION` (how many seats of each KIND at each count) and
  * `GUARANTEED` (which specific ROLES are forced in at each count). They were authored separately.
@@ -84,6 +84,8 @@
  *   matches, block 1: seed = 0..499 at each count, policies paired exactly as `party-sim` pairs
  *                     them (`s % 2 ? naive-good/aggressive-evil : cautious-good/patient-evil`)
  *   matches, block 2: seed = 5000..5499, same pairing — the reseed control
+ *   matches, C4e:     seed = 0..2999 at each count, spike OFF, shipped table only — the
+ *                     over-measured version of the S1 finding, 6x block 1
  *
  * ---------------------------------------------------------------------------------------------
  * THE THREE TABLES UNDER TEST
@@ -94,6 +96,12 @@
  *                untouched. The slot still exists; what fills it is drawn.
  *   CANDIDATE B  widen the outsider slot at 5 and 6 (1 -> 2), paying for it out of `informed`
  *                (3 -> 2). GUARANTEED untouched.
+ *   HYBRID       Candidate A at 6, 7 and 8, with `glitched` left in `GUARANTEED[5]`. Named in the
+ *                report on the first sweep and declined there on the grounds that it had not been
+ *                measured; C6 measures it. 7 is included for completeness and is expected to be
+ *                a no-op, because `GUARANTEED[7]` is `['continuity']` against three informed
+ *                slots — C6b asserts that as byte-identity of the whole 7p frequency vector
+ *                rather than as an expectation.
  *
  * ⚠️ CANDIDATE B MOVES THE COLLISION RATHER THAN REMOVING IT, AND C2 IS WHAT SHOWS THAT.
  * `GUARANTEED[6]` already forces two informed roles in. Take the informed slot count at 6 down to
@@ -159,8 +167,8 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { dealCast, ROLES, COMPOSITION } from '../../src/party/cast.js';
-import { resolveInformation, SCRIPT } from '../../src/party/roles.js';
+import { dealCast, viewFor, ROLES, COMPOSITION, EVIL } from '../../src/party/cast.js';
+import { resolveInformation, pairContainsProduction, SCRIPT } from '../../src/party/roles.js';
 import { OUTCOME } from '../../src/party/win.js';
 
 let pass = 0, fail = 0, skipped = 0;
@@ -171,6 +179,7 @@ const done = (label) => { console.log(`\n_cast-table: ${pass} passed, ${fail} fa
 const COUNTS = [4, 5, 6, 7, 8];
 const DEAL_SEEDS = 20000;
 const MATCH_SEEDS = 500;
+const BIG_SEEDS = 3000;                    // C4e only — the S1 finding, over-measured on purpose
 const BLOCK2 = 5000;
 const pct = (x) => (x * 100).toFixed(1).padStart(5) + '%';
 
@@ -178,9 +187,11 @@ const HERE = import.meta.url;
 const CAST_URL = new URL('../../src/party/cast.js', HERE).href;
 const POLICY_URL = new URL('../../src/party/policy.js', HERE).href;
 const SIM_URL = new URL('../party-sim.mjs', HERE).href;
+const SESSION_URL = new URL('../../src/party/session.js', HERE).href;
 const CAST_SRC = readFileSync(new URL(CAST_URL), 'utf8');
 const POLICY_SRC = readFileSync(new URL(POLICY_URL), 'utf8');
 const SIM_SRC = readFileSync(new URL(SIM_URL), 'utf8');
+const SESSION_SRC = readFileSync(new URL(SESSION_URL), 'utf8');
 
 // ================================================================ the table rewriter
 const COMP_RE = /export const COMPOSITION = \{[\s\S]*?\n\};/;
@@ -358,10 +369,17 @@ const CAND_B = {
   guar: SHIPPED_GUAR,
 };
 
+/**
+ * THE HYBRID, named in the report that C6 answers: Candidate A at 6, 7 and 8, with `glitched`
+ * left in `GUARANTEED[5]`. Three characters of CAND_A, as promised — one row put back.
+ */
+const CAND_H = { comp: COMPOSITION, guar: { ...CAND_A.guar, 5: SHIPPED_GUAR[5] } };
+
 const base = await sweepDeals(SHIPPED);
 const a = await sweepDeals(CAND_A);
 const b = await sweepDeals(CAND_B);
-const VARIANTS = [['baseline', SHIPPED, base], ['cand-A', CAND_A, a], ['cand-B', CAND_B, b]];
+const h = await sweepDeals(CAND_H);
+const VARIANTS = [['baseline', SHIPPED, base], ['cand-A', CAND_A, a], ['cand-B', CAND_B, b], ['hybrid', CAND_H, h]];
 
 // ================================================================ C1 · the baseline claim
 console.log('\n_cast-table · C1 — per-role deal frequency under the shipped tables\n');
@@ -432,6 +450,55 @@ console.log('\n_cast-table · C2 — per-role frequency under each candidate\n')
     `baseline leaves ${collides(deadBase)} cards unreachable in kinds that do have slots`);
 }
 
+// ================================================================ C6 · the hybrid
+console.log('\n_cast-table · C6 — the hybrid: Candidate A at 6/7/8, `glitched` left guaranteed at 5\n');
+{
+  const deadBase = crowdedOut(SHIPPED), deadA = crowdedOut(CAND_A), deadH = crowdedOut(CAND_H);
+  const n = (d) => COUNTS.reduce((acc, c) => acc + d[c].length, 0);
+  console.log(`       unreachable:  ${COUNTS.map((c) => `${c}p [${deadH[c].join(' ')}]`).join('  ')}`);
+  console.log(`       unreachable role/count pairs: baseline ${n(deadBase)} · A ${n(deadA)} · hybrid ${n(deadH)}`);
+
+  /**
+   * The six pairs the two tables collide on. The hybrid is expected to fix the 6p and 8p four and
+   * leave the 5p two, and this asserts exactly that rather than a count — a count can be right
+   * for the wrong reasons.
+   */
+  const COLLISIONS = [['theStatic', 5], ['methodActor', 5], ['theStatic', 6], ['methodActor', 6], ['plant', 6], ['fixer', 8]];
+  const fixed = COLLISIONS.filter(([r, c]) => !deadH[c].includes(r));
+  const left = COLLISIONS.filter(([r, c]) => deadH[c].includes(r));
+  console.log(`       fixes: ${fixed.map(([r, c]) => `${r}@${c}p`).join(' ') || 'none'}`);
+  console.log(`       leaves: ${left.map(([r, c]) => `${r}@${c}p`).join(' ') || 'none'}`);
+  t('C6 · the hybrid fixes the four 6p/8p collisions and leaves exactly the two outsider pairs at 5',
+    fixed.length === 4 && left.length === 2 && left.every(([, c]) => c === 5),
+    `${n(deadBase)} → ${n(deadH)} unreachable pairs (Candidate A reaches ${n(deadA)}) · `
+      + `fixed ${fixed.map(([r, c]) => `${r}@${c}p`).join(' ')} · left ${left.map(([r, c]) => `${r}@${c}p`).join(' ')}`);
+
+  /** Per-role frequency, the same table reported for A. */
+  for (const r of ['glitched', 'theStatic', 'methodActor', 'fixer', 'plant', 'cameraOp', 'focusPuller', 'continuity', 'editor', 'fanFavourite', 'stuntDouble', 'contestant']) {
+    console.log(`         ${r.padEnd(13)} ${COUNTS.map((c) => pct((h[c].freq[r] || 0) / h[c].n)).join('')}`);
+  }
+
+  /**
+   * 🚨 THE EXACT-IDENTITY ARMS, WHICH ANSWER THE THIRD QUESTION WITHOUT A BAND. `GUARANTEED[7]` is
+   * `['continuity']` and the informed slot count at 7 is 3, so 7 has no collision to fix and no
+   * candidate touches it. Asserted as byte-identity of the whole 7p frequency vector rather than
+   * as an expectation.
+   */
+  const vec = (sw, c) => Object.keys(ROLES).map((r) => sw[c].freq[r] || 0).join();
+  const sameAsBase = COUNTS.filter((c) => vec(h, c) === vec(base, c));
+  const sameAsA = COUNTS.filter((c) => vec(h, c) === vec(a, c));
+  t('C6b · the hybrid changes NOTHING at 4, 5 or 7, and is Candidate A exactly at 6 and 8',
+    sameAsBase.join() === '4,5,7' && sameAsA.join() === '4,6,7,8',
+    `identical to baseline at ${sameAsBase.join('/')}p · identical to Candidate A at ${sameAsA.join('/')}p · `
+      + `7p is untouched by every table here because GUARANTEED[7] is ['continuity'] against 3 informed slots — no collision to fix`);
+
+  // The control mutates the real artefact — Candidate A is the other shipped-shaped table — and
+  // the same identity check must fail on it at 5, where A does differ from the shipped deal.
+  t('C6 control · the identity check can tell the two apart — Candidate A is NOT identical to baseline at 5',
+    vec(a, 5) !== vec(base, 5) && vec(h, 5) === vec(base, 5),
+    `5p Glitched: baseline ${pct(base[5].freq.glitched / base[5].n)} · A ${pct(a[5].freq.glitched / a[5].n)} · hybrid ${pct(h[5].freq.glitched / h[5].n)}`);
+}
+
 // ================================================================ C3 · poison
 console.log('\n_cast-table · C3 — how often is there nothing to distrust?\n');
 {
@@ -475,6 +542,180 @@ console.log('\n_cast-table · C3 — how often is there nothing to distrust?\n')
     inf > 0 && none === inf, `${none}/${inf} of 4,000 six-player deals have informers and no outsider once the slot is gone`);
 }
 
+// ================================================================ C7 · the two poison channels
+/**
+ * 🚨 **THE POISON NUMBERS ABOVE ARE CAST-LEVEL. THESE ARE FIRED-LEVEL, AND UNTIL 2026-08-21 THERE
+ * 🚨 WAS NO DIFFERENCE BECAUSE NO ROLE HAD EVER FIRED.**
+ *
+ * `session.js` now calls `fireContinuity()` at the end of `resolveCasting()`. It takes the pair,
+ * builds `alignmentOf` and `plantIds` off the deal, asks the shipped `pairContainsProduction()`
+ * for the truth, and hands each holder's answer through the shipped `resolveInformation()`. So a
+ * Continuity reading is a thing that happens to a phone, and "how often is there nothing to
+ * distrust" stopped being a statement about a system where nothing fires.
+ *
+ * Two mechanisms can make that reading unreliable, and they are NOT the same thing:
+ *
+ *   **The Glitched channel.** `resolveInformation({role:'continuity', truth, holderGlitched:true})`
+ *   returns `poisoned:true` and `falsify('boolean', truth)` is `!truth`, so the holder's answer is
+ *   inverted on EVERY entry. The holder is never told. `fireContinuity` selects holders by
+ *   `viewFor(deal, id).you.role === 'continuity'`, which is the COVER for a Glitched, so a Glitched
+ *   covered as Continuity is a reader and a second dossier exists that disagrees everywhere.
+ *
+ *   **The Plant channel.** `pairContainsProduction(pair, alignmentOf, plantIds)` excludes the Plant
+ *   by name, so a pair whose only Production member is the Plant reads NO — and that NO is
+ *   **honest**. Nobody lied; the question is answerable and the answer is wrong. It falsifies one
+ *   boolean on the pairs that contain the Plant and nothing else.
+ *
+ * ⚠️ **SO "ANY POISON" IS THE COARSEST OF THE THREE NUMBERS AND IS REPORTED LAST ON PURPOSE.** It
+ * collapses a card that inverts every reading its holder will ever take, invisibly, into the same
+ * bucket as a card that makes one boolean wrong on some pairs. A game with a Plant and no Glitched
+ * still has a Camera Op and a Focus Puller whose readings are exactly true. Read the two columns;
+ * the combined one is there because it was asked for and because it bounds the other two.
+ *
+ * The reader filter, the truth call and the falsify call are all taken from `session.js` here —
+ * `C7a` asserts each of the three lines is still in the shipped source, and SKIPs the section
+ * rather than measuring a filter of its own if `fireContinuity` is ever rewritten.
+ */
+console.log('\n_cast-table · C7 — the two channels that make a fired Continuity reading unreliable\n');
+const FIRES = /function fireContinuity\(\)/.test(SESSION_SRC);
+const FILTER_LINE = /viewFor\(deal, seat\.id\)\.you\.role !== 'continuity'/.test(SESSION_SRC);
+const TRUTH_LINE = /pairContainsProduction\(pair, alignmentOf, plantIds\)/.test(SESSION_SRC);
+const GLITCH_LINE = /holderGlitched: seat\.role === 'glitched'/.test(SESSION_SRC);
+if (!FIRES || !FILTER_LINE || !TRUTH_LINE || !GLITCH_LINE) {
+  skip('C7', `session.js's fireContinuity is not the one this section models (`
+    + `fires:${FIRES} filter:${FILTER_LINE} truth:${TRUTH_LINE} glitched:${GLITCH_LINE}) — `
+    + `re-derive the reader filter from the shipped source before believing any fired-level number`);
+} else {
+  t('C7a arm · the reader filter, the truth call and the falsify flag are all lifted from the shipped fireContinuity',
+    true, "viewFor(deal, id).you.role === 'continuity' · pairContainsProduction(pair, alignmentOf, plantIds) · holderGlitched: seat.role === 'glitched'");
+
+  /** Per-deal: is each channel live? Both questions are answered by the shipped functions. */
+  const sweepChannels = async (tables) => {
+    const mod = tables === SHIPPED ? { dealCast, viewFor } : await castModule(tables);
+    const out = {};
+    for (const c of COUNTS) {
+      let gl = 0, pl = 0, any = 0, readers = 0, pairsFalse = 0, pairsEvil = 0;
+      for (let s = 1; s <= DEAL_SEEDS; s++) {
+        const d = mod.dealCast({ count: c, castSeed: s * 7919 });
+        const alignmentOf = Object.fromEntries(d.seats.map((x) => [x.id, x.alignment]));
+        const plantIds = d.seats.filter((x) => x.role === 'plant').map((x) => x.id);
+        const holders = d.seats.filter((x) => mod.viewFor(d, x.id).you.role === 'continuity');
+        if (holders.length) readers++;
+        const glLive = holders.some((x) => x.role === 'glitched'
+          && resolveInformation({ role: 'continuity', truth: true, holderGlitched: true }).poisoned);
+        const honestReader = holders.some((x) => x.role !== 'glitched');
+        let falseNo = false;
+        for (let i = 0; i < d.seats.length; i++) for (let j = i + 1; j < d.seats.length; j++) {
+          const pair = [d.seats[i].id, d.seats[j].id];
+          if (!pair.some((id) => alignmentOf[id] === EVIL)) continue;
+          pairsEvil++;
+          if (!pairContainsProduction(pair, alignmentOf, plantIds)) { falseNo = true; pairsFalse++; }
+        }
+        const plLive = honestReader && plantIds.length > 0 && falseNo;
+        if (glLive) gl++;
+        if (plLive) pl++;
+        if (glLive || plLive) any++;
+      }
+      out[c] = { gl, pl, any, readers, pairsFalse, pairsEvil, n: DEAL_SEEDS };
+    }
+    return out;
+  };
+
+  const chBase = await sweepChannels(SHIPPED);
+  const chA = await sweepChannels(CAND_A);
+  const chH = await sweepChannels(CAND_H);
+  const CH = [['baseline', chBase], ['cand-A', chA], ['hybrid', chH]];
+
+  console.log('       fraction of deals in which a FIRED Continuity reading is unreliable, by channel');
+  console.log(`       table       ${COUNTS.map((c) => `${c}p`.padStart(24)).join('')}`);
+  console.log(`                   ${COUNTS.map(() => 'glitch /  plant /   any'.padStart(24)).join('')}`);
+  for (const [name, ch] of CH) {
+    console.log(`       ${name.padEnd(11)} ${COUNTS.map((c) => `${pct(ch[c].gl / ch[c].n)}/${pct(ch[c].pl / ch[c].n)}/${pct(ch[c].any / ch[c].n)}`.padStart(24)).join('')}`);
+  }
+  console.log(`       a Continuity reading fires at all:`);
+  for (const [name, ch] of CH) console.log(`       ${name.padEnd(11)} ${COUNTS.map((c) => pct(ch[c].readers / ch[c].n).padStart(24)).join('')}`);
+  console.log(`       report-only · of the pairs that DO contain Production, the fraction reading a false NO:`);
+  for (const [name, ch] of CH) console.log(`       ${name.padEnd(11)} ${COUNTS.map((c) => pct(ch[c].pairsFalse / ch[c].pairsEvil).padStart(24)).join('')}`);
+
+  /**
+   * 🚨 **THE FIRED-LEVEL PICTURE IS NOT THE CAST-LEVEL ONE, AND AT SIX PLAYERS IT IS ITS OPPOSITE.**
+   * The shipped table is all-or-nothing by count: at 6 a fired Continuity reading is unreliable in
+   * **0.0%** of deals, and at 8 in **100%** of them. Both numbers are the guarantee table doing it.
+   */
+  t('C7 · the shipped table is all-or-nothing on fired readings — never poisoned at 6, always poisoned at 8',
+    chBase[6].any === 0 && chBase[8].any === chBase[8].n && chA[6].any > 0 && chA[8].any < chA[8].n,
+    `6p any-poison ${pct(chBase[6].any / chBase[6].n)} → ${pct(chA[6].any / chA[6].n)} under A · `
+      + `8p ${pct(chBase[8].any / chBase[8].n)} → ${pct(chA[8].any / chA[8].n)} · `
+      + `6p is 0 because the Plant is structurally undealable there and the Glitched's cover is never Continuity; `
+      + `8p is 1 because the Plant is guaranteed`);
+
+  /**
+   * 🚨 **AND THE GUARANTEED GLITCHED AT SIX PLAYERS POISONS NOTHING THAT FIRES.** `cast.js` draws
+   * the cover from informing roles and PREFERS an undealt one — its own header argues that choice,
+   * and at 8 players it is the only thing that keeps the Outsider working. At 6, `GUARANTEED[6]`
+   * deals Continuity every game and leaves Camera Op and Focus Puller undealt three games in four,
+   * so the preferred cover is nearly always one of those two — and neither of them fires. The
+   * Glitched is in 100% of six-player deals and is a decoration on the one reading the build takes.
+   *
+   * This is the same shape of defect as `role-script` S6b (quoted in `cast.js`'s own header), one
+   * count over: there, all three informers were dealt and the cover had nowhere to go; here, the
+   * cover has somewhere to go and it is somewhere that does not inform.
+   */
+  t('C7c · the Glitched is guaranteed at 6 and falsifies no fired reading there, because its cover is never the card that fires',
+    base[6].freq.glitched === base[6].n && chBase[6].gl === 0 && chBase[8].gl > 0,
+    `6p: Glitched in ${pct(base[6].freq.glitched / base[6].n)} of deals, ${pct(chBase[6].gl / chBase[6].n)} of fired readings falsified · `
+      + `8p, where all three informers are dealt and the cover must duplicate one: ${pct(chBase[8].gl / chBase[8].n)} · `
+      + `cast.js's cover rule prefers an UNDEALT informer, and at 6 the undealt informers are Camera Op and Focus Puller, neither of which fires`);
+
+  t('C7b · at five players nothing replaces the Glitched, because COMPOSITION[5] has no minion slot',
+    COMPOSITION[5].minion === 0 && chBase[5].pl === 0 && chA[5].pl === 0 && chH[5].pl === 0
+      && chH[5].any === chBase[5].any && chA[5].any < chBase[5].any,
+    `5p any-poison: baseline ${pct(chBase[5].any / chBase[5].n)} · A ${pct(chA[5].any / chA[5].n)} · hybrid ${pct(chH[5].any / chH[5].n)} `
+      + `· the Plant channel is 0.0% at 5 under every table, so A's five-player loss is not offset by anything`);
+
+  /**
+   * 🚨 THE CONTROL, AND IT MUTATES THE SHIPPED CALL RATHER THAN THE PROBE'S COPY OF IT. The whole
+   * Plant channel is the `plantIds` argument `fireContinuity` passes. Hand the same pairs to the
+   * same shipped `pairContainsProduction` with `plantIds` empty — which is what the call looked
+   * like before the Plant existed — and every false NO must disappear.
+   */
+  let falseWith = 0, falseWithout = 0;
+  for (let s = 1; s <= 4000; s++) {
+    const d = dealCast({ count: 8, castSeed: s * 7919 });
+    const alignmentOf = Object.fromEntries(d.seats.map((x) => [x.id, x.alignment]));
+    const plantIds = d.seats.filter((x) => x.role === 'plant').map((x) => x.id);
+    for (let i = 0; i < d.seats.length; i++) for (let j = i + 1; j < d.seats.length; j++) {
+      const pair = [d.seats[i].id, d.seats[j].id];
+      if (!pair.some((id) => alignmentOf[id] === EVIL)) continue;
+      if (!pairContainsProduction(pair, alignmentOf, plantIds)) falseWith++;
+      if (!pairContainsProduction(pair, alignmentOf, [])) falseWithout++;
+    }
+  }
+  t('C7 control · the false NO comes from the plantIds the shipped call is handed, not from the pair',
+    falseWith > 0 && falseWithout === 0,
+    `${falseWith} false NOs over 4,000 eight-player deals with plantIds, ${falseWithout} with plantIds empty`);
+
+  // And a table where neither channel can exist must report zero on both, with readers present.
+  const ctl = await castModule({ comp: { ...COMPOSITION, 8: { informed: 5, contestant: 0, outsider: 0, minion: 1, producer: 1 } },
+    guar: { ...SHIPPED_GUAR, 8: ['continuity', 'cameraOp', 'focusPuller', 'fixer'] } });
+  let z = 0, rd = 0;
+  for (let s = 1; s <= 4000; s++) {
+    const d = ctl.dealCast({ count: 8, castSeed: s * 7919 });
+    const alignmentOf = Object.fromEntries(d.seats.map((x) => [x.id, x.alignment]));
+    const plantIds = d.seats.filter((x) => x.role === 'plant').map((x) => x.id);
+    const holders = d.seats.filter((x) => ctl.viewFor(d, x.id).you.role === 'continuity');
+    if (holders.length) rd++;
+    let falseNo = false;
+    for (let i = 0; i < d.seats.length; i++) for (let j = i + 1; j < d.seats.length; j++) {
+      const pair = [d.seats[i].id, d.seats[j].id];
+      if (pair.some((id) => alignmentOf[id] === EVIL) && !pairContainsProduction(pair, alignmentOf, plantIds)) falseNo = true;
+    }
+    if (holders.some((x) => x.role === 'glitched') || (plantIds.length && falseNo)) z++;
+  }
+  t('C7b control · a table with no Outsider slot and the Fixer forced reports zero on both channels while readings still fire',
+    z === 0 && rd === 4000, `${z} poisoned of 4,000 deals, ${rd} of which fired a reading — the metric is reading the table, not a constant`);
+}
+
 // ================================================================ C4 · win rate
 console.log('\n_cast-table · C4 — win rate under `party-sim`\'s match model (NOT the shipped game; see header)\n');
 const MARK = '// ---------------------------------------------------------------- run the sweep';
@@ -497,12 +738,12 @@ if (!SIM_SRC.includes(MARK)) {
       ? 'policy.js spikesThisEpisode fires at p=0.85; the spike-off arm rewrites that literal to 0'
       : 'policy.js no longer carries the 0.85 — the spike-off column below would be a copy of the spike-on one');
 
-  const sweepMatches = async (tables, { spike = true, from = 0, counts = COUNTS } = {}) => {
+  const sweepMatches = async (tables, { spike = true, from = 0, counts = COUNTS, n = MATCH_SEEDS } = {}) => {
     const { playMatch } = await simModule(tables, { spike });
     const out = {};
     for (const c of counts) {
       const wins = [];
-      for (let i = 0; i < MATCH_SEEDS; i++) {
+      for (let i = 0; i < n; i++) {
         const s = from + i;
         const r = playMatch({ count: c, seed: s, goodPolicy: s % 2 ? 'naive-good' : 'cautious-good', evilPolicy: s % 2 ? 'aggressive-evil' : 'patient-evil' });
         wins.push({ good: r.outcome === OUTCOME.FINALE ? 1 : 0, evil: r.evilSet.size });
@@ -600,6 +841,65 @@ if (!SIM_SRC.includes(MARK)) {
   t('C4 control · the win-rate instrument is alive — add one evil at 5p and it moves far outside the bar C4 just cleared',
     lt > SE_LIMIT, `5p good win ${pct(rate(on.base[5]))} → ${pct(rate(live[5]))} (${(lv.mean * 100).toFixed(1)}pp ± ${(lv.se * 100).toFixed(1)}, |t| = ${lt.toFixed(1)}) `
       + `· the sim can see an ALIGNMENT change and cannot see a ROLE change, which is exactly the C4c finding`);
+
+  // ---------------------------------------------------------------- C4e · the S1 finding
+  /**
+   * 🚨 **`party-sim` S1's VERDICT RESTS ON THE ABILITY THAT DOES NOT SHIP, AND THIS IS THE
+   * 🚨 OVER-MEASURED VERSION OF THAT NUMBER.**
+   *
+   * This asserts nothing about `cast.js` and changes nothing in `party-sim`. It is here because
+   * this is the file where it was measured, and because a finding that lives only in a report is
+   * a finding that dies with the session that wrote it.
+   *
+   * S1's band is read out of `party-sim.mjs`'s own source rather than copied, so if somebody moves
+   * it this arm moves with it. The claim is armed in the direction that deletes it: if the
+   * spike-off rate ever comes back inside the ceiling, `C4e` goes RED and the finding — and this
+   * comment — should be deleted rather than re-argued.
+   */
+  const bandM = SIM_SRC.match(/r\.win < (0\.\d+) \|\| r\.win > (0\.\d+)/);
+  const titleM = SIM_SRC.match(/t\('(S1 · [^']*)'/);
+  if (!bandM || !titleM) {
+    skip('C4e', 'party-sim S1 no longer carries a two-sided literal band this file can read out of its source');
+  } else {
+    const [, floorS, ceilS] = bandM;
+    const FLOOR = Number(floorS), CEIL = Number(ceilS);
+    t('C4e arm · S1\'s band is read out of party-sim\'s own source, not copied into this file',
+      FLOOR > 0 && CEIL > FLOOR, `"${titleM[1]}" · degenerate if win < ${FLOOR} or > ${CEIL}`);
+
+    const big = await sweepMatches(SHIPPED, { spike: false, n: BIG_SEEDS });
+    const se = (r, n) => Math.sqrt((r * (1 - r)) / n);
+    console.log(`\n       C4e · the SHIPPED cast table, spike OFF, n = ${BIG_SEEDS.toLocaleString()} matches per count`);
+    console.log(`       count │ good win (spike off, n=${BIG_SEEDS}) │ good win (spike on, n=${MATCH_SEEDS}) │ vs S1 ceiling ${CEIL}`);
+    const rows = COUNTS.map((c) => {
+      const r = rate(big[c]), s2 = se(r, BIG_SEEDS);
+      return { c, r, se: s2, on: rate(on.base[c]), over: (r - CEIL) / s2 };
+    });
+    for (const r of rows) {
+      console.log(`       ${String(r.c).padStart(5)} │ ${pct(r.r)} ± ${(r.se * 100).toFixed(1)}pp`.padEnd(46)
+        + `│ ${pct(r.on)}`.padEnd(38) + `│ ${r.r > CEIL ? `OVER by ${((r.r - CEIL) * 100).toFixed(1)}pp (${r.over.toFixed(1)}σ)` : 'in band'}`);
+    }
+    /**
+     * ⚠️ **AND THE FIRST, SMALLER SWEEP OVERSTATED THIS — WHICH IS THE REASON IT WAS RE-RUN BIG.**
+     * At n=500 (seeds 0-499) the spike-off rates read 83.4 / 90.2 / 78.4 / 82.0 / 78.8% and every
+     * count but none looked out of band. At n=3,000 they are lower and six players comes back
+     * INSIDE the ceiling. The claim is therefore stated as S1's own predicate rather than as a
+     * count of failures: `degenerate` is non-empty, so S1 goes red — and how far, per count, is
+     * printed above rather than summarised into a single adjective.
+     */
+    const outOfBand = rows.filter((r) => r.r < FLOOR || r.r > CEIL);
+    const over3 = outOfBand.filter((r) => Math.abs(r.over) > 3);
+    const inBand = rows.filter((r) => !outOfBand.includes(r));
+    t(`C4e · with the lever removed, S1's own degenerate filter fires on ${outOfBand.length} of ${COUNTS.length} counts`,
+      over3.length >= 3, `out of band: ${outOfBand.map((r) => `${r.c}p ${pct(r.r)} (${r.over.toFixed(1)}σ)`).join(' ')} · `
+        + `in band: ${inBand.map((r) => `${r.c}p ${pct(r.r)}`).join(' ') || 'none'} · `
+        + `S1 asserts "${titleM[1]}" with degenerate = win < ${FLOOR} || win > ${CEIL}, and one out-of-band count turns it red. `
+        + `The suite's balance verdict is carried by policy.js's Producer spike, which C5 shows emits nothing in the shipped tree`);
+
+    const onRows = COUNTS.map((c) => rate(on.base[c]));
+    t('C4e control · and the same seeds WITH the lever are all inside that band, so it is the ability and not the sweep',
+      onRows.every((r) => r >= FLOOR && r <= CEIL),
+      `spike on, n=${MATCH_SEEDS}: ${COUNTS.map((c, i) => `${c}p ${pct(onRows[i])}`).join(' ')} — every count inside ${FLOOR}-${CEIL}`);
+  }
 }
 
 // ================================================================ C5 · the caveat's own arm
@@ -618,4 +918,4 @@ console.log('\n_cast-table · C5 — the label on C4\'s numbers, re-derived from
     declared, 'events.js FAILURE_KINDS carries `noise.spike`');
 }
 
-done(`${(DEAL_SEEDS * 2 * COUNTS.length * 3).toLocaleString()} deals + ${(MATCH_SEEDS * COUNTS.length * 7 + MATCH_SEEDS).toLocaleString()} matches`);
+done(`${(DEAL_SEEDS * 2 * COUNTS.length * 4 + DEAL_SEEDS * COUNTS.length * 3).toLocaleString()} deals + ${(MATCH_SEEDS * COUNTS.length * 7 + MATCH_SEEDS + BIG_SEEDS * COUNTS.length).toLocaleString()} matches`);
