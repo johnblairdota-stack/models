@@ -156,6 +156,24 @@ export const tellFor = (state, t, runnerId = 'runner') => {
 };
 
 /**
+ * 🎚️ **ONE DETENT, AS A STICK.** `darkrun.js` owns the four speeds; this is the only place one of
+ * them becomes an input, and it is the only place a top speed is chosen.
+ *
+ * 🚨 **A DETENT IS A FRACTION OF A TOP SPEED AND `_stepGround` APPLIES IT ONCE.** It used to apply
+ * it twice — the direction vector already carries the stick's magnitude and the scale multiplied by
+ * it again — so this returned 0.353 for CREEP and the body delivered 0.353². Exported so
+ * `dark-run` D4 can drive the real `Player` with the real ladder rather than asserting
+ * `darkrun.js`'s table against `darkrun.js`'s table, which is how three years of a factor of three
+ * went unnoticed.
+ */
+export function detentInputFor(detent) {
+  const d = DETENT[detent];
+  if (!d || d.speed <= 0) return { move: { x: 0, y: 0 }, run: false };
+  const top = d.speed > MOVE.walk ? MOVE.run : MOVE.walk;
+  return { move: { x: 0, y: Math.min(1, d.speed / top) }, run: d.speed > MOVE.walk };
+}
+
+/**
  * 🚪 **HOW FAR BEYOND A DOORWAY THE WAYPOINT SITS.** Far enough that the runner is never standing
  * on its own target — `atan2(~0, ~0)` is what put the first draft in a jitter in the opening.
  */
@@ -452,14 +470,7 @@ export default async function view(args = {}) {
    * stick has no notch in that band — `dark-run` D4 asserts both halves.
    */
   let detent = 0;
-  const detentInput = () => {
-    const d = DETENT[detent];
-    if (!d || d.speed <= 0) return { move: { x: 0, y: 0 }, run: false };
-    // `_stepGround` scales the stick by its own magnitude, so a detent is a magnitude against
-    // whichever top speed `run` selects. That is the only place a speed is chosen.
-    const top = d.speed > MOVE.walk ? MOVE.run : MOVE.walk;
-    return { move: { x: 0, y: Math.min(1, d.speed / top) }, run: d.speed > MOVE.walk };
-  };
+  const detentInput = () => detentInputFor(detent);
 
   // Steering: the runner aims at a heading the phone sets. In solo it chases the terminal.
   let heading = player.facing;

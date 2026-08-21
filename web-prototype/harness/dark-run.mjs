@@ -32,6 +32,22 @@
  * in that band: STILL goes nowhere, CREEP already carries 2.42 m. **Unreachable, not patched** —
  * and that is an argument for the detents beyond thumb ergonomics.
  *
+ * 🚨 **FINDING 2 WAS ASSERTED AGAINST THE TABLE AND THE ENGINE DISAGREED WITH IT BY A FACTOR OF
+ * THREE.** D4b used to read `audibleRange(noiseFor(DETENT[1].speed))` — `darkrun.js`'s own numbers,
+ * checked against `darkrun.js`'s own numbers. What decides whether the exploit is reachable is what
+ * `Player` does with the stick, and `_stepGround` was applying the stick's magnitude twice: the
+ * direction vector already carries `mlen`, and the scale multiplied by `mlen` again. WALK and RUN
+ * send 1.0 and were exact; CREEP sends 0.353 and got 0.353², so shipped CREEP was **0.318 m/s,
+ * audible at 0.86 m** — less than the 1.00 m at which a stage-3 Hunter is already touching the
+ * runner — and crossed **28.6 m** in ninety seconds. The exploit this file calls *"unreachable, not
+ * patched"* was reachable, by the second notch of the shipped throttle, for as long as the party
+ * mode has existed.
+ *
+ * D4 is measured on the ENGINE now: a real `Player`, driven by `views/expedition.js`'s own
+ * `detentInput` ladder, free body, ninety seconds per detent. D4d is the control and it is the
+ * shipped bug — the same `Player`, handed a stick that has already been squared, which is exactly
+ * what the second multiplication did.
+ *
  * ⚠️ ONE UNMEASURED INPUT, NAMED RATHER THAN BURIED: `ROOM_DEPTH` below is an assumption. The
  * real per-space spans are reported by `_flyover1-view.mjs` and should replace it before these
  * percentages are quoted as tuning targets.
@@ -41,6 +57,85 @@ import { DETENT, noiseFor, audibleRange, blindStrip, guideSight, ghost, canOutru
 import { coverageFraction, expectedHonestError, T3_BAND } from '../src/party/coverage.js';
 import { MOVE, HUNTER_SENSE, HUNTER_SPEED } from '../src/game/rules.js';
 import { SECONDS, PHASE } from '../src/party/phases.js';
+
+// ---------------------------------------------------------------- the free body
+/**
+ * 🚨 THE GATE IMPORTS THE ENGINE; `darkrun.js` STILL MAY NOT. Same trade `expedition-wire` E1
+ * makes: the rules stay pure so they run in a worker and on a phone, and the gate is where the
+ * two are held against each other. No house is built — a free body on flat ground is what a
+ * top-speed and a noise reading are about, and `room.collide` would only add a wall to argue with.
+ */
+const SRC = new URL('../src/', new URL('.', import.meta.url));
+const s_ = (p) => new URL(p, SRC).href;
+globalThis.location = { search: '' };
+globalThis.document = {
+  createElementNS: () => ({ set src(_v) {}, get src() { return ''; }, addEventListener() {}, removeEventListener() {}, style: {} }),
+  createElement: () => ({ style: {}, getContext: () => null }),
+};
+const _w = console.warn, _e = console.error; console.warn = () => {}; console.error = () => {};
+const { initBaker } = await import(s_('materials/baker.js'));
+initBaker({
+  getRenderTarget: () => null, setRenderTarget: () => {}, render: () => {},
+  readRenderTargetPixels: (a, b, c, d, e, buf) => { buf[0] = 200; buf[1] = 200; buf[2] = 200; if (buf.length > 3) buf[3] = 255; },
+});
+const THREE = await import('three');
+const { Player } = await import(s_('game/player.js'));
+const { LimbField } = await import(s_('game/limbs.js'));
+console.warn = _w; console.error = _e;
+
+/** `views/expedition.js`'s own detent-to-stick, imported rather than restated. */
+const { detentInputFor } = await import(s_('views/expedition.js'));
+
+/**
+ * Hold one detent for `seconds` and report what the body actually did. The first two seconds are
+ * spin-up (`MOVE.accel` is a first-order lag, not a step) and are not measured.
+ */
+function freeBody(detent, seconds = SECONDS[PHASE.EXPEDITION]) {
+  const DT = 1 / 60;
+  let seed = 7;
+  const rng = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  const scene = new THREE.Scene();
+  const field = new LimbField(scene, { rng, floorY: 0, bounds: { minX: -400, maxX: 400, minZ: -400, maxZ: 400 } });
+  const p = new Player({ scene, world: null, field, rng, id: 'runner', avatar: null });
+  p.pos.set(0, 0, 0); p.facing = 0; p.aimYaw = 0;
+  const inp = detentInputFor(detent);
+  for (let i = 0; i < 2 * 60; i++) p.update(DT, i * DT, { ...inp, aimYaw: 0, aimPitch: 0 });
+  const from = p.pos.clone();
+  let noiseSum = 0, frames = 0;
+  for (let i = 0; i < Math.round(seconds / DT); i++) {
+    p.update(DT, i * DT, { ...inp, aimYaw: 0, aimPitch: 0 });
+    noiseSum += p.noise; frames++;
+  }
+  const noise = noiseSum / frames;
+  return { speed: p.speed, noise, audible: audibleRange(noise), travel: p.pos.distanceTo(from), radius: p.radius };
+}
+
+/**
+ * THE CONTROL, AND IT IS THE BUG RATHER THAN A MODEL OF IT. `_stepGround` applied the stick's
+ * magnitude a second time, so the body received `mv` squared. Squaring the stick before it is
+ * handed over drives the IDENTICAL integrator to the IDENTICAL place — nothing is recomputed from
+ * a formula here, the same `Player` is simply given what the shipped one was effectively given.
+ */
+function freeBodySquared(detent, seconds = SECONDS[PHASE.EXPEDITION]) {
+  const DT = 1 / 60;
+  let seed = 7;
+  const rng = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  const scene = new THREE.Scene();
+  const field = new LimbField(scene, { rng, floorY: 0, bounds: { minX: -400, maxX: 400, minZ: -400, maxZ: 400 } });
+  const p = new Player({ scene, world: null, field, rng, id: 'runner', avatar: null });
+  p.pos.set(0, 0, 0); p.facing = 0; p.aimYaw = 0;
+  const base = detentInputFor(detent);
+  const inp = { ...base, move: { x: base.move.x * Math.hypot(base.move.x, base.move.y), y: base.move.y * Math.hypot(base.move.x, base.move.y) } };
+  for (let i = 0; i < 2 * 60; i++) p.update(DT, i * DT, { ...inp, aimYaw: 0, aimPitch: 0 });
+  const from = p.pos.clone();
+  let noiseSum = 0, frames = 0;
+  for (let i = 0; i < Math.round(seconds / DT); i++) {
+    p.update(DT, i * DT, { ...inp, aimYaw: 0, aimPitch: 0 });
+    noiseSum += p.noise; frames++;
+  }
+  const noise = noiseSum / frames;
+  return { speed: p.speed, noise, audible: audibleRange(noise), travel: p.pos.distanceTo(from) };
+}
 
 let pass = 0, fail = 0;
 const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' · ' + d : ''}`); } else { fail++; console.log(`  FAIL ${n}${d ? ' · ' + d : ''}`); } return c; };
@@ -104,18 +199,72 @@ t('D0 arm · the shipped constants are the ones being reasoned about',
 }
 
 // ---------------------------------------------------------------- D4 · T4, and the exploit
+/**
+ * 🚨 **THE ARGUMENT IS ABOUT THE ENGINE, SO IT IS MEASURED ON THE ENGINE.** Everything below drives
+ * a real `Player` with `views/expedition.js`'s own detent ladder for a full expedition per notch.
+ * `darkrun.js`'s table is still here — as the thing the engine has to AGREE with (D4b), which is a
+ * claim, rather than as the thing being asserted about itself, which was not.
+ */
 {
+  const engine = DETENT.map((d, i) => ({ name: d.name, table: d.speed, ...freeBody(i) }));
+  const shipped = DETENT.map((d, i) => ({ name: d.name, table: d.speed, ...freeBodySquared(i) }));
+  /**
+   * How close a Hunter must be before its hearing beats simply bumping into the runner. Stage 3 is
+   * `0.30 + 3 × 0.12` (`hunter-ai.js`'s own radius line) and the runner brings its own. Below this
+   * an "audible" robot is one the Hunter can only hear by standing inside it.
+   */
+  const TOUCHING = (0.30 + 3 * 0.12) + engine[0].radius;
+
+  console.log('       detent │ table speed │ engine speed  noise  audible │ 90 s travel');
+  for (const r of engine) {
+    console.log(`       ${r.name.padEnd(6)} │ ${r.table.toFixed(3).padStart(11)} │ ${r.speed.toFixed(3).padStart(12)} ${r.noise.toFixed(3).padStart(6)} ${(r.audible.toFixed(2) + ' m').padStart(8)} │ ${r.travel.toFixed(1).padStart(7)} m`);
+  }
+
   const silent = silentCrossing(EXPEDITION);
   t('D4a · a continuous throttle really does have a silent band',
     SILENT_SPEED > 0 && silent > 10,
     `under ${SILENT_SPEED.toFixed(3)} m/s is inaudible → ${silent.toFixed(2)} m of silent travel in a ${EXPEDITION}s expedition`);
 
-  const inBand = DETENT.filter((d) => d.speed > 0 && d.speed < SILENT_SPEED);
-  t('D4b · T4 — no detent lands in the silent band, so the exploit is unreachable',
-    inBand.length === 0,
-    `STILL 0 m/s goes nowhere · CREEP ${DETENT[1].speed} m/s is already audible at ${audibleRange(noiseFor(DETENT[1].speed)).toFixed(2)} m`);
+  t('D4a2 · and the ENGINE delivers the speed the table names, at every detent',
+    engine.every((r) => Math.abs(r.speed - r.table) < 0.005),
+    engine.map((r) => `${r.name} ${r.speed.toFixed(3)}/${r.table.toFixed(3)}`).join(' · '));
 
-  t('D4c · every moving detent is audible', DETENT.filter((d) => d.speed > 0).every((d) => audibleRange(noiseFor(d.speed)) > 0),
+  const inBand = engine.filter((r) => r.speed > 0 && r.speed < SILENT_SPEED);
+  t('D4b · T4 — no detent DELIVERS a speed in the silent band, so the exploit is unreachable',
+    inBand.length === 0,
+    `STILL 0 m/s goes nowhere · CREEP delivers ${engine[1].speed.toFixed(3)} m/s and is audible at ${engine[1].audible.toFixed(2)} m`);
+
+  t('D4b2 · and "audible" means audible before it is touching you — the honest form of T4',
+    engine.filter((r) => r.speed > 0).every((r) => r.audible > TOUCHING),
+    `contact at ${TOUCHING.toFixed(2)} m (stage-3 Hunter + runner) · ` + engine.filter((r) => r.speed > 0).map((r) => `${r.name} ${r.audible.toFixed(2)}m`).join(' '));
+
+  t('D4c · every moving detent is audible, measured off the body rather than off the table',
+    engine.filter((r) => r.speed > 0).every((r) => r.audible > 0),
+    engine.map((r) => `${r.name}:${r.audible.toFixed(1)}m`).join(' '));
+
+  /**
+   * The control. Same `Player`, same ladder, stick squared — which is precisely what the second
+   * `mlen` did. If the fix is ever reverted these four go red and D4b goes with them.
+   */
+  t('D4d control · apply the stick twice and CREEP collapses to a third of its documented speed',
+    Math.abs(shipped[1].speed - engine[1].speed * (DETENT[1].speed / MOVE.walk)) < 0.01
+    && shipped[1].speed < engine[1].speed * 0.4,
+    `CREEP ${engine[1].speed.toFixed(3)} → ${shipped[1].speed.toFixed(3)} m/s · noise ${engine[1].noise.toFixed(3)} → ${shipped[1].noise.toFixed(3)}`);
+
+  t('D4d2 control · WALK and RUN are untouched by it, which is why nothing caught it',
+    Math.abs(shipped[2].speed - engine[2].speed) < 0.005 && Math.abs(shipped[3].speed - engine[3].speed) < 0.005,
+    `the stick is 1.0 at both, and 1.0² is 1.0 — WALK ${shipped[2].speed.toFixed(3)}, RUN ${shipped[3].speed.toFixed(3)}`);
+
+  t('D4d3 control · and the exploit D4b dismisses becomes REACHABLE — a detent audible only inside the Hunter',
+    shipped[1].audible < TOUCHING && shipped[1].audible > 0,
+    `shipped CREEP audible at ${shipped[1].audible.toFixed(2)} m against ${TOUCHING.toFixed(2)} m of contact — the Hunter has to be standing in the robot to hear it`);
+
+  t('D4d4 control · carrying it further in ninety seconds than the silent-travel budget the argument calls unacceptable',
+    shipped[1].travel > silent,
+    `${shipped[1].travel.toFixed(1)} m at an inaudible-in-practice speed vs the ${silent.toFixed(2)} m budget · fixed CREEP travels ${engine[1].travel.toFixed(1)} m and is heard at ${engine[1].audible.toFixed(2)} m`);
+
+  t('D4e · the table itself is unchanged and still agrees with `noiseFor`',
+    DETENT.filter((d) => d.speed > 0).every((d) => audibleRange(noiseFor(d.speed)) > 0),
     DETENT.map((d) => `${d.name}:${audibleRange(noiseFor(d.speed)).toFixed(1)}m`).join(' '));
 }
 

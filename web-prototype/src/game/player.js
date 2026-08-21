@@ -902,10 +902,38 @@ export class Player {
     // were swapped and the game was close to unplayable. Verified against the camera's own
     // matrixWorld rather than by reasoning about handedness: with the camera's right at
     // (+1, 0), driving move.x = +1 moved the player (-1.6, 0) — dot product negative.
+    /**
+     * 🚨 **`mv` ALREADY CARRIES ITS OWN MAGNITUDE. MULTIPLYING BY `mlen` AGAIN SQUARED THE STICK.**
+     *
+     * The three components below are `mv.x`/`mv.y` rotated into world space, so the vector's
+     * length IS `mlen` before any scaling. This line then multiplied by `top · carry · mlen`, and
+     * the delivered speed was `top · carry · mlen²`.
+     *
+     * ⚠️ IT WAS INVISIBLE FROM THE KEYBOARD AND FROM THE CAPTURE DIRECTOR, WHICH IS WHY IT LASTED.
+     * `Input.move` returns components in {-1, 0, 1} and the caller normalises anything past 1, so
+     * `mlen` is exactly 1 for every WASD press and for every `_walk()` in `game.js`. The party
+     * runner's throttle is the first analogue stick in the codebase and `mlen² == mlen` has no
+     * error at 1.0 — so the only detent that could show it was the one below full deflection:
+     *
+     *   detent   `mv.y`   TABLE speed / noise / audible      SHIPPED speed / noise / audible
+     *   CREEP    0.353    0.900 / 0.173 / 2.42 m             0.318 / 0.061 / 0.86 m
+     *   WALK     1.000    2.550 / 0.490 / 6.87 m             2.550 / 0.490 / 6.87 m
+     *   RUN      1.000    5.200 / 1.000 / 14.00 m            5.200 / 1.000 / 14.00 m
+     *
+     * 🚨 **AND IT VOIDED A PUBLISHED SAFETY ARGUMENT.** `darkrun.js` argues that a continuous
+     * throttle has a silent-creep exploit — sit just under `HUNTER_SENSE.hearFloor` and cross
+     * 14.04 m of house inaudibly — and that the detents close it BY CONSTRUCTION, because *"CREEP
+     * is the slowest thing that moves and is already audible at 2.42 m. The exploit is
+     * unreachable, not patched."* At 0.318 m/s it is audible at **0.86 m**, which is less than the
+     * combined radii of a stage-3 Hunter and the runner: the Hunter has to be standing inside the
+     * robot to hear it. And it delivers **28.6 m** in ninety seconds against the doc's own 14.04 m
+     * silent-travel budget — twice the distance the argument calls unacceptable. `dark-run` D4b
+     * now measures the ENGINE rather than the table, which is how it missed this.
+     */
     const want = _v2.set(
       Math.sin(this.aimYaw) * mv.y - Math.cos(this.aimYaw) * mv.x, 0,
       Math.cos(this.aimYaw) * mv.y + Math.sin(this.aimYaw) * mv.x)
-      .multiplyScalar(top * carry * mlen);
+      .multiplyScalar(top * carry);
     const rate = mlen > 0.05 ? MOVE.accel : MOVE.decel;
     // limping and crawling accelerate badly — the stagger is part of the punishment
     const k = 1 - Math.exp(-rate * caps.speedScale * dt);
