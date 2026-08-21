@@ -36,6 +36,7 @@
     "party:spike": "node net/party/spike.mjs",
     "gate:live-session": "node harness/live-session.mjs",
     "gate:show-wire": "node harness/show-wire.mjs",
+    "gate:party-surface": "node harness/party-surface.mjs",
     "party:show": "node net/party/show.mjs",
     "gate:shot-solver": "node harness/shot-solver.mjs",
     "gate:expedition-wire": "node harness/expedition-wire.mjs",

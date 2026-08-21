@@ -91,7 +91,8 @@ const GATES = [
   'role-deal', 'party-anon', 'party-isolation', 'party-taken', 'guide-coverage', 'party-log',
   'party-sockets', 'vote-table', 'cast-ballot', 'win-machine', 'round-loop', 'dark-run',
   'director-cut', 'task-deck', 'role-script', 'reunion-truth', 'party-noise', 'party-sim',
-  'join-spike', 'live-session', 'show-wire', 'shot-solver', 'expedition-wire', 'premiere-stage',
+  'join-spike', 'live-session', 'show-wire', 'party-surface', 'shot-solver', 'expedition-wire',
+  'premiere-stage',
   'hunter-draw', 'engine-take', 'wire-parity', 'door-hop', 'wing-draw', 'drivable-frame',
   'dead-import',
 ];

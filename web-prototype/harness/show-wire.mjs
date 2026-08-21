@@ -26,7 +26,7 @@
  * ones and the gate takes four seconds instead of half an hour.
  */
 
-import { startShow, playerIdOf, seatNoOf, seedFrom } from '../net/party/show.mjs';
+import { startShow, playerIdOf, seatNoOf } from '../net/party/show.mjs';
 import { MAX_PHONES } from '../net/party/lobby.mjs';
 import { PHASE } from '../src/party/phases.js';
 import { CALL, MOVE_CHOICE } from '../src/party/session.js';
@@ -155,10 +155,19 @@ t('X2 arm · the show rolled and every socket got a projected frame',
   && tv.frames().length > 0 && phones.every((p) => p.frames().length > 0),
   `${sess?.state.phase} · tv ${tv.frames().length} frames`);
 
-t('X2b · the seeds were derived, never sent, and are reproducible from the room code',
-  show.lobby.events.some((e) => e.type === 'show.started' && e.castSeed === seedFrom('wire', 'cast', 1700000000000, 8))
+/**
+ * 🚨 THIS ASSERTED THE DEFECT. It read `castSeed === seedFrom('wire', 'cast', 1700000000000, 8)` —
+ * i.e. it required the seed to be reproducible from the room code, the stamp and the count, all
+ * three of which a player has. That is exactly the arithmetic that let an attacker filtering on
+ * their own card and the announced wings name both traitors 80.4% of the time. The seeds are now
+ * 32 random bits each and the event log does not carry them; `party-surface` W1-W2 is the gate
+ * that argues it, with the pre-fix server running as its control.
+ */
+t('X2b · the seeds are random, on no wire, and not in the event log the report hands out',
+  show.lobby.events.some((e) => e.type === 'show.started' && e.count === 8
+    && !('castSeed' in e) && !('worldSeed' in e))
   && !JSON.stringify([...tv.msgs, ...phones.flatMap((p) => p.msgs)]).includes('castSeed'),
-  'derived from code+stamp+count, printed in the report, on no wire');
+  'randomBytes, kept in this process, reported after the Reunion');
 
 // ---------------------------------------------------------------- play the whole show
 /** Everyone taps sensibly, then the host skips the clock forward. */

@@ -22,14 +22,16 @@
  * `replayFor`, which is the same filter applied to history. `net/server.mjs` L114-120 and L335-336
  * are the two bugs in this repo's own past that shape those three sentences.
  *
- * ⚠️ `/report` WITHHOLDS THE GAME LOG UNTIL THE REUNION, AND THAT IS NOT PARANOIA. Anyone on the
- * wifi can GET it, including the eight people playing. Until the show ends it serves connection
- * health only; the sealed stream is served once there is nothing left to spoil.
+ * ⚠️ `/report` WITHHOLDS THE GAME LOG **AND BOTH SEEDS** UNTIL THE REUNION, AND THAT IS NOT
+ * PARANOIA. Anyone on the wifi can GET it, including the eight people playing — the cheat is to
+ * read the address off the television and add five characters. Until the show ends it serves
+ * connection health only; the sealed stream is served once there is nothing left to spoil.
  *
  * ⚠️ ZERO DEPENDENCIES, NO BUILD STEP. Same reason as `spike.mjs`: this repo ships no
  * `node_modules` and a party server you cannot start at a party does not get started.
  */
 
+import crypto from 'node:crypto';
 import http from 'node:http';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -57,7 +59,41 @@ export const MIN_PLAYERS = Math.min(...Object.keys(COMPOSITION).map(Number));
 export const playerIdOf = (seatNo) => `p${seatNo + 1}`;
 export const seatNoOf = (playerId) => Number(playerId.slice(1)) - 1;
 
-/** FNV-1a. The seeds are derived, printed and reported, so any game can be replayed exactly. */
+/**
+ * 🚨 **THE SEEDS ARE 32 RANDOM BITS EACH, AND THE ARITHMETIC THEY REPLACED WAS THE SECOND HALF OF
+ * A LEAK THE GATE ON `/report` COULD NOT CLOSE ON ITS OWN.**
+ *
+ * They were `seedFrom(code, 'cast'|'world', stamp, count)`. Every one of those four inputs is
+ * public or nearly so: `code` is on the television in 60pt, `count` is in every roster frame, and
+ * `stamp` was `Date.now()` at `begin()` — which `/report`'s own `durationMs` pins to a window a
+ * few thousand milliseconds wide, because it is `Date.now() - lobby.startedAt` evaluated one
+ * statement later. So the *health* half of the report — "the half nobody has to hide" — was a
+ * search key for the half that is the whole game. Held out on unseen games, filtering candidates
+ * with nothing but the attacker's own card and the publicly-announced wings names **both traitors
+ * 80.4% of the time at eight players after two episodes, and 84% at five**, against a 4.8% chance
+ * baseline. Withholding the seed field while leaving the derivation in place fixes none of that:
+ * the seed was never the secret, the arithmetic was.
+ *
+ * `rng` in `cast.js` does `seed >>> 0`, so 32 bits is the entire entropy the deal can consume and
+ * four random bytes is the whole of it. What changes is that those 32 bits are now unguessable
+ * rather than a hash of four printed values, which is what collapses the search above to chance.
+ *
+ * ⚠️ REPLAYABILITY IS NOT LOST, IT MOVED. The seeds still come home in `/report` — after the
+ * Reunion, in the same breath as the log, behind the gate that already exists for exactly this
+ * question. A game is replayed from the report rather than from four values printed at the start.
+ */
+export const randomSeed = () => crypto.randomBytes(4).readUInt32BE(0);
+
+/**
+ * FNV-1a over the printed values — **the derivation above, kept for `party-surface`'s control and
+ * called by nothing in this process.**
+ *
+ * ⚠️ EXPORTED FOR THE GATE AND FOR NOBODY ELSE, in the shape `session.js` states for `hash`/`pick`:
+ * the gate has to run the actual recovery attack against a control built from this file, and a
+ * gate that re-implemented the derivation would be measuring its own copy rather than the code
+ * that shipped. `party-surface` W3 asserts on the source that no caller in `net/party` or
+ * `src/party` reaches it — the D8 property, so nobody can innocently seed a show with it again.
+ */
 export function seedFrom(...parts) {
   let h = 0x811c9dc5 >>> 0;
   const s = parts.join(':');
@@ -65,6 +101,12 @@ export function seedFrom(...parts) {
   return h >>> 0;
 }
 
+/**
+ * ⚠️ `stamp` NO LONGER REACHES ANYTHING. It was the third input to the seed derivation and is kept
+ * only because every caller in `harness/` passes it and because the control `party-surface` builds
+ * out of this file has to compile against the same signature to reproduce the old arithmetic.
+ * Nothing below reads it.
+ */
 export function startShow({ port = 5183, code = makeCode(), stamp = Date.now() } = {}) {
   const lobby = createLobby(code);
   let show = null;                       // { session, castSeed, worldSeed, startedAt }
@@ -145,11 +187,12 @@ export function startShow({ port = 5183, code = makeCode(), stamp = Date.now() }
       });
     }
     if (frozen.dropped.length) note(lobby, 'roster.frozen', { kept: frozen.kept, evicted: frozen.dropped.length });
-    // 🚨 THE CAST SEED IS DERIVED, NEVER SENT, AND IS RECORDED IN THE REPORT. Derived so a game is
-    // replayable from four printed values; never sent because `cast.js`'s header is unambiguous
-    // that a client holding it can deal the whole table itself.
-    const castSeed = seedFrom(code, 'cast', stamp, count);
-    const worldSeed = seedFrom(code, 'world', stamp, count);
+    // 🚨 RANDOM, NOT DERIVED — see `randomSeed` above for the 80.4% that says why. Never sent,
+    // because `cast.js`'s header is unambiguous that a client holding `castSeed` can deal the
+    // whole table itself; and now not reconstructible either, which is the half a gate on the
+    // wire cannot reach.
+    const castSeed = randomSeed();
+    const worldSeed = randomSeed();
     const names = [...lobby.seats.values()].sort((a, b) => a.seat - b.seat).map((s) => s.name);
     const session = createSession({
       count, castSeed, worldSeed, names,
@@ -157,7 +200,13 @@ export function startShow({ port = 5183, code = makeCode(), stamp = Date.now() }
       emit: (id, ev) => deliver(id, { t: 'event', ev }),
     });
     show = { session, castSeed, worldSeed, startedAt: now };
-    note(lobby, 'show.started', { count, castSeed, worldSeed });
+    /**
+     * 🚨 **THE SECOND COPY. The seeds were written into the event log here, and `report()` returns
+     * `lobby.events` RAW — so gating the `show.castSeed` field alone left the same two integers in
+     * the same response, four lines further down.** The log is the deliverable; it does not get to
+     * carry the one value that is not allowed out. The count is what an event log needs.
+     */
+    note(lobby, 'show.started', { count });
     session.start(now);
     return { ok: true };
   }
@@ -173,16 +222,35 @@ export function startShow({ port = 5183, code = makeCode(), stamp = Date.now() }
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       return res.end(page('show-phone.html'));
     }
+    /**
+     * 🚨 **ONE GATE, AND EVERYTHING THAT SPOILS THE SHOW IS BEHIND IT.**
+     *
+     * The seeds sat OUTSIDE the `over` check while the log sat inside it — the notice reading
+     * *"the game log is served after the Reunion"* was printed four lines under the two integers
+     * it was written to protect. `dealCast({count, castSeed})` is every role, both alignments, the
+     * Production roster and the Glitched's cover, and `count` is in every roster frame; a critic
+     * got an exact match on the first try. `pick(6, worldSeed, 'hunter', ep)` is every episode's
+     * Hunter room, available before episode one is cast. No devtools, no socket: the address off
+     * the television, plus `/report`.
+     *
+     * ⚠️ THE SEALED STREAM IS SERVED ONLY ONCE THERE IS NOTHING LEFT TO SPOIL. Anyone on the
+     * wifi can fetch this, the eight people playing included. What is served while the show is on
+     * the air is connection health and the phase — nothing a player could not read off the
+     * television — and `party-surface` walks the whole response to say so.
+     */
     if (url.pathname === '/report') {
       const over = show && show.session.state.phase === PHASE.REUNION;
       res.writeHead(200, { 'content-type': 'application/json' });
       return res.end(JSON.stringify(report(lobby, {
-        show: show ? { castSeed: show.castSeed, worldSeed: show.worldSeed, phase: show.session.state.phase,
-          episode: show.session.state.episode, outcome: show.session.state.outcome } : null,
-        // ⚠️ THE SEALED STREAM IS SERVED ONLY ONCE THERE IS NOTHING LEFT TO SPOIL. Anyone on the
-        // wifi can fetch this, the eight people playing included.
+        show: show ? {
+          phase: show.session.state.phase,
+          episode: show.session.state.episode,
+          outcome: show.session.state.outcome,
+          // The seeds come home with the log and never before it — one gate, one moment.
+          ...(over ? { castSeed: show.castSeed, worldSeed: show.worldSeed } : {}),
+        } : null,
         log: over ? show.session.log.all() : undefined,
-        withheld: show && !over ? 'the game log is served after the Reunion' : undefined,
+        withheld: show && !over ? 'the game log and the seeds are served after the Reunion' : undefined,
       }), null, 2));
     }
     res.writeHead(404); res.end('no');
