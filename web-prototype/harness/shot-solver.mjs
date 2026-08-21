@@ -137,6 +137,23 @@ const ROLE_NAMES = ['cameraOp', 'soundie', 'fixer', 'producer', 'continuity', 's
   t('H1b · and `isFiller` agrees with the shot library\'s own `live` flag',
     SHOTS.every((s) => isFiller(s.id) === !s.live),
     'one source of truth for what may show the mansion');
+
+  /**
+   * 🚨 **THE CARD VALUES WERE STAGE DIRECTIONS AND `broadcast.js` PRINTS THEM.** They were
+   * `circle`, `bust`, `sponsor` — notes to a future implementer — and the literal word **CIRCLE**
+   * was on the television for 4-7% of a measured round, over a frozen frame, with no circle of
+   * robots in the expedition scene to cut to. §6.5: *"Never break the frame … no debug text."*
+   * §3 names the vocabulary a gap is allowed to use: a bracketed production slug, or the ad break
+   * said out loud. Never `[LOADING]`, and never the name of the thing that has not been built.
+   */
+  const PRODUCTION_VOICE = /^(\[[A-Z' ]+\]|WE'LL BE RIGHT BACK)$/;
+  const offVoice = Object.entries(CARDS).filter(([, v]) => !PRODUCTION_VOICE.test(v));
+  t('H1c · every seam card is a production caption, not the name of a thing that is not built',
+    offVoice.length === 0 && !/loading/i.test(Object.values(CARDS).join(' ')),
+    offVoice.length ? offVoice.map(([k, v]) => `${k}: "${v}"`).join(', ') : Object.values(CARDS).join(' · '));
+  t('H1c control · and the check would have caught what shipped',
+    ['circle', 'bust', 'sponsor', '[LOADING]'].every((v) => !PRODUCTION_VOICE.test(v) || /loading/i.test(v)),
+    'circle · bust · sponsor · [LOADING] all refused');
 }
 
 // ---------------------------------------------------------------- H2 · the shipped rig numbers

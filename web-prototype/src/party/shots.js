@@ -73,11 +73,25 @@ export const STING_MIN_RANGE = 6.0;
  */
 export const BOOM_STANDOFF = 0.30;
 
-/** Seam fillers, and what each one puts on the screen instead of the house. */
+/**
+ * Seam fillers, and the words each one puts on the screen instead of the house.
+ *
+ * 🚨 **THESE WERE STAGE DIRECTIONS AND THEY WERE BEING RENDERED.** `broadcast.js` prints
+ * `solved.card.toUpperCase()`, so the value here IS what a room of eight people reads — and the
+ * values were `circle`, `bust`, `sponsor`, notes to a future implementer. Measured on the wired
+ * expedition, the literal word **CIRCLE** was on the television for 4-7% of the round, over a
+ * frozen frame, and there is no circle of robots in the expedition scene to cut to in the first
+ * place. §6.5: *"Never break the frame … no debug text."*
+ *
+ * §3 says what a cutaway is allowed to say instead, in its own words: *"Name it as production.
+ * `[FEED INTERRUPTED]`, `[CENSORED FOR LEGAL REASONS]`, `WE'LL BE RIGHT BACK`. Never `[LOADING]`."*
+ * When the bust render and the six sponsor cards exist they replace these; until then the card is
+ * an honest production caption rather than a word from the implementation.
+ */
 export const CARDS = Object.freeze({
-  REACTION: 'circle',        // the nameplate rail, blown up — the room reacting to itself
-  CONFESSIONAL: 'bust',      // a still bust render and a canned line (§7: faked in v1)
-  SPONSOR: 'sponsor',        // one of six pre-rendered cards
+  REACTION: '[FEED INTERRUPTED]',            // the gap, named as production rather than as a bug
+  CONFESSIONAL: '[CENSORED FOR LEGAL REASONS]',  // a still bust render and a canned line, when they exist
+  SPONSOR: "WE'LL BE RIGHT BACK",            // one of six pre-rendered cards, when they exist
 });
 
 export const isFiller = (shotId) => shotId in CARDS;

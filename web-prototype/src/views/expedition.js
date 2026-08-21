@@ -66,6 +66,45 @@ export const TERMINAL_AT = Object.freeze({
 });
 
 /**
+ * ⏱️ **TWO GATES, BECAUSE A BUS EVENT PER FRAME IS NOT AN EVENT.**
+ *
+ * Measured over a wired 90 s expedition: **926-5398 `noise` events and 3450 `place` events**. The
+ * noise test is `player.noise > 0.55` evaluated every frame, so a runner holding RUN emits sixty a
+ * second; and `place` fires on `here !== lastRoom`, which a runner standing IN a doorway satisfies
+ * every other frame as `spaceAt` flips between the two rooms it joins. That second one is not just
+ * noise on the bus — the same branch calls `lightRig.snapTo`, so **straddling a doorway relit the
+ * whole house at 60 Hz**.
+ *
+ * `rateGate` is the rising-edge limiter; `roomGate` refuses to believe a room change until the new
+ * room has held for a moment. Both pure and exported, so `expedition-wire` can hold the rates
+ * against a synthetic 90 seconds without a GPU.
+ */
+export const NOISE_GAP = 1.2;     // seconds between `noise` events from a running robot
+export const ROOM_SETTLE = 0.35;  // how long a new room must hold before it counts as arriving
+
+export function rateGate(gap) {
+  let last = -Infinity;
+  return (t, open = true) => {
+    if (!open) return false;
+    if (t - last < gap) return false;
+    last = t;
+    return true;
+  };
+}
+
+export function roomGate(settle) {
+  let cand = null, since = 0, held = null;
+  return (room, t) => {
+    if (room === held || room == null) { cand = null; return null; }
+    if (room !== cand) { cand = room; since = t; return null; }
+    if (t - since < settle) return null;
+    held = room;
+    cand = null;
+    return room;
+  };
+}
+
+/**
  * 🛰️ **THE SIMULATOR'S BRIEF, READ.** `show.mjs` sends `{t:'brief', wing, cameras, worldSeed,
  * episode}` on connect and at the top of every expedition, and the view's socket handler had no
  * branch for it — `wing` was bound once from a query string and never reassigned, so the runner
@@ -463,6 +502,8 @@ export default async function view(args = {}) {
 
     lastRoom = null;
     lastState = null;
+    rooms = roomGate(ROOM_SETTLE);
+    loud = rateGate(NOISE_GAP);
     director = createDirector({ world: {} });
     thirds = createLowerThirds();
     bx.setShot(null);
@@ -470,6 +511,8 @@ export default async function view(args = {}) {
 
   // ---------------------------------------------------------------- the loop
   let lastRoom = null, lastState = null, sinceReport = 0;
+  // See `rateGate`/`roomGate` above for the 3450 place events and the house relit at 60 Hz.
+  let rooms = roomGate(ROOM_SETTLE), loud = rateGate(NOISE_GAP);
   const _camDir = new THREE.Vector3();
   /**
    * 🚨 **THE DIRECTOR WAS BEING ASKED TO CHOOSE BETWEEN EIGHT SHOTS AND TOLD NOTHING ABOUT ANY OF
@@ -577,8 +620,39 @@ export default async function view(args = {}) {
   };
 
 
+  /**
+   * 🚨 **THE EPISODE ENDED ON A PERMANENTLY FROZEN FRAME UNDER A PERMANENT CAPTION.** `finish()`
+   * sets `outcome` and this loop returned immediately, for ever — so the rank-4 event it had just
+   * fed was never applied to a camera, `bx.tick` never ran again and the lower third it had just
+   * raised stayed up until the phase changed. The climax of the segment was the one shot the
+   * Director never got to take.
+   *
+   * §3: *"Return to the aftermath, not a new scene. Same room, 3-6 s later, in whatever state it
+   * is in."* So the simulation stops — nobody moves after a take, and the runner has finished —
+   * and the BROADCAST keeps running: the rank-4 shot airs, `MAX_HOLD` keeps re-solving it, the
+   * dust settles, and the caption drops on its own hold. The return to the circle is the
+   * television's: `show-tv.html` hides the feed the moment the phase leaves EXPEDITION.
+   */
+  function aftermath(dt, t) {
+    simT = t;
+    debris.update(dt); dust.update(dt); limbField.update?.(dt);
+    director.tick(t);
+    let cur = director.current();
+    let shot = cur ? solve(cur.shotId, { subjectId: cur.subjectId, probe: rig.probe }) : null;
+    if (cur && !shot) {
+      director.refuse(t);
+      cur = director.current();
+      shot = cur ? solve(cur.shotId, { subjectId: cur.subjectId, probe: rig.probe }) : null;
+    }
+    if (shot) { rig.apply(shot); bx.setShot(shot); }
+    engine.camera.getWorldDirection(_camDir);
+    room.setViewpoint(engine.camera.position, _camDir, dt);
+    bx.setFrame(state, clock);
+    bx.tick(t);
+  }
+
   engine.onUpdate((dt, t) => {
-    if (outcome) return;
+    if (outcome) return aftermath(dt, t);
     // The one thing `onKill` needs and cannot be handed: the simulation's clock, for the caption
     // and the report. `hunter.update` is called from inside this loop, so it is never stale.
     simT = t;
@@ -600,14 +674,15 @@ export default async function view(args = {}) {
 
     // ---- the bus the Director reads
     const here = room.spaceAt(player.pos)?.id ?? null;
-    if (here && here !== lastRoom) {
-      lastRoom = here;
+    const arrived = rooms(here, t);
+    if (arrived) {
+      lastRoom = arrived;
       // The rig follows the RUNNER, not the broadcast camera: the lights belong to the room the
       // robot is standing in, and a cutaway must not relight the house.
       lightRig.snapTo(room.spaceAt(player.pos) ?? room.spaces[0]);
       feed('place', 'runner', t);
     }
-    if (player.noise > 0.55) announce('noise', t);
+    if (loud(t, player.noise > 0.55)) announce('noise', t);
     /**
      * 🚨 **A HUNTER EVENT IS ABOUT THE RUNNER. THE SUBJECT IS WHO THE AUDIENCE IS WATCHING, NOT
      * WHAT CAUSED THE EVENT — AND GETTING THAT BACKWARDS COST THE RUNNER 74 SECONDS.**

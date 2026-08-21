@@ -34,7 +34,10 @@ import { SPACES, ANCHORS } from '../src/game/spaces.js';
 import { ROOMS, coveredRooms } from '../src/party/coverage.js';
 import { HOUSE, EXTENT, roomAt } from '../src/party/houseplan.js';
 import { ROOM_LABEL } from '../src/party/captions.js';
-import { TERMINAL_AT, TERMINAL_REACH, EXPEDITION_SECONDS, TELL_FOR_STATE, tellFor, readBrief } from '../src/views/expedition.js';
+import {
+  TERMINAL_AT, TERMINAL_REACH, EXPEDITION_SECONDS, TELL_FOR_STATE, tellFor, readBrief,
+  rateGate, roomGate, NOISE_GAP, ROOM_SETTLE,
+} from '../src/views/expedition.js';
 import { startShow } from '../net/party/show.mjs';
 import { camerasLive } from '../src/party/coverage.js';
 import { KIND } from '../src/party/director.js';
@@ -326,6 +329,102 @@ const engaged = (s) => {
   const strayKind = Object.values(TELL_FOR_STATE).filter((k) => !KIND.includes(k));
   t('E8d · and every kind it emits is one of §1.2\'s twelve, which has no room for a new one',
     strayKind.length === 0, strayKind.join(', ') || Object.values(TELL_FOR_STATE).join(' '));
+}
+
+// ---------------------------------------------------------------- E13 · the episode does not freeze
+/**
+ * 🚨 **THE EPISODE ENDED ON A PERMANENTLY FROZEN FRAME UNDER A PERMANENT CAPTION.** `finish()`
+ * sets `outcome`, and the update loop opened with `if (outcome) return;` — for ever. So the rank-4
+ * event `finish` had just fed was never applied to a camera, `bx.tick` never ran again and the
+ * lower third it had just raised stayed up until the phase changed. The climax of the segment was
+ * the one shot the Director never got to take.
+ *
+ * ⚠️ WHAT THIS DOES AND DOES NOT PROVE. It reads the shipped source: the loop hands off to an
+ * aftermath pass, and that pass drives the camera and the overlay. **It cannot see a pixel** —
+ * this box has no GPU and the mansion software-rasterises at minutes per frame — so that the
+ * aftermath LOOKS like §3's *"same room, 3-6 s later"* is unproven here and is said so out loud.
+ */
+{
+  const view = readFileSync(new URL('../src/views/expedition.js', import.meta.url), 'utf8');
+  /**
+   * ⚠️ SCOPED TO THE UPDATE LOOP, AND `lastIndexOf` BECAUSE THE SOLO DIRECTOR REGISTERS ONE FIRST.
+   * `finish()` opens with its own perfectly correct `if (outcome) return;` re-entry guard, and the
+   * first draft of this assertion read that and failed the fix.
+   */
+  const loopAt = view.lastIndexOf('engine.onUpdate((dt, t)');
+  const head = view.slice(loopAt, loopAt + 300);
+  const frozen = /if\s*\(outcome\)\s*return\s*;/.test(head);
+  const hands = /if\s*\(outcome\)\s*return\s+\w+\(dt,\s*t\)/.test(head);
+  t('E13 · the loop hands the end of the episode to an aftermath rather than returning',
+    hands && !frozen, hands ? 'if (outcome) return aftermath(dt, t)' : 'the loop still returns nothing');
+  const body = view.slice(view.indexOf('function aftermath'), loopAt);
+  t('E13b · and that pass drives the camera, the overlay and the clock the caption hangs on',
+    /rig\.apply\(/.test(body) && /bx\.tick\(/.test(body) && /director\.tick\(/.test(body),
+    'rig.apply · bx.setShot · bx.tick · director.tick');
+  t('E13 control · the scanner can tell the two forms apart',
+    /if\s*\(outcome\)\s*return\s*;/.test('  if (outcome) return;')
+    && !/if\s*\(outcome\)\s*return\s+\w+\(dt,\s*t\)/.test('  if (outcome) return;'),
+    'the frozen form is detected, and it is not the shipped one');
+}
+
+// ---------------------------------------------------------------- E12 · the bus is not the frame rate
+/**
+ * 🚨 **MEASURED ON A WIRED EXPEDITION: 926-5398 `noise` EVENTS AND 3450 `place` EVENTS IN NINETY
+ * SECONDS.** `player.noise > 0.55` is evaluated every frame, so a runner holding RUN emitted sixty
+ * a second; and `place` fired on `here !== lastRoom`, which a runner standing IN a doorway
+ * satisfies every other frame as `spaceAt` flips between the two rooms it joins.
+ *
+ * The second one is not merely noise on the bus. The same branch calls `lightRig.snapTo`, so a
+ * runner straddling a doorway **relit the whole house at 60 Hz**.
+ *
+ * ⚠️ THE BOUNDS BELOW ARE ABSOLUTE, NOT DERIVED FROM THE CONSTANT UNDER TEST. The first draft
+ * asserted `noises <= 90 / NOISE_GAP + 1`, which is `Infinity` at `NOISE_GAP = 0` — so it passed
+ * green against the shipped behaviour it was written to catch. A gate that takes its ceiling from
+ * the number it is checking is not a gate.
+ */
+{
+  const FRAMES = 90 * 60, DT = 1 / 60;
+  /** The two shipped predicates, as one-liners, so each assertion is a difference. */
+  const everyFrame = (cond) => cond;
+  const shippedRoom = (() => { let last = null; return (room) => (room && room !== last ? (last = room) : null); })();
+
+  const loud = rateGate(NOISE_GAP);
+  let gated = 0, raw = 0;
+  for (let i = 0; i < FRAMES; i++) {
+    if (loud(i * DT, true)) gated++;
+    if (everyFrame(true)) raw++;
+  }
+  t('E12 · ninety seconds at full throttle is under a hundred noise events, not five thousand',
+    gated > 0 && gated <= 90,
+    `${gated} events across 90 s (the ceiling is 90, one a second)`);
+  t('E12 control · the same ninety seconds through the shipped every-frame test',
+    raw === FRAMES, `${raw} events — which is what 926-5398 was measured against`);
+  t('E12b control · and the gate is a gate rather than an off switch — silence emits nothing',
+    (() => { const g = rateGate(NOISE_GAP); let n = 0; for (let i = 0; i < FRAMES; i++) if (g(i * DT, false)) n++; return n === 0; })(),
+    'the second argument is the condition, so a quiet robot is silent');
+
+  const doorway = roomGate(ROOM_SETTLE);
+  let flips = 0, shippedFlips = 0;
+  for (let i = 0; i < FRAMES; i++) {
+    const room = i % 2 ? 'gallery' : 'study_w';        // a body standing in the aperture
+    if (doorway(room, i * DT)) flips++;
+    if (shippedRoom(room)) shippedFlips++;
+  }
+  t('E12c · a runner standing in a doorway does not relight the house sixty times a second',
+    flips === 0, `${flips} room changes across 90 s of flicker`);
+  t('E12c control · the shipped test relights it on every frame of that same flicker',
+    shippedFlips === FRAMES, `${shippedFlips} changes — the 3450 that were measured, at a lower frame rate`);
+
+  const walk = roomGate(ROOM_SETTLE);
+  let arrivals = 0, at = null;
+  for (let i = 0; i < FRAMES; i++) {
+    const room = ROOMS[Math.floor(i / (FRAMES / 6)) % ROOMS.length];
+    const got = walk(room, i * DT);
+    if (got) { arrivals++; at = got; }
+  }
+  t('E12d · but a runner who actually walks through the house still arrives, six times',
+    arrivals === 6 && at === ROOMS[5],
+    `${arrivals} arrivals, last in ${at} — the settle is ${ROOM_SETTLE}s, not a mute`);
 }
 
 // ---------------------------------------------------------------- E11 · the brief is read
