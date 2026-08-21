@@ -26,3 +26,11 @@ Thumbs.db
 *.log
 __pycache__/
 *.pyc
+
+# Control-mirror scratch. `party-private` and `party-surface` build a dot-prefixed copy of the
+# shipped modules, patch it, import it, and rmSync it — so these exist only while a gate is
+# running. Ignored because a KILLED run leaves them behind, and a stale mirror of entitle.js
+# sitting in the tree is exactly the kind of thing someone later mistakes for the real file.
+web-prototype/harness/.private-ctl-*/
+web-prototype/harness/.ctl-probe*/
+web-prototype/harness/.control-lease.mjs

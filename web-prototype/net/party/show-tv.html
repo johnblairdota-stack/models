@@ -437,12 +437,35 @@
      * from `nominations[]` would be the television computing game truth, which this page does not
      * do. So it reads the one event that carries it. See `onEvent` for why that is a whitelist.
      */
+    /**
+     * 🚨 **THE VOTE RECORD IS AIRED, ATTRIBUTED — AND IT WAS PROJECTED TO EVERY SOCKET AND SHOWN
+     * ON NO SCREEN.** `entitle.js` rows `tally.counts.*` and `tally.threshold` `all` and says why
+     * in its own words: *"§4: the vote record is AIRED, attributed."* This card read
+     * `frame.tally.executed` and nothing else, so the television announced WHO died and withheld
+     * the arithmetic that killed them — in the phase the whole episode builds to.
+     *
+     * Found by `wire-parity` P4c, which is the leaf-depth version of P4b written the same
+     * afternoon this was fixed for the CASTING ballot. Identical bug, one phase later, and P4b
+     * could not see either: it compares top-level frame keys, and `tally` was already read.
+     *
+     * ⚠️ ABSTENTIONS ARE THE POINT AND ARE PRINTED. `session.js`'s threshold is more than half
+     * the LIVING, so abstaining protects the accused — a table that sees only the counts cannot
+     * tell a room that split from a room that mostly declined to swing. The gap between the
+     * winning count and the threshold is the whole story of a survived vote.
+     *
+     * ⚠️ AND STILL NOBODY SAYS WHAT THEY WERE. Alignment has no row and never will before the
+     * Reunion — bible P6, silent death.
+     */
     EXECUTION: () => {
       const ex = frame.tally && frame.tally.executed;
       const by = execution && execution.id === ex ? execution.executioner : null;
-      return big('<span class="bad">' + esc(nameOf(ex)) + '</span> voted out',
-        by ? 'Nominated by ' + esc(swingerName(by)) + ' — who swings. Nobody says what they were.'
-          : 'The sledgehammer. Nobody says what they were.');
+      return '<div class="big">'
+        + (ex ? '<span class="bad">' + esc(nameOf(ex)) + '</span> voted out' : 'Nobody swings')
+        + '</div>'
+        + '<div class="sub">' + esc(by
+            ? 'Nominated by ' + swingerName(by) + ' — who swings. Nobody says what they were.'
+            : 'The sledgehammer. Nobody says what they were.') + '</div>'
+        + record();
     },
     // Round §4 airs the cameras as *"n of N lit"*. It read `unlocked + ' cameras live'`, which was
     // a different quantity under a third name — see `coverage.js` on the establishing camera.
@@ -500,6 +523,26 @@
    * ⚠️ AN ABSTENTION IS PRINTED, NOT OMITTED. A phone that never tapped is visibly silent —
    * dropping the row would let a dead battery look like it never sat down.
    */
+  /**
+   * The aired vote, attributed — `tally.counts` is one entry per player who drew a vote, and
+   * `threshold` is what it took. Rendered beside the execution rather than instead of it, so the
+   * room sees the arithmetic at the moment it lands.
+   */
+  function record() {
+    const t = frame.tally || {};
+    const counts = t.counts || {};
+    const rows = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+    if (!rows.length) return '';
+    const need = t.threshold;
+    return '<div class="slate"><div class="slate-h">The vote'
+      + (need != null ? ' &middot; ' + esc(String(need)) + ' to swing' : '') + '</div>'
+      + '<table><tbody>'
+      + rows.map((id) => '<tr><th>' + esc(nameOf(id)) + '</th>'
+          + '<td class="' + (need != null && counts[id] >= need ? 'bad' : 'dim') + '">'
+          + esc(String(counts[id])) + '</td></tr>').join('')
+      + '</tbody></table></div>';
+  }
+
   function slate() {
     const bs = frame.ballots || [];
     if (!bs.length) return '';

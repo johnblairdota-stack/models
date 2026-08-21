@@ -81,6 +81,7 @@
 
 import { readFileSync } from 'node:fs';
 import { createSession, CALL, MOVE_CHOICE } from '../src/party/session.js';
+import { audienceFor } from '../net/party/entitle.js';
 import { createRoom } from '../src/party/room.js';
 import { PHASE } from '../src/party/phases.js';
 import { ROOMS } from '../src/party/coverage.js';
@@ -884,6 +885,26 @@ const ON_THE_WIRE_UNRENDERED = new Map([
   ['tick', 'the phase counter — frame identity for the isolation and reconnect gates, never a pixel'],
 ]);
 
+/**
+ * P4c's exemptions, at leaf depth. Two kinds, and the difference is stated rather than blurred:
+ * a leaf the walker cannot SEE being read, and a leaf that genuinely is not read.
+ */
+const DARK_LEAVES = new Map([
+  // Walker limitation, verified by hand. `show-phone.html`'s guide view does
+  // `const g = frame.flyover || {}` inside the closure `mount()` returns, and `framePathsRead`'s
+  // alias pass is scoped to the DECLARING BLOCK — deliberately, because a file-wide scan
+  // mis-attributed `c` between `frame.call` and `frame.cameras` on the television. A nested
+  // closure defeats it. Both are rendered: `g.hunter` sets the reading's colour and `g.room` is
+  // printed through `ROOM_LABEL`.
+  ['flyover.hunter', 'read as `g.hunter` in a nested closure the block-scoped alias pass cannot follow'],
+  ['flyover.room', 'read as `g.room` in the same closure, printed through ROOM_LABEL'],
+  // NOT a walker limitation — genuinely unread, and recorded rather than deleted. The phone
+  // learns its seat from the `seated` envelope, which arrives before its first frame, so the
+  // frame's copy is surplus. It comes from `viewFor`, which the Reunion shares, so removing it
+  // here is a change to a function with another caller rather than a row deletion.
+  ['you.seat', 'surplus — the phone takes its seat from the `seated` envelope, never from a frame'],
+]);
+
 /** Property names that belong to JavaScript rather than to the frame — see P4's loop. */
 const BUILTIN = /\.(length|map|filter|find|findIndex|some|every|slice|join|forEach|sort|concat|indexOf|includes|reduce|push|reverse|flat|flatMap|keys|values|entries|toFixed|toString|padStart|padEnd|split|trim|replace|charAt|at)$/;
 
@@ -892,6 +913,14 @@ function framePathsRead(file) {
   const b = strip(src(file));
   const out = new Set();
   for (const m of b.matchAll(/\bframe((?:\.[A-Za-z_$][\w$]*)+)/g)) out.add(m[1].slice(1));
+  // ⚠️ `(frame.incident || {}).alarms` — THE GUARD IDIOM, and the bare chain regex above stops at
+  // the closing paren, so it yields `incident` and loses `alarms`. Both pages use this shape
+  // constantly (`wing()`, every `<dt>Incidents</dt>`, the whole flyover), and P4c reported nine
+  // correctly-rendered leaves as dark until it was taught this. It is one more chain form, not a
+  // parser: `(frame.a.b || …).c` is `a.b.c`.
+  for (const m of b.matchAll(/\(\s*frame((?:\.[A-Za-z_$][\w$]*)+)\s*\|\|[^)]*\)\s*\.([A-Za-z_$][\w$]*)/g)) {
+    out.add(m[1].slice(1) + '.' + m[2]);
+  }
   for (const m of b.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*[^;\n]*?\bframe((?:\.[A-Za-z_$][\w$]*)+)/g)) {
     const [, alias, chain] = m;
     const base = chain.slice(1);
@@ -972,6 +1001,88 @@ function framePathsRead(file) {
     surprises.length === 0,
     surprises.length ? `on the wire, rendered nowhere: ${surprises.join(', ')}`
       : `${unrendered.length} known-unrendered keys, each named with a reason: ${unrendered.join(', ')}`);
+  /**
+   * 🚨 **P4b COMPARES TOP-LEVEL KEYS, AND A NESTED FIELD IS INVISIBLE TO IT.** `readAnywhere` is
+   * built from `p.split('.')[0]`, so once a page reads ANY path under `you`, every future field
+   * added under `you` counts as rendered whether or not a pixel exists for it.
+   *
+   * Found by shipping one. `you.readings[]` — Continuity's dossier, the first private information
+   * in the game that is not the role card — reached real phone frames and appeared on no screen,
+   * and this gate stayed green because `you.roleName` was already read. `expedition.guideSaw` and
+   * `expedition.hunterHere` went under `expedition` the same way and would have gone the same
+   * distance if their television card had been forgotten.
+   *
+   * That is the session's own rule turned on the gate: P4b polices a real property, but the thing
+   * it measures is a coarser object than the thing at risk. So P4c asks the same question at leaf
+   * depth, where the frame actually gets added to.
+   *
+   * ⚠️ **WHAT P4c PROVES IS THAT A PATH IS MENTIONED, NOT THAT A PIXEL APPEARS.** Measured:
+   * deleting the `record()` CALL from the television's execution card leaves P4c green, because
+   * the function is still in the file and still names `frame.tally`. Deleting the function turns
+   * it red at four leaves. So P4c catches a field nothing anywhere reads — which is the bug it
+   * was built for, and the bug it actually found — and does NOT catch a field read only by dead
+   * code. Stated here rather than left for someone to discover the hard way; a page-level render
+   * assertion is a different instrument and `harness/scenarios/` is where it would live.
+   *
+   * ⚠️ **PREFIX COVERAGE IS ALLOWED ONLY ACROSS AN ARRAY HOP, AND THE CONTROL IS WHAT FORCED
+   * THAT.** The first draft counted a leaf as read whenever any read path was a prefix of it.
+   * `show-phone.html` opens with `const you = (frame && frame.you) || {}`, so `you` is itself a
+   * read path — and a plain prefix rule then covers every field under `you` that will ever exist,
+   * which is P4b's blindness rebuilt one level down. P4c passed and its control failed, which is
+   * the control doing precisely the job it is here for.
+   *
+   * A page reads `frame.players` and then `p.name` inside a `.map()`, and no static walker this
+   * file is willing to hand-roll recovers `players[].name` from that. THAT is the case worth
+   * conceding, and it is identifiable: the unfollowable step is the array hop. So a prefix counts
+   * only when the leaf crosses a `[]` at or after the prefix boundary. `you.readings[].episode`
+   * is covered by a page reading `you.readings`; `you.anythingElse` is not covered by a page
+   * reading `you`.
+   */
+  {
+    const segs = (x) => x.split('.').filter(Boolean);
+    const bare = (x) => x.replace(/\[\]$/, '');
+    const readSegs = [...new Set(PAGES.flatMap(([, file]) => [...framePathsRead(file)]))]
+      .filter(Boolean).map((r) => segs(r).map(bare));
+    const covered = (leaf) => {
+      const L = segs(leaf);
+      const Lb = L.map(bare);
+      return readSegs.some((r) => {
+        if (r.length > L.length) return false;
+        for (let i = 0; i < r.length; i++) if (r[i] !== Lb[i]) return false;
+        if (r.length === L.length) return true;                 // exact
+        // A strict prefix counts when the walker was stopped by a hop it cannot follow: an array
+        // (`players[].name` read as `p.name` inside a `.map()`), or a DYNAMIC MAP. The matrix is
+        // the authority on which segments are dynamic — `tally.counts.*` is a row, so `counts`
+        // holds one key per player and no static walker recovers `tally.counts.p2` from a page
+        // that iterates it. Asking `audienceFor` rather than pattern-matching the name means a
+        // future map is covered the moment somebody writes its row, and never before.
+        if (L.slice(r.length - 1).some((seg) => seg.endsWith('[]'))) return true;
+        return audienceFor(L.slice(0, r.length + 1).join('.').replace(/[^.]+$/, '*')) !== null;
+      });
+    };
+    const wireLeaves = [...new Set([...tv, ...phone])];
+    const dark = wireLeaves.filter((l) => !covered(l))
+      .filter((l) => !ON_THE_WIRE_UNRENDERED.has(l.split('.')[0]))
+      .filter((l) => !DARK_LEAVES.has(l));
+    t('P4c · and no LEAF on a real frame is dark — nested fields are checked, not just top keys',
+      dark.length === 0,
+      dark.length ? `on the wire, read by neither page: ${dark.join(', ')}`
+        : `${wireLeaves.length} leaf paths on real frames, every one reachable from a page read`);
+    // The same refusal P4b's arm makes: an exemption that has quietly become wrong is worse than
+    // no exemption, because it is a hole with a reassuring comment on it.
+    const staleLeaves = [...DARK_LEAVES.keys()]
+      .filter((l) => covered(l) || !wireLeaves.includes(l));
+    t('P4c arm · every leaf exemption is still on the wire and still unread — none has gone stale',
+      staleLeaves.length === 0,
+      staleLeaves.length ? `now rendered or gone from the wire, delete the entry: ${staleLeaves.join(', ')}`
+        : `${DARK_LEAVES.size} entries, each with a reason, all live`);
+
+    t('P4c control · the leaf walker tells a read leaf from an unread one, and does not let a bare `you` cover the world',
+      covered('you.roleName') && covered('you.readings[].episode')
+      && !covered('you.__nothing_reads_this__') && !covered('expedition.__invented__'),
+      'exact match yes · across an array hop yes · an invented sibling under an aliased parent NO');
+  }
+
   const stale = [...ON_THE_WIRE_UNRENDERED.keys()].filter((k) => !unrendered.includes(k));
   t('P4b arm · and every entry on that list is still genuinely unrendered',
     stale.length === 0, stale.length ? `now rendered, delete the entry: ${stale.join(', ')}` : `${ON_THE_WIRE_UNRENDERED.size} entries, all live`);
