@@ -581,11 +581,42 @@ t('X3 arm · the show played to the Reunion over real sockets',
   t('X15b control · the drift check would notice a preset the script has no card for',
     !['Sound Guy'].every((c) => goodNames.includes(c)), 'a claim the room cannot check is not a claim');
 
-  t('X15c · PREMIERE is the role card, not a text box above the button that shows you who you are',
-    /if \(p === 'PREMIERE'\) \{ box\.innerHTML = premiereCard\(\)/.test(phoneBody),
-    'the fallthrough that put an irreversible Publish on a first-timer\'s first screen is gone');
-  t('X15 control · the scan would notice a claim text field coming back',
-    (('<input id="claim" maxlength="24">').match(/<input\b/g) || []).length === 1);
+  /**
+   * 🚨 THIS ASSERTION USED TO PIN A LINE OF SOURCE AND IT FAILED ITS OWN AUTHOR. It was
+   * `/if \(p === 'PREMIERE'\) \{ box\.innerHTML = premiereCard\(\)/` — the exact shape of one
+   * statement — and it went red the moment `mount()` landed, the build-once/update-after helper
+   * that stopped the guide's CLEAR/HOLD buttons being destroyed and rebuilt 450 times an
+   * expedition. The property it names was preserved and improved; only the wording moved.
+   *
+   * A gate that pins a shape blocks the fix and calls it a regression. Pin the ROUTING: the
+   * PREMIERE branch reaches the card and never the plate, however it is spelled.
+   */
+  const premiereRoutes = (src) => {
+    const branch = src.match(/if \(p === 'PREMIERE'\)[^\n]*/);
+    return !!branch && /premiereCard/.test(branch[0]) && !/claimCard/.test(branch[0]);
+  };
+  t('X15c · PREMIERE routes to the role card, and never to the claim plate',
+    premiereRoutes(phoneBody),
+    (phoneBody.match(/if \(p === 'PREMIERE'\)[^\n]*/) || ['no PREMIERE branch in controls()'])[0].trim());
+
+  // The control edits the SHIPPED text — the regression as it actually read — and runs the same
+  // predicate over it. The arm proves the edit landed, because a splice that silently misses
+  // makes a control pass for the one reason it must never pass.
+  const fellThrough = phoneBody.replace(/if \(p === 'PREMIERE'\)[^\n]*/,
+    "if (p === 'PREMIERE') return mount('claim', claimCard, wireClaim);");
+  t('X15c control arm · the fallthrough really was spliced into the shipped text',
+    fellThrough !== phoneBody && /PREMIERE'\) return mount\('claim'/.test(fellThrough),
+    'a control that fails to apply proves nothing');
+  t('X15c control · the same predicate, on a PREMIERE that reaches the plate again',
+    !premiereRoutes(fellThrough),
+    'the predicate is what catches it, not the wording');
+
+  const noNameBox = phoneSrc.replace('id="name"', 'id="claim"');
+  t('X15 control arm · the claim field really was spliced back in', /id="claim"/.test(noNameBox));
+  t('X15 control · the scan notices a claim text field coming back',
+    !(((noNameBox.match(/<input\b/g) || []).length === 1)
+      && /id="name"/.test(noNameBox) && !/id="claim"/.test(noNameBox)),
+    'X15 re-run over a page carrying a claim box');
 
   t('X11d · the word is spelled out on the card, never colour alone — §2.3 and §6',
     /You are PRODUCTION/.test(body) && /You are GOOD/.test(body),

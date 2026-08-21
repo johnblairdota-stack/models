@@ -611,18 +611,41 @@ const fx = (n) => (n == null ? 'never' : n.toFixed(2));
   // ---- K7c · the two calls, in the source
   {
     const strip = (x) => x.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-    const game = strip(readFileSync(new URL('../src/views/game.js', import.meta.url), 'utf8'));
-    const wep = strip(readFileSync(new URL('../src/game/weapons.js', import.meta.url), 'utf8'));
+    const gameSrc = readFileSync(new URL('../src/views/game.js', import.meta.url), 'utf8');
+    const wepSrc = readFileSync(new URL('../src/game/weapons.js', import.meta.url), 'utf8');
+    /**
+     * ⚠️ **THE CONTROL WAS HALF A STRING LITERAL AND HALF A COPY OF THE ASSERTION.**
+     * `/hunter\.onStagger\s*=/.test('hunter.onStagger = () => {};')` proved a regex compiles, and
+     * the other half re-ran K7c2's own predicate over the same file — a restatement, not a
+     * control. Both claims are one scan over text now, and each control feeds it the shipped
+     * source with one real edit applied.
+     */
+    const scan = (game, wep) => ({
+      subscribes: /hunter\.onStagger\s*=/.test(strip(game)),
+      hookGone: !/onBodyHit/.test(strip(wep)),
+      handBack: /return \{ kind: 'body', point, body, socket, item \}/.test(strip(wep)),
+    });
+    const shipped = scan(gameSrc, wepSrc);
     t('K7c · `views/game.js` subscribes — it is the mode whose player can cause a break',
-      /hunter\.onStagger\s*=/.test(game),
+      shipped.subscribes,
       'the party runner has no weapon, so there is nothing for it to subscribe to');
     t('K7c2 · and `WeaponSystem.onBodyHit` is gone rather than left announcing into nothing',
-      !/onBodyHit/.test(wep) && /return \{ kind: 'body', point, body, socket, item \}/.test(wep),
+      shipped.hookGone && shipped.handBack,
       'the caller already gets `{socket, item}` back from `hitBody` on the same call');
-    t('K7c control · and the scan would find either of them coming back',
-      /hunter\.onStagger\s*=/.test('hunter.onStagger = () => {};')
-      && /onBodyHit/.test(strip(readFileSync(new URL('../src/game/weapons.js', import.meta.url), 'utf8'))) === false,
-      'the weapons scan is over the stripped source, so the note that records the deletion does not satisfy it');
+
+    const unsubscribed = gameSrc.replace('  hunter.onStagger = (breakChain) => {', '  hunter.setTargets([playerBody]); {');
+    const rehooked = wepSrc.replace(
+      "    return { kind: 'body', point, body, socket, item };",
+      "    this.onBodyHit?.(body, socket, item);\n    return { kind: 'body', point, body, socket, item };");
+    t('K7c mutation arm · both edits landed on the shipped files — the controls below are not no-ops',
+      unsubscribed !== gameSrc && rehooked !== wepSrc,
+      'the stagger subscription removed from game.js · onBodyHit put back into weapons.js');
+    t('K7c control · delete the subscription from the shipped `game.js` and K7c goes red',
+      !scan(unsubscribed, wepSrc).subscribes && scan(unsubscribed, wepSrc).hookGone,
+      'nothing listens for a stagger, and the scan says so');
+    t('K7c2 control · put `onBodyHit` back into the shipped `weapons.js` and K7c2 goes red',
+      !scan(gameSrc, rehooked).hookGone && scan(gameSrc, rehooked).handBack,
+      'the scan is over stripped source, so the note recording the deletion does not satisfy it either way');
   }
 }
 

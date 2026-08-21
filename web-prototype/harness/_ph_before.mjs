@@ -213,12 +213,21 @@ proxy.accepting = false; proxy.cutAll();       // the socket dies; reconnects fa
 await sleep(700);
 console.log(`  bar reads: ${JSON.stringify(await b.js(`document.getElementById('state').textContent`))}`);
 await b.js(`window.__sent.length = 0; 1`);
-if (vb) { await press(vb); await sleep(80); await release(vb); }
+await b.js(`window.__clicks.length = 0; 1`);
+const vb2 = await rect('#controls [data-vote]');
+console.log(`  rect before outage ${JSON.stringify(vb)} / now ${JSON.stringify(vb2)}`);
+if (vb2) { await press(vb2); await sleep(80); await release(vb2); }
 await sleep(300);
+console.log(`  click during outage: ${JSON.stringify(await b.js(`window.__clicks`))}`);
+console.log(`  banner: ${JSON.stringify(await b.js(`document.getElementById('offair').textContent`))}`);
+console.log(`  chosen shown: ${await b.js(`!!document.querySelector('#controls [data-vote].on')`)}`);
 console.log(`  page sent during the outage: ${JSON.stringify(await b.js(`window.__sent.map(x=>x.d.slice(0,60))`))}`);
 console.log(`  any visible sign the tap was lost: ${JSON.stringify((await b.js(`document.body.textContent`)).match(/held|queued|off air|no signal|not sent/i))}`);
 proxy.accepting = true;
-await sleep(1400);
+for (let i = 0; i < 40; i++) { await sleep(250); if (await b.js(`document.getElementById('state').textContent`) === 'connected') break; }
+await sleep(500);
+console.log(`  banner after: ${JSON.stringify(await b.js(`document.getElementById('offair').textContent`))}`);
+console.log(`  refused note: ${JSON.stringify(await b.js(`document.getElementById('refused').textContent`))}`);
 console.log(`  after reconnect, page sent: ${JSON.stringify(await b.js(`window.__sent.map(x=>x.d.slice(0,60))`))}`);
 sess.skip(Date.now()); await sleep(300);
 console.log(`  tally: ${JSON.stringify(sess.state.tally)}`);

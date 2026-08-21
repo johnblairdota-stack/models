@@ -20,7 +20,7 @@ export function play({castSeed,worldSeed}){
   const al=Object.fromEntries(s.truth().seats.map(x=>[x.id,x.alignment]));
   return {s,state,events,log:s.log.all(),ctx:{alignmentOf:id=>al[id]}};
 }
-if(process.argv[1].endsWith('_ru_probe7.mjs')){
+if((process.argv[1]||'').endsWith('_ru_probe7.mjs')){
   const hits=[];const deck=new Map();
   for(let seed=1;seed<=120;seed++){
     const r=play({castSeed:seed*41,worldSeed:seed});

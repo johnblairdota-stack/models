@@ -55,7 +55,15 @@
   button.kill{background:var(--gone);color:#1a0605;border-color:transparent}
   button.on{outline:3px solid var(--warn);outline-offset:-3px}
   button:disabled{opacity:.35}
-  button .sw{width:18px;height:18px;border-radius:50%;flex:none}
+  button .sw{width:20px;height:20px;border-radius:50%;flex:none}
+  /* 🚨 THE SWATCH CARRIES THE SEAT NUMBER, NOT JUST A HUE — §6, *"no information anywhere is
+     carried by hue alone"*. The seat palette has measured deuteranope confusions at ΔE2000 3.3
+     (seat 2 vs seat 5) and 4.6 (seat 6 vs seat 7), which is the same colour; and three guests all
+     called "Sam" is a real table, at which point the dot is the only discriminator there is.
+     The number is the one the television draws inside its own dot, so the two screens agree. */
+  .sw{display:flex;align-items:center;justify-content:center;font:700 12px/1 ui-sans-serif;
+      color:#0b0d12;font-variant-numeric:tabular-nums}
+  .bar .sw{font-size:11px}
   input{width:100%;background:#0d1017;border:1px solid var(--edge);border-radius:12px;color:var(--ink);
         font:600 20px/1.2 inherit;padding:14px;outline:none}
   .two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
@@ -70,7 +78,7 @@
   /* the nameplate rail — round §1's phase table gives DEBRIEF "claims/nameplates only" */
   .plate{display:flex;align-items:baseline;gap:8px;padding:7px 0;border-bottom:1px solid var(--edge)}
   .plate:last-of-type{border-bottom:0}
-  .plate .sw{width:14px;height:14px;border-radius:50%;flex:none;align-self:center}
+  .plate .sw{width:18px;height:18px;border-radius:50%;flex:none;align-self:center;font-size:11px}
   .plate .say{margin-left:auto;font-style:italic;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
   /* the card */
@@ -90,6 +98,15 @@
   .holdnote{font:600 13px/1.4 ui-sans-serif;letter-spacing:.18em;text-transform:uppercase;
             color:var(--dim);text-align:center}
   .flag.lit .holdnote{color:var(--live)}
+
+  /* 🚨 OFF AIR — the banner `act()` raises when a tap cannot leave the phone. It is deliberately
+     the loudest thing on the screen and deliberately NOT the top strip: the strip already says
+     `reconnecting…` at 13px in the same slot that normally says `connected`, and a player who has
+     just tapped a name is not reading the strip. */
+  .offair{position:fixed;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:8;
+          background:var(--gone);color:#1a0605;border-radius:14px;padding:12px 14px;text-align:center;
+          font:600 17px/1.3 ui-sans-serif;box-shadow:0 8px 28px rgba(0,0,0,.55)}
+  .offair b{display:block;font:700 13px/1.5 ui-sans-serif;letter-spacing:.16em;text-transform:uppercase}
 </style>
 
 <div class="bar" id="bar">
@@ -114,6 +131,9 @@
   <button id="cardBtn" style="margin-top:14px">🎴 <span>Your card — hold to read</span></button>
   <div class="note" id="refused"></div>
 </div>
+
+<!-- 🚨 A TAP THAT COULD NOT BE SENT SAYS SO. `act()` raises this; nothing else touches it. -->
+<div class="offair hide" id="offair"></div>
 
 <!-- the card, full screen, blurred until a finger is held on it — §2.3 -->
 <div class="flag hide" id="cardView">
@@ -143,7 +163,7 @@
    * refer to people out loud. Same array the TV draws its circle from, same colours.
    */
   let roster = [];
-  let pickRunner = null, pickGuide = null, lastPhase = null;
+  let pickRunner = null, pickGuide = null, lastPhase = null, myVote = null;
 
   $('name').value = localStorage.getItem(NKEY) || '';
   $('go').onclick = () => {
@@ -180,7 +200,63 @@
   });
   for (const ev of ['pointerup', 'pointercancel']) $('cardView').addEventListener(ev, () => lit(false));
 
-  const act = (msg) => ws && ws.readyState === 1 && ws.send(JSON.stringify({ t: 'act', msg }));
+  /**
+   * 🚨 **A TAP THAT CANNOT LEAVE THE PHONE IS HELD AND SAID OUT LOUD — IT USED TO EVAPORATE.**
+   *
+   * This was `ws && ws.readyState === 1 && ws.send(…)`, and when that short-circuited **nothing
+   * happened at all**: no disabled state, no queue, no message, and the controls stayed fully
+   * enabled and fully interactive. The only sign was the top strip changing from `connected` to
+   * `reconnecting…` — 13px, uppercase, in the same slot, above a screen the player is not looking
+   * at, because they are looking at the name they just tapped.
+   *
+   * The trace this comes from: a screen locks during the 75-second DEBRIEF, the player picks it up
+   * as the VOTE opens, there is half a second of dead socket, they tap a name, nothing visible
+   * happens, they tap again. It lands on the one action in the game with a hard 25-second deadline
+   * and no second chance.
+   *
+   * So the tap is **kept** — one of them, the most recent, because a controller that replays a
+   * queue is worse than one that drops it — and it goes the instant the seat is back. Two rules
+   * bound it, and both exist so a held tap can never become a tap somebody did not make:
+   *
+   *   · **the phase must not have moved.** A `vote` composed in the VOTE and delivered in the
+   *     EXECUTION is a different act. The server would refuse it anyway; the phone must not have
+   *     asked.
+   *   · **and it expires.** `HOLD_MS` is one phase's worth of patience, not the evening's.
+   *
+   * Either way `#offair` says which happened, because the failure this replaces was silent.
+   */
+  const HOLD_MS = 20000;
+  let held = null;
+
+  function act(msg) {
+    if (wireLive()) { ws.send(JSON.stringify({ t: 'act', msg })); return true; }
+    held = { msg, phase: frame && frame.phase, at: Date.now() };
+    offair();
+    return false;
+  }
+
+  function flushHeld() {
+    if (!held || !wireLive()) return;
+    const h = held;
+    held = null;
+    if (h.phase !== (frame && frame.phase) || Date.now() - h.at > HOLD_MS) {
+      $('refused').innerHTML = '<span class="warn">Your ' + esc(h.msg.t)
+        + ' never left this phone — it was off air, and the moment passed. Say it out loud.</span>';
+    } else {
+      ws.send(JSON.stringify({ t: 'act', msg: h.msg }));
+    }
+    offair();
+  }
+
+  /** The banner. Raised by `act()`, lowered by the watchdog the moment the wire is back. */
+  function offair() {
+    const box = $('offair'), down = !wireLive();
+    box.classList.toggle('hide', !down);
+    if (!down) { box.innerHTML = ''; return; }
+    box.innerHTML = held
+      ? '<b>Off air — your tap is held</b>It goes the moment this phone is back. Nothing is lost.'
+      : '<b>Off air</b>Nothing you tap can leave this phone yet.';
+  }
 
   function join() {
     ws.send(JSON.stringify({
@@ -256,16 +332,65 @@
     REUNION: 'It is over. Look up.',
   };
 
+  /**
+   * 🚨 **THE CONTROLS ARE BUILT ONCE PER SHEET AND UPDATED AFTER THAT. THEY USED TO BE DESTROYED
+   * AND REBUILT ON EVERY FRAME, AND THAT ATE ROUGHLY HALF THE GUIDE'S TAPS.**
+   *
+   * Measured, in Chromium, against a real `show.mjs`: during a wired expedition the **guide's**
+   * phone receives one `state` frame per simulator report at 5 Hz — **450 frames in 90 seconds**,
+   * while every other phone in the room receives only pings. `render()` ran on every one of them
+   * and every branch below began `box.innerHTML = …`, so the `<canvas id="map">` and the
+   * `CLEAR`/`HOLD` buttons were thrown away and remade 450 times per expedition. Two costs:
+   *
+   *   · `drawMap` reallocated the canvas backing store 450 times (measured: 50 writes over 50
+   *     frames, one per frame, every one of them a fresh allocation and a clear).
+   *   · **a `pointerdown` on CLEAR and a `pointerup` ~100 ms later landed on different DOM nodes.**
+   *     The browser then fires `click` on the common ancestor — or, when the pressed node is gone,
+   *     fires nothing at all — and no handler runs. Measured: a press, one frame, a release, and
+   *     the server heard **nothing** (`call.said = null`); the identical press with no frame
+   *     between it and the release was heard as `HOLD`. With a 200 ms rebuild period and a ~100 ms
+   *     tap that is about half of every CLEAR and HOLD, silently, with no feedback of any kind.
+   *
+   * The same measurement on the casting ballot: **8 of 8** taps landed with no frame mid-tap and
+   * **0 of 8** landed when another player's ballot arrived between the press and the release.
+   *
+   * So a sheet declares a **structural key**. The key changes when the sheet's SHAPE changes — a
+   * map appears, the call has been made, a chair has been spent, the list of the living changes —
+   * and only then is the DOM rebuilt. Every other frame runs the sheet's own `update`, which
+   * writes text and classes into nodes that keep their identity for as long as the player can see
+   * them. A tap that starts on a button ends on the same button.
+   *
+   * ⚠️ THE KEY MUST COVER EVERYTHING THE HTML BRANCHES ON, or a sheet goes stale — which is the
+   * failure mode a rebuild-everything render can never have and this one can. Each key below is
+   * built beside the html it guards, from the same values, for exactly that reason.
+   */
+  let sheetKey = null, sheetUpdate = null, sheetDrop = null;
+
+  function mount(key, html, wire) {
+    if (key === sheetKey && sheetUpdate) { sheetUpdate(); return; }
+    if (sheetDrop) { sheetDrop(); sheetDrop = null; }
+    sheetKey = key;
+    $('controls').innerHTML = html();
+    sheetUpdate = (wire && wire()) || null;
+    if (sheetUpdate) sheetUpdate();
+  }
+
+  /** The Reunion writes `#controls` directly, so the sheet under it has to be forgotten. */
+  function dropSheet() {
+    if (sheetDrop) { sheetDrop(); sheetDrop = null; }
+    sheetKey = null; sheetUpdate = null;
+  }
+
+  /** §2.11's window: whether the refuse button is on this sheet at all is a structural fact. */
+  const refuseKey = () => (refuseCard() ? 'refuse' : 'spent');
+
   function controls() {
-    const box = $('controls');
     if (!alive()) {
       // C1: the dead get the chat and the Reunion. No ghost UI, by design.
-      box.innerHTML = '<div class="card"><div class="say">You are out. You keep your voice and nothing else — '
-        + 'no vote, no nominations. Stay in the room; the Reunion is coming.</div></div>';
-      return;
+      return mount('dead', () => '<div class="card"><div class="say">You are out. You keep your voice and nothing else — '
+        + 'no vote, no nominations. Stay in the room; the Reunion is coming.</div></div>');
     }
     const p = frame.phase;
-    const acted = frame.you && frame.you.acted;
 
     /**
      * 🚨 SEQUENTIAL, ONE LIST — round §2, in its own words: *"Every living player makes exactly two
@@ -278,28 +403,48 @@
      * message would let the bell catch a ballot with a runner and no guide — a half-vote nobody
      * cast, scoring one person and not the other. `CONFIRM PAIR` sends both picks in one message
      * or sends nothing, so the ballot the server tallies is always a ballot somebody finished.
+     *
+     * ⚠️ AND THE TWO TAPS ARE THE REASON THIS SHEET IS KEYED ON THE LIVING AND NOTHING ELSE. The
+     * heading, the chair badges, the flattening and the button's own label all move on a pick —
+     * every one of them a text or a class, none of them a node. The ballot is rebuilt when
+     * somebody DIES, and at no other time.
      */
     if (p === 'CASTING') {
-      const full = !!(pickRunner && pickGuide);
-      box.innerHTML = '<div class="card"><h3>' + (pickRunner ? (full ? 'Your pair' : 'Now your guide') : 'First, your runner') + '</h3>'
-        + castButtons(full) + '</div>'
-        + '<button class="big stop" id="sendCast"' + (full ? '' : ' disabled') + '>'
-        + (acted ? 'Change your pair' : 'Confirm pair') + '</button>'
-        + '<div class="note">Two taps: the first is who runs, the second is who guides. '
-        + 'Nothing is sent until you confirm — and nobody sees your ballot until the bell.</div>';
-      for (const b of box.querySelectorAll('[data-pick]')) {
-        b.onclick = () => {
-          const id = b.dataset.pick.split('|')[1];
-          if (pickRunner === id) pickRunner = null;
-          else if (pickGuide === id) pickGuide = null;
-          else if (!pickRunner) pickRunner = id;
-          else if (!pickGuide) pickGuide = id;
-          controls();
-        };
-      }
-      // One message, both picks, or no message at all.
-      $('sendCast').onclick = () => { if (pickRunner && pickGuide) act({ t: 'cast', runner: pickRunner, guide: pickGuide }); };
-      return;
+      return mount('cast|' + living().map((x) => x.id).join(','),
+        () => '<div class="card"><h3 id="castHead"></h3>' + castButtons() + '</div>'
+          + '<button class="big stop" id="sendCast"></button>'
+          + '<div class="note">Two taps: the first is who runs, the second is who guides. '
+          + 'Nothing is sent until you confirm — and nobody sees your ballot until the bell.</div>',
+        () => {
+          for (const b of $('controls').querySelectorAll('[data-pick]')) {
+            b.onclick = () => {
+              const id = b.dataset.pick.split('|')[1];
+              if (pickRunner === id) pickRunner = null;
+              else if (pickGuide === id) pickGuide = null;
+              else if (!pickRunner) pickRunner = id;
+              else if (!pickGuide) pickGuide = id;
+              controls();
+            };
+          }
+          // One message, both picks, or no message at all.
+          $('sendCast').onclick = () => { if (pickRunner && pickGuide) act({ t: 'cast', runner: pickRunner, guide: pickGuide }); };
+          return () => {
+            const full = !!(pickRunner && pickGuide);
+            $('castHead').textContent = pickRunner ? (full ? 'Your pair' : 'Now your guide') : 'First, your runner';
+            for (const b of $('controls').querySelectorAll('[data-pick]')) {
+              const id = b.dataset.pick.split('|')[1];
+              const role = pickRunner === id ? 'RUNNER' : pickGuide === id ? 'GUIDE' : null;
+              b.classList.toggle('on', !!role);
+              // A name already taken stays live so it can be given back; every other name goes
+              // flat once both chairs are full — §2.6's most expensive input error.
+              b.disabled = full && !role;
+              paintPerson(b, id, role ? '▶ ' + role : null, !!role);
+            }
+            const send = $('sendCast');
+            send.disabled = !full;
+            send.textContent = (frame.you && frame.you.acted) ? 'Change your pair' : 'Confirm pair';
+          };
+        });
     }
 
     if (p === 'EXPEDITION') {
@@ -310,24 +455,41 @@
         // a lie and an honest mistake look the same from the sofa.
         // The map, when the house is real. Marks and the floor plan arrive together and only for
         // a socket the matrix entitles — this page does no filtering and must never start.
-        const map = (f.plan && f.plan.length)
-          ? '<canvas id="map" style="width:100%;aspect-ratio:4/3;background:#0d1017;border-radius:12px;margin-bottom:10px"></canvas>'
-          : '';
-        const read = f.hunter
-          ? '<div class="big bad" style="font:700 26px/1 ui-sans-serif">HUNTER — ' + esc(f.room || '?') + '</div>'
-          : '<div class="big" style="font:700 26px/1 ui-sans-serif;color:var(--dim)">NO SIGNAL</div>';
-        box.innerHTML = '<div class="card"><h3>Your cameras</h3>' + map + read
-          + '<div class="note">' + (f.hunter ? 'A live camera has it.'
-            : 'Nothing in ' + wing() + '. That is not the same as empty.') + '</div></div>'
-          + (frame.call && frame.call.said
-            ? '<div class="card" style="margin-top:10px"><div class="say">You called <b>' + esc(frame.call.said) + '</b>.</div></div>'
-            : '<div class="two" style="margin-top:10px">'
-              + '<button class="big go" id="cl">CLEAR</button><button class="big stop" id="hd">HOLD</button></div>')
-          + refuseCard();
-        if ($('cl')) { $('cl').onclick = () => act({ t: 'call', call: 'CLEAR' }); $('hd').onclick = () => act({ t: 'call', call: 'HOLD' }); }
-        wireRefuse();
-        drawMap(f);
-        return;
+        const hasMap = !!(f.plan && f.plan.length);
+        const called = !!(frame.call && frame.call.said);
+        // 🚨 THE KEY, AND EVERY TERM IN IT IS A SHAPE. Whether there is a map, whether the buttons
+        // have been replaced by what you said, and whether the chair is still refusable. The
+        // reading itself — HUNTER or NO SIGNAL, and which room — is text, so it is an update, and
+        // that is what keeps CLEAR and HOLD alive under 450 frames.
+        return mount('guide|' + (hasMap ? 'map' : 'blind') + '|' + (called ? 'said' : 'open') + '|' + refuseKey(),
+          () => '<div class="card"><h3>Your cameras</h3>'
+            + (hasMap ? '<canvas id="map" style="width:100%;aspect-ratio:4/3;background:#0d1017;border-radius:12px;margin-bottom:10px"></canvas>' : '')
+            + '<div class="big" id="read" style="font:700 26px/1 ui-sans-serif"></div>'
+            + '<div class="note" id="readNote"></div></div>'
+            + (called
+              ? '<div class="card" style="margin-top:10px"><div class="say">You called <b id="saidWord"></b>.</div></div>'
+              : '<div class="two" style="margin-top:10px">'
+                + '<button class="big go" id="cl">CLEAR</button><button class="big stop" id="hd">HOLD</button></div>')
+            + refuseCard(),
+          () => {
+            if ($('cl')) { $('cl').onclick = () => act({ t: 'call', call: 'CLEAR' }); $('hd').onclick = () => act({ t: 'call', call: 'HOLD' }); }
+            wireRefuse();
+            return () => {
+              const g = frame.flyover || {};
+              const read = $('read');
+              read.className = 'big' + (g.hunter ? ' bad' : '');
+              read.style.color = g.hunter ? '' : 'var(--dim)';
+              // 🚨 AND THE ROOM IS NAMED THE WAY THE ROOM IS NAMED. This printed `f.room` raw, so
+              // the guide's own screen — the one private reading in the game — said
+              // `HUNTER — study_w` while the television beside it said THE WEST STUDY. Same
+              // `ROOM_LABEL` this page already carries for `wing()`; same fix as the television's.
+              read.textContent = g.hunter ? 'HUNTER — ' + (ROOM_LABEL[g.room] || g.room || '?') : 'NO SIGNAL';
+              $('readNote').textContent = g.hunter ? 'A live camera has it.'
+                : 'Nothing in ' + wing() + '. That is not the same as empty.';
+              if ($('saidWord')) $('saidWord').textContent = (frame.call && frame.call.said) || '';
+              drawMap(g);
+            };
+          });
       }
       if (amRunner()) {
         // 🚨 THE RUNNER IS NOT SHOWN THE WORD, AND THAT IS BROADCAST §6.9 RATHER THAN AN OMISSION.
@@ -341,46 +503,77 @@
         // hears them. `player.js:638` is `noise = speed / MOVE.run`, so the ring under the stick
         // IS the noise, and choosing RUN while it is close is loud, on camera, and completely
         // deniable as panic. That is the runner's whole dual-use verb under D13.
-        if (frame.expedition && frame.expedition.live && said) { box.innerHTML = driveCard(); wireDrive(); return; }
-        box.innerHTML = said
-          ? '<div class="card"><h3>' + esc(nameOf(frame.pair && frame.pair.guide)) + ' has called it</h3>'
-            + '<div class="say">Out loud, to the room. Nothing on this phone will repeat it.</div>'
-            + '<div class="note">Waiting costs the camera. It does not cost you.</div></div>'
-            + (acted ? '<div class="card" style="margin-top:10px"><div class="say">Locked in.</div></div>'
-              : '<div class="two" style="margin-top:10px"><button class="big go" id="gogo">GO</button>'
-                + '<button class="big" id="wait">WAIT</button></div>')
-          : '<div class="card"><div class="say">Waiting for your guide.</div></div>';
-        box.innerHTML += refuseCard();
-        if ($('gogo')) { $('gogo').onclick = () => act({ t: 'move', move: 'GO' }); $('wait').onclick = () => act({ t: 'move', move: 'WAIT' }); }
-        wireRefuse();
-        return;
+        if (frame.expedition && frame.expedition.live && said) {
+          // 🚨 AND THE DRIVE SHEET IS THE ONE THAT MUST BE TORN DOWN, NOT JUST REPLACED — see
+          // `stopDrive()`. The stick's timer outlived the expedition by the whole rest of the show.
+          return mount('drive', driveCard, () => {
+            wireDrive();
+            sheetDrop = stopDrive;
+            return paintDetents;
+          });
+        }
+        return mount('run|' + (said ? 'said' : 'wait') + '|' + (frame.you && frame.you.acted ? 'locked' : 'open') + '|' + refuseKey(),
+          () => (said
+            ? '<div class="card"><h3>' + esc(nameOf(frame.pair && frame.pair.guide)) + ' has called it</h3>'
+              + '<div class="say">Out loud, to the room. Nothing on this phone will repeat it.</div>'
+              + '<div class="note">Waiting costs the camera. It does not cost you.</div></div>'
+              + (frame.you && frame.you.acted
+                ? '<div class="card" style="margin-top:10px"><div class="say">Locked in.</div></div>'
+                : '<div class="two" style="margin-top:10px"><button class="big go" id="gogo">GO</button>'
+                  + '<button class="big" id="wait">WAIT</button></div>')
+            : '<div class="card"><div class="say">Waiting for your guide.</div></div>') + refuseCard(),
+          () => {
+            if ($('gogo')) { $('gogo').onclick = () => act({ t: 'move', move: 'GO' }); $('wait').onclick = () => act({ t: 'move', move: 'WAIT' }); }
+            wireRefuse();
+            return null;
+          });
       }
-      box.innerHTML = claimCard();
-      wireClaim();
-      return;
+      return claimSheet();
     }
 
     if (p === 'RECKONING') {
-      box.innerHTML = acted
-        ? '<div class="card"><div class="say">Your nomination stands. One each.</div></div>'
-        : '<div class="card"><h3>Nominate</h3>' + peopleButtons('n', null, true) + '</div>';
-      for (const b of box.querySelectorAll('[data-pick]')) {
-        b.onclick = () => act({ t: 'nominate', target: b.dataset.pick.split('|')[1] });
-      }
-      return;
+      const acted = frame.you && frame.you.acted;
+      return mount('nom|' + (acted ? 'done' : living().filter((x) => x.id !== iAm()).map((x) => x.id).join(',')),
+        () => (acted
+          ? '<div class="card"><div class="say">Your nomination stands. One each.</div></div>'
+          : '<div class="card"><h3>Nominate</h3>' + peopleButtons('n', true) + '</div>'),
+        () => {
+          for (const b of $('controls').querySelectorAll('[data-pick]')) {
+            b.onclick = () => act({ t: 'nominate', target: b.dataset.pick.split('|')[1] });
+          }
+          return () => { for (const b of $('controls').querySelectorAll('[data-pick]')) paintPerson(b, b.dataset.pick.split('|')[1]); };
+        });
     }
 
+    /**
+     * 🚨 THE VOTE SHEET TAKES TAPS TOO, AND IT WAS REBUILT EVERY TIME ANYBODY ELSE VOTED. Eight
+     * living players is up to eight rebuilds inside a 25-second window with no clock stop, each
+     * one able to swallow a tap that straddles it. Same key, same reason: the nominations are the
+     * shape and everything else is text.
+     *
+     * ⚠️ AND YOUR OWN CHOICE IS NOW SHOWN, LOCALLY, THE INSTANT YOU TAP IT — §5, *"each shows a
+     * local pressed/pending state instantly"*. Nothing is revealed to anybody: the server has
+     * always known who you voted for and the television still shows nothing until the bell. What
+     * changes is that a tap on this sheet now looks like a tap.
+     */
     if (p === 'VOTE') {
       const noms = frame.nominations || [];
-      if (!noms.length) { box.innerHTML = '<div class="card"><div class="say">Nobody was nominated. Nothing to vote on.</div></div>'; return; }
-      box.innerHTML = '<div class="card"><h3>Execute</h3>'
-        + noms.map((n) => '<button data-vote="' + n.target + '">'
-          + swatch(n.target) + esc(nameOf(n.target))
-          + '<span class="say" style="margin-left:auto">by ' + esc(nameOf(n.nominator)) + '</span></button>').join('')
-        + '<button data-vote="NO_ONE">Abstain — protect them all</button>'
-        + '<div class="note">You can change it until the clock runs out. Nothing is shown until then.</div></div>';
-      for (const b of box.querySelectorAll('[data-vote]')) b.onclick = () => act({ t: 'vote', choice: b.dataset.vote });
-      return;
+      if (!noms.length) return mount('vote|none', () => '<div class="card"><div class="say">Nobody was nominated. Nothing to vote on.</div></div>');
+      return mount('vote|' + noms.map((n) => n.target + '<' + n.nominator).join(','),
+        () => '<div class="card"><h3>Execute</h3>'
+          + noms.map((n) => '<button data-vote="' + esc(n.target) + '">'
+            + swatch(n.target) + esc(nameOf(n.target))
+            + '<span class="say" style="margin-left:auto">by ' + esc(nameOf(n.nominator)) + '</span></button>').join('')
+          + '<button data-vote="NO_ONE">Abstain — protect them all</button>'
+          + '<div class="note">You can change it until the clock runs out. Nothing is shown until then.</div></div>',
+        () => {
+          for (const b of $('controls').querySelectorAll('[data-vote]')) {
+            b.onclick = () => { myVote = b.dataset.vote; act({ t: 'vote', choice: b.dataset.vote }); controls(); };
+          }
+          return () => {
+            for (const b of $('controls').querySelectorAll('[data-vote]')) b.classList.toggle('on', myVote === b.dataset.vote);
+          };
+        });
     }
 
     /**
@@ -401,18 +594,16 @@
      * reveal, so it is a thing you can check rather than a thing left on screen. Nothing else.
      */
     if (DARK.includes(p)) {
-      box.innerHTML = '<div class="card"><div class="down">Phones down — talk</div>'
-        + '<div class="say">' + esc(DARK_SAY[p]) + '</div></div>';
-      return;
+      return mount('dark|' + p, () => '<div class="card"><div class="down">Phones down — talk</div>'
+        + '<div class="say">' + esc(DARK_SAY[p]) + '</div></div>');
     }
 
     // 🚨 PREMIERE IS THE CARD AND NOTHING ELSE. It fell through to the claim plate, so a
     // first-time player's first sight of the game was a text box and a permanent public Publish
     // button, above the button that shows them who they are.
-    if (p === 'PREMIERE') { box.innerHTML = premiereCard(); return; }
+    if (p === 'PREMIERE') return mount('premiere', premiereCard);
 
-    box.innerHTML = claimCard();
-    wireClaim();
+    return claimSheet();
   }
 
   /** Round §1's phase table, `Phones` column: the rows that read "dark". */
@@ -436,8 +627,17 @@
     if (!c || !f.plan) return;
     const dpr = Math.min(2, devicePixelRatio || 1);
     const w = c.clientWidth, h = Math.round(w * 0.75);
-    c.width = w * dpr; c.height = h * dpr;
-    const g = c.getContext('2d'); g.scale(dpr, dpr);
+    /**
+     * ⚠️ ASSIGNING `width` REALLOCATES THE BACKING STORE AND WIPES IT, EVEN WHEN THE VALUE IS THE
+     * ONE ALREADY THERE. This ran unconditionally on a function called once per frame, so a guide
+     * at 5 Hz threw away and re-allocated a 423×317 device-pixel buffer 450 times an expedition
+     * for no reason at all. It is set only when the element has actually changed size — and
+     * because a resize is what resets the transform, the transform is now set explicitly rather
+     * than multiplied on by `scale()`.
+     */
+    const W = Math.round(w * dpr), H = Math.round(h * dpr);
+    if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
+    const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
     const xs = f.plan.flatMap((r) => [r.x0, r.x1]), zs = f.plan.flatMap((r) => [r.z0, r.z1]);
     const x0 = Math.min(...xs), x1 = Math.max(...xs), z0 = Math.min(...zs), z1 = Math.max(...zs);
     const pad = 10, k = Math.min((w - pad * 2) / (x1 - x0), (h - pad * 2) / (z1 - z0));
@@ -448,27 +648,70 @@
       g.fillRect(px(r.x0), pz(r.z0), (r.x1 - r.x0) * k, (r.z1 - r.z0) * k);
       g.strokeRect(px(r.x0), pz(r.z0), (r.x1 - r.x0) * k, (r.z1 - r.z0) * k);
     }
-    for (const m of f.marks || []) {
-      g.beginPath();
-      g.arc(px(m.x), pz(m.z), m.kind === 'hunter' ? 7 : 5, 0, Math.PI * 2);
-      g.fillStyle = m.kind === 'hunter' ? '#e4483a' : '#4cc27a';
-      g.fill();
+    for (const m of f.marks || []) drawMark(g, m, px(m.x), pz(m.z));
+  }
+
+  /**
+   * 🚨 **THIS WAS A RED DOT AND A GREEN DOT, DISTINGUISHED OTHERWISE ONLY BY 7px AGAINST 5px.**
+   *
+   * Under deuteranopia `#e4483a` and `#4cc27a` render as `#959529` and `#a7a77e` — two olive dots
+   * on a dark plan, at a glance, on a 390px screen, under a 90-second clock. This is the **only
+   * private information in the entire game**, on the phone of the one player whose whole job is to
+   * read it and say what it means out loud, and eight percent of the men at any party cannot.
+   *
+   * `rrr-broadcast.md` §4 is the rule — *"every state change carries a non-colour channel"* — and
+   * `rrr-phone-ux.md` §4 is the shape: *"Marks are shapes first. Runner = filled triangle pointing
+   * along heading. Hunter = hollow ring, its stroke thickening with `awareness`. Objective =
+   * square. Each has a one-word label. Colour is redundant."* Three channels ship here:
+   *
+   *   · **fill against hole.** The Hunter is a ring with the floor showing through it; you are a
+   *     solid disc. That difference survives any colour transform, including a monochrome screen.
+   *   · **a light rim on both**, so each mark separates from the plan by luminance and not by hue.
+   *   · **a word.** `HUNTER` and `YOU`, in caps, knocked out of a dark halo so they read over a
+   *     room fill. The television does the equivalent by putting the seat number inside the dot.
+   *
+   * ⚠️ AND THE RUNNER IS A DISC RATHER THAN §4'S TRIANGLE, DELIBERATELY. A triangle *points*, and
+   * `session.js`'s marks carry `{x, z, kind}` and no heading — so a triangle here would be
+   * pointing somewhere nobody sent, which on a guide's map is worse than a circle. The shape is
+   * available the moment a heading is on the mark; that belongs to the frame, not to this file.
+   */
+  function drawMark(g, m, x, y) {
+    const hunter = m.kind === 'hunter';
+    if (hunter) {
+      g.beginPath(); g.arc(x, y, 9, 0, Math.PI * 2);
+      g.strokeStyle = '#e4483a'; g.lineWidth = 4.5; g.stroke();
+      g.beginPath(); g.arc(x, y, 11.5, 0, Math.PI * 2);
+      g.strokeStyle = '#f2f4f8'; g.lineWidth = 1.5; g.stroke();
+    } else {
+      g.beginPath(); g.arc(x, y, 6, 0, Math.PI * 2);
+      g.fillStyle = '#4cc27a'; g.fill();
+      g.strokeStyle = '#f2f4f8'; g.lineWidth = 1.5; g.stroke();
     }
+    mapLabel(g, hunter ? 'HUNTER' : 'YOU', x, y + (hunter ? 23 : 19));
+  }
+
+  /** A word, knocked out of its own halo so it survives whatever room fill is under it. */
+  function mapLabel(g, txt, x, y) {
+    g.font = '700 12px ui-sans-serif,system-ui,-apple-system,sans-serif';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.lineJoin = 'round'; g.lineWidth = 4; g.strokeStyle = '#0d1017';
+    g.strokeText(txt, x, y);
+    g.fillStyle = '#f2f4f8'; g.fillText(txt, x, y);
   }
 
   // ---------------------------------------------------------------- the runner's stick
-  let heading = 0, detent = 0, driveTimer = null;
+  let heading = 0, detent = 0, driveTimer = null, driveTail = null, driveAt = 0;
   const DETENTS = ['STILL', 'CREEP', 'WALK', 'RUN'];
   function driveCard() {
     return '<div class="card"><h3>Drive</h3>'
       + '<canvas id="stick" style="width:100%;aspect-ratio:1/1;background:#0d1017;border-radius:16px;touch-action:none"></canvas>'
       + '<div class="note">Drag to steer. The ring is how far your noise carries.</div></div>'
       + '<div class="card" style="margin-top:10px"><h3>Throttle</h3>'
-      + DETENTS.map((d, i) => '<button data-det="' + i + '"' + (i === detent ? ' class="on"' : '') + '>' + d + '</button>').join('')
+      + DETENTS.map((d, i) => '<button data-det="' + i + '">' + d + '</button>').join('')
       + '</div>';
   }
   function wireDrive() {
-    for (const b of document.querySelectorAll('[data-det]')) {
+    for (const b of $('controls').querySelectorAll('[data-det]')) {
       b.onclick = () => { detent = +b.dataset.det; controls(); pushDrive(); };
     }
     const c = $('stick');
@@ -483,14 +726,41 @@
     c.addEventListener('pointerdown', (e) => { c.setPointerCapture(e.pointerId); set(e); });
     c.addEventListener('pointermove', (e) => { if (c.hasPointerCapture(e.pointerId)) set(e); });
     paintStick();
-    if (driveTimer) clearInterval(driveTimer);
+    stopDrive();
     driveTimer = setInterval(pushDrive, 250);       // a held heading still has to arrive
+  }
+
+  /** The detents are a class on four buttons, so they are an update and never a rebuild. */
+  function paintDetents() {
+    for (const b of $('controls').querySelectorAll('[data-det]')) b.classList.toggle('on', +b.dataset.det === detent);
+    paintStick();
+  }
+
+  /**
+   * 🚨 **THE STICK'S TIMER OUTLIVED THE EXPEDITION BY THE REST OF THE SHOW.** `driveTimer` was
+   * never cleared: the only `clearInterval` was at the top of `wireDrive`, and `wireDrive` is not
+   * called again once EXPEDITION ends. So the moment a player had been the runner once, their
+   * phone sent `{t:'drive'}` at 4 Hz for the remaining ~25 minutes of the evening — measured, in
+   * a browser: **4.0 messages a second, still going, after the phase had moved on to RECAP.** The
+   * server drops every one of them on the phase check, silently, so nothing anywhere complained;
+   * the only cost was the radio, which is to say the battery, on the phone of the person who has
+   * just done the most work.
+   *
+   * The sheet that starts it is the sheet that stops it — `mount`'s `sheetDrop`.
+   */
+  function stopDrive() {
+    clearInterval(driveTimer); driveTimer = null;
+    clearTimeout(driveTail); driveTail = null;
   }
   function paintStick() {
     const c = $('stick'); if (!c) return;
     const dpr = Math.min(2, devicePixelRatio || 1), w = c.clientWidth, h = w;
-    c.width = w * dpr; c.height = h * dpr;
-    const g = c.getContext('2d'); g.scale(dpr, dpr);
+    // ⚠️ SAME REALLOCATION AS THE MAP'S, AND ON A HOTTER PATH: `set()` repaints on every
+    // `pointermove`, so this threw away the stick's backing store sixty times a second under a
+    // moving thumb. Sized only when the element's size actually changes.
+    const W = Math.round(w * dpr), H = Math.round(h * dpr);
+    if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
+    const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
     const cx = w / 2, cy = h / 2, R = w * 0.42;
     g.clearRect(0, 0, w, h);
     // The noise ring: `audibleRange(noise) = 14 * noise` metres, drawn to the same scale as the
@@ -504,7 +774,41 @@
     g.lineTo(cx + Math.sin(heading) * R, cy - Math.cos(heading) * R);
     g.strokeStyle = '#e0b23c'; g.lineWidth = 4; g.stroke();
   }
-  const pushDrive = () => { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'drive', heading, detent })); };
+  /**
+   * 🚨 **THE DRIVE CHANNEL WAS 15-30x DENSER THAN EVERY COMMENT ABOUT IT BELIEVED.**
+   *
+   * `views/expedition.js`'s header reasons from *"the phone sends an absolute world compass
+   * bearing at 4 Hz"*. It did not: `pointermove` called `set()` called `pushDrive()` **on every
+   * single move event**, on top of the 250 ms keep-alive. Measured here, in a real browser at a
+   * dispatch rate a headless box could sustain: **66 `drive` messages in 998 ms from one drag,
+   * all 66 relayed to the simulator**, and a real 120 Hz touchscreen doubles that again. A critic
+   * measured the relay itself has no gate whatsoever — 3000 sent, 3000 forwarded.
+   *
+   * `rrr-phone-ux.md` §5's **D-P2** is the number that ships: *"Continuous input is a LEVEL
+   * snapshot at 20 Hz"*, matching `client.js`'s `sendHz`. Leading edge plus a trailing send, so a
+   * flick that ends between ticks still delivers the heading it ended on — a throttle that drops
+   * the last sample is a stick that does not go where you put it.
+   *
+   * ⚠️ AND THE 250 ms KEEP-ALIVE STAYS, because a held heading with no movement still has to
+   * arrive. It now coalesces through the same gate rather than racing it.
+   *
+   * ⚠️ WHAT IS NOT CHANGED HERE, AND IT IS REPORTED RATHER THAN FIXED: §3.1 specifies the stick's
+   * horizontal axis as **yaw rate**, *"eased, capped at `MOVE.turnRate` (3.4 rad/s)"*, and this
+   * page sends an absolute world compass bearing instead. That is a control-scheme decision with a
+   * receiving end in somebody else's file; changing it from here would be changing the game from
+   * the controller.
+   */
+  const DRIVE_MS = 50;
+  function pushDrive() {
+    if (!ws || ws.readyState !== 1) return;
+    const now = Date.now(), wait = DRIVE_MS - (now - driveAt);
+    if (wait > 0) {
+      if (!driveTail) driveTail = setTimeout(() => { driveTail = null; pushDrive(); }, wait);
+      return;
+    }
+    driveAt = now;
+    ws.send(JSON.stringify({ t: 'drive', heading, detent }));
+  }
 
   /**
    * 🚨 REFUSE THE CHAIR — round §2. *"Once per game, a player voted into a chair may REFUSE THE
@@ -550,30 +854,42 @@
    * most damage to, because DEBRIEF is the argument. A tap is a claim; a typed sentence is an
    * exhibit.
    */
-  function claimCard() {
+  /**
+   * ⚠️ THE RAIL IS THE PART THAT MOVES. Seven other people publish claims during a 75-second
+   * DEBRIEF and each publication is a frame, so this sheet was rebuilt seven times underneath a
+   * table of seven tappable presets. The plates are written in place now; the sheet is rebuilt
+   * only when the room's shape changes — somebody dies, or your own claim goes up.
+   */
+  function claimSheet() {
     const mine = ((frame && frame.players) || []).find((p) => p.id === iAm());
-    const rail = '<div class="card" style="margin-top:10px"><h3>The table</h3>'
-      + living().filter((p) => p.id !== iAm()).map((p) =>
-        '<div class="plate">' + swatch(p.id) + '<b>' + esc(p.name) + '</b>'
-        + '<span class="say">' + (p.claim ? '\u201c' + esc(p.claim) + '\u201d' : 'undeclared') + '</span></div>').join('')
-      + '<div class="note">A nameplate is what somebody is willing to have checked. '
-      + 'Everything else is said out loud.</div></div>';
-
-    if (mine && mine.claim) {
-      return '<div class="card"><h3>Your claim</h3><div class="say">You are telling the room you are '
-        + '<b>' + esc(mine.claim) + '</b>. A published claim stands — there is no taking it back.</div></div>'
-        + rail;
-    }
-    return '<div class="card"><h3>Claim a role, or don\'t</h3>'
-      + CLAIMS.map((c) => '<button data-claim="' + esc(c) + '">' + esc(c) + '</button>').join('')
-      + '<div class="note">One tap publishes it to your nameplate on the television, for the rest '
-      + 'of the game. Blank is a statement too, and it is the default.</div></div>'
-      + rail;
-  }
-  function wireClaim() {
-    for (const b of document.querySelectorAll('[data-claim]')) {
-      b.onclick = () => act({ t: 'claim', claim: b.dataset.claim });
-    }
+    const others = living().filter((p) => p.id !== iAm());
+    return mount('claim|' + (mine && mine.claim ? 'published' : 'open') + '|' + others.map((p) => p.id).join(','),
+      () => (mine && mine.claim
+        ? '<div class="card"><h3>Your claim</h3><div class="say">You are telling the room you are '
+          + '<b>' + esc(mine.claim) + '</b>. A published claim stands — there is no taking it back.</div></div>'
+        : '<div class="card"><h3>Claim a role, or don\'t</h3>'
+          + CLAIMS.map((c) => '<button data-claim="' + esc(c) + '">' + esc(c) + '</button>').join('')
+          + '<div class="note">One tap publishes it to your nameplate on the television, for the rest '
+          + 'of the game. Blank is a statement too, and it is the default.</div></div>')
+        + '<div class="card" style="margin-top:10px"><h3>The table</h3>'
+        + others.map((p) => '<div class="plate" data-plate="' + esc(p.id) + '">' + swatch(p.id)
+          + '<b class="nm"></b><span class="say tail"></span></div>').join('')
+        + '<div class="note">A nameplate is what somebody is willing to have checked. '
+        + 'Everything else is said out loud.</div></div>',
+      () => {
+        for (const b of $('controls').querySelectorAll('[data-claim]')) {
+          b.onclick = () => act({ t: 'claim', claim: b.dataset.claim });
+        }
+        return () => {
+          for (const d of $('controls').querySelectorAll('[data-plate]')) {
+            const id = d.dataset.plate, p = ((frame && frame.players) || []).find((x) => x.id === id);
+            const sw = d.querySelector('.sw');
+            if (sw) { sw.style.background = colourOf(id); sw.textContent = p ? p.seat + 1 : ''; }
+            d.querySelector('.nm').textContent = p ? p.name : id;
+            d.querySelector('.tail').textContent = p && p.claim ? '“' + p.claim + '”' : 'undeclared';
+          }
+        };
+      });
   }
 
   /**
@@ -597,7 +913,17 @@
     // The seat's own colour is authoritative before the first roster lands, and identical after.
     return (r && r.colour) || (seat && p.seat === seat.seat ? seat.colour : '#8b93a3');
   };
-  const swatch = (id) => '<span class="sw" style="background:' + colourOf(id) + '"></span>';
+  /**
+   * 🚨 THE SWATCH SAYS WHICH SEAT, NOT JUST WHICH HUE. It was a bare empty coloured circle. Today
+   * it sits beside a name, so it is redundant rather than sole-channel — but the eight-seat
+   * palette has measured deuteranope confusions at ΔE2000 **3.3** (seat 2 blue against seat 5
+   * purple) and **4.6** (seat 6 pink against seat 7 teal), which is not "similar", it is the same
+   * colour; and the lobby accepts three guests all called Sam, at which point the dot IS the
+   * discriminator. `show-tv.html:260` already draws `p.seat + 1` inside its own dot — this is the
+   * same number, so the phone and the television name people identically.
+   */
+  const seatNo = (id) => { const p = ((frame && frame.players) || []).find((x) => x.id === id); return p ? p.seat + 1 : ''; };
+  const swatch = (id) => '<span class="sw" style="background:' + colourOf(id) + '">' + seatNo(id) + '</span>';
   /**
    * 🚨 THE PHONE NAMED THE ROOM `study_w` TOO. Same fix as the television's, same reason, same
    * copy: `src/party/captions.js`'s ROOM_LABEL, held against the original by `show-wire` X17.
@@ -614,24 +940,35 @@
    * tap that silently reassigned a chair is the mis-tap §2.6 calls the most expensive input error
    * in the game.
    */
-  function castButtons(full) {
-    return living().map((p) => {
-      const role = pickRunner === p.id ? 'RUNNER' : pickGuide === p.id ? 'GUIDE' : null;
-      return '<button data-pick="c|' + p.id + '"' + (role ? ' class="on"' : '')
-        + (full && !role ? ' disabled' : '') + '>'
-        + swatch(p.id) + esc(p.name)
-        + (role ? '<span class="say warn" style="margin-left:auto">▶ ' + role + '</span>'
-          : p.claim ? '<span class="say" style="margin-left:auto">“' + esc(p.claim) + '”</span>' : '')
-        + '</button>';
-    }).join('');
+  function castButtons() {
+    return living().map((p) => row('c|' + p.id, p)).join('');
   }
 
-  function peopleButtons(slot, chosen, excludeSelf) {
-    return living().filter((p) => !(excludeSelf && p.id === iAm())).map((p) =>
-      '<button data-pick="' + slot + '|' + p.id + '"' + (chosen === p.id ? ' class="on"' : '') + '>'
-      + swatch(p.id) + esc(p.name)
-      + (p.claim ? '<span class="say" style="margin-left:auto">“' + esc(p.claim) + '”</span>' : '')
-      + '</button>').join('');
+  function peopleButtons(slot, excludeSelf) {
+    return living().filter((p) => !(excludeSelf && p.id === iAm())).map((p) => row(slot + '|' + p.id, p)).join('');
+  }
+
+  /**
+   * One name, one button, and every part of it that MOVES is a node with a name on it. The swatch
+   * and the trailing badge are written by `paintPerson` on later frames rather than re-emitted,
+   * which is the whole difference between a list you can tap and a list that eats taps.
+   */
+  const row = (pick, p) => '<button data-pick="' + esc(pick) + '">' + swatch(p.id)
+    + '<span class="nm">' + esc(p.name) + '</span>'
+    + '<span class="say tail" style="margin-left:auto"></span></button>';
+
+  function paintPerson(b, id, badge, warn) {
+    const p = ((frame && frame.players) || []).find((x) => x.id === id);
+    const sw = b.querySelector('.sw');
+    // The roster can land after the first frame, so the colour and the number are refreshed here
+    // rather than baked into the html — otherwise the whole sheet would be grey until it rebuilt.
+    if (sw) { sw.style.background = colourOf(id); sw.textContent = p ? p.seat + 1 : ''; }
+    const nm = b.querySelector('.nm');
+    if (nm && p) nm.textContent = p.name;
+    const tail = b.querySelector('.tail');
+    if (!tail) return;
+    tail.className = 'say tail' + (warn ? ' warn' : '');
+    tail.textContent = badge || (p && p.claim ? '“' + p.claim + '”' : '');
   }
 
   function render() {
@@ -645,7 +982,7 @@
       // The card closes itself on every phase change — nobody has to remember to put it away.
       $('cardView').classList.remove('lit');
       $('cardView').classList.add('hide');
-      pickRunner = pickGuide = null;
+      pickRunner = pickGuide = myVote = null;
       lastPhase = frame.phase;
       $('refused').textContent = '';
     }
@@ -658,15 +995,79 @@
   }
 
   // ---------------------------------------------------------------- the wire
+  /**
+   * 🚨 **A SOCKET THAT REPORTS OPEN AND IS DEAD WAS NEVER DETECTED, AND THE SERVER HAS BEEN
+   * SENDING THE EVIDENCE FOUR TIMES A SECOND THE WHOLE TIME.**
+   *
+   * Reconnection was `if (document.visibilityState === 'visible' && ws.readyState > 1)`, so it
+   * depended entirely on a `close` event arriving. A NAT table expiring on a home router, or a
+   * wifi-to-cellular flap, produces a TCP connection that is gone at both ends of the middle and
+   * OPEN at this one: no `close`, no `error`, nothing. Measured, against a real server with the
+   * downstream muted: **six seconds of total silence, zero reconnect attempts, and the top strip
+   * still reading `connected`.** The phone holds a frozen frame, `paintClock` counts past zero,
+   * and every tap goes into `ws.send()` on a dead socket and returns without throwing.
+   *
+   * `show.mjs:335` pings every live seat every `TICK_MS` — 250 ms — so a seated phone is told the
+   * wire is alive four times a second and this page threw all of it away. Recording the arrival is
+   * one line. The thresholds are `rrr-phone-ux.md` §5's degradation ladder, in its own numbers:
+   *
+   *   · **1.5 s** — six missed pings. The strip goes down and `act()` starts holding taps, which
+   *     is the ladder's *"600 ms silence: edge glow solid, RECONNECTING in the strip"* moved out
+   *     to a threshold a congested 2.4 GHz AP with eight phones on it cannot trip by jitter.
+   *   · **3 s** — the ladder's own *"3 s silence"* row. The socket is declared dead and the
+   *     reconnect path runs, which is the path that already exists and already works: measured at
+   *     socket open 2 ms, seated 4 ms, first frame 7 ms.
+   *
+   * ⚠️ THE WATCHDOG ONLY ARMS ONCE THERE IS A SEAT, because the server pings SEATS. A phone
+   * sitting on the join card is sent nothing at all, and a watchdog that did not know that would
+   * tear down a perfectly good socket every three seconds for as long as somebody took to type
+   * their name.
+   */
+  const STALE_MS = 1500, DEAD_MS = 3000;
+  let lastPing = 0;
+  const silence = () => (seat && lastPing ? Date.now() - lastPing : 0);
+  const wireLive = () => !!ws && ws.readyState === 1 && silence() < STALE_MS;
+
+  function checkWire() {
+    if (ws && ws.readyState === 1 && silence() >= DEAD_MS) {
+      // ⚠️ THE HANDLERS COME OFF FIRST. A half-open socket may take its own time to fire `close`,
+      // and a late `close` from a socket we have already replaced would schedule a second connect
+      // on top of the live one.
+      const dead = ws;
+      ws = null;
+      dead.onopen = dead.onmessage = dead.onclose = dead.onerror = null;
+      try { dead.close(); } catch (_) {}
+      setState('reconnecting…', true);
+      backoff = 500;
+      connect();
+    } else if (ws && ws.readyState === 1 && silence() >= STALE_MS) {
+      setState('reconnecting…', true);
+    }
+    // ⚠️ AND THE FLUSH LIVES HERE AS WELL AS ON `seated`. A wire that went stale and came back
+    // without ever closing never re-seats, so a tap held across that gap would have waited for a
+    // `seated` that was not coming.
+    if (wireLive()) flushHeld();
+    offair();
+  }
+
   function connect() {
     ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/');
-    ws.onopen = () => { backoff = 500; setState(seat ? 'connected' : 'ready'); if (wantJoin || localStorage.getItem(KEY)) join(); };
+    ws.onopen = () => {
+      backoff = 500;
+      lastPing = seat ? Date.now() : 0;
+      setState(seat ? 'connected' : 'ready');
+      if (wantJoin || localStorage.getItem(KEY)) join();
+    };
     ws.onmessage = (e) => {
       const m = JSON.parse(e.data);
       if (m.t === 'seated') {
         seat = m; localStorage.setItem(KEY, m.token);
-        $('sw').style.background = m.colour; $('me').textContent = m.name;
+        lastPing = Date.now();
+        $('sw').style.background = m.colour; $('sw').textContent = m.seat + 1;
+        $('me').textContent = m.name;
         $('joinCard').classList.add('hide'); setState('connected');
+        // The seat is back, so anything the player tapped while it was gone can go now.
+        flushHeld();
       }
       if (m.t === 'full') { $('go').disabled = true; $('go').textContent = 'Room is full'; }
       /**
@@ -709,6 +1110,9 @@
             ? '<br><span class="note">' + esc(first ? 'and you were told you were the '
               : 'was told they were the ') + esc(p.believedTheyWere) + '</span>' : '')
           + '</div>';
+        // The Reunion writes this box itself, so the sheet mounted under it is forgotten — a
+        // later frame must rebuild rather than "update" the roll call into the wrong shape.
+        dropSheet();
         $('controls').innerHTML = '<div class="card"><h3>' + esc(m.outcome) + '</h3>'
           + (me ? line(me, true) : '')
           + '<div class="note" style="margin-top:10px">Everyone else — the television has the rest.</div>'
@@ -716,7 +1120,13 @@
           + '</div>';
       }
       // The pong echoes the SERVER's clock value. Phone clocks at a party disagree by minutes.
-      if (m.t === 'ping') ws.send(JSON.stringify({ t: 'pong', at: m.at }));
+      // 🚨 AND THE ARRIVAL IS THE DATUM. One line — the whole of `checkWire` rests on it.
+      if (m.t === 'ping') {
+        lastPing = Date.now();
+        if (seat) setState('connected');
+        ws.send(JSON.stringify({ t: 'pong', at: m.at }));
+        offair();
+      }
     };
     ws.onclose = () => { setState('reconnecting…', true); setTimeout(connect, backoff); backoff = Math.min(backoff * 2, 5000); };
     ws.onerror = () => { try { ws.close(); } catch (_) {} };
@@ -724,9 +1134,12 @@
   const setState = (txt, down) => { $('state').textContent = txt; $('bar').className = 'bar' + (down ? ' down' : ''); };
 
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && ws && ws.readyState > 1) { backoff = 500; connect(); }
+    if (document.visibilityState !== 'visible') return;
+    if (ws && ws.readyState > 1) { backoff = 500; connect(); return; }
+    // A tab that has been asleep is the exact case a `close` never arrives for — so ask.
+    checkWire();
   });
-  setInterval(paintClock, 250);
+  setInterval(() => { paintClock(); checkWire(); }, 250);
   connect();
 })();
 </script>
