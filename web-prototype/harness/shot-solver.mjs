@@ -538,6 +538,36 @@ const ROLE_NAMES = ['cameraOp', 'soundie', 'fixer', 'producer', 'continuity', 's
       t('H13 control · and the detector really can tell the three apart, so H13 is a difference',
         (house.feed && house.feed.visible) === true && (silent.feed && silent.feed.visible) === false && off.feed === null,
         'aired / mounted-but-dark / absent — three states, one detector');
+
+      // ---------------------------------------------------------- H16 · the Reunion is rendered
+      /**
+       * 🚨 **THE REUNION WAS COMPUTED, TRANSMITTED, AND RENDERED BY NOTHING.** `show.mjs` builds
+       * the whole special and sends it to the television and every phone; the page read three
+       * fields of the roll call and dropped the rest, and carried **no award and no decisive
+       * episode at all**. This plays a real season out to its end — the host's own S key, phase by
+       * phase, nothing injected — and reads what is on the screen against the sealed deal.
+       */
+      const r = res.reunion, truth = res.truth;
+      t('H16 arm · a real season was played to its Reunion in the browser',
+        !!r && r.phase === 'REUNION' && r.rows > 0, r ? `${r.phase} · ${r.rows} roll-call rows` : 'never reached REUNION');
+      if (r && truth) {
+        t('H16 · every seat in the sealed deal has a row, with the role it actually held',
+          r.rows >= truth.seats.length && truth.seats.every((s) => r.text.includes(s.role)),
+          `${r.rows} rows for ${truth.seats.length} seats · ${[...new Set(truth.seats.map((s) => s.role))].join(', ')}`);
+        t('H16b · every row carries the final claim the page used to drop',
+          (r.text.match(/claimed/g) || []).length >= truth.seats.length,
+          `${(r.text.match(/claimed/g) || []).length} claim lines for ${truth.seats.length} seats`);
+        t('H16b2 · and how somebody left, which was the other dropped field',
+          /(taken|evicted)/.test(r.text),
+          (r.text.match(/(taken|evicted[^<]*)/) || ['—'])[0]);
+        t('H16c · the decisive episode is named, in the show\'s voice rather than a rule id',
+          /Episode \d+ decided it/.test(r.text) && !/\bW[1-6]\b/.test(r.text),
+          (r.text.match(/Episode \d+ decided it[^·]*/) || ['—'])[0].slice(0, 90));
+        t('H16d · and the awards are on the screen, each with the evidence for it',
+          r.awards > 0, `${r.awards} award row(s)`);
+        t('H16 control · the same scan finds nothing of the kind before the Reunion',
+          !/claimed|decided it/.test(off.stage), `the EXPEDITION stage reads "${off.stage.slice(0, 48)}"`);
+      }
     }
   }
 }
@@ -638,7 +668,7 @@ async function tvSweep(chromePath) {
     })()`;
 
     /** One arm: a fresh show, five phones, cast through to a real EXPEDITION, then look. */
-    const arm = async (houseArg, alsoAfter = false) => {
+    const arm = async (houseArg, alsoAfter = false, toReunion = false) => {
       show = startShow({ port: SHOW, code: 'shot', stamp: 1700000000000 });
       phones = [];
       for (let i = 0; i < 5; i++) {
@@ -656,11 +686,39 @@ async function tvSweep(chromePath) {
       for (let i = 0; i < 8 && sess.state.phase !== PHASE.EXPEDITION; i++) { sess.skip(Date.now()); await new Promise((r) => setTimeout(r, 120)); }
       await new Promise((r) => setTimeout(r, 700));
       const at = await js(READ);
+      const truth = sess.truth();
       let after = null;
       if (alsoAfter) {
         sess.skip(Date.now());
         await new Promise((r) => setTimeout(r, 600));
         after = await js(READ);
+      }
+      let reunion = null;
+      if (toReunion) {
+        /**
+         * One death, so the roll call has something to say about how somebody left. It arrives the
+         * way the mansion reports one — `role=sim`, `{t:'expedition', outcome:'taken'}`, the same
+         * message `harness/storyboard.mjs` uses — rather than by writing into the session.
+         */
+        const sim = new WebSocket(`ws://127.0.0.1:${SHOW}/?role=sim`);
+        await new Promise((r) => { sim.onopen = r; });
+        sim.send(JSON.stringify({ t: 'expedition', outcome: 'taken' }));
+        await new Promise((r) => setTimeout(r, 200));
+        try { sim.close(); } catch { /* gone */ }
+        // Play the season out the way the host does — the S key, phase by phase — until the win
+        // machine calls it. Nothing is injected: the Reunion special is the one `show.mjs` built.
+        for (let i = 0; i < 120 && sess.state.phase !== PHASE.REUNION; i++) {
+          sess.skip(Date.now());
+          await new Promise((r) => setTimeout(r, 40));
+        }
+        await new Promise((r) => setTimeout(r, 900));
+        reunion = await js(`(() => {
+          const st = document.getElementById('stage');
+          return { phase: (document.getElementById('phase').textContent || '').trim(),
+                   text: (st.textContent || '').trim(),
+                   rows: st.querySelectorAll('.roll .row').length,
+                   awards: st.querySelectorAll('.awards .row').length };
+        })()`);
       }
       /**
        * ⚠️ THE BROWSER'S OWN SOCKET KEEPS THE SERVER ALIVE. `server.close()` stops listening and
@@ -675,16 +733,16 @@ async function tvSweep(chromePath) {
       await show.close();
       show = null;
       await new Promise((r) => setTimeout(r, 150));
-      return { at, after };
+      return { at, after, reunion, truth };
     };
 
     const a = await arm(`http://127.0.0.1:${STUB}`, true);
     const b = await arm(`http://127.0.0.1:${STUB}/silent`);
-    const c = await arm('off');
+    const c = await arm('off', false, true);
 
     proc.kill();
     await new Promise((r) => stub.close(r));
-    return { house: a.at, later: a.after, silent: b.at, off: c.at };
+    return { house: a.at, later: a.after, silent: b.at, off: c.at, reunion: c.reunion, truth: c.truth };
   } catch (e) {
     try { proc && proc.kill(); } catch { /* gone */ }
     try { for (const p of phones) p.close(); } catch { /* gone */ }

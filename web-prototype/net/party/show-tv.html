@@ -114,6 +114,11 @@
   .row .who{font-weight:700;min-width:6em}
   .row .was{color:var(--warn)}
   .row .al{margin-left:auto;font-size:.8em;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+  .row .sub{font-size:.85em}
+  /* The awards read across the full width: one line each, and each one is a sentence. */
+  .awards{grid-template-columns:1fr}
+  .awards .who{min-width:0;color:var(--ink)}
+  .awards .al{text-transform:none;letter-spacing:0;font-style:italic}
 </style>
 
 <header>
@@ -406,15 +411,60 @@
     return c.unlocked >= c.needed ? 'The season is made.' : 'Still shooting.';
   };
 
+  /**
+   * 🚨 **THE REUNION WAS COMPUTED, TRANSMITTED, AND RENDERED BY NOTHING.**
+   *
+   * `show.mjs` builds the whole special — roll call, the decisive episode, the awards, the chat
+   * unmixed — and sends it to the television and to every phone. This function read three fields
+   * of the roll call and dropped the rest; there was **no award and no decisive episode anywhere
+   * on the page**. That is the payoff for a mode that charges silent death all game: P6 spends the
+   * entire show refusing to say what anybody was, and the one screen where it finally can was
+   * showing a third of it.
+   *
+   * Everything below is a field `reunion.js` already produces. Nothing is computed here — the
+   * television still does not derive game truth, it just stops throwing away what it is handed.
+   */
+  const DECIDED_BY = {
+    'win.W1': 'Production was cleared out',
+    'win.W2': 'the crew lit the last camera',
+    'win.W3': 'the feed had taken enough of them',
+    'win.W4': 'Production drew level',
+    'win.W5': 'the season ran out of episodes',
+    'win.W6': 'the host called time',
+    'last death': 'the last death of the season',
+  };
+
   function reunionStage() {
     if (!special) return big('The Reunion', 'Roll call coming up.');
+    const d = special.decisive;
+    const awards = special.awards || [];
     return '<div class="big">' + esc(special.outcome || 'The Reunion') + '</div>'
-      + '<div class="roll">' + special.rollCall.map((p) =>
-        '<div class="row"><span class="who">' + esc(nameOf(p.id) === '—' ? p.id : nameOf(p.id)) + '</span>'
-        + '<span class="was">' + esc(p.role) + '</span>'
-        + (p.believedTheyWere && p.believedTheyWere !== p.role
+      + (d ? '<div class="sub">Episode ' + esc(d.episode) + ' decided it — '
+          + esc(DECIDED_BY[d.because] || 'the episode that mattered') + '</div>' : '')
+      + (awards.length
+        ? '<div class="roll awards">' + awards.map((a) =>
+          '<div class="row"><span class="was">' + esc(a.award) + '</span>'
+          + '<span class="who">' + esc(nameOf(a.winner) === '—' ? a.winner : nameOf(a.winner)) + '</span>'
+          + '<span class="al">' + esc(a.why) + '</span></div>').join('') + '</div>'
+        : '')
+      + '<div class="roll">' + special.rollCall.map((p) => {
+        const who = nameOf(p.id) === '—' ? p.id : nameOf(p.id);
+        // How they left, and at whose hand — the two facts the roll call carried and the page
+        // dropped. Never a word about it before this screen; every word about it now.
+        const gone = !p.death ? ''
+          : p.death.by === 'TAKEN' ? '<span class="sub">taken</span>'
+            : '<span class="sub">evicted' + (p.death.executioner
+              ? ' by ' + esc(swingerName(p.death.executioner)) : '') + '</span>';
+        const claimed = p.finalClaim
+          ? '<span class="sub">claimed “' + esc(p.finalClaim) + '”</span>'
+          : '<span class="sub">claimed nothing</span>';
+        return '<div class="row"><span class="who">' + esc(who) + '</span>'
+          + '<span class="was">' + esc(p.role) + '</span>'
+          + (p.believedTheyWere && p.believedTheyWere !== p.role
             ? '<span class="sub">believed ' + esc(p.believedTheyWere) + '</span>' : '')
-        + '<span class="al">' + esc(p.alignment) + '</span></div>').join('') + '</div>';
+          + claimed + gone
+          + '<span class="al">' + esc(p.alignment) + '</span></div>';
+      }).join('') + '</div>';
   }
 
   // ---------------------------------------------------------------- the event stream

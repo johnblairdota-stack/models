@@ -692,9 +692,28 @@
       }
       if (m.t === 'state') { frame = m.frame; render(); }
       if (m.t === 'refused') { $('refused').innerHTML = '<span class="warn">' + esc(m.why) + '</span>'; }
+      /**
+       * 🚨 THE PHONE SAID "SEASON FINALE. Look at the television." AND NOTHING ELSE, WHILE HOLDING
+       * THE WHOLE SPECIAL. The television carries the beats for the room (`show-tv.html`); this
+       * carries the one row that is about the person holding it — the answer to a card they were
+       * handed in the premiere and never allowed to check. The Glitched learns here, and only
+       * here, that the role on their card was never theirs.
+       */
       if (m.t === 'reunion') {
-        $('controls').innerHTML = '<div class="card"><h3>The Reunion</h3><div class="say">'
-          + esc(m.outcome) + '. Look at the television.</div></div>';
+        const me = ((m.special && m.special.rollCall) || []).find((p) => p.id === iAm());
+        const rest = ((m.special && m.special.rollCall) || []).filter((p) => p.id !== iAm());
+        const line = (p, first) => '<div class="say"' + (first ? ' style="font-weight:700"' : '') + '>'
+          + esc(first ? 'You were ' : nameOf(p.id) + ' — ') + '<b>' + esc(p.role) + '</b>'
+          + ' <span class="warn">' + esc(p.alignment) + '</span>'
+          + (p.believedTheyWere && p.believedTheyWere !== p.role
+            ? '<br><span class="note">' + esc(first ? 'and you were told you were the '
+              : 'was told they were the ') + esc(p.believedTheyWere) + '</span>' : '')
+          + '</div>';
+        $('controls').innerHTML = '<div class="card"><h3>' + esc(m.outcome) + '</h3>'
+          + (me ? line(me, true) : '')
+          + '<div class="note" style="margin-top:10px">Everyone else — the television has the rest.</div>'
+          + rest.map((p) => line(p, false)).join('')
+          + '</div>';
       }
       // The pong echoes the SERVER's clock value. Phone clocks at a party disagree by minutes.
       if (m.t === 'ping') ws.send(JSON.stringify({ t: 'pong', at: m.at }));
