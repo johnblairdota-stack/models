@@ -976,6 +976,9 @@ await quiet.h.close();
 }
 
 // ================================================================== done
+// The refused claims are closed by the server; closing them here as well is what keeps this file
+// terminating when it is run against a control that does NOT refuse them.
+for (const c of claims) c.close();
 for (const p of live.phones) p.close();
 live.tv.close();
 await show.close();
