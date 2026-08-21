@@ -295,6 +295,112 @@ const R = play({ taps: engaged });
     recks.some((f) => f.clock.seconds === SECONDS[PHASE.RECKONING]), `${SECONDS[PHASE.RECKONING]}s`);
 }
 
+// ---------------------------------------------------------------- L18 · the stretch stretches
+/**
+ * 🚨 **THE EXTENSION DID NOT EXTEND.** `nominate` set `clock.seconds` and left `clock.endsAt`
+ * alone — and `endsAt` is the deadline `tick()` compares against, so the number on screen grew
+ * and the bell did not move. The television says *"every one buys the table fifteen seconds"*
+ * and it bought none; worse, `show-tv.html`'s countdown ring divides the time remaining by
+ * `clock.seconds`, so the ring jumped BACKWARDS as the total grew under a deadline that stood
+ * still. L7c saw the LABEL grow and could not see that nothing else did.
+ */
+{
+  const probe = play({
+    taps: (s, act) => {
+      engaged(s, act);
+      if (s.state.phase === PHASE.RECKONING) {
+        const alive = s.state.players.filter((p) => p.alive).map((p) => p.id);
+        for (let i = 0; i < alive.length; i++) act(alive[i], { t: 'nominate', target: alive[(i + 3) % alive.length] });
+      }
+    },
+  });
+  const tv = probe.tape.get('tv');
+  // Consecutive RECKONING frames inside one phase — `tick` counts up across every transition, so
+  // a shared tick is a shared phase.
+  const pairs = [];
+  for (let i = 1; i < tv.length; i++) {
+    const a = tv[i - 1], b = tv[i];
+    if (a.phase !== PHASE.RECKONING || b.phase !== PHASE.RECKONING) continue;
+    if (a.tick !== b.tick) continue;
+    pairs.push({ dS: b.clock.seconds - a.clock.seconds, dE: b.clock.endsAt - a.clock.endsAt });
+  }
+  const grew = pairs.filter((p) => p.dS > 0);
+  t('L18 arm · a live reckoning was stretched more than once on the wire',
+    grew.length > 1, `${grew.length} stretches across ${pairs.length} frame pairs`);
+  t('L18 · every second the label buys is a second the DEADLINE buys',
+    grew.every((p) => p.dE === p.dS * 1000),
+    grew.map((p) => `+${p.dS}s/+${p.dE}ms`).join(' ') || 'nothing grew');
+  t('L18b · and no frame pair moves one without the other, in either direction',
+    pairs.every((p) => p.dE === p.dS * 1000),
+    `${pairs.length} pairs · ${pairs.filter((p) => p.dE !== p.dS * 1000).length} mismatched`);
+
+  // ⚠️ THE CAP IS REACHED AND NEVER EXCEEDED, AND IT IS ASSERTED THAT WAY RATHER THAN AS "a
+  // nomination past the cap moves nothing" — which is unreachable and would therefore be a
+  // vacuous truth. `vote.js` caps standing nominations at 3 and `reckoningSeconds(3)` is exactly
+  // `RECKONING_CAP`, so the ceiling is enforced twice and the clock never gets the chance to try.
+  const recks = tv.filter((f) => f.phase === PHASE.RECKONING);
+  const longest = Math.max(...recks.map((f) => f.clock.seconds));
+  t('L18c · the stretch reaches the ninety-second ceiling and never goes past it',
+    longest === RECKONING_CAP && recks.every((f) => f.clock.seconds <= RECKONING_CAP)
+      && recks.every((f) => f.clock.endsAt - f.clock.seconds * 1000 > 0),
+    `longest ${longest}s of a ${RECKONING_CAP}s cap, over ${recks.length} frames`);
+
+  // 🚨 THE CONTROL IS THE SHIPPED BUG, DERIVED FROM THIS TAPE. Leave `endsAt` alone and the
+  // ring's own arithmetic — `left / clock.seconds` — walks backwards on every nomination.
+  const ringWas = grew.map((p) => {
+    const total = 45 + p.dS;                       // the label after the stretch
+    return { before: 45 / 45, after: 45 / total }; // time left unchanged, total grown
+  });
+  t('L18 control · leaving the deadline alone makes the ring jump backwards, which is what shipped',
+    ringWas.length > 0 && ringWas.every((r) => r.after < r.before),
+    ringWas.map((r) => `${(r.before * 100).toFixed(0)}% → ${(r.after * 100).toFixed(0)}%`)[0]
+    + ' of a ring, for buying the table nothing');
+}
+
+// ---------------------------------------------------------------- L19 · sized by its own episode
+/**
+ * `advance` computed `reckoningSeconds(state.nominations.length)` and handed it to `enter`, which
+ * then ran `onEnter[RECKONING]` and cleared the list — so the number was read from the episode
+ * BEFORE, every time. The sizing lives inside the phase now, after the clear, where the only list
+ * in scope is the one that belongs to it.
+ *
+ * ⚠️ TWO FIXES STAND BETWEEN THIS AND THE BUG, AND THE CONTROL HAS TO REMOVE BOTH. Clearing
+ * `state.nominations` at `closeEpisode` (L17) already empties the list before `advance` can read
+ * it, so reverting the ordering alone leaves L19 green. Reverting both turns it red — episodes
+ * 3, 4 and 5 open at 90s, which is episode 2's stretched length. The ordering fix is therefore
+ * defence in depth rather than the only thing holding this up, and that is worth knowing before
+ * somebody "simplifies" one of them away.
+ */
+{
+  const probe = play({
+    taps: (s, act) => {
+      engaged(s, act);
+      if (s.state.phase === PHASE.RECKONING) {
+        const alive = s.state.players.filter((p) => p.alive).map((p) => p.id);
+        for (let i = 0; i < 3 && i < alive.length; i++) act(alive[i], { t: 'nominate', target: alive[(i + 3) % alive.length] });
+      }
+    },
+  });
+  const tv = probe.tape.get('tv');
+  const opens = [];
+  let lastTick = null;
+  for (const f of tv) {
+    if (f.phase !== PHASE.RECKONING) continue;
+    if (f.tick === lastTick) continue;
+    lastTick = f.tick;
+    opens.push({ episode: f.episode, seconds: f.clock.seconds });
+  }
+  t('L19 arm · more than one episode held a reckoning, and earlier ones were nominated in',
+    opens.length > 1 && probe.s.log.all().filter((e) => e.type === 'nom.made').length > 2,
+    `${opens.length} reckonings · ${probe.s.log.all().filter((e) => e.type === 'nom.made').length} nominations in the show`);
+  t('L19 · every reckoning opens at its own floor, never at last episode\'s stretched length',
+    opens.every((o) => o.seconds === SECONDS[PHASE.RECKONING]),
+    opens.map((o) => `ep${o.episode} ${o.seconds}s`).join(' · '));
+  t('L19 control · the previous episode really did stretch, so there was a stale number to inherit',
+    tv.some((f) => f.phase === PHASE.RECKONING && f.clock.seconds > SECONDS[PHASE.RECKONING]),
+    `longest ${Math.max(...tv.filter((f) => f.phase === PHASE.RECKONING).map((f) => f.clock.seconds))}s`);
+}
+
 // ---------------------------------------------------------------- L8 · no dead-air phase
 {
   // Nobody votes → nobody is executed → EXECUTION must not be entered at all.

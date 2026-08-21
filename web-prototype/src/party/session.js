@@ -376,6 +376,14 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
       // Attribution exists from the first episode and is sealed until the Reunion.
       record(makeEvent('hunter.placed', VIS.SEALED, { room: hunterRoom, episode: state.episode }));
     },
+    /**
+     * 🚨 THE RECKONING SIZES ITSELF, AND IT USED TO BE SIZED BY THE PREVIOUS EPISODE. `advance`
+     * computed `reckoningSeconds(state.nominations.length)` and passed it to `enter`, which then
+     * ran this function and cleared the list — so the number was always read from the episode
+     * before. It is set here, after the clear, where the only list in scope is this episode's
+     * and is empty by definition. `SECONDS[RECKONING]` is `reckoningSeconds(0)`; the stretch is
+     * bought a nomination at a time, in `input`.
+     */
     [PHASE.RECKONING]: () => { state.nominations = []; state.tally = null; },
   };
 
@@ -423,10 +431,10 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
     // EXECUTION is skipped outright when the vote executed nobody, rather than held for 20s on a
     // screen reading "nothing happens".
     if (next === PHASE.EXECUTION && !(state.tally && state.tally.executed)) return advance(now);
-    const seconds = next === PHASE.RECKONING
-      ? reckoningSeconds(state.nominations.length)
-      : SECONDS[next];
-    enter(next, seconds, now);
+    // Every phase opens at its own floor. The reckoning's stretch is bought during the phase —
+    // see `input`'s `nominate` — rather than predicted before it starts from a list that belongs
+    // to the episode before.
+    enter(next, SECONDS[next], now);
   }
 
   // ---------------------------------------------------------------- resolutions
@@ -731,8 +739,23 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
         state.nominations.push(n.nomination);
         pending.acted.add(playerId);
         record(makeEvent('nom.made', VIS.PUBLIC, n.nomination));
-        // Every nomination buys the table 15 more seconds to argue, capped at 90.
+        /**
+         * 🚨 **EVERY NOMINATION BUYS THE TABLE FIFTEEN SECONDS, AND IT USED TO BUY NONE.** This
+         * set `clock.seconds` and left `clock.endsAt` alone — and `endsAt` is the deadline
+         * `tick()` compares against, so the number on screen grew and the bell did not move. The
+         * television says *"every one buys the table fifteen seconds"* while the countdown runs
+         * to the original moment, and `show-tv.html`'s ring, which divides the remaining time by
+         * `clock.seconds`, visibly jumped BACKWARDS as the total grew under it.
+         *
+         * ⚠️ THE DEADLINE MOVES BY THE DIFFERENCE, NEVER BY A FRESH `now + seconds`, and that is
+         * what keeps this file free of a clock. `input()` takes no time argument on purpose —
+         * a tap is not a tick — so the extension is expressed as a delta against the deadline
+         * already standing. It also makes the cap free: once `reckoningSeconds` saturates at
+         * `RECKONING_CAP` the difference is zero and the bell does not move at all.
+         */
+        const was = state.clock.seconds;
         state.clock.seconds = reckoningSeconds(state.nominations.length);
+        state.clock.endsAt += (state.clock.seconds - was) * 1000;
         broadcast();
         return { ok: true };
       }
