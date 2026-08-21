@@ -154,6 +154,54 @@
  * out the top of that band and S1 would go red. That belongs to `party-sim` and `policy.js`, not
  * to `cast.js`, and it is recorded here because this file is where it was measured.
  *
+ * ⚠️ **THOSE FIVE NUMBERS ARE n=500 AND THEY OVERSTATE IT. `C4e` RE-RAN THEM AT n=3,000 AND
+ * SIX PLAYERS CAME BACK INTO BAND.** Read the second-sweep block below, not this paragraph.
+ *
+ * ---------------------------------------------------------------------------------------------
+ * SECOND SWEEP, 2026-08-21 — THE HYBRID, THE TWO CHANNELS, AND THE S1 NUMBER OVER-MEASURED.
+ * 36 passed, 0 failed. Two full runs, byte-identical output.
+ * ---------------------------------------------------------------------------------------------
+ * ⚠️ **THE GROUND MOVED UNDER THE FIRST SWEEP'S HONEST-COST ARGUMENT WHILE IT WAS RUNNING.**
+ * `session.js` gained `fireContinuity()`. Before it, "a fully honest information layer" was a
+ * statement about a system in which no role had ever fired, and it cost nothing real. C7 is the
+ * fired-level measurement that replaces it, and it does not say what the cast-level one said.
+ *
+ * **C6, the hybrid** — Candidate A at 6/7/8, `glitched` kept in `GUARANTEED[5]`. Unreachable
+ * role/count pairs 16 -> **12** (Candidate A reaches 10). Fixes the Static @6, the Method Actor
+ * @6, the Plant @6 and the Fixer @8; leaves the Static @5 and the Method Actor @5. Its 6p
+ * frequencies are Candidate A's — Glitched 33.2%, Static 33.5%, Method 33.4%, Fixer 50.8%, Plant
+ * 49.2% — and its 4p, 5p and 7p frequency vectors are byte-identical to the shipped table's.
+ * **7 is a no-op under every table here**, asserted as vector identity rather than expected:
+ * `GUARANTEED[7]` is `['continuity']` against three informed slots, so there is no collision at
+ * seven to fix.
+ *
+ * **C7, the two channels, through `fireContinuity`'s own filter.** Fraction of deals in which a
+ * FIRED Continuity reading is unreliable — Glitched / Plant / either:
+ *
+ *              4p             5p              6p              7p              8p
+ *   baseline   0.0/0.0/0.0    48.1/0.0/48.1   0.0/0.0/0.0     1.0/49.8/50.3   22.5/100/100
+ *   cand-A     0.0/0.0/0.0    16.1/0.0/16.1   0.0/49.2/49.2   1.0/49.8/50.3   22.8/50.2/61.3
+ *   hybrid     0.0/0.0/0.0    48.1/0.0/48.1   0.0/49.2/49.2   1.0/49.8/50.3   22.8/50.2/61.3
+ *
+ * 🚨 **THE SHIPPED TABLE IS ALL-OR-NOTHING, AND AT SIX PLAYERS IT IS NOTHING.** A six-player
+ * Continuity reading fires in 100% of games and is unreliable in **0.0%** of them: the Plant is
+ * structurally undealable at 6, and the guaranteed Glitched — in 100% of six-player deals — is
+ * covered as Camera Op or Focus Puller rather than Continuity, because `cast.js` prefers an
+ * UNDEALT informer for the cover and `GUARANTEED[6]` deals Continuity every game. The Outsider
+ * guaranteed at six players poisons nothing that fires (C7c). At 8 the same table gives the
+ * opposite extreme: the Plant is guaranteed, so every eight-player reading is unreliable, 100.0%.
+ * Both candidates move both extremes toward the middle. At 5, where `COMPOSITION[5].minion` is 0
+ * and no Plant can exist, nothing replaces the Glitched: Candidate A takes 48.1% -> 16.1% and the
+ * hybrid holds it at 48.1% (C7b).
+ *
+ * **C4e, the S1 finding at n = 3,000 per count — and the small sweep OVERSTATED it.** Shipped
+ * table, spike OFF: **81.5 / 88.4 / 73.3 / 78.9 / 76.8%** good win at 4-8 (+/-0.6-0.8pp), against
+ * the 83.4 / 90.2 / 78.4 / 82.0 / 78.8% the first 500 seeds reported. Four of five counts sit
+ * outside S1's 25-75% band — 4p 9.2 sigma, 5p 23.0, 7p 5.2, 8p 2.3 — and **6p comes back INSIDE
+ * at 73.3%**. S1 fails on any out-of-band count so it goes red either way, but the honest
+ * statement is four counts, not five. With the lever ON the same table over 500 seeds is
+ * 57.8 / 64.6 / 35.2 / 39.0 / 36.4%, every count comfortably inside.
+ *
  * POISON — what it means here, and why the second fraction is the one to read.
  * ---------------------------------------------------------------------------------------------
  * Each Outsider poisons one surface (`roles.js` SURFACE): Glitched the phone, The Static the
