@@ -237,7 +237,7 @@ const SKATE_POSE = {
 // `roll` banks the body about its OWN FORWARD AXIS, which is what a carving skater physically
 // does. But `rotation.set(0, yaw, roll)` under three's default XYZ order is Ry(yaw)·Rz(roll),
 // so the bank happens first in the body frame and is then yawed by -80° — which lays the bank
-// axis almost exactly IN THE IMAGE PLANE. Measured with `harness/_g7_skate.mjs`, which
+// axis almost exactly IN THE IMAGE PLANE. Measured with `harness/evidence/_g7_skate.mjs`, which
 // projects the real joints through the real capture camera:
 //
 //   body forward axis   world (-0.985, 0, 0.170)   dot(view dir) = 0.040  -> 87.7° off the

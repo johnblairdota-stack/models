@@ -46,7 +46,7 @@ go light.
 
 ```
 npm run build
-node harness/playtest.mjs --view furn.smash --script harness/_furn-smash-critic.mjs --port 5421 --q "quality=medium"
+node harness/playtest.mjs --view furn.smash --script harness/evidence/_furn-smash-critic.mjs --port 5421 --q "quality=medium"
 ```
 
 Lip should recover vs r33 70.4%. Dust hue-split must not stay at 18%.

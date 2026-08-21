@@ -27,7 +27,7 @@ wound, always black, and look jarring on thin legs / tripod.
 
 ```
 npm run build
-node harness/playtest.mjs --view furn.smash --script harness/_furn-smash-critic.mjs --port 5349 --q "quality=medium"
+node harness/playtest.mjs --view furn.smash --script harness/evidence/_furn-smash-critic.mjs --port 5349 --q "quality=medium"
 ```
 
 Critic looks at chair / cam-tripod / desk / settee **wound**: lip must sit in the

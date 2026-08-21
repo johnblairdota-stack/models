@@ -48,11 +48,11 @@ corridor the warm floor patch beside the player measures **171/99/45 (L110) → 
 2 m of floor. Tint saturation, not strength, is the knob that trades these off; the numbers for
 four settings are in the comment at `heatWash` in `src/gadgets/index.js`.
 
-🔧 `harness/_tmp_fxglow.mjs` is the instrument the whole diagnosis rests on: it boots a view,
+🔧 `harness/evidence/_tmp_fxglow.mjs` is the instrument the whole diagnosis rests on: it boots a view,
 freezes a probe list, then renders once per scene-mutation STATE and reports the **pre-tonemap
 HDR radiance from `pipeline.sceneRT` and the final LDR pixel at the same coordinate**. That
 pairing is what separates "the effect never deposited light" from "the tone curve ate the light
-it deposited", and no existing tool could tell those apart. `harness/_tmp_fxprobe.mjs` adds
+it deposited", and no existing tool could tell those apart. `harness/evidence/_tmp_fxprobe.mjs` adds
 `--row`/`--col` scans across a PNG, which is how both the render and the bar art were profiled.
 
 **Also: every mesh in `src/gadgets/*` now has a name** (`mesh(geo, mat, D, name)` plus a
@@ -254,7 +254,7 @@ pull-in is the recommendation, not the full correction.**
 hunter's stage-1 stoop, in a different file.** `views/gadget.js` had `unit.root.rotation.set(0,
 yaw, roll)`, which under three's default XYZ order is `Ry(yaw)·Rz(roll)`: the bank is applied
 about the body's **forward** axis and then yawed by −80°, which lays that axis almost exactly in
-the image plane. Measured through the real capture camera (`harness/_g7_skate.mjs`):
+the image plane. Measured through the real capture camera (`harness/evidence/_g7_skate.mjs`):
 
 | | dot with view dir | what a rotation about it does |
 |---|---|---|
@@ -272,7 +272,7 @@ the roll still applies first in the body frame and the call is bit-identical at 
 `src/gadgets/index.js`, added at the SCENE root and deliberately not under `gadget.root`
 (`LimbRig.fitSkates()` does `unit.root.add(g.root)`, and a skid mark that follows you around is
 not a skid mark). Nested skid arcs, grit and a lifting dust cloud, sampled off the art with
-**percentiles, not means** (`harness/_g7_px.mjs`) — a skid mark is a few dark pixels among a lot
+**percentiles, not means** (`harness/evidence/_g7_px.mjs`) — a skid mark is a few dark pixels among a lot
 of bright floor, and any mean over a box containing one just reports the floor.
 
 A/B'd against its own absence with `--extra "dbg=nodrift"`, which is the knob that says what it
@@ -339,8 +339,8 @@ moving): instance or bake the puffs before wiring this into `game`. `gadget.nail
 unchanged. `gadget.sheet` 983 / 604k, over the *room* budget, which is not this piece's gate and
 is unchanged by this round.
 
-**Instruments left behind:** `harness/_g7_px.mjs` (percentile stats over PNG rectangles — the
-tool for thin dark marks on bright floors) and `harness/_g7_skate.mjs` (joint/floor projection
+**Instruments left behind:** `harness/evidence/_g7_px.mjs` (percentile stats over PNG rectangles — the
+tool for thin dark marks on bright floors) and `harness/evidence/_g7_skate.mjs` (joint/floor projection
 through the real capture camera, per-skate ground contact, `--clear` gadget↔thigh clearance and
 gadget hang axis). ⚠️ The latter's first version matched **zero** gadget meshes from a guessed
 root name and cheerfully reported a clearance of **Infinity over 0 vertex pairs** — it now

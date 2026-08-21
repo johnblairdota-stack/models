@@ -649,7 +649,7 @@ export function apertureRects(e, lo, hi, side) {
  * `DIG_H`. `apertureRects` CLAMPS `v1` and `d.h` is bounded nowhere, so a doorway taller than its
  * band is accepted and quietly loses its head. This never emits one — but it counts them
  * (`stats.overTall`) rather than clamping, because a silent clamp is the "result-shaped output
- * instead of an error" failure this project keeps paying for. `harness/_ap3-geom.mjs`'s `slabhead`
+ * instead of an error" failure this project keeps paying for. `harness/evidence/_ap3-geom.mjs`'s `slabhead`
  * fixture deliberately DOES emit one, which is why the clamp may not be turned into a throw.
  */
 export const GEN_SLAB_MAX = 35.00;   // `genspike.mjs` `SLAB_MAX` — a maximum; a slab has no minimum

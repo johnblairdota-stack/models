@@ -39,7 +39,7 @@ hard top edge and a downward fade), **scouring** of upward-facing and convex-pro
 same-config control pair on this harness now reads **exactly 0**, so that is the real floor and
 not a rounding claim. Against `?weather=1`: `hunter.3` **11.3%** of bytes / max delta 121,
 `hunter.sheet` **12.2%** / 120, `char.turnaround` 1.36% / 85, `mat.robot` 0.39% / 44.
-**And the difference is PLACED, not global** (`harness/_tmp_weather_rect.mjs`): empty cyc
+**And the difference is PLACED, not global** (`harness/evidence/_tmp_weather_rect.mjs`): empty cyc
 **0/200000** differing pixels, empty floor **1/68000 at max delta 1**, hunter torso
 **70362/90000 at max delta 95**.
 **Grade at the default tier: median and topChroma UNCHANGED on all four; only `toeL` moves
@@ -93,7 +93,7 @@ reads on both pieces. `hunter.js` was not touched.
   expectation that one fix "reaches" `mat.robot` did not hold; report it as no-change, not a win.
 - The player pieces gain only a small crevice contact-shade (an ungated 0.10 floor). Shells stay
   showroom white — verified by eye and by a flat grade.
-- Left behind: `harness/_tmp_weather_ab.mjs` (before/after crop, one image per comparison).
+- Left behind: `harness/evidence/_tmp_weather_ab.mjs` (before/after crop, one image per comparison).
 
 
 ## char.locomotion r4 — and three instruments that were lying (motion-2)

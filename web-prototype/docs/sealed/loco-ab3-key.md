@@ -14,7 +14,7 @@ different from round 2's on walk and run:
 | run  | plant **ON** | plant OFF |
 | limp | plant OFF | plant **ON** |
 
-Verified genuinely different before sealing (`harness/_tmp_critic_diff.mjs`), because round 1's
+Verified genuinely different before sealing (`harness/evidence/_tmp_critic_diff.mjs`), because round 1's
 limp pair was two copies of the same build and its "0.137% indistinguishable" was measuring
 nothing:
 

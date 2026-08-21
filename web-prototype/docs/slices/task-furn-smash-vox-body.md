@@ -55,7 +55,7 @@ must not go light.
 
 ```
 npm run build
-node harness/playtest.mjs --view furn.smash --script harness/_furn-smash-critic.mjs --port 5379 --q "quality=medium"
+node harness/playtest.mjs --view furn.smash --script harness/evidence/_furn-smash-critic.mjs --port 5379 --q "quality=medium"
 ```
 
 Look at `s-settee-leave.png`, `s-chaise-leave.png`, `s-desk-leave.png`,

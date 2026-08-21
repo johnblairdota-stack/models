@@ -375,20 +375,20 @@ because hiding it would be dishonest, not because it is a defect.
 ### 6a. The instruments that already exist, and which change each one proves
 
 ```
-node harness/_genwalk1-place.mjs           must stay 10 pass / 0 fail
+node harness/evidence/_genwalk1-place.mjs           must stay 10 pass / 0 fail
 ```
 Proves **Change 2**'s `turns: 0` assumption (every library type places at turns 0) and that
 **Change 5 of the NEXT slice** — the colonnade — is still guarded: its `ballroom × turns 1/3` cells
 must still read `X`. When Arm B lands, those two cells flip to `.` and that is Arm B's gate.
 
 ```
-node harness/_genwalk1-rot.mjs --n 512     must print "controls OK"
+node harness/evidence/_genwalk1-rot.mjs --n 512     must print "controls OK"
 ```
 Proves the arm-A choice is the measured one and that C1/C2/C3/C4 still behave. **If C1 goes red the
 harness is measuring its own patching and every number in this plan is void.**
 
 ```
-node harness/_genwalk1-build.mjs --all     control/turn1/turn2 exit 0 · ballturn exit 1
+node harness/evidence/_genwalk1-build.mjs --all     control/turn1/turn2 exit 0 · ballturn exit 1
 ```
 Proves the **authored** house still builds headless after your `spaces.js` edit. `--arm control`
 going red is the loudest possible signal that Change 1's `typeof location` guard is wrong. It prints
@@ -397,9 +397,9 @@ going red is the loudest possible signal that Change 1's `typeof location` guard
 ### 6b. The gate you build — `harness/scenarios/_plangen1-boot.mjs`
 
 **Building it IS part of the slice.** It does not exist. Fork the machinery from
-`harness/_genwalk1-build.mjs` — the `node:module` `registerHooks` load hook, the four-call
+`harness/evidence/_genwalk1-build.mjs` — the `node:module` `registerHooks` load hook, the four-call
 `stubRenderer()`, `globalThis.location` set BEFORE the first `src/` import, and
-`buildTestRoom({ work: (p) => p }, {})`. ⚠️ **`harness/_ap3-build.mjs` does the same thing and it is
+`buildTestRoom({ work: (p) => p }, {})`. ⚠️ **`harness/evidence/_ap3-build.mjs` does the same thing and it is
 another agent's file — do not import it and do not edit it.** Re-state the ~15 lines.
 
 Over **16 seeds**, with `globalThis.location = { search: '?plan=gen&planseed=' + s }`:
@@ -461,12 +461,12 @@ Run every one of these **before** you start and **after** you finish, and diff:
 
 ```
 npm run build                                                          green
-node harness/_loc1_golden.mjs --check harness/_loc1_golden.json        1170 leaves, Object.is
+node harness/evidence/_loc1_golden.mjs --check harness/fixtures/_loc1_golden.json        1170 leaves, Object.is
 node harness/playtest.mjs --view game.play --script harness/scenarios/escape.mjs   --port 5457 --q "seed=s4"     20/20
 node harness/mechanics.mjs                                                                                       13/13
 node harness/playtest.mjs --view game.play --script harness/scenarios/dig-free.mjs --port 5457                    15/15
 node harness/playtest.mjs --view game.play --script harness/scenarios/eo2-calls.mjs --port 5457                    6/0
-node harness/_ap3-golden.mjs --check harness/_ap3-golden.json          15740 leaves
+node harness/evidence/_ap3-golden.mjs --check harness/fixtures/_ap3-golden.json          15740 leaves
 ```
 
 ⚠️ **`_loc1_golden` is the sharpest of these** — 1170 exported leaves compared with `Object.is`. Your

@@ -14,7 +14,7 @@
 - `src/destruction/debris.js` — big-chunk open-floor prop lean (stand plates)
 - `src/destruction/furn-fx.js` — larger seat/back plates; near-zero crumbs on part break
 - `src/destruction/furnprop.js` — tip toward camera, longer, less sink; FX already light for cams
-- `harness/_furn-feel-critic.mjs` — mid-tip shot ~400 ms after tripod shatter
+- `harness/evidence/_furn-feel-critic.mjs` — mid-tip shot ~400 ms after tripod shatter
 
 ---
 

@@ -53,7 +53,7 @@ gone. Chaise / settee / table-round / crate plates must not go light.
 
 ```
 npm run build
-node harness/playtest.mjs --view furn.smash --script harness/_furn-smash-critic.mjs --port 5413 --q "quality=medium"
+node harness/playtest.mjs --view furn.smash --script harness/evidence/_furn-smash-critic.mjs --port 5413 --q "quality=medium"
 ```
 
 Fireplace densest: `#4c3c2c` family, espresso must not grow vs r28.

@@ -48,7 +48,7 @@ so even a thin plate has already let go.
 
 ```
 npm run build
-node harness/playtest.mjs --view furn.smash --script harness/_furn-smash-critic.mjs --port 5375 --q "quality=medium"
+node harness/playtest.mjs --view furn.smash --script harness/evidence/_furn-smash-critic.mjs --port 5375 --q "quality=medium"
 ```
 
 Look at `s-table-round-leave.png`, `s-settee-leave.png`,

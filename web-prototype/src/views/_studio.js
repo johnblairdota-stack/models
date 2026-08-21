@@ -19,7 +19,7 @@ import { Engine } from '../core/engine.js';
  *
  *   1. `?orbit=1` — mouse-orbit the camera live, plus a paste-ready readout of the current
  *      cameraPos/target/fov (with a copy button) and, where the view supplies a `roomBox`,
- *      a live floor/ceiling/wall composition fraction ported from `harness/_eo13_cam.mjs`.
+ *      a live floor/ceiling/wall composition fraction ported from `harness/evidence/_eo13_cam.mjs`.
  *      HARD-GATED on `!engine.capture` — see `orbitEnabled()` below — so this can never
  *      exist on anything `shoot.mjs` (or any other capture-mode page load) touches, and it
  *      is further gated behind the query flag so the default LIVE path is unchanged too:
@@ -75,7 +75,7 @@ function orbitEnabled(engine, opts) {
 }
 
 /**
- * ITEM 2 — live composition readout, ported from `harness/_eo13_cam.mjs`'s own ray-cast:
+ * ITEM 2 — live composition readout, ported from `harness/evidence/_eo13_cam.mjs`'s own ray-cast:
  * for a subsampled NDC grid, cast the pixel's ray out of the camera and report which face
  * of `box` (a world-space room AABB) it exits through first. Floor/ceiling/wall fractions
  * of the frame this way are pure geometry — immune to lighting, grade and clutter, which is
@@ -625,7 +625,7 @@ export function buildStudioEnv(renderer, opts = {}) {
      * sheet, on an arm-tube patch measuring p05-p95 range 82 against the sheet's 165. That
      * specific pair does not reproduce, and it is not internally consistent either — the same
      * finding quotes the render's own band as (72-215), which is a range of 143, not 82.
-     * Sampled honestly on the round-34 capture with `harness/_tmp_scan.mjs patch`, matching the
+     * Sampled honestly on the round-34 capture with `harness/evidence/_tmp_scan.mjs patch`, matching the
      * sheet's figure 1 arm-tube boxes to the render's:
      *
      *                        p05    p50    p95   p95-p05    min
@@ -683,7 +683,7 @@ export function buildStudioEnv(renderer, opts = {}) {
      * a blown streak in it.
      *
      * A BRIGHT frontal source was tried first and was measurably the wrong shape of change,
-     * twice. Measured on the front figure's upper arm (26x55 px, `harness/_px33.mjs`):
+     * twice. Measured on the front figure's upper arm (26x55 px, `harness/evidence/_px33.mjs`):
      *
      *                                     chrome median   range     shell median
      *   dark flag only                        144          136          173

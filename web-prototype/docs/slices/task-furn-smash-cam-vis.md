@@ -39,7 +39,7 @@ the raw Meshy chrome-black.
 
 ```
 npm run build
-node harness/playtest.mjs --view furn.smash --script harness/_furn-smash-look.mjs --port 5361 --q "quality=medium"
+node harness/playtest.mjs --view furn.smash --script harness/evidence/_furn-smash-look.mjs --port 5361 --q "quality=medium"
 ```
 
 Look at `s-cam-wall-aim` / `s-cam-tripod-aim` (or look-script shots):

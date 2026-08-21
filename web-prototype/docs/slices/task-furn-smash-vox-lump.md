@@ -66,7 +66,7 @@ lumpy cluster, not a packing-foam rectangle. Body tint must not go cream
 
 ```
 npm run build
-node harness/playtest.mjs --view furn.smash --script harness/_furn-smash-critic.mjs --port 5383 --q "quality=medium"
+node harness/playtest.mjs --view furn.smash --script harness/evidence/_furn-smash-critic.mjs --port 5383 --q "quality=medium"
 ```
 
 Look at `s-chaise-leave.png`, `s-settee-leave.png`, `s-desk-leave.png`,

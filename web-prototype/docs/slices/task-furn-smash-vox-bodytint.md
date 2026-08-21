@@ -48,7 +48,7 @@ Crate stay dark brown.
 
 ```
 npm run build
-node harness/playtest.mjs --view furn.smash --script harness/_furn-smash-critic.mjs --port 5381 --q "quality=medium"
+node harness/playtest.mjs --view furn.smash --script harness/evidence/_furn-smash-critic.mjs --port 5381 --q "quality=medium"
 ```
 
 Look at `s-chaise-leave.png`, `s-settee-leave.png`, `s-fireplace-leave.png`,

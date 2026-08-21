@@ -103,7 +103,7 @@ function mesh(geo, mat, disposables, name) {
  * Give every mesh in the map the name of the variable holding it, and return the map so it
  * can be dropped in at the end of a builder.
  *
- * WHY THIS EXISTS. `harness/_tmp_geoprobe.mjs --pick` raycasts camera->pixel and answers
+ * WHY THIS EXISTS. `harness/evidence/_tmp_geoprobe.mjs --pick` raycasts camera->pixel and answers
  * "which mesh owns this pixel"; it is the tool that proved the hunter's shoulder ball was
  * rendering inside its own bore, and it is useless on anything unnamed. `unit4h.js` and
  * `hunter.js` name their meshes; this file did not, so `--pick` answered "(unnamed)" for
@@ -1038,7 +1038,7 @@ function grapplingHook(H, opts) {
   //
   // ⚠️ THE DROP WAS TOO LONG AND THE THING BRIDGING IT WAS THE WRONG OBJECT. Measured off the
   // first capture this rebuild ever got (`progress/shots/gadget.grapple.png`, silhouette scan
-  // via `harness/_g6_span.mjs`): the anchor hung 0.55 housing-heights below the shoe on a
+  // via `harness/evidence/_g6_span.mjs`): the anchor hung 0.55 housing-heights below the shoe on a
   // 7-pixel hairline, against a 74-pixel housing. The art (1785320715285, same scan) hangs it
   // 0.41 housing-heights down on a 19-pixel-wide member against a 75-pixel housing — i.e. the
   // gap is a quarter of the housing wide, not a tenth, and it is a POLISHED SHANK, with the
@@ -1347,7 +1347,7 @@ function bouncyBallGun(H, opts) {
  * motion and speed". It is not a tweak — there was no ground object anywhere in this file —
  * so it is built here as its own thing rather than faked with a shadow.
  *
- * Sampled from `Dev Art/1785314396477.png` with `harness/_g7_px.mjs`, which reports
+ * Sampled from `Dev Art/1785314396477.png` with `harness/evidence/_g7_px.mjs`, which reports
  * PERCENTILES over a box rather than a mean: a skid mark is a few dark pixels among a lot of
  * bright floor, and a mean over any box containing one just reports the floor.
  *
@@ -2001,7 +2001,7 @@ function rocketSkates(H, opts) {
      * consumer is the "drop the figure until the wheels touch y = 0" solve in
      * `views/gadget.js`, so every skate capture ever taken stood 36% of a tyre radius (H *
      * 0.0122, i.e. 21 mm at H = 1.7, about 11 capture px) BELOW the floor. Measured with
-     * `harness/_g7_skate.mjs`, which reads the lowest real tyre VERTEX rather than trusting
+     * `harness/evidence/_g7_skate.mjs`, which reads the lowest real tyre VERTEX rather than trusting
      * this number: -0.0177 m before, ~0 after. It was invisible while the floor was a
      * featureless cyc and stops being invisible the moment there is a drift mark drawn on it.
      */

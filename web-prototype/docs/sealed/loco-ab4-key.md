@@ -15,7 +15,7 @@ across:
 | run  | plant OFF | plant **ON** |
 | limp | plant **ON** | plant OFF |
 
-Verified genuinely different before sealing (`harness/_tmp_critic_diff.mjs`), because round 1's
+Verified genuinely different before sealing (`harness/evidence/_tmp_critic_diff.mjs`), because round 1's
 limp pair was two copies of the same build:
 
 | gait | differing pixels | sumAbsDiff | × the noise floor |

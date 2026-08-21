@@ -19,7 +19,7 @@ Copy *size, tumble, persistence, skeleton* — not voxels.
 | `src/game/furn-catalog.js` (**new**) | chair circle layout |
 | `src/views.js` — one `furn.smash` row | |
 | `src/destruction/furn-fx.js` — `rug` profile only | |
-| `harness/_furn-smash-critic.mjs` (**new**) | |
+| `harness/evidence/_furn-smash-critic.mjs` (**new**) | |
 | `FURNSMASH.bat` (**new**) | |
 | `docs/slices/task-furn-smash.md` (this) | |
 
@@ -44,7 +44,7 @@ Copy *size, tumble, persistence, skeleton* — not voxels.
 
 ## Playcritic instrument
 
-`harness/_furn-smash-critic.mjs`: for **each** catalog id, park ~1.5 m in the aisle facing the
+`harness/evidence/_furn-smash-critic.mjs`: for **each** catalog id, park ~1.5 m in the aisle facing the
 prop, aim, `_resolveSledgeHit` until shatter or 8 blows, screenshot before + after, log
 connects / stages / debris rest count if exposed.
 
@@ -55,7 +55,7 @@ Then the **playcritique role** (not the builder) looks at the shots and files
 
 ```
 npm run build
-node harness/playtest.mjs --view furn.smash --script harness/_furn-smash-critic.mjs --port 5330 --q "quality=medium"
+node harness/playtest.mjs --view furn.smash --script harness/evidence/_furn-smash-critic.mjs --port 5330 --q "quality=medium"
 ```
 
 Assert: 24 lineup ids (or fewer if a GLB is still generating — report missing, do not fake).

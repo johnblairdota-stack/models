@@ -46,7 +46,7 @@ Plates must not go light.
 
 ```
 npm run build
-node harness/playtest.mjs --view furn.smash --script harness/_furn-smash-critic.mjs --port 5419 --q "quality=medium"
+node harness/playtest.mjs --view furn.smash --script harness/evidence/_furn-smash-critic.mjs --port 5419 --q "quality=medium"
 ```
 
 Densest ranked hex should be `#4c3c2c` / `#4b3a2c` luma ~0.24. Dust

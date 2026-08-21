@@ -17,7 +17,7 @@ Stop when playcritique files **WOWED** or **PASS with no new hates**.
 - `src/destruction/furn-fx.js` — less crumb + camera dust; tip-friendly payout
 - `src/game/furn-dress.js` — wall cam AABB thicker / taller
 - `src/destruction/furnprop.js` — longer slower tip; delay hide; less immediate dust via handlers
-- `harness/_furn-feel-critic.mjs` — longer settle before after-chair / after-tripod shots
+- `harness/evidence/_furn-feel-critic.mjs` — longer settle before after-chair / after-tripod shots
 
 **Does not own:** dig DamageField, board art WOWED.
 
@@ -47,7 +47,7 @@ Wall register: `w=1.2`, `d=1.0`, `h=1.55`, `cy = mountY - 1.25` so swing arcs hi
 
 ```bash
 npm run build
-node harness/playtest.mjs --view game.play --script harness/_furn-feel-critic.mjs \
+node harness/playtest.mjs --view game.play --script harness/evidence/_furn-feel-critic.mjs \
   --port 5305 --q "seed=s4&furndemo=1&quality=medium"
 ```
 

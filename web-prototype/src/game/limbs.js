@@ -378,7 +378,7 @@ export class LimbField {
  *
  * ---------------------------------------------------------------------------
  * 🎯 **THE RULE, AND EVERY NUMBER IN IT IS MEASURED OFF THE SHIPPED EVENT STREAM RATHER THAN
- * CHOSEN.** (`harness/_limb1-rule.mjs`, the shipped `DamageField` at 220 blows × both of
+ * CHOSEN.** (`harness/evidence/_limb1-rule.mjs`, the shipped `DamageField` at 220 blows × both of
  * `debris-collapse` C5's play policies.)
  *
  * **1. ONLY A FULL BITE CAN DO IT, AND THE THRESHOLD SITS IN A MEASURED HOLE.** `sag-1` made
@@ -520,7 +520,7 @@ export const COLLAPSE_LIMB = {
 /**
  * Would this collapse event take a limb off this body, and which one?
  *
- * **Pure.** No THREE, no rig, no side effects — so `harness/_limb1-rule.mjs` can sweep it
+ * **Pure.** No THREE, no rig, no side effects — so `harness/evidence/_limb1-rule.mjs` can sweep it
  * headless and `Player.hitByCollapse` can be the only thing that ever acts on the answer.
  *
  * @param {object} ev  ONE entry of `collapse().events[]`, placed in the world by the view:

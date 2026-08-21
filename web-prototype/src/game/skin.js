@@ -85,7 +85,7 @@ import { DAMAGE_BANDS } from './wall.js';
  * longest edge until that edge is under `SKIN_CELL`, which is exact: the fragments are coplanar
  * with the triangle they came from and their normals and uvs are the barycentric interpolation the
  * rasteriser was already doing, so the subdivided surface is the same surface.
- * **`harness/_skin1-geom.mjs` A2 asserts the total area is conserved (worst relative drift 1.33e-8
+ * **`harness/evidence/_skin1-geom.mjs` A2 asserts the total area is conserved (worst relative drift 1.33e-8
  * against a float32 storage epsilon of 1.19e-7), A3 that no mesh was added or renamed, and A4 that
  * not one collider moved.** Cost: **+42 824 triangles house-wide**, 165–200 ms in the builder.
  *

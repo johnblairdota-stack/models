@@ -5,9 +5,9 @@
 run every run:
 
 ```
-node harness/_genwalk1-rot.mjs --n 512     arm A (no rotation) priced against the shipped generator
-node harness/_genwalk1-place.mjs           which placements spaces.js will actually emit — 10/0
-node harness/_genwalk1-build.mjs --all     does room.js BUILD a turned room, or only place one
+node harness/evidence/_genwalk1-rot.mjs --n 512     arm A (no rotation) priced against the shipped generator
+node harness/evidence/_genwalk1-place.mjs           which placements spaces.js will actually emit — 10/0
+node harness/evidence/_genwalk1-build.mjs --all     does room.js BUILD a turned room, or only place one
 ```
 
 Scope set by John, 2026-08-11, via the lead: **IN** — rooms, corridors, doors, diggable walls, the
@@ -39,7 +39,7 @@ Only **three files in `src/`** import from `spaces.js` at all: `dig.js`, `room.j
 
 ### Arm A — rooms never turned. **RECOMMENDED.**
 
-`node harness/_genwalk1-rot.mjs --n 512`. Every arm is the SHIPPED `genspike.mjs` with ONE line
+`node harness/evidence/_genwalk1-rot.mjs --n 512`. Every arm is the SHIPPED `genspike.mjs` with ONE line
 textually replaced (`const rot = rng() < 0.5;`) in a scratchpad copy, so `selectRooms`,
 `placeRooms`, `planFromRooms` and `measure` are the same code in every column. **It does not
 re-derive the packer.**
@@ -91,7 +91,7 @@ is a thing he can see and we cannot score.
 
 ### Arm B — turned rooms supported. **Much smaller than §9.4b says, and mostly already done.**
 
-`node harness/_genwalk1-place.mjs` — **10 pass, 0 fail**, asking the shipped `placeRoom`:
+`node harness/evidence/_genwalk1-place.mjs` — **10 pass, 0 fail**, asking the shipped `placeRoom`:
 
 ```
            turns:   0     1     2     3
@@ -108,7 +108,7 @@ and it is one field — `sp.columns` — in one library entry:
 > `[spaces] a rotated room cannot emit \`columns\` — room.js reads { z, xs }; give it the general
 > form before rotating a room that has a colonnade`
 
-And `node harness/_genwalk1-build.mjs --all` takes it one step further: it patches `HOUSE_PLAN` in
+And `node harness/evidence/_genwalk1-build.mjs --all` takes it one step further: it patches `HOUSE_PLAN` in
 memory at load (`node:module` `registerHooks`, nothing written to disk) and BUILDS the mansion
 headless.
 
@@ -417,9 +417,9 @@ Filed rather than diverged silently, per the rule.
 
 | file | what it asks | controls |
 |---|---|---|
-| `harness/_genwalk1-rot.mjs` | what forbidding rotation costs, over 512 seeds | **C1** identity re-patch, 512/512 hashes == arm 0 · **C2** dropped rng draw, 512/512 differ · **C3** 272 m ballroom, `frac` 0.9279 → 0.6861 and void 5.5 → 30.0 m² · **C4** undiggable + doorless, 512/512 fail closure. Exit 0 iff all four behave; **the arms never set the exit code.** |
-| `harness/_genwalk1-place.mjs` | which `(type, turns)` pairs `placeRoom` will emit | **K1** the shipped plan places 6 · **K2** an unknown room type throws · **K3** a half turn MOVES the rig. **10 pass, 0 fail.** |
-| `harness/_genwalk1-build.mjs` | does `room.js` BUILD a turned room | `--arm control` must exit 0 (and it prints `room.js`'s sha1, because another agent has that file open) · `--arm ballturn` must exit 1 with the columns throw. A missing patch anchor throws rather than building the shipped house and calling it turned. |
+| `harness/evidence/_genwalk1-rot.mjs` | what forbidding rotation costs, over 512 seeds | **C1** identity re-patch, 512/512 hashes == arm 0 · **C2** dropped rng draw, 512/512 differ · **C3** 272 m ballroom, `frac` 0.9279 → 0.6861 and void 5.5 → 30.0 m² · **C4** undiggable + doorless, 512/512 fail closure. Exit 0 iff all four behave; **the arms never set the exit code.** |
+| `harness/evidence/_genwalk1-place.mjs` | which `(type, turns)` pairs `placeRoom` will emit | **K1** the shipped plan places 6 · **K2** an unknown room type throws · **K3** a half turn MOVES the rig. **10 pass, 0 fail.** |
+| `harness/evidence/_genwalk1-build.mjs` | does `room.js` BUILD a turned room | `--arm control` must exit 0 (and it prints `room.js`'s sha1, because another agent has that file open) · `--arm ballturn` must exit 1 with the columns throw. A missing patch anchor throws rather than building the shipped house and calling it turned. |
 
 All three are pure Node, no browser, no GPU. `_genwalk1-rot.mjs` patches **scratchpad copies** of
 `genspike.mjs` and imports them; `_genwalk1-build.mjs` patches `spaces.js` **in memory at load**.

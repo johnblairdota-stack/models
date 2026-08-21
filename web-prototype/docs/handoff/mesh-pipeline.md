@@ -90,7 +90,7 @@ would have curled round the ribs. It ships at **0.1853 × 0.0440 m**.
 onto the measured skull would silently drop the face 11 mm down the jaw as a side effect of
 fixing the ears. Conforming made the Z one nearly inert anyway.
 
-Probes: `harness/_kit1_probe.mjs` (bone-owned boxes) · `_kit2_surfaces.mjs` (skull/torso profiles
+Probes: `harness/evidence/_kit1_probe.mjs` (bone-owned boxes) · `_kit2_surfaces.mjs` (skull/torso profiles
 + donor ratios) · `_kit3_chest.mjs` (chest cross-section and normals) · `_kit5_where.mjs` (where a
 kit part actually landed) · `_kit7_artratio.mjs` (measures the ART) · `_kit8_delivered.mjs`
 (target vs DELIVERED, in metres, off the built character).
@@ -440,7 +440,7 @@ just improved.
 1. **Darks are atomised speckle, not plate channels.** Median dark connected component **1–2 px vs
    the art's 10–16**, and **21.9–59.7 components per 1000 dark px vs the art's 1.5–7.3**. Disjoint
    at all four dark cuts and both poses. The dark *fraction* target is met; the structure is dust.
-   Probe: `harness/_critdig_darkstruct.mjs`. Per-component elongation did NOT separate them
+   Probe: `harness/evidence/_critdig_darkstruct.mjs`. Per-component elongation did NOT separate them
    (art 1.95–2.32 vs render 1.74–1.91) — it is count and size, not shape.
 2. **Visible flat-shaded triangle mosaic.** Facet energy 15.7–21.5 vs art 8.3–12.3 across all five
    neutrality cuts and four regions. MESH.

@@ -46,7 +46,7 @@ float pat(float v, float k){ return clamp((v - 0.5) * k + 0.5, 0.0, 1.0); }
  * occlusion, the render is matte white plastic".
  *
  * MEASURED, on a chroma-key capture masked identically to assets/mv/player/baseline_front.png
- * (harness/_kit8_shellvalue.mjs), the whole figure:
+ * (harness/evidence/_kit8_shellvalue.mjs), the whole figure:
  *
  *                                    ART          RENDER before
  *   shell pixels below luma 90     13.9-15.9%     0.56-1.16%
@@ -78,7 +78,7 @@ float pat(float v, float k){ return clamp((v - 0.5) * k + 0.5, 0.0, 1.0); }
  * GLB is one mesh whose atlas is 405 charts with a median uv-bbox diagonal of 0.070 — about
  * 14 cm of surface — at arbitrary orientations, so a uv-space grid cannot be body-aligned and
  * the network lands as a uniform crazed glaze across the whole figure. Measured: mean |second
- * difference| of luma along a row (the 'facet' column of harness/_kit8_shellvalue.mjs) sat at
+ * difference| of luma along a row (the 'facet' column of harness/evidence/_kit8_shellvalue.mjs) sat at
  * 17.9-18.7 against the reference art's 9-12 in every setting that also delivered the darks.
  *
  * The reference does not distribute its darks uniformly. It concentrates them at joints, plate
@@ -99,7 +99,7 @@ float pat(float v, float k){ return clamp((v - 0.5) * k + 0.5, 0.0, 1.0); }
  * neither is a geometric statement.
  *
  * MEASURED, mesh.animated ?solo=1&clip=walking, whole figure, neutrality cuts 20 and 30
- * (harness/_kit8_shellvalue.mjs). Every row is a capture, not an estimate:
+ * (harness/evidence/_kit8_shellvalue.mjs). Every row is a capture, not an estimate:
  *
  *                                    dark<90     legs      seam@14    spread     facet
  *   nothing (?seams=0&occ=0)         0.7-1.0%   0.0-0.1%   3.4-3.7    107-111    7.4-7.5
@@ -393,7 +393,7 @@ float pat(float v, float k){ return clamp((v - 0.5) * k + 0.5, 0.0, 1.0); }
  * seams, screw heads and machined chrome; the render is smooth toy-plastic outside the joint
  * discs", and this is the chrome half of it.
  *
- * MEASURED off the sheet (harness/_probe_tmp.mjs on Dev Art/1785277053522.png): a 10x30 px
+ * MEASURED off the sheet (harness/evidence/_probe_tmp.mjs on Dev Art/1785277053522.png): a 10x30 px
  * box on the front figure's upper arm reads median 119 with a RANGE of 203 — p05 32, p95 235.
  * The abdomen band reads median 106, range 111. That is the signature: the sheet's structural
  * metal is not a mid grey, it is a narrow bright band and a dark band a few pixels apart, i.e.
@@ -802,7 +802,7 @@ void surface(in vec2 uv, inout Surf s){
   // the sheet's screen physically is, and that finding stands.
   /*
    * ⚠️ ROUND 33 — THE COMPENSATION OVERSHOT AND INVERTED THE THING IT WAS CORRECTING, and that
-   * is measurable rather than arguable. harness/_face1-pop.mjs reports the median of the
+   * is measurable rather than arguable. harness/evidence/_face1-pop.mjs reports the median of the
    * screen's top half minus its bottom half, over the segmented visor:
    *
    *     art (assets/mv/player/baseline_front.png)   +0.002   i.e. FLAT, as a backlit panel is
@@ -894,7 +894,7 @@ const C = {
    * WARM CHAMPAGNE, NOT NEUTRAL — #EDEFF0 -> #F1EEE6, AND IT IS A HUE DEFECT RATHER THAN AN
    * EXPOSURE ONE.
    *
-   * Measured on `harness/_critdig_darkstruct.mjs`, mean R-B over the LIT neutral shell of the
+   * Measured on `harness/evidence/_critdig_darkstruct.mjs`, mean R-B over the LIT neutral shell of the
    * torso+legs band, swept over four lit cuts. The art's number is remarkably stable, which is
    * what says it is a deliberate paint colour and not a lighting artefact:
    *
@@ -1304,7 +1304,7 @@ uniform float uRRWVentKeep;
  * PICTURE: the slots came out as seven concentric arcs wrapping the entire back of the skull and
  * over the crown, which is not a ventilation panel, it is a rib cage.
  *
- * The reason is in harness/_head4-vent.mjs and it follows from the fork. The mean axis leans 47
+ * The reason is in harness/evidence/_head4-vent.mjs and it follows from the fork. The mean axis leans 47
  * degrees FORWARD, so every vertex on the rear of the skull projects BEHIND the proximal joint, goes
  * negative, and RRW_BONE_VERT's clamp(aBoneEnd.x / len, 0, 1) flattens all of them onto t = 0 —
  * the probe measures 140 vertices at t < 0.1 spanning 0 to 0.159 m of height on a skull whose
@@ -1440,7 +1440,7 @@ float rrwPanelDist(vec2 uv, float n, float seed, float density){
  * close the gap with a finer or coarser grid failed for the same structural reason: A GRID
  * CANNOT KNOW WHERE A PLATE ENDS.
  *
- * MEASURED, `harness/_two1_regionmap.mjs`, over baseline_front / side-left / back:
+ * MEASURED, `harness/evidence/_two1_regionmap.mjs`, over baseline_front / side-left / back:
  *
  *   region        art value / white chest plate      verdict
  *   arms           0.563  0.721 | 0.622  0.667       DARK  (the dominant two-tone)
@@ -1712,7 +1712,7 @@ vRRWDet2 = vec4(0.0, 0.0, 0.0, 1000.0);
          * bone and boneAxisTable gives it the MEAN of head_end and headfront, which leans 47
          * degrees forward — so the entire occiput projects BEHIND the proximal joint and lands at
          * a NEGATIVE fraction. clamp() flattens all of it onto exactly 0, and a window in a
-         * constant cannot place anything. harness/_head4-vent.mjs bins the back-facing head
+         * constant cannot place anything. harness/evidence/_head4-vent.mjs bins the back-facing head
          * vertices by height and prints both: the unclamped fraction runs -0.317, -0.169, 0.046,
          * 0.263, 0.477 from the bottom fifth of the skull to the crown — cleanly monotone, exactly
          * the vertical coordinate this panel needs — while the clamped one reads 0.000 for the
@@ -2038,7 +2038,7 @@ if (uRRWOn > 0.0001) {
      * — 14.5 mm, converted through the same tiny metres-per-uv — becomes a large fraction of
      * that one cell. The part is not panelled. The part IS a groove, plus a 4.6x shoulder.
      *
-     * MEASURED, capFixtureFR at azim 0 on the shared material (harness/_hubs2-uni.mjs and
+     * MEASURED, capFixtureFR at azim 0 on the shared material (harness/evidence/_hubs2-uni.mjs and
      * _hubs2-plate.mjs), each uniform zeroed one at a time and the delivered pixel read back:
      *
      *   shipped                 ( 77, 75, 65)     the dark hole
@@ -2702,7 +2702,7 @@ const RRW_POST = /* glsl */ `
  * ⚠️ AND THIS IS THE LINE THAT DECIDES WHETHER IT HAS A DARK CORE — WHICH IS A DIFFERENT
  * QUESTION FROM THE ONE ABOVE, AND THE ONE THE VALUE-SPREAD DEFICIT TURNED OUT TO BE.
  *
- * MEASURED. The art's upper arm (harness/_mat4_artbox.mjs on baseline_front.png) reads
+ * MEASURED. The art's upper arm (harness/evidence/_mat4_artbox.mjs on baseline_front.png) reads
  * p05 57.4, median 120.3, p95 221.3 — spread 163.9. The render at the settled dlcenv 2.0 reads
  * p05 103.8, median 127.5, p95 214.5 — spread 110.7. THE BRIGHT END IS ALREADY RIGHT, within 7
  * levels of the art. The whole 53-level deficit is at the DARK end: our chrome never goes dark.
@@ -2921,7 +2921,7 @@ export const RRW_FAM = { CHROME: 0, DARK: 1, RUBBER: 2, INNER: 3 };
  *
  * Every predicate here answers "is this bone part of region X" against the normalised token
  * string from rrwTokens(). Two things depend on it: the family assignment below, and the
- * `?famprobe=` selection mask that `harness/_mat4_regions.mjs` uses to decide which PIXELS of a
+ * `?famprobe=` selection mask that `harness/evidence/_mat4_regions.mjs` uses to decide which PIXELS of a
  * capture are the forearm.
  *
  * ⚠️ THEY MUST BE THE SAME PREDICATE OR THE MEASUREMENT IS NOT A MEASUREMENT OF THE SHADER. A
@@ -2932,7 +2932,7 @@ export const RRW_FAM = { CHROME: 0, DARK: 1, RUBBER: 2, INNER: 3 };
  *
  * ORDER IS LOAD-BEARING inside `upperarm`: ' left fore arm ' contains ' arm ', so the upper-arm
  * predicate has to exclude the forearm and the hand explicitly rather than relying on being
- * tried second. `harness/_two3_bones.mjs` case 3b is the control for that.
+ * tried second. `harness/evidence/_two3_bones.mjs` case 3b is the control for that.
  */
 const RRW_REGION = {
   forearm: (t) => / (fore|lower) ?arm|forearm|lowerarm/.test(t),
@@ -2969,7 +2969,7 @@ const rrwSide = (t) => (/ left | l /.test(t) ? 1 : / right | r /.test(t) ? -1 : 
  * waist). Matching /spine$/i for "the waist" would therefore have put CHROME ON THE CHEST PLATE
  * of this character — the one surface the brief protects, because the 4Humanity wordmark is on
  * it. The SHALLOWEST spine bone is the one nearest the hips in either convention, and
- * `harness/_two3_bones.mjs` case 3 asserts the naive rule and is expected to FAIL.
+ * `harness/evidence/_two3_bones.mjs` case 3 asserts the naive rule and is expected to FAIL.
  *
  * ⚠️ THE FOREARM TEST MUST BE TRIED BEFORE THE UPPER-ARM TEST and it is not merely tidy: ' left
  * fore arm ' matches / arm / too, so an upper-arm-first chain would paint the forearms chrome —
@@ -3114,7 +3114,7 @@ export function rrwBoneDetail(bones, opts = {}) {
     const t = rrwTokens(bones[i].name);
     // Same ordering rule, same reason, as rrwFamilyWeights: ' left fore arm ' matches / arm /,
     // so the forearm has to be taken before the upper arm or the shoulder's detach crease lands
-    // on the WRIST. `harness/_fd2-ring.mjs` case 2 is the control for that.
+    // on the WRIST. `harness/evidence/_fd2-ring.mjs` case 2 is the control for that.
     if (RRW_REGION.forearm(t)) { set(i, RRW_DET.PROX, joint); set(i, RRW_DET.CAPP, cap); }
     else if (RRW_REGION.hand(t)) continue;
     else if (RRW_REGION.upperarm(t)) { set(i, RRW_DET.DIST, joint); set(i, RRW_DET.PROX, detach); }
@@ -3612,7 +3612,7 @@ export function shellWhite(opts = {}) {
    * exactly the state in which it costs value spread without ever reading as a line. At 1024 it
    * is two texels and has a bottom.
    *
-   * ✅ THE COST IS NOW MEASURED, AND IT IS PAID ONCE, NOT FOUR TIMES — `harness/_vram3_shellsize.mjs`.
+   * ✅ THE COST IS NOW MEASURED, AND IT IS PAID ONCE, NOT FOUR TIMES — `harness/evidence/_vram3_shellsize.mjs`.
    * This block used to say the increase was "12.6 MB per variant ... a scene holding the player
    * plus three hunter stages pays it four times". The per-variant figure was near enough (12.00 MB,
    * not 12.6 — the mip chain is 4/3, not 1.34). THE "FOUR TIMES" WAS WRONG, because it reasoned
@@ -3631,7 +3631,7 @@ export function shellWhite(opts = {}) {
    * that was requested, precisely because a caller can win the merge; the hunters' pinned 512s are
    * the probe's own control, and a run in which they moved would mean it was reading the request.
    *
-   * `harness/_vram1_reset.mjs` is NOT the probe for this, though this comment used to name it. It
+   * `harness/evidence/_vram1_reset.mjs` is NOT the probe for this, though this comment used to name it. It
    * reads `renderer.info.memory.{textures,geometries}`, which are counts of OBJECTS — a 512 tile
    * and a 1024 tile both count as 1, and the count is identical under both flags in every view
    * above (53, 53, 65, 91, 283). It would have printed the same number twice and read as "free".
@@ -3802,9 +3802,9 @@ export function shellWhite(opts = {}) {
        * ALBEDO 0.52, AND TWO MEASUREMENTS DISAGREED ABOUT IT — the disagreement is named here
        * rather than averaged away, because picking the wrong one of the two costs a whole round.
        *
-       * Swept on the Alert capture, `harness/_two2_ratio.mjs` (which selects the region with the
+       * Swept on the Alert capture, `harness/evidence/_two2_ratio.mjs` (which selects the region with the
        * ?weather=debug5 mask rather than with a box, because the render is posed and a box lands
-       * on the wrong parts) and `harness/_two1_regionmap.mjs` for the fractions:
+       * on the wrong parts) and `harness/evidence/_two1_regionmap.mjs` for the fractions:
        *
        *   at dlmetal 0.55:
        *   darkAlb    0.28   0.34   0.42   0.52   0.64  |  ART
@@ -3909,7 +3909,7 @@ export function shellWhite(opts = {}) {
        * "The hue of the chrome and of the dark crease. Measure those off the art; they are not
        * described here."
        *
-       * MEASURED, `harness/_mat4_artbox.mjs` on assets/mv/player/baseline_front.png, median R-B
+       * MEASURED, `harness/evidence/_mat4_artbox.mjs` on assets/mv/player/baseline_front.png, median R-B
        * over a box on each region (0-255):
        *
        *                     ART R-B      RENDER R-B at dlcwarm 0
@@ -4004,8 +4004,8 @@ export function shellWhite(opts = {}) {
        */
       /*
        * MEASURED, mesh.animated ?solo=1&clip=merged&anim=Alert&azim=0, upper arm through its
-       * ?famprobe= mask (`harness/_mat4_regions.mjs`), against the art's own upper-arm box
-       * (`harness/_mat4_artbox.mjs` on baseline_front.png). Every row is a capture:
+       * ?famprobe= mask (`harness/evidence/_mat4_regions.mjs`), against the art's own upper-arm box
+       * (`harness/evidence/_mat4_artbox.mjs` on baseline_front.png). Every row is a capture:
        *
        *                                        p05    med    p95   spread   R-B
        *   pre-round                           103.8  127.5  214.5   110.7    11
@@ -4051,7 +4051,7 @@ export function shellWhite(opts = {}) {
        *
        * THE PITCH IS THE LEVER, and the whole of its useful range is a narrow band just above a
        * CLIFF. Swept on mesh.animated ?solo=1, upper arm through its ?famprobe= mask minus the
-       * ?famprobe=none detail furniture (harness/_turn1_ribs.mjs), at turn 1.0:
+       * ?famprobe=none detail furniture (harness/evidence/_turn1_ribs.mjs), at turn 1.0:
        *
        *   pitch (m)   0.013   0.010   0.009   0.008   0.007   0.0065   0.0045
        *   density      65.6    56.3    48.4    35.5    23.0     18.2     18.2
@@ -4174,7 +4174,7 @@ export function shellWhite(opts = {}) {
        *
        * STUDIO, 'mesh.animated?solo=1&bg=ff00ff&azim=0', _kit8_shellvalue vs baseline_front,
        * cut 45 — and GAME, 'game.play?mesh=1&quality=medium&seed=s4' at 6.2 s, p10 of a fixed
-       * box on the shin and on the forearm (harness/_rd1-legcontrast.mjs):
+       * box on the shin and on the forearm (harness/evidence/_rd1-legcontrast.mjs):
        *
        *   floor    studio spread   studio legs spread  |  shinL p10   forearm p10
        *   0            168.0            153.2          |     7.0          1.4
@@ -4210,7 +4210,7 @@ export function shellWhite(opts = {}) {
       /*
        * 0.28, AND IT WAS SWEPT. Foot median as a ratio of the SHIN — the white plate immediately
        * above it on the same limb, so the comparison is free of pose and exposure
-       * (`harness/_mat4_regions.mjs`, masks from ?famprobe=):
+       * (`harness/evidence/_mat4_regions.mjs`, masks from ?famprobe=):
        *
        *   dlralb      0.28   0.36   0.46   0.60
        *   foot/shin   0.66   0.76   0.86   0.97
@@ -4440,7 +4440,7 @@ export function shellWhite(opts = {}) {
       /*
        * ⚠️ THE OUT-RAMP IS SET BY VALUE COST, NOT BY TASTE, AND THE WIDER WINDOW WAS MEASURED
        * FIRST. At (-0.20, 0.02) the panel holds the bottom TWO fifths of the back of the skull and
-       * harness/_head1-uni.mjs ablates it at NINE AND A HALF POINTS of head dark<120 — and of that,
+       * harness/evidence/_head1-uni.mjs ablates it at NINE AND A HALF POINTS of head dark<120 — and of that,
        * uRRWRidge (the slots) is 1.06 and the rest is the chrome field itself. A metal has no
        * diffuse term, so a chrome patch on a surface turned away from the key is a grey hole in a
        * white skull, and this head was already the figure's worst region for exactly that
@@ -4630,7 +4630,7 @@ export function faceplate(opts = {}) {
    *
    * The art is a DARK visor with LIT eyes glowing out of it. This plate had become a PALE panel
    * with eyes that barely rose above it — the single most identifying thing on the character,
-   * reading as switched off. Measured with harness/_face1-pop.mjs, which SEGMENTS the visor by
+   * reading as switched off. Measured with harness/evidence/_face1-pop.mjs, which SEGMENTS the visor by
    * blue chroma rather than taking a crop box (see below for why that distinction is the whole
    * ballgame), over the front elevation:
    *
@@ -4689,7 +4689,7 @@ export function faceplate(opts = {}) {
    * `sat` pulls red out of the EMISSIVE only, never out of `uLight`, so the lit albedo and the
    * hunter's red override are untouched.
    *
-   * === WHERE IT LANDED, front elevation, harness/_face1-pop.mjs ===
+   * === WHERE IT LANDED, front elevation, harness/evidence/_face1-pop.mjs ===
    *
    *                    screen    eye    POP      tilt    eyeChroma  screenChroma
    *   art               0.396   0.743  +0.347   +0.003     47.1        39.6

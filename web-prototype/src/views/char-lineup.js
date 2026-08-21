@@ -259,7 +259,7 @@ export default async function view(args = {}) {
    * ⚠️ `brandReady()` BEFORE `markReady()`, and `markReady()` AT ALL.
    *
    * This view shipped without `markReady()` on its first run, so nothing downstream could tell
-   * the difference between "still baking" and "finished" — `harness/_lineup_shot.mjs` waited on
+   * the difference between "still baking" and "finished" — `harness/evidence/_lineup_shot.mjs` waited on
    * a plain timer instead and photographed the splash screen while reporting OK. A view that
    * never declares itself ready makes every capture of it a guess.
    *

@@ -1569,7 +1569,7 @@ export function emissiveMat(color = 0xffb457, intensity = 6.0) {
 // does not 404, it succeeds and returns an HTML document. Parsing that throws, `tryMod` catches
 // it exactly as designed, and every borrowed surface quietly becomes its local stand-in.
 //
-// Measured: `node harness/_tmp_geoprobe.mjs --pick --view light.dark` (which serves `dist/`)
+// Measured: `node harness/evidence/_tmp_geoprobe.mjs --pick --view light.dark` (which serves `dist/`)
 // reports the study's and dark room's walnut panelling as
 // `est-bois:{"paint":[0.23,0.15,0.092],…}` — the fallback PAINT shader — not walnut.
 //

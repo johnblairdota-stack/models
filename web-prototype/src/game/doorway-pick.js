@@ -1,7 +1,7 @@
 ﻿/**
  * Doorway picker — aims the existing sledge at the (u, v) that most quickly
  * opens a robot-scale channel. Measured 2026-08-16 in
- * harness/_taskrun_picker_measure.mjs against the real DamageField.
+ * harness/evidence/_taskrun_picker_measure.mjs against the real DamageField.
  *
  * Open test is field.channel(0.34, 1.70, 0.30).open — the same predicate
  * wall.js blocksMovement() already uses. Do NOT retarget at COLLAPSE.fail.

@@ -47,7 +47,7 @@ must stay gone. Plates must not go light.
 
 ```
 npm run build
-node harness/playtest.mjs --view furn.smash --script harness/_furn-smash-critic.mjs --port 5425 --q "quality=medium"
+node harness/playtest.mjs --view furn.smash --script harness/evidence/_furn-smash-critic.mjs --port 5425 --q "quality=medium"
 ```
 
 Densest must not rank studio khaki. Lip toward 80%+. Chaise must not

@@ -14,7 +14,7 @@ i.e. the cavity FLOOR, upward and outward into the cavity, which makes the cavit
 itself is never touched, so the silhouette John chose cannot move — that is a structural guarantee,
 not a measurement, and it is asserted (no selected vertex may lie on the hem rim).
 
-WHAT THE MEASUREMENT SAYS THE TARGET IS. `harness/_hipx2_whatisdark.mjs` raycasts every dark pixel
+WHAT THE MEASUREMENT SAYS THE TARGET IS. `harness/evidence/_hipx2_whatisdark.mjs` raycasts every dark pixel
 in the band ROI at the captured frame and reports what it hits. On `player_norm30.glb`:
 
     median hit height    model y 0.709      (the hem rim spans y 0.691..0.843)

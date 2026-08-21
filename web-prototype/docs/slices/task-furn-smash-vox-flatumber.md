@@ -55,7 +55,7 @@ light. Well must stay gone.
 
 ```
 npm run build
-node harness/playtest.mjs --view furn.smash --script harness/_furn-smash-critic.mjs --port 5399 --q "quality=medium"
+node harness/playtest.mjs --view furn.smash --script harness/evidence/_furn-smash-critic.mjs --port 5399 --q "quality=medium"
 ```
 
 Look at densest 80×80 vs 148s. Ranked hex should be the `#4c3c2c`

@@ -1399,7 +1399,7 @@ function dressFamily(p) { return p.spec?.dig ? SEG_FAMILY : CONN_FAMILY; }
  * ⚠️ **WHAT WAS WRONG, MEASURED RATHER THAN ASSERTED.** `connectorDressing`'s `blind` arm is a
  * per-cue coin flip (`DRESS_P` chain 0.50, boards 0.28, mortar 0.28), so over 512 seeds
  * **49.4% of closed connectors wore no chain and 22% wore nothing at all**
- * (`harness/_dl1-census.mjs`). `bang-1` announced "THE WEST GALLERY DOOR", walked to it, and
+ * (`harness/evidence/_dl1-census.mjs`). `bang-1` announced "THE WEST GALLERY DOOR", walked to it, and
  * photographed *"a dark recessed panel with corner brackets and a dashed X: no chain, no
  * padlock"* — a mechanic named for chains, on a door with none.
  *

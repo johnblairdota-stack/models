@@ -120,7 +120,7 @@ import { shellWhite } from '../materials/surfaces/robot.js';
  * `friendly_rigged.glb` reads **0.00 deg worst rest direction, 0.0% worst bone length**, against
  * the 114.86 deg that made `friendly_merged.glb` invalid.
  *
- * Measured, not assumed — `harness/_anim_check.mjs --clip fall`: `Walking` 2.3% ground break,
+ * Measured, not assumed — `harness/evidence/_anim_check.mjs --clip fall`: `Walking` 2.3% ground break,
  * 5.0% drift, 8.9 deg tilt; `Running` and `Alert` the same order. The copied build read 4.3% and
  * pitched off the plane, which is what John saw.
  *
@@ -442,7 +442,7 @@ const urlNum = (name, fallback) => {
  * character. Multiplying by the bone's own world scale puts `aBoneLocal` in METRES OF THE
  * FINISHED CHARACTER, which is the unit a shader author writing "3 cm below the elbow" needs.
  *
- * `harness/_fd1_frames.mjs` is the control for all of that: it recomputes every vertex both ways
+ * `harness/evidence/_fd1_frames.mjs` is the control for all of that: it recomputes every vertex both ways
  * and compares against `SkinnedMesh.applyBoneTransform`, three.js's own skinning. Agreement is
  * 3.9e-7 m over 800 vertices; the same loop with `boneInverses` omitted misses by 0.285 m.
  */

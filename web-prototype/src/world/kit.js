@@ -620,7 +620,7 @@ export function wallRun(bin, o = {}) {
   //   chroma work were aimed at. Its back wall has five bays over 12.4 m and no `skip`, so bay
   //   2's field — a 2.16 x 2.20 m plate at z = -reveal, i.e. IN FRONT of the glazing line —
   //   was drawn straight across a 1.62 x 3.05 m doorway. Found with
-  //     node harness/_tmp_geoprobe.mjs --pick --view light.dark --grid 860,340,220,320,8
+  //     node harness/evidence/_tmp_geoprobe.mjs --pick --view light.dark --grid 860,340,220,320,8
   //   which returns `kit:wood` over the whole opening. Every round that answered "the doorway
   //   is not bright enough" by raising the light was raising a light behind a panel.
   //

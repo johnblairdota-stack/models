@@ -56,7 +56,7 @@ same cubes *are* the object, scaled up to the cell.
 
 ```
 npm run build
-node harness/playtest.mjs --view furn.smash --script harness/_furn-smash-critic.mjs --port 5357 --q "quality=medium"
+node harness/playtest.mjs --view furn.smash --script harness/evidence/_furn-smash-critic.mjs --port 5357 --q "quality=medium"
 ```
 
 Look at `s-crate-wound.png` (hole in wood, empty inside, no voxel fill),

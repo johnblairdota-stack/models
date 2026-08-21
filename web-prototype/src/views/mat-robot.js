@@ -412,7 +412,7 @@ export default async function view() {
      * remained was the constant.
      *
      * MEASURED both ways, on a vertical scan at x = 330 crossing the rectangle's top edge
-     * (`harness/_tmp_scan.mjs col`): before, the panel dips from 177.0 to 171.0 across that edge;
+     * (`harness/evidence/_tmp_scan.mjs col`): before, the panel dips from 177.0 to 171.0 across that edge;
      * at 0.0006 the dip is 177.0 -> 174.1, i.e. halved; at 0.0002 it is under a value and the 4x
      * crop shows nothing. The step scales with the lift, which is itself the confirmation that
      * the lift is the cause.

@@ -46,7 +46,7 @@ const ART = {
  * measurements, not opinions. Carrying a ratio across is therefore evidence; carrying a raw
  * distance across is not, because the two characters are not the same shape.
  *
- * Measured by `harness/_kit2_surfaces.mjs` and `harness/_kit3_chest.mjs` on a 1.7 m donor:
+ * Measured by `harness/evidence/_kit2_surfaces.mjs` and `harness/evidence/_kit3_chest.mjs` on a 1.7 m donor:
  *
  *   visor plate width 0.2222 m / head width 0.2836 m            = 0.7835
  *   chest decal width 0.2992 m / front-facing band 0.310 m      = 0.965
@@ -66,7 +66,7 @@ const DONOR = {
 /**
  * ===================== MEASURED OFF THE ART ITSELF =====================
  *
- * `assets/mv/player/baseline_front.png`, by `harness/_kit7_artratio.mjs`. Swept across three
+ * `assets/mv/player/baseline_front.png`, by `harness/evidence/_kit7_artratio.mjs`. Swept across three
  * colour cuts; only figures that agreed across cuts are used, and the disagreeing cut is named.
  *
  *   visor width / head width      0.781 (cut 26) · 0.740 (cut 36)   -> 0.78
@@ -90,7 +90,7 @@ const DONOR = {
  * SILHOUETTE. Ours is a ratio of two things in a MODEL: plate width against skull width. They are
  * not the same ratio, because our silhouette includes the ear discs and the plate is curved.
  *
- * So it is set by measuring the end product. `harness/_kit7_artratio.mjs` masks a chroma capture
+ * So it is set by measuring the end product. `harness/evidence/_kit7_artratio.mjs` masks a chroma capture
  * (`?bg=ff00ff`) exactly as it masks the art, and the two are compared at the same figure scale:
  *
  *                        head silhouette   visible blue   blue / head
@@ -109,7 +109,7 @@ const DONOR = {
  * written up here because the numbers behind it were correct, reproducible, and still pointed the
  * wrong way — the failure was choosing an invariant, not measuring one.
  *
- * THE BRIEF. `harness/_mat4_teal.mjs` reports the teal band as a fraction of figure height below
+ * THE BRIEF. `harness/evidence/_mat4_teal.mjs` reports the teal band as a fraction of figure height below
  * the CROWN. Ours read 0.199..0.283 against the art's 0.236..0.298: "0.03 too high, 39% too tall".
  * Both numbers reproduce exactly, on the production build, at
  * '?solo=1&bg=ff00ff&label=0&clip=merged&anim=Alert&azim=0'. The knobs are linear in that band:
@@ -749,7 +749,7 @@ function shoulderCap(bone, meshes, side, headW, H, crownY, reach, mat) {
    * 1.7 (the rig is scaled to it at :260) and `crownY = rigBox.max.y` is the bind-pose crown.
    *
    * The DELIVERED figure is the Alert pose, which is shorter and whose crown sits lower. Measured
-   * through `harness/_mat4_teal.mjs` on '?solo=1&bg=ff00ff&clip=merged&anim=Alert', the band the
+   * through `harness/evidence/_mat4_teal.mjs` on '?solo=1&bg=ff00ff&clip=merged&anim=Alert', the band the
    * viewer actually sees is not the band this line asks for — see the calibration below. Checking
    * the world-space span (the old note's "y 1.1814..1.3170") could never catch it, because that
    * span is this line read back to itself: it is correct by construction in the bind frame and
@@ -788,7 +788,7 @@ function shoulderCap(bone, meshes, side, headW, H, crownY, reach, mat) {
    * 🚨 BUT THE BACK WEDGE IS COVERAGE, NOT RESPONSE, AND THE MEASUREMENT SAYS SO PLAINLY. The
    * round-3 brief asked for a straight revert to -35 on the reading that the pre-round cap
    * already reached behind the shoulder and merely went dark there. It does not. Teal as a
-   * percentage of FIGURE pixels on the BACK elevation, `harness/_mat4_teal.mjs`, against
+   * percentage of FIGURE pixels on the BACK elevation, `harness/evidence/_mat4_teal.mjs`, against
    * `assets/mv/player/baseline_back.png`:
    *
    *   capf0     0     -35    -55    -62      -70   |  ART
@@ -811,7 +811,7 @@ function shoulderCap(bone, meshes, side, headW, H, crownY, reach, mat) {
    * on each shoulder, so the art and the correction agree; the original spec line was the outlier
    * and round 2 followed it off a cliff.
    *
-   * MEASURED, not assumed, which way is forward: `harness/_mat4_axes.mjs` reads the rig and
+   * MEASURED, not assumed, which way is forward: `harness/evidence/_mat4_axes.mjs` reads the rig and
    * reports LeftToeBase at z +0.065 against LeftFoot at z -0.039, so +z is the character's
    * FRONT. In dirAt() below, +f swings toward +z. That sign is why -35 is BEHIND the shoulder
    * and not in front of it, and it is worth keeping straight: reversed, this revert would delete
@@ -1488,7 +1488,7 @@ function attachIdentityAtOrigin(rig, mats, H) {
      * by exactly 0. The evidence that convicted it was `material.clone()` brightening the part,
      * and a clone drops the whole injection, so it could not tell one term inside it from another.
      *
-     * THE REAL CAUSE, MEASURED WITH `harness/_hubs2-uni.mjs` (one uniform zeroed at a time, the
+     * THE REAL CAUSE, MEASURED WITH `harness/evidence/_hubs2-uni.mjs` (one uniform zeroed at a time, the
      * delivered pixel read back) — capFixtureFR, azim 0, on the shared material:
      *
      *   shipped                 ( 77, 75, 65)     the dark hole

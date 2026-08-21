@@ -604,7 +604,7 @@ Nothing in `src/` was touched by this spike. Here is the honest bill, largest it
 > the room's own frame (origin at its centre, floor level), and `HOUSE_PLAN` is six lines of
 > `at` + `turns`. `study_w` and `study_e` are ONE `ROOMS.study` entry placed twice. Every emitted
 > row is **byte-identical** to the row that was authored — 1170 exported leaves, `Object.is`,
-> gated by `node harness/_loc1_golden.mjs --check harness/_loc1_golden.json` — and 7 of 7
+> gated by `node harness/evidence/_loc1_golden.mjs --check harness/fixtures/_loc1_golden.json` — and 7 of 7
 > capture-mode frames (4 `game.play` moments + `room.gallery`/`room.study`/`room.ballroom`) came
 > back byte-identical, with programs 213 → 213 and `eo2-calls` 426/625 unchanged.
 > ⚠️ **Two corrections to the estimate.** (a) `src/world/**` and `src/lighting/**` needed **no

@@ -5,9 +5,9 @@ instruments `harness/_maplabel1-{cyan,labels,score}.mjs`. **Nothing in `src/`, n
 `harness/genspike.mjs`, nothing in `HANDOFF.md`.**
 
 ```
-node harness/_maplabel1-cyan.mjs     ->  5/5, the fix is on the screen (boots its own server, 5182)
-node harness/_maplabel1-labels.mjs   ->  6/6, what the 40 verdicts separate on
-node harness/_maplabel1-score.mjs    ->  5/5, the generator's own score against those verdicts
+node harness/evidence/_maplabel1-cyan.mjs     ->  5/5, the fix is on the screen (boots its own server, 5182)
+node harness/evidence/_maplabel1-labels.mjs   ->  6/6, what the 40 verdicts separate on
+node harness/evidence/_maplabel1-score.mjs    ->  5/5, the generator's own score against those verdicts
 ```
 
 ---
@@ -369,7 +369,7 @@ Every row from now on carries `arm`. **The original 40 carry no `arm` field at a
 absence, deliberately, so John's data file is never rewritten.** Read it as
 `row.arm ?? 'route-shown'`, which is what they were.
 
-### The control that must fail — `node harness/_maplabel1-arm.mjs`, 7/7
+### The control that must fail — `node harness/evidence/_maplabel1-arm.mjs`, 7/7
 
 **Every check has an arm that must fail, because "the route is hidden" and "the page is broken"
 would otherwise look the same.**

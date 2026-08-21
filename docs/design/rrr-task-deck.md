@@ -119,7 +119,7 @@ for 90 seconds. Measure before designing anything else onto it.
   sledge. The hammer is automated: `pickDoorwayHit()` takes the shallowest still-solid cell in an 0.80 m
   window, y ∈ [0, 1.95] (`src/game/doorway-pick.js:33-61`), and opens `channel(0.34, 1.70, 0.30)` — the same
   predicate `wall.js` `blocksMovement()` uses — in a **measured 3 blows** on 5.72 / 2.96 / 2.08 m faces
-  (`doorway-pick.js:10-12`), gated at ≤6 (`harness/_taskrun_picker_unit.mjs:22`). At `WEAPON_COOLDOWN.sledge
+  (`doorway-pick.js:10-12`), gated at ≤6 (`harness/evidence/_taskrun_picker_unit.mjs:22`). At `WEAPON_COOLDOWN.sledge
   = 0.95` s (`rules.js:78`) that is ~3 seconds of committed, loud work. The runner picks *which face*; the
   picker does the rest.
 - **Guide:** the flyover shows what is behind each face — the terminal room, a dead cavity, or the space the
@@ -213,7 +213,7 @@ measurement, not settled facts. "Noise on success" is **peak bus loudness in gun
 | 5 THE EXTRACTION | **15%** (bottom of band — routing is the least ambiguous channel, so its error must be earned by real occlusion) | **70 s**, i.e. deliberately near the clock | **0.0** peak, but sustained body noise ~0.49 |
 
 Measured with **two known-good players**, no evil, in the harness style already in use
-(`harness/_taskrun_picker_measure.mjs` is the model). Completion is timed to the *terminal*, not the exit.
+(`harness/evidence/_taskrun_picker_measure.mjs` is the model). Completion is timed to the *terminal*, not the exit.
 All three land in a per-task harness table before a task is ever dealt.
 
 ---

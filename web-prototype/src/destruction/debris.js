@@ -87,7 +87,7 @@ import * as THREE from 'three';
  * `debris-1` died before it could settle its own diagnosis, and the note it left said the floor
  * was clean because *"resting pieces fill the pool and get recycled"*. Each of round 12's three
  * terms has now been ablated back to its round-11 behaviour on the same seeded 63-blow drive,
- * against the shipped object, headless (`harness/_debris2-cause.mjs`, ~2 s, no browser):
+ * against the shipped object, headless (`harness/evidence/_debris2-cause.mjs`, ~2 s, no browser):
  *
  * | arm                              | resting | litres | peak  | p90 y | footprint |
  * |----------------------------------|---------|--------|-------|-------|-----------|
@@ -161,7 +161,7 @@ import * as THREE from 'three';
  * `debris-floor.mjs` produced a **false FAIL** on this — it measured the spread of the THREE
  * plates it drops and read 0.69 rad on one run and 0.11 on the next, which is HANDOFF's own
  * `_macro` error (*"n = 3 was a small sample and I called it a strong signal"*) repeated exactly.
- * Over the whole population (`harness/_debris4-angles.mjs`, five dig lengths), the share of
+ * Over the whole population (`harness/evidence/_debris4-angles.mjs`, five dig lengths), the share of
  * resting slabs lying within 10° of flat is **18% at 4 blows, 11% at 16, 4% at 63**, p90 tilt
  * 0.83 → 1.32 rad. Ablated at 16 blows: **removing the wall lean takes the flat share 11% → 34%**,
  * while pinning the pile-height slop to bare floor moves it 11% → 14%. So the `dw < 0.34` lean is
@@ -875,7 +875,7 @@ export class DebrisSystem {
    * the same slot back nine times: **`burst(kind, at, 10)` returned 10 and left 1 piece.**
    *
    * 🎯 **MEASURED, AND IT IS THE CLEAN FLOOR COMING BACK FOR THE SECOND DIG**
-   * (`harness/_debris2-cause.mjs`, two digs 40 m apart, same seed): the first dig left **305**
+   * (`harness/evidence/_debris2-cause.mjs`, two digs 40 m apart, same seed): the first dig left **305**
    * pieces resting, and the second dig — on pools its own first dig had filled — left **64**,
    * of which 63 were slabs from the one pool that had not saturated. Every plaster crumb of a
    * whole second dig was deleted by the crumb spawned after it.

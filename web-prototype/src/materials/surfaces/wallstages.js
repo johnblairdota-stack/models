@@ -39,7 +39,7 @@ import { boiserieMat } from '../../world/materials-local.js';
  * It used to be copy-pasted four times, identically, which is how four call sites came to
  * share a defect nobody could fix in one place.
  *
- * WHAT WAS WRONG WITH IT (measured, not guessed — harness/_be1_field.mjs dumps the baked
+ * WHAT WAS WRONG WITH IT (measured, not guessed — harness/evidence/_be1_field.mjs dumps the baked
  * ORM alpha and thresholds it at the uBreak the view actually uses):
  * the field is radial x 0.72 + billow x 0.34 + fbm x 0.16, and fbmT returns a narrow bell
  * around 0.5, so the third term contributes about +/-0.013 of real amplitude. That leaves a
@@ -71,7 +71,7 @@ import { boiserieMat } from '../../world/materials-local.js';
  * rather than the same texture reinterpreted.
  */
 // Tile means of the three biased terms in crumbleOrder(), measured on the GPU over the whole
-// 1024-square tile by harness/_be1_means.mjs rather than estimated. They exist only to make
+// 1024-square tile by harness/evidence/_be1_means.mjs rather than estimated. They exist only to make
 // the crumble mean-zero; see the note at the end of crumbleOrder().
 // The voronoi F2-F1 distribution is scale free, so fis1/fis2 hold at every `cells` value;
 // keyline's 0.25997 also lands on its analytic 0.26, which is the check that the measurement
@@ -122,14 +122,14 @@ float crumbleOrder(vec2 uv, float cells, float courseRows, float amt){
   // more plaster over the lath at wall.2.lath, a PASS at 66 whose gate is "name the stage
   // from a context-free crop", i.e. precisely the thing more plaster makes harder. So the
   // three constants below are the tile means of fis, fis2 and keyline, measured by
-  // harness/_be1_means.mjs, not estimated. What is left changes WHERE the material is and
+  // harness/evidence/_be1_means.mjs, not estimated. What is left changes WHERE the material is and
   // not HOW MUCH, which is also what makes the before/after a fair comparison.
   // ...AND MEAN-ZERO IS NOT ENOUGH, WHICH IS WHY THIS SECOND CONSTANT EXISTS.
   // The kept set is the OUTSIDE of a blob, so its boundary is concave toward the kept side,
   // and a mean-zero perturbation of a concave boundary adds more area than it removes. That
   // is geometry, not bias: with the three means above subtracted the plaster surviving at
   // 0.89 still measured 16.06% of the tile against the legacy 11.96%. So this last constant
-  // is solved for, on the field itself, with harness/_be1_field.mjs's offset sweep, and it
+  // is solved for, on the field itself, with harness/evidence/_be1_field.mjs's offset sweep, and it
   // took two rounds because the sweep over-predicts by about a fifth — an offset does not
   // move the texels the cling term pins with max(). It is scaled by the same per-layer amt
   // the perturbation carries, so a layer that barely crumbles barely moves.

@@ -560,12 +560,12 @@ groups.reach = async () => {
  * TREE WAS GREEN THE WHOLE TIME** (`inputfix-1`, 2026-08-09). Two defects, both in the probe,
  * both fixed below. **Measured, not reasoned:**
  *
- *   · `harness/_inputfix1-diag.mjs` drove this exact sub-frame dispatch with `Input.once`
+ *   · `harness/evidence/_inputfix1-diag.mjs` drove this exact sub-frame dispatch with `Input.once`
  *     instrumented and printed the latch's own timeline — `add KeyE` on keydown,
  *     `consume->true` on the next frame, `interact -> attach`. Four ways: bare, under a 140 ms
  *     CPU hog, with a latch parked 1.5 s under load, and through `keyboard.press()`. **All
  *     four PASS. `Input.once` was never the problem.**
- *   · `harness/_inputfix1-order.mjs` replayed the suite's GROUP ORDER and caught the real
+ *   · `harness/evidence/_inputfix1-order.mjs` replayed the suite's GROUP ORDER and caught the real
  *     thing: `interact()` returned **`{ kind: 'swap', socket: 'shoulderR' }`**. The suite's own
  *     trace says the same out loud — `slowframes` opened at `arms=2 weapon=fist` and
  *     `animation` opened at `arms=1 weapon=nailgun`, so between them this "dropped" keypress

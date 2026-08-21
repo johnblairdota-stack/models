@@ -170,7 +170,7 @@ quote a number, per the standing rule.
   unreachable from the change (`uLitBand` lives in `DAMAGE_PARS`).
   ⚠️ **THE TRADE, STATED: the cyan's diameter at the END of a dig goes 96% → 88% of the breach**
   (`critic-dig-4`'s *"it should fill nearly the whole breach"*). Eleven candidate bands were priced
-  against one recorded drive (`harness/_visible1-analyse.mjs`); this one pays **8 points of fill
+  against one recorded drive (`harness/evidence/_visible1-analyse.mjs`); this one pays **8 points of fill
   for 58 points of dead blows** and is the cheapest point on the curve.
   ⚠️ **Band 3's COLOUR moved with it and had to**: round 6 chose 0.280 on the stated premise that
   layer 3 *"is NEVER seen head-on"*, and it is now the crater FLOOR for most of a dig — at 0.280 it
@@ -396,7 +396,7 @@ speed was held there by an undiminished inward acceleration and re-contacted **e
 wall contacts in one 2.2 m fall**, each taking 10% off `vy`. 0.9 per frame is a terminal velocity
 of 1.4 m/s, i.e. the same drift rebuilt in a different part of the loop. `sag` is now spent by any
 touch, and only a contact above 0.25 m/s costs energy.
-📉 **Measured headless on the shipped `DebrisSystem` at a fixed 60 Hz** (`harness/_collapse2-fall.mjs`,
+📉 **Measured headless on the shipped `DebrisSystem` at a fixed 60 Hz** (`harness/evidence/_collapse2-fall.mjs`,
 which carries its own reintroduction and FAILS if putting the old terminals back reads the same):
 a collapsed slab falling 2.2 m goes **1.61 s / arrives at 1.41 m/s → 0.67 s / 6.22 m/s**, an
 ordinary blow's slab **1.17 s / 1.41 → 0.56 s / 5.29**, the crumb spray **1.49 s / 1.05 → 0.56 s /
@@ -556,7 +556,7 @@ sooner. What was missing is *a middle-sized event a region can have more than on
    `critic-dig-8`'s stated risk on C5 was *"a wall that has been about to fall for ten minutes…
    it needs a decay"* — and a decay would need a time term this file has none of by contract.
 
-📐 **MEASURED, `harness/_sag1-grain.mjs`, 14/0, headless on the shipped `DamageField` and the
+📐 **MEASURED, `harness/evidence/_sag1-grain.mjs`, 14/0, headless on the shipped `DamageField` and the
 shipped `DebrisSystem` at a fixed 60 Hz. Both arms in one process; `COLLAPSE.sag = false` is the
 round-13 code unmoved, not an approximation of it, and every assertion runs it as a control that
 must fail.**
@@ -710,7 +710,7 @@ sweeps and refits. **Nothing in `src/destruction/` was touched.**
 
 ### The rule, and every number in it is measured off the shipped event stream
 
-`harness/_limb1-rule.mjs` **9/0** — the shipped `DamageField`, 220 blows × both of
+`harness/evidence/_limb1-rule.mjs` **9/0** — the shipped `DamageField`, 220 blows × both of
 `debris-collapse` C5's play policies, every event placed in a synthetic world and handed to the
 shipped `collapseLimbHit`. Headless, no time term, two runs byte-identical.
 
@@ -823,7 +823,7 @@ the in-frame one. `eo2-calls` worst station unmoved at **426/625**.
 instrument flips it in-page and gets the identical arm). Both instruments run it as a control on
 every run.
 
-- **`harness/_limb1-rule.mjs` 9/0** — headless, the rule and every constant, nine assertions each
+- **`harness/evidence/_limb1-rule.mjs` 9/0** — headless, the rule and every constant, nine assertions each
   with a control that must fail (a wide-open threshold, `depth: 3.0`, a crawling eyeline, a body
   turned round, the naive bounding-box footprint, the `wounds` guard defeated, `on: false`, and a
   1 mm perturbation for the determinism transcript).
@@ -865,7 +865,7 @@ draw-call finding are all unchanged and still argued above.
 
 §12.1 is still true and is the reason: the event distribution is bimodal with a **3.49× hole**, and
 every value from **0.45 to 1.35** admits the identical set. Three other things were wrong instead,
-each measured (`harness/_limb1-rule.mjs`, now **10/0** — L3, L4 and a new L10):
+each measured (`harness/evidence/_limb1-rule.mjs`, now **10/0** — L3, L4 and a new L10):
 
 1. 🚨 **THERE WAS NO LEGAL PLACE TO STAND AND UNDERCUT FROM.** `WEAPON_RANGE.sledge` is 1.55 m
    **from the eye**, so the skirting — 0.28 m up a 2.80 m face, against a 1.539 m eyeline — is

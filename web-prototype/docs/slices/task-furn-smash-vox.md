@@ -29,7 +29,7 @@ Do **not** voxelize `game.play` walls. Those keep `DamageField`.
 | `src/views/furn-smash.js` — `perKind` / `keepRest` | |
 | `src/destruction/debris.js` — `keepRest` refuse to steal pile | |
 | `src/core/debug.js` — hide chrome on `furn.smash` | |
-| `harness/_furn-smash-critic.mjs` — wound + after framing | |
+| `harness/evidence/_furn-smash-critic.mjs` — wound + after framing | |
 | `docs/slices/task-furn-smash.md` / this file | |
 
 ## Decisions (numbers)
@@ -53,7 +53,7 @@ Do **not** voxelize `game.play` walls. Those keep `DamageField`.
 
 ```
 npm run build
-node harness/playtest.mjs --view furn.smash --script harness/_furn-smash-critic.mjs --port 5340 --q "quality=medium"
+node harness/playtest.mjs --view furn.smash --script harness/evidence/_furn-smash-critic.mjs --port 5340 --q "quality=medium"
 ```
 
 Playcritique looks at wound + after vs the wiki still. Ceiling is PASS. Do not self-award WOWED.

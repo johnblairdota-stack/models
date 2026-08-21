@@ -570,7 +570,7 @@ export class Gait {
        * ⚠ STATED HONESTLY: on the configuration that prompted this it is a NO-OP, and I
        * measured that rather than claiming a save. With the skates fitted, the hidden boot
        * merges sit at 27 and 28 mm while the skate soles sit at 0 and 4 mm (measured in the
-       * page, `harness/_tmp_altgroundpage.mjs`), so the visible skate is the minimum either
+       * page, `harness/evidence/_tmp_altgroundpage.mjs`), so the visible skate is the minimum either
        * way. It is here because the general case is a real trap — any gadget that SHROUDS a
        * limb rather than extending past it inverts those two numbers — and because a floor
        * solver that reads geometry nobody draws is wrong even when it gets the right answer.

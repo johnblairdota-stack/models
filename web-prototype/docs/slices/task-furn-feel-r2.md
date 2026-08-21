@@ -17,7 +17,7 @@ no “section leaves as one chunk.”
 - `src/destruction/furn-fx.js` — part/whole break pays `debris.chunk` (sized) + light crumbs
 - `src/game/furn-dress.js` — tripod hit AABB enlarge; desk park clearer later if needed
 - `src/destruction/furnprop.js` — camera HP / tip only if needed
-- `harness/_furn-feel-critic.mjs` — keep as critic instrument
+- `harness/evidence/_furn-feel-critic.mjs` — keep as critic instrument
 
 **Does not own:** dig DamageField, voxel conversion, art board WOWED.
 
@@ -58,7 +58,7 @@ sledge aiming at desk mid prefers the desk AABB (margin, not a new system).
 
 ```bash
 npm run build
-node harness/playtest.mjs --view game.play --script harness/_furn-feel-critic.mjs \
+node harness/playtest.mjs --view game.play --script harness/evidence/_furn-feel-critic.mjs \
   --port 5302 --q "seed=s4&furndemo=1&quality=medium"
 ```
 

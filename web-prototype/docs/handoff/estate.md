@@ -16,7 +16,7 @@ trail, not as current fact.**
 Repeats `estate-1`'s method rather than re-deriving it. Two new files, one new rig, five edited:
 `src/world/study-order.js` (the shared order) · `src/lighting/study-rig.js` (the practicals) ·
 `src/game/room.js`, `src/game/spaces.js`, `src/game/estate-spike.js`, `src/views/game.js`,
-`src/views/room-study.js`. Measured with `harness/_estate2_probe.mjs` (a copy of
+`src/views/room-study.js`. Measured with `harness/evidence/_estate2_probe.mjs` (a copy of
 `_estate1_probe.mjs` with `--space`), both arms in ONE browser, parked, 8 yaws, hunter banished.
 
 **1. ✅ ONE SOURCE OF TRUTH, PROVEN BY A PIXEL DIFF — TWICE.**
@@ -238,7 +238,7 @@ Three things make that possible and they are the design:
   order, so this keeps the merged buffer layout as well as the picture.
 
 **2. ✅ +12 DRAW CALLS, NOT +184 — AND THE TWO REASONS ARE SEPARABLE.**
-Measured with `harness/_estate1_probe.mjs`: both arms in ONE browser, parked at `gallery.mid`,
+Measured with `harness/evidence/_estate1_probe.mjs`: both arms in ONE browser, parked at `gallery.mid`,
 **8 yaws**, hunter banished, `renderer.info` (deterministic, GPU-exempt).
 
 | at `gallery.mid` | shipped default | `?estate=port` |
@@ -417,7 +417,7 @@ surfaces) · `lights` / `nosun` (the practical rig, with/without its second shad
 space root so residency governs it) · `all`. Every arm reports through `engine.__estateSpike` so
 a probe asserts the build, not the query string.
 
-**Measured — `harness/_spike1_ab.mjs`, interleaved configs at PARKED stations, `quality=medium`,
+**Measured — `harness/evidence/_spike1_ab.mjs`, interleaved configs at PARKED stations, `quality=medium`,
 3 timed rounds after a discarded one, spreads 0.04–0.38 ms. ⚠️ The machine was NOT quiet
 (`sledge-3` was building throughout); draw calls are deterministic and exempt, GPU ms is not.**
 
@@ -571,7 +571,7 @@ Grade gate **PASS 0.071 / median 50.7 / toe 4.8**; 219 calls / 448k tris unchang
 only).
 
 ⚠️ **A WRONG TURN, RECORDED IN THE FILE RATHER THAN QUIETLY UNDONE.** Before the near plane was
-found, the plate's AIM was measured — `harness/_tmp_eo10_aim.mjs` reflects the eye ray about the
+found, the plate's AIM was measured — `harness/evidence/_tmp_eo10_aim.mjs` reflects the eye ray about the
 plate plane over a 15×15 grid and classifies where each ray lands, with the right plate as the
 control: **right FLOOR 60% / endZ 40%, floor z-span 10.4 m · left FLOOR 29% / wall 54% / GLASS
 17%, span 5.3 m.** Those numbers are correct and **the inference from them was wrong** — "54%
@@ -693,7 +693,7 @@ intact (they are `critic-estate-9`'s). Four permanent ablations added: **`?dayli
 gate **PASS 0.123 / 39.1 / 4.5** (was PASS 0.127 / 53.8 / 4.3).
 
 **1. ⚠️ THE MACRO GAP IS ATTRIBUTED, AND IT IS ONE NUMBER.** Live ablation in one boot
-(`harness/_eo12_macro.mjs`), mean luma over 300,760,896×300 of lit floor:
+(`harness/evidence/_eo12_macro.mjs`), mean luma over 300,760,896×300 of lit floor:
 
 | ablation | lit floor mean |
 |---|---|
@@ -742,7 +742,7 @@ supports and a hem that pools; plus a **linen-tinted clone of `mats.plaster` wit
 because five instances of one geometry is five copies of the same crease.
 
 **4. THE MIRROR FILTER: KEPT, AND BOTH HALVES OF THE QUESTION ARE NOW ANSWERED SEPARATELY.**
-- **The CODE claim is verified by direct measurement** (`harness/_eo12_mirrorcode.mjs`,
+- **The CODE claim is verified by direct measurement** (`harness/evidence/_eo12_mirrorcode.mjs`,
   `_tmp_eo11_plates.mjs`): `end-mirror.l` is **71 × 142 screen px against a 506 × 1024 target =
   7.13 × 7.21 RT texels per screen pixel**, and `?mirrorfilter=point` really is
   `minFilter=LinearFilter, generateMipmaps=false, anisotropy=1` with a single `texture2D` tap.
@@ -755,7 +755,7 @@ because five instances of one geometry is five copies of the same crease.
 
 ⚠️ **THREE STATED THINGS FOUND FALSE OR NOT REPRODUCIBLE.**
 1. **`critic-estate-9`'s "acutance 0.0244 → 0.0743" is NOT what its own filed script produces.**
-   `harness/_critic9_floorbreak.mjs` computes `mean|dL/dx| / 255`; run on the **pre-r12 build**
+   `harness/evidence/_critic9_floorbreak.mjs` computes `mean|dL/dx| / 255`; run on the **pre-r12 build**
    via `?daylight=flat&depot=0` it reads **0.0095 → 0.0142**, not 0.0244 → 0.0743. The recorded
    pair belongs to the **tells/Sobel** metric (`mean|Sobel| / meanL`), which on the same rect and
    the same build reads **0.0255 → 0.0813 (3.19×)** — i.e. `estate-owner-11`'s number reproduces
@@ -822,7 +822,7 @@ intact. Two permanent toggles added: **`?mirrorfilter=point|mip|sharp`** and
 0.127 / 53.8 / 4.3**.
 
 **1. ⚠️ "THE NEAR PLATE IS SOFTER" IS NOT A SHARPNESS DEFICIT — THE REFLECTION WAS BEING
-POINT-SAMPLED AT 7:1 MINIFICATION.** Measured (`harness/_tmp_eo11_plates.mjs`):
+POINT-SAMPLED AT 7:1 MINIFICATION.** Measured (`harness/evidence/_tmp_eo11_plates.mjs`):
 
 | plate | screen px | reflection target | minification |
 |---|---|---|---|
@@ -830,7 +830,7 @@ POINT-SAMPLED AT 7:1 MINIFICATION.** Measured (`harness/_tmp_eo11_plates.mjs`):
 | `end-mirror.r` (the "crisp" one) | **188 × 245** | 568 × 1024 | 3.0 : 1 |
 
 Both targets were created `minFilter: LinearFilter` with **no mip chain**, so one screen pixel
-took a single bilinear tap out of a 7 × 7 texel footprint. `harness/_tmp_eo11_rt.mjs` dumps a
+took a single bilinear tap out of a 7 × 7 texel footprint. `harness/evidence/_tmp_eo11_rt.mjs` dumps a
 target to PNG and `_tmp_eo11_ideal.mjs` box-filters it to the plate's real screen size: **the
 correctly filtered version of the same data is fully legible at 71 × 142** — glazing bars,
 sconce, drapes, sheeted table, chequer. The information was there and the fetch was throwing it
@@ -906,7 +906,7 @@ in `GRADES.ballroom` only. **Whenever a bug is fixed, re-derive every gate figur
 measured over it.**
 
 **4. WHAT "IDENTIFIABLE AS A RENDER" ACTUALLY MEASURES HERE — and most of the usual suspects are
-FALSE for this piece.** `harness/_tmp_eo11_tells.mjs` runs a battery (per-pixel grain, Laplacian
+FALSE for this piece.** `harness/evidence/_tmp_eo11_tells.mjs` runs a battery (per-pixel grain, Laplacian
 band energy per octave at 2/4/8/16/32 px, Sobel acutance, 10–90 edge rise, 32-px macro variation,
 chroma) over any rectangle. Run over a **66-tile grid on both the render and
 `refs/bf1/bf1-ballroom-01.png`**, bucketed by tile luminance so composition cannot fake it:
@@ -951,7 +951,7 @@ board's own filed gate to two decimals — PASS 0.122 / 37.5 / 3.1 against the r
 0.123 / 39.1 / 4.5** — so every historic number on this piece stays checkable and the revert is one
 query parameter.
 
-🆕 **`harness/_eo13_cam.mjs` PUTS A NUMBER ON "THE SHOT DOES NOT MATCH THE BAR", and it is a number
+🆕 **`harness/evidence/_eo13_cam.mjs` PUTS A NUMBER ON "THE SHOT DOES NOT MATCH THE BAR", and it is a number
 lighting and grade cannot confound:** cast every pixel's ray and ask which face of the room box
 (x −13..13, y 0..9.6, z −8..8) it leaves through. Props stand on the floor and occupy floor rays,
 which is the right accounting — a crate is floor-zone content, not ceiling.
@@ -976,7 +976,7 @@ is what the brief asked to re-measure before spending.
 1. 🚨 **THE NEAR WALL (z +8) WAS HALF A WALL.** Every other wall in the room is built as two
    storeys; this one stopped at 4.8 m with **4.8 m of open void above it** and the cove ending in
    mid-air. It never showed because the r10 camera stands at z 6.1 with that wall behind it.
-   `node harness/_eo13_cam.mjs --shots --cams "NEARWALL:0,5,-4,0,4.5,8,60"` photographs a black
+   `node harness/evidence/_eo13_cam.mjs --shots --cams "NEARWALL:0,5,-4,0,4.5,8,60"` photographs a black
    band across two-thirds of the frame. Built, plus the full-height pilaster order the other
    three walls carry — merged into existing buckets, **no extra draw call**.
 2. **The vestibule beyond the arch is a featureless pale card.** At eye height the arch reads as
@@ -989,7 +989,7 @@ is what the brief asked to re-measure before spending.
 
 
 ### 🆕 THE PAPER IS LEGIBLE, AND IT IS PROVEN BY ABLATION RATHER THAN BY COUNT
-`harness/_eo13_paper.mjs` projects each instance's four corners and compares the pixels INSIDE the
+`harness/evidence/_eo13_paper.mjs` projects each instance's four corners and compares the pixels INSIDE the
 quad against a ring just outside it. On r12 the median sheet differed from the floor under it by
 **|dL| 6.6 of 255** — 2.6% of the range, which is what "130/130 on screen and not one legible"
 was. ⚠️ **The live sweep INVERTS the obvious reading: SIZE buys nothing and VALUE is the whole

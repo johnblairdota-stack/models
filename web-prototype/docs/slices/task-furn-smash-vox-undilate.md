@@ -33,7 +33,7 @@ Plates not light.
 
 ```
 npm run build
-node harness/playtest.mjs --view furn.smash --script harness/_furn-smash-critic.mjs --port 5423 --q "quality=medium"
+node harness/playtest.mjs --view furn.smash --script harness/evidence/_furn-smash-critic.mjs --port 5423 --q "quality=medium"
 ```
 
 Lip should recover toward 80.7%. Ceiling PASS.

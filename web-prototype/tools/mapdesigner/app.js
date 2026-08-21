@@ -1284,7 +1284,7 @@ async function pushLabel(verdict) {
     dials: { ...S.dials },
     /**
      * 🐞 `storey` AND `char` ARE LOAD-BEARING AND WERE BEING DROPPED. Found by
-     * `harness/_maplabel1-labels.mjs`'s provenance check. `planFromRooms` does `y1: r.storey`,
+     * `harness/evidence/_maplabel1-labels.mjs`'s provenance check. `planFromRooms` does `y1: r.storey`,
      * and every diggability test intersects that y range with the dig band — so a row rebuilt
      * without `storey` came back with `y1 === undefined`, every overlap went NaN, and the plan
      * had ZERO diggable edges: `digsToExit −1`, every room a dead end. It only bit HAND-EDITED

@@ -11,7 +11,7 @@ silently — six briefed hypotheses were refuted by the agent that received them
 | you may edit | you may NOT edit |
 |---|---|
 | `src/game/room.js` — **the `buildWall` walk only**, lines ~2714–2744 | anything else in `src/` |
-| `harness/_ap3-golden.json` — **only** by re-running `--write`, and **only** if the gate below tells you to (it should not) | `src/game/spaces.js`, `src/game/dig.js`, `src/views/game.js`, `harness/_ap2-*`, `harness/scenarios/_ap2-slab.mjs` |
+| `harness/fixtures/_ap3-golden.json` — **only** by re-running `--write`, and **only** if the gate below tells you to (it should not) | `src/game/spaces.js`, `src/game/dig.js`, `src/views/game.js`, `harness/_ap2-*`, `harness/scenarios/_ap2-slab.mjs` |
 
 `views/game.js` was last held by `reach-1`; `spaces.js` by `doorlook-1`. **Do not touch either.**
 ⚠️ Other agents are on this tree: if `node harness/lint-glsl.mjs` names a file you did not edit,
@@ -21,9 +21,9 @@ this slice's diagnosis, with `harness/scenarios/_dress1-skin.mjs`).
 New files this slice ships (already written by `aperture-3`'s diagnostic pass — **read them, do
 not rewrite them**):
 
-- `harness/_ap3-build.mjs` — the whole mansion, built headless in node, one arm per process
-- `harness/_ap3-geom.mjs` — the metres-of-masonry meter, its five controls, and `--preview`
-- `harness/_ap3-golden.mjs` + `harness/_ap3-golden.json` — the disjoint-cut regression gate
+- `harness/evidence/_ap3-build.mjs` — the whole mansion, built headless in node, one arm per process
+- `harness/evidence/_ap3-geom.mjs` — the metres-of-masonry meter, its five controls, and `--preview`
+- `harness/evidence/_ap3-golden.mjs` + `harness/fixtures/_ap3-golden.json` — the disjoint-cut regression gate
 
 ---
 
@@ -257,8 +257,8 @@ single-pass walk cannot represent in any visit order. **It cannot arise on the s
 
 ```
 node harness/lint-glsl.mjs                                     # after every edit
-node harness/_ap3-geom.mjs                                     # 20 pass / 0 fail
-node harness/_ap3-golden.mjs --check harness/_ap3-golden.json  # 15740 leaves + the control
+node harness/evidence/_ap3-geom.mjs                                     # 20 pass / 0 fail
+node harness/evidence/_ap3-golden.mjs --check harness/fixtures/_ap3-golden.json  # 15740 leaves + the control
 npm run build
 ```
 
@@ -284,11 +284,11 @@ red, the measurement is meaningless and the A1/A2/A3 result above means nothing:
 - `C5` — the fabricated 3.40 m opening really reached `buildWall` (its 3.40 m lintel is in the
   collider set), so A3's "no refusal" cannot mean "nothing to refuse".
 
-**Before you start**, run `node harness/_ap3-geom.mjs --preview`. 🎯 **It parses §4's own
+**Before you start**, run `node harness/evidence/_ap3-geom.mjs --preview`. 🎯 **It parses §4's own
 `old_string` / `new_string` blocks out of this file and applies them to `room.js` in memory** —
 comments and all — so the preview measures the document you are about to follow, and prints
 `preview: 20 pass / 0 fail`. That is the target. If your typed version does not reach it, you
-mistyped something: re-paste from §4. `node harness/_ap3-golden.mjs --check harness/_ap3-golden.json
+mistyped something: re-paste from §4. `node harness/evidence/_ap3-golden.mjs --check harness/fixtures/_ap3-golden.json
 --preview` does the same for the regression gate. Once the fix is in the tree both print *"the fix
 is already in the tree"* and that is correct, not a failure.
 
@@ -309,7 +309,7 @@ walk.** The defect only exists when cuts nest, which happens on no shipped arm, 
 is that the fix moves something on a DISJOINT arm and nobody notices for a week.
 
 ```
-node harness/_ap3-golden.mjs --check harness/_ap3-golden.json
+node harness/evidence/_ap3-golden.mjs --check harness/fixtures/_ap3-golden.json
 ```
 
 Carries `localise-1`'s technique (`_loc1_golden.mjs`, **1170 leaves `Object.is`-identical**) onto

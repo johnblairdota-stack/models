@@ -22,7 +22,7 @@
  * SRC_MD5 below is checked before and after every run.
  *
  * ------------------------------------------------------------------------------------------
- * WHAT THE SOURCE ACTUALLY IS, measured (harness/_delit0_probe.mjs, _delit1_seg.mjs):
+ * WHAT THE SOURCE ACTUALLY IS, measured (harness/evidence/_delit0_probe.mjs, _delit1_seg.mjs):
  *
  *   - 1024x1024, NO alpha channel — every pixel is opaque, composited on pure white 255.
  *   - The matte is HARD. There are ZERO pixels with luma in 231..254, in all four views. So the
@@ -90,7 +90,7 @@
  *  7. COMPOSITE onto --bg.
  *
  * ------------------------------------------------------------------------------------------
- * GUARDS, and each one has a control that has been WATCHED to fail (harness/_delit5_control.mjs):
+ * GUARDS, and each one has a control that has been WATCHED to fail (harness/evidence/_delit5_control.mjs):
  *   G1 sources unmodified   — md5 of all four inputs, before and after.
  *   G2 shadow mask sane     — kept shadow must be under --shadowShareMax of the ground band's
  *                             non-page area, must not reach above the ground band, and must leave
@@ -125,7 +125,7 @@
  *
  * ------------------------------------------------------------------------------------------
  * THE THREE VARIANTS John keeps, and their invocations — these were NOT recorded anywhere and had
- * to be recovered by measurement (harness/_delit8_variant.mjs). Common flags:
+ * to be recovered by measurement (harness/evidence/_delit8_variant.mjs). Common flags:
  *     --radius 0.08 --sharpR 2.5 --sharpLight 0 --sharpFloor 0.020 --defringe 2 --bg grey
  *   delit/             --sharpDark 1.5 --emblem remove     (+ --debug delit/_masks)
  *   delit/emblem-kept/ --sharpDark 1.5 --emblem keep
@@ -195,7 +195,7 @@ const OPTS = {
    * "a gap in the head and structure between the feet" — background grey was showing THROUGH the
    * figure in our own output, and Meshy dutifully modelled the holes. Neither cause was the
    * de-fringe, which was the standing suspect; de-fringe only rewrites COLOUR and never touches a
-   * label. See harness/_delit6_stage.mjs for the measurement that named them.
+   * label. See harness/evidence/_delit6_stage.mjs for the measurement that named them.
    */
   shadowFigBelowMax: num('shadowFigBelowMax', 2),  // see SHADOW: floor rule
   pageClose: num('pageClose', 2),                  // see PAGE: notch repair
@@ -215,7 +215,7 @@ const OPTS = {
 
 /**
  * Ear ring centre and outer radius per side view, at 1024. Found as the centroid and extent of the
- * largest connected dark component in a box around the ear (harness/_delit7_ear.mjs) and then
+ * largest connected dark component in a box around the ear (harness/evidence/_delit7_ear.mjs) and then
  * CONFIRMED BY EYE against a tinted overlay — the centroid alone was not trustworthy on its own,
  * it drifts when the box catches the visor edge as well as the ring.
  */
@@ -335,7 +335,7 @@ const WORKER = async ({ url, O, isFront, bgRGB, sabotage, ear }) => {
    * straight through it and chews a notch out of the figure. On the side views' crown that is the
    * ragged, grey-intruded head outline John saw; there is a matching set at the boot toes.
    *
-   * Measured (harness/_delit6_stage.mjs): a morphological CLOSING of the non-page mask fills
+   * Measured (harness/evidence/_delit6_stage.mjs): a morphological CLOSING of the non-page mask fills
    * 58/26/27/49 px at r=1 and 186/64/82/160 px at r=2 (front/side-left/side-right/back). Every
    * one of them is a clipped-white pixel — a closing cannot fill anything except a concavity
    * narrower than its structuring element, and there is no genuine page channel in these
@@ -404,7 +404,7 @@ const WORKER = async ({ url, O, isFront, bgRGB, sabotage, ear }) => {
    * over it. That is the grey bite around the ankle and heel, and it is what Meshy read as a hole
    * and reconciled into "structure between the feet".
    *
-   * Measured before the fix (harness/_delit6_stage.mjs), shadow pixels that had figure BELOW them
+   * Measured before the fix (harness/evidence/_delit6_stage.mjs), shadow pixels that had figure BELOW them
    * in their own column — i.e. that were sitting on top of a boot, not on the floor:
    *      front 1941/3351 (57.9%)   side-left 1701/2467 (69.0%)
    *      side-right 2348/2399 (97.9%)   back 274/1608 (17.0%)
@@ -637,7 +637,7 @@ const WORKER = async ({ url, O, isFront, bgRGB, sabotage, ear }) => {
   // ================================================================ 1.5 DE-FRINGE
   /*
    * The source's outermost figure pixels are WHITE-CONTAMINATED, and this was found by measuring
-   * the edge rather than by reasoning about it (harness/_delit4_edge.mjs). On the shin at y=840 the
+   * the edge rather than by reasoning about it (harness/evidence/_delit4_edge.mjs). On the shin at y=840 the
    * two outermost figure pixels read 205 and 175 against a limb interior of ~145 — a bright rim
    * BRIGHTER than the surface it borders. It is invisible in the source because the page behind it
    * is white, and it appears as a glowing outline the moment the figure is placed on grey.
@@ -885,7 +885,7 @@ const WORKER = async ({ url, O, isFront, bgRGB, sabotage, ear }) => {
      * THE MANUFACTURED-HOLE RULE. --sharpDark 1.5 amplifies every dark dip by 2.5x and the result
      * was hard-clipped at zero, so a mid-tone feature could be driven to ABSOLUTE BLACK and then
      * flattened there. The EAR is where that bites: it is a chrome ring around a lighter disc and
-     * it should read as a recess, but measured (harness/_delit7_ear.mjs) the side-left ring runs
+     * it should read as a recess, but measured (harness/evidence/_delit7_ear.mjs) the side-left ring runs
      * min 31.8 / p01 46.1 / p05 72.3 in the ART with ZERO pixels under luma 30, and came out of
      * this step at min 0 / p01 0 / p05 0 with 90 px at pure black. A black arc is not a recess, it
      * is a hole, and Meshy modelled it as one — John's "gap in the head".

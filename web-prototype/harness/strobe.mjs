@@ -318,7 +318,7 @@ const SETUP_CLUB = `() => {
  *     is right for play and wrong for judging a shape, so the strobe grades for legibility and
  *     says so — `--no-stage` turns it off when you want to judge the shipped look instead.
  *
- * ⚠️ ITS SILHOUETTE, BY CONTRAST, IS DELIBERATELY NOT ADOPTED. `harness/_tmp_swing_silhouette.mjs`
+ * ⚠️ ITS SILHOUETTE, BY CONTRAST, IS DELIBERATELY NOT ADOPTED. `harness/evidence/_tmp_swing_silhouette.mjs`
  * thresholds the finished PNG at luminance > 150. On stations that sit at 7-13 that is a coin
  * toss dressed as a measurement, and it is exactly why the exposure had to be pushed to 2.6
  * before it could work at all. `scene.overrideMaterial` separates figure from ground in the

@@ -327,7 +327,7 @@ chest's already-pitched frame, so the arms cross the leg line in outline), and a
 
 `critic-hunter-2` verified all four against the art and found them TRUE. Kept for the record.
 
-**Numbers first.** Draw calls (deterministic, `harness/_calls_tmp.mjs`, no GPU timing):
+**Numbers first.** Draw calls (deterministic, `harness/evidence/_calls_tmp.mjs`, no GPU timing):
 
 | | before | after | budget |
 |---|---|---|---|

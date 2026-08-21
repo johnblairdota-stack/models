@@ -17,7 +17,7 @@ import { DamageField, OPEN_AT } from '../destruction/damagefield.js';
  * in ONE page rather than across two processes (`harness/still.mjs`'s whole reason for existing:
  * the same build gave 0 of 15 identical parked frames over two page loads).
  *
- * Read once and guarded for node — `harness/_ap3-build.mjs` imports this file outside a browser.
+ * Read once and guarded for node — `harness/evidence/_ap3-build.mjs` imports this file outside a browser.
  * Default ON in both, because unlike the coat this changes no geometry and no headless golden:
  * it writes a uniform on a panel that has already been hit, and nothing headless hits one.
  */
@@ -244,7 +244,7 @@ export const DAMAGE_BACK_F = 0.97;
  *
  * 🚨 **AND IT LANDS ON JOHN'S OWN CONSTRAINT.** He refused a numeric destruction meter, so the
  * wall itself is the only progress indicator the game has — and it stopped indicating over halfway
- * through. `harness/scenarios/_visible1-gap.mjs` records the drive; `harness/_visible1-analyse.mjs`
+ * through. `harness/scenarios/_visible1-gap.mjs` records the drive; `harness/evidence/_visible1-analyse.mjs`
  * prices any candidate band against it offline.
  *
  * ---------------------------------------------------------------------------
@@ -273,7 +273,7 @@ export const DAMAGE_BACK_F = 0.97;
  * job it was built for. So the inner contour is always inside the outer one and the white rim is
  * never eaten from behind.
  *
- * 📐 **SWEPT, NOT CHOSEN** (`harness/_visible1-analyse.mjs`, eleven candidate bands priced against
+ * 📐 **SWEPT, NOT CHOSEN** (`harness/evidence/_visible1-analyse.mjs`, eleven candidate bands priced against
  * the same recorded drive — the bands are a purely visual mapping, so one drive answers for all
  * of them). THROUGH, over 144 blows:
  *
@@ -852,7 +852,7 @@ export const COAT_ARMS = [
  * constructed at arm 0 — so on the default arm this whole block executes `if (0 === 0) return`
  * once per damage-armed face and touches nothing. `_coat1-programs.mjs` measures it.
  *
- * Read once and guarded for node: `harness/_ap3-build.mjs` builds the whole mansion headless and
+ * Read once and guarded for node: `harness/evidence/_ap3-build.mjs` builds the whole mansion headless and
  * imports this file outside a browser.
  */
 /**
@@ -883,7 +883,7 @@ export const COAT_ARMS = [
  * `[C]` still cycles all three, because which of 1 and 2 the gallery should use is a look question
  * nobody has put a picture in front of him for yet.
  *
- * Read once and guarded for node: `harness/_ap3-build.mjs` builds the whole mansion headless and
+ * Read once and guarded for node: `harness/evidence/_ap3-build.mjs` builds the whole mansion headless and
  * imports this file outside a browser. **Node keeps arm 0** so every headless golden — 15740
  * leaves — stays comparable with what it recorded.
  */

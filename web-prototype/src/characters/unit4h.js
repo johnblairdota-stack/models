@@ -550,7 +550,7 @@ function legProfile(yf) {
  *      property of the geometry CLASS, so no amount of retuning inside that class could reach
  *      it, which is exactly why a detailed, sincere writeup and an unchanged render coexisted.
  *
- * IDENTIFIED BY PICK, NOT BY READING (`harness/_tmp_geoprobe.mjs --pick`, new this round): a
+ * IDENTIFIED BY PICK, NOT BY READING (`harness/evidence/_tmp_geoprobe.mjs --pick`, new this round): a
  * Moller-Trumbore cast from the view's own camera through the bar's pixels returns
  * `bootSeamR / unit4h.sole` at 3.684-3.704, and a 46-wide ownership raster over the whole boot
  * draws that mesh as a one-cell-wide straight diagonal from the collar into the sole. That
@@ -694,7 +694,7 @@ function driveDisc(radius, thickness, rings = 3, seg = 40) {
  * either side of it has been measured rather than argued.
  *
  * Sampled off `Dev Art/1785277053522.png`, profile figure, and off the round-30 render, in
- * 0-255 luminance (`harness/_probe_tmp.mjs`):
+ * 0-255 luminance (`harness/evidence/_probe_tmp.mjs`):
  *
  *                       sheet    round 30
  *   inner disc           187        180      <- agrees
@@ -1380,10 +1380,10 @@ function limbStripe(rings, o) {
    * the geometry is built, it is in the merged mesh, it is measurably PROUD of the shell, and
    * it is culled.
    *
-   * MEASURED, not reasoned (`harness/_tmp_geoprobe.mjs`, a Moller-Trumbore cast from the view's
+   * MEASURED, not reasoned (`harness/evidence/_tmp_geoprobe.mjs`, a Moller-Trumbore cast from the view's
    * own camera to a ribbon vertex on figure 1's left thigh): the ribbon's outer edge sits at
    * 10.56674 from the camera against the shell's 10.56950 — 0.0028 world units IN FRONT, which
-   * is `out` exactly. A horizontal luminance scan across that thigh (`harness/_tmp_scan.mjs`,
+   * is `out` exactly. A horizontal luminance scan across that thigh (`harness/evidence/_tmp_scan.mjs`,
    * y = 600 on the 1080p capture) runs 182.1 181.7 181.0 179.8 178.2 straight through the four
    * pixels the ribbon covers: a monotone gradient, no dip of any size. Present, unoccluded,
    * invisible. The only thing left is culling.
@@ -3323,7 +3323,7 @@ export function buildUnit4H(opts = {}) {
      * per joint, `j.hip` carried `mats.shell` alone, so this is one new merged mesh per hip —
      * eight across this sheet's four figures. `bootSeam` gives exactly eight back by moving
      * from `mats.gap` to `mats.sole`, which is already in `j.ankle` (see `buildBoot`). Net
-     * zero, measured both ways with `harness/_calls_tmp.mjs`.
+     * zero, measured both ways with `harness/evidence/_calls_tmp.mjs`.
      *
      * `castShadow = false` for the same reason the shin's seams carry it: these ribbons stand
      * about a millimetre off the surface they lie on and cannot cast a shadow anything can

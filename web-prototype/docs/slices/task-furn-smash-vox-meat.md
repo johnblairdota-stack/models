@@ -45,7 +45,7 @@ this claim; the cream cavity is.
 
 ```
 npm run build
-node harness/playtest.mjs --view furn.smash --script harness/_furn-smash-critic.mjs --port 5385 --q "quality=medium"
+node harness/playtest.mjs --view furn.smash --script harness/evidence/_furn-smash-critic.mjs --port 5385 --q "quality=medium"
 ```
 
 Look at `s-fireplace-leave.png`, `s-desk-leave.png` vs `yt-house-148s`.

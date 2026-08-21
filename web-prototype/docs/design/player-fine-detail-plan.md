@@ -117,7 +117,7 @@ Two findings that change what the rest of this plan should assume:
    the elbow ring, the knee, the ankle, the hip detach and the shoulder detach are one expression
    with a different bone name in it: a dark band at one end of one bone. Building the elbow alone
    would have cost the same round and proved the same thing. `rrwBoneDetail()` in `robot.js` is the
-   rule, `harness/_fd2-ring.mjs` its gate, `?dlringctl=1` the frame's control.
+   rule, `harness/evidence/_fd2-ring.mjs` its gate, `?dlringctl=1` the frame's control.
 
    ⚠️ **THE ATTRIBUTE IS `aBoneEnd`, NOT `aBoneLocal`, AND THE REASON IS INTERPOLATION.** A crease
    at the elbow is drawn on vertices owned by TWO bones, so a varying carrying raw

@@ -199,7 +199,7 @@ function bankDatum() {
  * frame", and filed that as WORSE than the previous "they float" complaint: `_groundY` is
  * arithmetically self-consistent, but nothing in the picture let anyone confirm it. An
  * unfalsifiable render is worth less than a wrong one. Reproduced before touching anything
- * (`harness/_tmp_critic_scanrow.mjs` over six rows, x 100-1850): every row is a monotone
+ * (`harness/evidence/_tmp_critic_scanrow.mjs` over six rows, x 100-1850): every row is a monotone
  * 201 -> 234 -> 201 ramp broken only by robot pixels. No shadow. No line. The critic is right.
  *
  * TWO CAUSES, and the second one is the reason the previous round's fix could not work.

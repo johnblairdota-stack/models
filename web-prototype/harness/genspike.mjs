@@ -102,7 +102,7 @@ const L_DOOR = CONNECTOR_W + 2 * 0.20;   // 2.48 clear
 /**
  * 🧱 **THE SLAB CAP — A MAXIMUM, AND THERE IS NO MINIMUM.**
  *
- * `slab-1` / `doors-1`, re-run on this tree 2026-08-11 (`node harness/_slab1-cost.mjs`, section B's
+ * `slab-1` / `doors-1`, re-run on this tree 2026-08-11 (`node harness/evidence/_slab1-cost.mjs`, section B's
  * wall-clock table) — blow-frame CPU against `walls-perf.md`'s **2.00 ms** budget:
  *
  *     5.72 m   1800 cells   0.437 ms      15.40 m   4920 cells   0.494 ms

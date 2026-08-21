@@ -369,7 +369,7 @@ It is the `plaster`-lock tell and it is doing its job, but at luma 6.3 against a
 reads as the same black rectangle. **Isolated, owned by `exterior.js`, filed separately.**
 
 ### 🚨 THE INSTRUMENT THAT SAID "MISS", AND WHY IT SAID IT
-`harness/_tmp_geoprobe.mjs --pick` is what HANDOFF names as the tool that settles occlusion, and
+`harness/evidence/_tmp_geoprobe.mjs --pick` is what HANDOFF names as the tool that settles occlusion, and
 it is **blind to this whole defect in two independent ways**:
 1. It intersects `geometry.attributes.position` through `m.matrixWorld` — and an `InstancedMesh`'s
    `matrixWorld` is its PARENT's, with every copy it draws living in `instanceMatrix`. So every
@@ -418,7 +418,7 @@ every shader compile in the loading screen.** All three pins are now per-ARM con
 | before | **1077** | 264 | **4.08×** | 813 of 1077 |
 | after | **213** | 180 | **1.18×** | 33 of 213 |
 
-| time to `ready` (`harness/_boot1-cache.mjs --fresh --loads 2`) | cold | warm (driver program cache) |
+| time to `ready` (`harness/evidence/_boot1-cache.mjs --fresh --loads 2`) | cold | warm (driver program cache) |
 |---|---|---|
 | before | **199.7 s** | 39.0 s |
 | after | **98.9 s and 121.5 s** (two independent cold runs) | **4.5 s and 13.1 s** |
@@ -769,7 +769,7 @@ below is the depth SOURCE, not the delay):
 | `room.ballroom` | −1.253 on 69.8 (−1.8%) | — |
 
 So **`game.play` itself is pixel-equivalent**; the estate room views get slightly darker.
-`harness/_tmp_aodiffimg.mjs` renders the signed difference (green = more AO) and the structure
+`harness/evidence/_tmp_aodiffimg.mjs` renders the signed difference (green = more AO) and the structure
 is unambiguous: the new AO gains contact darkening at **real creases** — cornice undersides,
 mouldings, coffer intersections, window reveals, table-leg/floor contacts — and loses a broad
 low-amplitude haze over **flat panels**. The same-config control image is unstructured dither

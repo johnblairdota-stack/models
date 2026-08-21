@@ -31,7 +31,7 @@ import { generatedTables } from '../world/genplan.js';
  * (`localise-1`). Each room is a footprint plus its content in its OWN frame (`ROOMS`), placed
  * by a centre and a quarter turn (`HOUSE_PLAN`). Every emitted row is byte-identical to the row
  * that used to be written by hand — see the long note above `ROOMS`, and the gate,
- * `node harness/_loc1_golden.mjs --check`. The builder's contract is unchanged.
+ * `node harness/evidence/_loc1_golden.mjs --check`. The builder's contract is unchanged.
  *
  * CONVENTIONS, and they matter to the builder:
  *
@@ -136,7 +136,7 @@ export const PANEL_CY = CONNECTOR_CY;
  * 🆕 **EVERY ROOM IS NOW A FOOTPRINT, ITS CONTENT IN ITS OWN FRAME, AND A PLACEMENT**
  * (`localise-1`, 2026-08-09). `SPACES` is no longer authored — it is `roomsFromPlan(HOUSE_PLAN)`
  * — and every row it emits is **byte-identical to the row that used to be written here**: 1192
- * exported leaves, `Object.is`-equal, gated by `node harness/_loc1_golden.mjs --check`.
+ * exported leaves, `Object.is`-equal, gated by `node harness/evidence/_loc1_golden.mjs --check`.
  *
  * 🚨 **WHY, AND IT IS THE CAMPAIGN'S BIGGEST SINGLE COST RATHER THAN A TIDY-UP.**
  * `docs/design/house-packing.md` §9.1, after `genspike-1` proved the packing works (92.79% of
@@ -203,7 +203,7 @@ export function rotYOf(turns) { return (((turns | 0) % 4) + 4) % 4 * (Math.PI / 
  * coordinates by 1-2 ulp. That is invisible in a render and fatal to a byte-identity claim,
  * which is the only cheap proof that a no-op really is one. Every number in this file is
  * authored on a centimetre grid, so rounding the SUM to 1e-9 recovers the authored double
- * exactly for every value — measured, not hoped: `harness/_loc1_derive.mjs` prints the round
+ * exactly for every value — measured, not hoped: `harness/evidence/_loc1_derive.mjs` prints the round
  * trip for all 41 dressing coordinates and all 24 footprint extents, and
  * `_loc1_golden.mjs --check` gates the whole exported surface.
  * ⚠️ It really does quantise a GENERATED placement to 0.5 nm. That is 1e-8 of the smallest
@@ -550,7 +550,7 @@ export const ROOMS = {
      * from THIS side it reproduces exactly: `service.mid@90` median **11.6**, **58.0%** under
      * L 24, 26.8% pure black; `service.south@180` **65.9%** under L 24 with a whole-frame median
      * of **16.8**. The far room is the passage. Every number below is from
-     * `harness/_light1_probe.mjs` with three new `service.*` stations.
+     * `harness/evidence/_light1_probe.mjs` with three new `service.*` stations.
      *
      * 🚨 **AND IT IS ALSO THE HOUSE'S REMAINING CHROMA FAILURE, WITH TWO STATIONS OVER THE LINE.**
      * `service.mid@270` reads top-decile (r-b)/L **+0.612** and `service.mid@90` **+0.416**,
@@ -772,7 +772,7 @@ export const ROOMS = {
  * room ends up. `at` is the room's CENTRE in world, `[x, y, z]`; `turns` is quarter turns about
  * +Y. Every slot is `turns: 0` and `y: 0` today, so `SPACES` comes out with the exact doubles
  * that used to be written by hand — that is the whole safety property of this slice, and
- * `harness/_loc1_golden.mjs --check` is what proves it rather than asserts it.
+ * `harness/evidence/_loc1_golden.mjs --check` is what proves it rather than asserts it.
  *
  * MILESTONE STATE: **M3/M4 — the floor plan is COMPLETE.** Six spaces: two hubs (`gallery`
  * north, `ballroom` south) joined by three parallel routes (`study_w`, `service`, `study_e`),
@@ -987,7 +987,7 @@ export const HOUSE_PLAN = [
 /**
  * ⚠️ **DERIVED, NOT AUTHORED — AND EVERY ROW IS BYTE-IDENTICAL TO THE ROW THAT USED TO BE
  * WRITTEN HERE.** `room.js` reads exactly the shape it always did; nothing downstream knows this
- * changed. The gate is `node harness/_loc1_golden.mjs --check <golden>`, which compares 1192
+ * changed. The gate is `node harness/evidence/_loc1_golden.mjs --check <golden>`, which compares 1192
  * exported leaves with `Object.is` (not `===`: a placement transform is exactly the kind of code
  * that turns `0` into `-0`, and `===` cannot see it).
  */
@@ -1112,7 +1112,7 @@ export const INNER_WALLS = [];
  * route and is called out below and in the room-level comment.
  *
  * — connectivity after the change, verified by BFS over every non-chained connector, all six
- *   spaces, seeds `s0`..`s511` (`node harness/_tmp_solvability_check.mjs`, kept for re-running):
+ *   spaces, seeds `s0`..`s511` (`node harness/evidence/_tmp_solvability_check.mjs`, kept for re-running):
  *     study_w   D1 (kept) + D4 to the ballroom, + p.gal_w
  *     service   D5 to the ballroom — NO route to the gallery any more, direct or dug; the only
  *               path in is via a study or the ballroom
@@ -1428,7 +1428,7 @@ export const PANELS_AUTHORED = [
  * are `BREACHABLE`, never `EXIT`, so `EXIT_SITES = PANELS.filter(isExitSite)` returns the same 14
  * ids in the same order with them present and absent, and `run.js` `chooseExit()` cannot see the
  * flag. Measured rather than argued, with a control that shrinks the pool by one:
- * `harness/_doors1-pool.mjs` (and `_slab1-cost.mjs` D, independently).
+ * `harness/evidence/_doors1-pool.mjs` (and `_slab1-cost.mjs` D, independently).
  *
  * ⚠️ **THE COST, STATED: there is now NO connector at all directly between `service` and either
  * study.** The passage keeps D5 to the ballroom, so `service` ↔ `study_w` is D5 → D4 (and ↔
@@ -1665,7 +1665,7 @@ function generatedPatrol(spaces) {
 
 /**
  * CONTROL THAT MUST FAIL — `?patrol=authored` forces the FIXED house's route into a generated
- * one, which is precisely the bug above. `harness/_gen1_integration.mjs` runs it and requires the
+ * one, which is precisely the bug above. `harness/evidence/_gen1_integration.mjs` runs it and requires the
  * "every stop inside the house" assertion to fail; an assertion that cannot be made to fail is
  * not evidence that anything was fixed.
  */

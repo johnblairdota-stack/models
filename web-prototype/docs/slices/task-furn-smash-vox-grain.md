@@ -45,7 +45,7 @@ idea. Chaise / settee / table-round / crate plates must not go light.
 
 ```
 npm run build
-node harness/playtest.mjs --view furn.smash --script harness/_furn-smash-critic.mjs --port 5393 --q "quality=medium"
+node harness/playtest.mjs --view furn.smash --script harness/evidence/_furn-smash-critic.mjs --port 5393 --q "quality=medium"
 ```
 
 Look at `s-fireplace-leave.png` vs 148s. Count cube faces in the bite.

@@ -28,7 +28,7 @@ hollow shell. Debris is the same colour as the door. A severed piece drops.
 | `src/destruction/furn-voxels.js` | `src/views/game.js` |
 | `src/destruction/debris.js` — add `furnchip` kind only | wall `DamageField` |
 | `src/views/furn-smash.js` — `perKind` if needed | chair circle |
-| `harness/_furn-smash-critic.mjs` — log `islands` | |
+| `harness/evidence/_furn-smash-critic.mjs` — log `islands` | |
 | this file | |
 
 ## Decisions (numbers)
@@ -61,7 +61,7 @@ hollow shell. Debris is the same colour as the door. A severed piece drops.
 
 ```
 npm run build
-node harness/playtest.mjs --view furn.smash --script harness/_furn-smash-critic.mjs --port 5348 --q "quality=medium"
+node harness/playtest.mjs --view furn.smash --script harness/evidence/_furn-smash-critic.mjs --port 5348 --q "quality=medium"
 ```
 
 Playcritique looks at settee/fireplace **wound** (must not see through a hollow

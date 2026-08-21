@@ -92,7 +92,7 @@ const CLIPS = {
    * These two came down from Meshy applied to the Friendly Robot itself — one clip each, named
    * `Armature|walking_man|baselayer` and `Armature|running|baselayer` — so they are what a
    * REGENERATED clip looks like. Measuring `fwalk` against `friendly`+`Walking` with
-   * `harness/_anim_check.mjs` is the cheapest possible test of the regeneration plan: same body,
+   * `harness/evidence/_anim_check.mjs` is the cheapest possible test of the regeneration plan: same body,
    * same motion, one authored on this rig and one copied onto it.
    */
   fwalk: 'friendly_walking.glb',
@@ -122,7 +122,7 @@ export default async function view(args = {}) {
    * `?bg=ff00ff` exists for MEASUREMENT, not for looking at. The kit's dimensions are checked by
    * masking the figure out of a capture and comparing it against the art the same way, and the
    * studio's default is a pale grey SWEEP — a gradient, not a flat colour — so a "not background"
-   * test against one sampled corner pixel selects the entire frame. `harness/_kit7_artratio.mjs`
+   * test against one sampled corner pixel selects the entire frame. `harness/evidence/_kit7_artratio.mjs`
    * printed a figure 1920 px wide on its first run for exactly that reason. A flat chroma makes
    * the mask exact, and the art is masked by alpha, so both sides are then unambiguous.
    */
@@ -388,7 +388,7 @@ export default async function view(args = {}) {
      * joint — that is the torso"). That assertion is correct and stays; what was wrong was
      * running the kit at all on a body that already has its face, ears and caps painted on.
      *
-     * Missing this cost a whole run of `harness/_anim_check.mjs`: all six clips failed to load
+     * Missing this cost a whole run of `harness/evidence/_anim_check.mjs`: all six clips failed to load
      * with the identical error, and the probe reported "nothing measured" rather than anything
      * about the animation.
      */
@@ -447,7 +447,7 @@ export default async function view(args = {}) {
     action.play();
     engine.onUpdate((dt) => mixer.update(dt));
     /*
-     * PUBLISHED FOR `harness/_anim_check.mjs`, which scrubs the clip to fixed phases and reads
+     * PUBLISHED FOR `harness/evidence/_anim_check.mjs`, which scrubs the clip to fixed phases and reads
      * the SKINNED vertex positions back to look for a limb flung across the room by a bad
      * weight. Without a handle on the mixer a probe can only screenshot whatever frame it
      * happened to catch, and an auto-rig's failures are phase-specific — a shoulder that

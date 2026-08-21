@@ -41,7 +41,7 @@ air sphere. Not cream. Well must stay gone. Plates must not go light.
 
 ```
 npm run build
-node harness/playtest.mjs --view furn.smash --script harness/_furn-smash-critic.mjs --port 5427 --q "quality=medium"
+node harness/playtest.mjs --view furn.smash --script harness/evidence/_furn-smash-critic.mjs --port 5427 --q "quality=medium"
 ```
 
 Espresso/terra should drop vs r36 12.7/12.8. Largest face must not

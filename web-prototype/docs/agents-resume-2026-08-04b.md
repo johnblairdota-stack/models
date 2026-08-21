@@ -75,7 +75,7 @@ on the board, untouched for two rounds).
 ### Original entry
 
 
-**On disk:** `harness/_tmp_eo8_glassuv.mjs` and `harness/_tmp_eo8_mirror.mjs` — so it probed both
+**On disk:** `harness/evidence/_tmp_eo8_glassuv.mjs` and `harness/evidence/_tmp_eo8_mirror.mjs` — so it probed both
 the bullseye-decal cause and the mirror. Also modified: `src/world/materials-local.js` and
 `src/views/room-ballroom.js`.
 

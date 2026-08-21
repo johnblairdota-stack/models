@@ -68,7 +68,7 @@ board entry.** `src/views/_studio.js`'s `studio()`/`estate()` (shared by every `
 against the brief: gated it behind an explicit **`?orbit=1`** (was: on by default in any live,
 non-capture page load — nobody had asked for that and it is now off by default, matching every
 prior session's behaviour), added the **paste-ready `cameraPos`/`target`/`fov` readout with a
-copy button**, ported `harness/_eo13_cam.mjs`'s per-pixel room-box ray-cast into a **live
+copy button**, ported `harness/evidence/_eo13_cam.mjs`'s per-pixel room-box ray-cast into a **live
 floor/ceiling/wall composition readout** (wired into `room.ballroom`/`room.study`/`room.gallery`
 via a `roomBox` opt — verified against the live camera to reproduce `critic-estate-11`'s filed
 overlook numbers, floor 40.3% / ceiling 3.6–3.7%, to grid-resolution rounding), and added

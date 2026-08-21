@@ -643,7 +643,7 @@ if (process.argv[1]?.endsWith('footskate.mjs')) {
      * not an outlier and there was never a range. Plant-OFF hip angle is literally
      * `-A*cos(phase*TAU)` in every gait, so its peak second derivative is exactly A*omega^2,
      * and it is — measured against the authored constants at 3840 Hz, error 0.0% in all seven
-     * cases (`harness/_tmp_denominator.mjs`, this round):
+     * cases (`harness/evidence/_tmp_denominator.mjs`, this round):
      *
      *     walk 2.55  A 0.500 T 0.463  ->  91.9 predicted, 91.9 measured
      *     run  5.20  A 0.820 T 0.314  -> 328.7 predicted, 328.7 measured

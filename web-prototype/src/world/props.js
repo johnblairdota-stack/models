@@ -1176,7 +1176,7 @@ export function trestle(bin, o = {}) {
  * rather than as a flicker.
  *
  * ⚠ FLAT SHEETS ARE THE REASON `critic-estate-10` COULD NOT SEE ANY OF 130 ON SCREEN, and the
- * measurement is in `harness/_eo13_paper.mjs`: project each instance's four corners, then
+ * measurement is in `harness/evidence/_eo13_paper.mjs`: project each instance's four corners, then
  * compare the pixels inside the quad against a ring just outside it. A sheet lying dead flat
  * takes the SAME light as the floor it is lying on, so on a black-and-white chequer half of
  * them are a near-exact value match for the tile underneath and cannot be seen at any size.

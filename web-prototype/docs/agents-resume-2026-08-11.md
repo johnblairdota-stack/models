@@ -366,7 +366,7 @@ dressing unified · `HANDOFF.md` 95 KB → ~35 KB · both critics.
    `^d\.(.+)\.(\d+)\.(a|b)$` and free-arm ids are `f.…`. **Pre-existing and unreachable by any
    dressing change**; on `?dig=bays` it runs and reads 11/3. **Owner: unassigned.**
    ⚠️ **`_ap3-golden` reads 272 moved leaves and `skin-1` DELIBERATELY DID NOT `--write`.**
-   `harness/_skin1-golden-split.mjs` (new) ablates the skin **in memory** via `AP3_PATCH` and
+   `harness/evidence/_skin1-golden-split.mjs` (new) ablates the skin **in memory** via `AP3_PATCH` and
    re-censuses: **72 leaves / 24 mesh rows are this slice** — fields **[2][3][4] only** (vertex
    count, index count, digest); colliders 0, panelIds 0, dig-face rects 0, names 0, materials 0 —
    and **200 leaves / 40 rows are `wallinstances.js`**, every one a `wall.pristine.face`/`reveal`
@@ -544,7 +544,7 @@ dressing unified · `HANDOFF.md` 95 KB → ~35 KB · both critics.
    all 512 seeds** while `fracInternalDiggable` falls to **0.686**. `C4` (512/512 FAIL) ships to
    keep them falsifiable.
    **Instruments (all pure Node, `src/` and `genspike.mjs` byte-unchanged):**
-   `harness/_genwalk1-rot.mjs` (4 controls) · `_genwalk1-place.mjs` (10/0) · `_genwalk1-build.mjs`
+   `harness/evidence/_genwalk1-rot.mjs` (4 controls) · `_genwalk1-place.mjs` (10/0) · `_genwalk1-build.mjs`
    (control must build, `ballturn` must throw).
 
 ## Waiting on John

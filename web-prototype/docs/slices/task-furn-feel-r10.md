@@ -12,6 +12,6 @@
 
 - `docs/slices/task-furn-feel-r10.md`
 - `src/destruction/furnprop.js` — tip look boost; restore on hide
-- `harness/_furn-feel-critic.mjs` — park mid.x ± 0.7 for ¾ tip view
+- `harness/evidence/_furn-feel-critic.mjs` — park mid.x ± 0.7 for ¾ tip view
 
 Stop: WOWED or PASS-no-hates.

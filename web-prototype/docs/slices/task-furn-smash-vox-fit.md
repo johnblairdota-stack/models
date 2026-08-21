@@ -37,7 +37,7 @@ Cubes are the *volume representation*. They must not replace the albedo.
 | `src/destruction/debris.js` — optional `o.color` on `chunk()` only | wall `DamageField` |
 | `src/game/furn-smash-lab.js` — mesh AABB + hang flag | chair circle |
 | `src/views/furn-smash.js` — `perKind: 960` | |
-| `harness/_furn-smash-critic.mjs` — after wait 1100 ms | |
+| `harness/evidence/_furn-smash-critic.mjs` — after wait 1100 ms | |
 | this file + `docs/slices/task-furn-smash-vox.md` pointer | |
 
 ## Decisions (numbers)
@@ -74,7 +74,7 @@ Cubes are the *volume representation*. They must not replace the albedo.
 
 ```
 npm run build
-node harness/playtest.mjs --view furn.smash --script harness/_furn-smash-critic.mjs --port 5344 --q "quality=medium"
+node harness/playtest.mjs --view furn.smash --script harness/evidence/_furn-smash-critic.mjs --port 5344 --q "quality=medium"
 ```
 
 Playcritique looks at `s-<id>-aim.png` (must still be the Meshy paint), `s-<id>-wound.png`

@@ -147,7 +147,7 @@ export default async function view(args = {}) {
   //
   // ROUND 11. The remaining hate on this piece is "the near plate is still visibly softer
   // than the far one", and it is NOT a resolution problem at either end. Measured
-  // (`harness/_tmp_eo11_plates.mjs`):
+  // (`harness/evidence/_tmp_eo11_plates.mjs`):
   //
   //     end-mirror.l   71 x 142 screen px   reflection target 506 x 1024   -> 7.1 : 1
   //     end-mirror.r  188 x 245 screen px   reflection target 568 x 1024   -> 3.0 : 1
@@ -157,7 +157,7 @@ export default async function view(args = {}) {
   // took a single bilinear tap out of a 7 x 7 texel footprint. That is textbook minification
   // ALIASING, and it destroys exactly the content the critic is looking for — the window's
   // glazing bars are 4-8 texels wide, i.e. far under the sampling interval, so they arrive as
-  // speckle rather than as a grid. `harness/_tmp_eo11_rt.mjs` dumps the target and
+  // speckle rather than as a grid. `harness/evidence/_tmp_eo11_rt.mjs` dumps the target and
   // `_tmp_eo11_ideal.mjs` box-filters it to 71 x 142: the correctly filtered version of the
   // SAME data is fully legible at the plate's real screen size.
   //
@@ -228,7 +228,7 @@ export default async function view(args = {}) {
   // deep shade."
   //
   // ⚠ MEASURED, AND IT IS NOT A GRADE PROBLEM AND NOT A SHADOW-TINT PROBLEM. Live ablation in
-  // one boot (`harness/_eo12_macro.mjs`, four floor rects on the 1920x1080 frame):
+  // one boot (`harness/evidence/_eo12_macro.mjs`, four floor rects on the 1920x1080 frame):
   //
   //     the 19 point lights, ALL OFF        floor mean 78.3 -> 77.7    -0.8%
   //     the 19 point lights, ALL x6         floor mean 78.3 -> 58.7*   (*at env 1.8; +1%)
@@ -292,7 +292,7 @@ export default async function view(args = {}) {
   // turning the spot off now takes the lit floor down 40%, where before it took it down 3.1%.
   // The exposure lift is there to put the median back in the gate's 30-60 band after the
   // ambient came out, and the numbers below were solved together on one boot
-  // (`harness/_eo12_gradesweep.mjs`, gate and macro in the same table).
+  // (`harness/evidence/_eo12_gradesweep.mjs`, gate and macro in the same table).
   // ⚠ `lift: [0, 0, 0]`, NOT `lift: undefined`. Spreading an explicit `undefined` over the base
   // grade DELETES the field, and `Pipeline._applyGrade` does `fromArray(grade.lift)` with no
   // guard — so `?daylight=flat` threw `Cannot read properties of undefined` on the first frame
@@ -326,7 +326,7 @@ export default async function view(args = {}) {
   //    checkerboard marble and ~45% ceiling/upper wall."
   //
   // Four rounds of surface work had been done inside a frame composed differently from the thing
-  // it is judged against. `harness/_eo13_cam.mjs` puts a number on it that cannot be confounded
+  // it is judged against. `harness/evidence/_eo13_cam.mjs` puts a number on it that cannot be confounded
   // by lighting or grade: cast every pixel's ray and ask which face of the room box (x -13..13,
   // y 0..9.6, z -8..8) it leaves through. That is the frame's SUBJECT, independent of what is
   // standing in the way.
@@ -408,7 +408,7 @@ export default async function view(args = {}) {
   // window, below) has been here since before this round — the bar's red velvet at every window
   // was reported as entirely absent because the material was, not because it was missing. At
   // 0x3a0d10 under this room's near-black ambient the panels rendered as raw RGB ~(4,3,3) at a
-  // fixed sample point beside the window (`harness/_eo15_drape_sweep.mjs`) — indistinguishable
+  // fixed sample point beside the window (`harness/evidence/_eo15_drape_sweep.mjs`) — indistinguishable
   // from shadow, same failure class as the vestibule void a few lines down. Brightening the
   // albedo alone (not the light, not the geometry) was swept live on the SAME mesh
   // (`scene.getObjectByName('kit:drape')`) up to pure white to find the ceiling this position can
@@ -418,7 +418,7 @@ export default async function view(args = {}) {
   // OWN shaded drapery pixels sampled off `refs/bf1/bf1-ballroom-01.png` at ~(45-48,2-3,1-2) to
   // within a few counts — a real measured match — BUT it promotes enough of the frame's own dark
   // decile (the panels cover real screen area at every one of five windows) to push
-  // `grade.mjs`'s darkest-decile L from this round's 7.0 to 9.6, a WARN. `harness/_eo15_vest_sweep.mjs`
+  // `grade.mjs`'s darkest-decile L from this round's 7.0 to 9.6, a WARN. `harness/evidence/_eo15_vest_sweep.mjs`
   // (which patches this mesh AND `kit:vest` AND the grade together, see the vestibule note below)
   // found the joint point that keeps both fixes AND the gate: 0xc02030, paired with the vestibule
   // change and `GRADES.ballroom.toeCrush` 0.010 -> 0.018 / `exposure` 1.50 -> 1.55 below, reads
@@ -581,7 +581,7 @@ export default async function view(args = {}) {
   // rather than keying it two-thirds down.
   //
   // ITEM 2 (estate-owner-15, ROUND 15): "two thirds" (0x6d685e) turned out to still be a WRONG
-  // FIX, just a smaller one — `harness/_eo15_vest_sweep.mjs` forced this mesh to pure white and
+  // FIX, just a smaller one — `harness/evidence/_eo15_vest_sweep.mjs` forced this mesh to pure white and
   // it STILL only read ~(43-63) through the arch, confirming the space genuinely receives very
   // little light; at 0x6d685e specifically it sampled literal (0,0,0) at four fixed points behind
   // the arch, not merely dark. That is the render's own `contrast: 1.06` grade term doing it: its
@@ -611,7 +611,7 @@ export default async function view(args = {}) {
   // area for the same peak brightness; concentrating it near the arch buys more visible contrast
   // per unit of darkest-decile L spent. Swept live: rebuild, `harness/shoot.mjs --view
   // room.ballroom`, `harness/grade.mjs` against the canonical 0.087/31.9/7.5, plus
-  // `harness/_estate14_floorcrop.mjs` for matched before/after 8x crops of the arch — see the
+  // `harness/evidence/_estate14_floorcrop.mjs` for matched before/after 8x crops of the arch — see the
   // report for the measured result: still dark, still a "not black" read rather than a lit
   // gallery, but now a real stepped gradient instead of one flat plane of grain.
   //
@@ -654,7 +654,7 @@ export default async function view(args = {}) {
    * room is built as TWO storeys (0..4.8 and 4.8..9.6); this one stopped at 4.8 and the 4.8 m
    * above it was open to the void — the cove and coffers simply ended in mid-air. It never
    * showed because the r10 camera stands at z 6.1 with this wall behind it, so nobody had
-   * looked: `node harness/_eo13_cam.mjs --shots --cams "NEARWALL:0,5,-4,0,4.5,8,60"` points a
+   * looked: `node harness/evidence/_eo13_cam.mjs --shots --cams "NEARWALL:0,5,-4,0,4.5,8,60"` points a
    * camera at it and photographs a black band across two-thirds of the frame. It carries the
    * same full-height pilaster order as the other three, because any overlook framing wraps its
    * left edge past x -13 and puts 5-10% of the picture on it.
@@ -678,7 +678,7 @@ export default async function view(args = {}) {
   // slightly different wall panel". The second half of that sentence is exactly right and it is
   // the answer to the first half: it IS a wall panel. Settled with the ownership raycast rather
   // than by looking harder —
-  //   node harness/_tmp_geoprobe.mjs --pick --view room.ballroom --grid 0,0,1920,1080,24
+  //   node harness/evidence/_tmp_geoprobe.mjs --pick --view room.ballroom --grid 0,0,1920,1080,24
   // rasterises the whole frame and `pier-mirrors` never once appears in it; a 10-wide raster
   // over the right-hand 300 px does not find it either. Projecting the plate at z -5.3 through
   // this camera by hand agrees: it lands at screen x 2.37, i.e. more than a frame width off the
@@ -769,7 +769,7 @@ export default async function view(args = {}) {
   //
   // ⚠ AND A WRONG TURN WORTH KEEPING, because the next owner will otherwise take it. Before
   // that was found, the plate's AIM was measured and looked like the culprit.
-  // `harness/_tmp_eo10_aim.mjs` reflects the eye ray about the plate plane over a 15x15 grid
+  // `harness/evidence/_tmp_eo10_aim.mjs` reflects the eye ray about the plate plane over a 15x15 grid
   // and classifies where each reflected ray first lands, with the right plate as the control
   // (a critic verified it legible by name):
   //
@@ -1038,7 +1038,7 @@ export default async function view(args = {}) {
     //
     // ⚠ ROUND 12 STILL PUT 130 SHEETS ON SCREEN THAT NOBODY COULD SEE, AND SIZE WAS NOT THE
     // REASON. `critic-estate-10` cropped tight at their own reported coordinates and found only
-    // floor-reflection noise. `harness/_eo13_paper.mjs` measures the thing the count could not:
+    // floor-reflection noise. `harness/evidence/_eo13_paper.mjs` measures the thing the count could not:
     // project each instance's four corners, average the pixels inside the quad, average a ring
     // just outside it, and take the difference. On the r12 build it read
     //
@@ -1115,7 +1115,7 @@ export default async function view(args = {}) {
     });
     ch.root.position.set(-1.2, R.h - 0.36, c.z);
     // ---- THE THREE ORNAMENTAL FIXTURES DO NOT CAST -------------------------
-    // Measured with `node harness/_calls_tmp.mjs --view room.ballroom --list`: this room
+    // Measured with `node harness/evidence/_calls_tmp.mjs --view room.ballroom --list`: this room
     // submits 992k triangles a frame against a 900k budget, and the per-mesh table says the
     // largest single group is the chandeliers' brass at 27.5k EACH. `renderer.info` counts
     // submissions, not unique geometry — the one shadow-casting spot and the AO depth prepass
@@ -1541,7 +1541,7 @@ export default async function view(args = {}) {
   // ROUND 11. The near third of this frame is a featureless pale sheet with the chequer
   // missing, ending in a hard diagonal where the pattern comes back — the thing critics have
   // been calling "a seam where the tile scale changes" since round 2. It is not a tiling seam
-  // and it is not the light pools. ABLATED IN ONE BOOT (`harness/_tmp_eo11_floor.mjs`,
+  // and it is not the light pools. ABLATED IN ONE BOOT (`harness/evidence/_tmp_eo11_floor.mjs`,
   // 400 x 240 px of near floor at 120,700):
   //
   //     base                      mean L 127.9   acutance 0.0215   macro 0.505
@@ -1907,7 +1907,7 @@ function applyPlanarReflection(mat, texture, texMat, flatViewNormal, filterMode 
     // 2.1 screen px against a window mullion of about 1, i.e. it destroys the one piece of
     // structure the plate has. The same number, applied honestly to both plates, damages only
     // the small one — which is exactly the asymmetry the "not at parity" hate describes.
-    // Swept in one boot at 0.030 / 0.010 / 0 (`harness/_tmp_eo11_knob.mjs uEoWobble`): at
+    // Swept in one boot at 0.030 / 0.010 / 0 (`harness/evidence/_tmp_eo11_knob.mjs uEoWobble`): at
     // 0.030 the reflected glazing bars are visibly wavy and broken, at 0.010 they are a clean
     // grid with a slight lean, at 0 they are ruler-straight and the plate starts to read as
     // polished steel rather than as old glass. 0.010 keeps the character and returns the read.
@@ -1920,7 +1920,7 @@ function applyPlanarReflection(mat, texture, texMat, flatViewNormal, filterMode 
     uEoRough: { value: new THREE.Vector2(opts.lo ?? 0.10, opts.hi ?? 0.34) },
     uEoSize: { value: new THREE.Vector2(size[0], size[1]) },
     uEoMaxLod: { value: Math.floor(Math.log2(Math.max(size[0], size[1]))) },
-    // Swept in one boot at 0 / 0.55 / 1.0 (`harness/_tmp_eo11_knob.mjs uEoSharp`), measured on
+    // Swept in one boot at 0 / 0.55 / 1.0 (`harness/evidence/_tmp_eo11_knob.mjs uEoSharp`), measured on
     // the near plate's 64 x 134 crop: acutance 0.1949 / 0.2048 / 0.2144 and the 2-px band
     // 8.36 / 9.03 / 9.71, with the reflected glazing bars gaining definition the whole way and
     // no visible halo at this magnification. 0.85 rather than 1.0 only because a mask this

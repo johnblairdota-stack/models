@@ -353,7 +353,7 @@ export default async function view(args = {}) {
    * frame-cost and silhouette numbers for "the game" are numbers for a different character.
    *
    * The body is `friendly_all38.glb`, 15,944 tris against the procedural player's 56,308 — this
-   * is not a cost increase — with 38 clips regenerated on its own rig. `harness/_gen1_integration.mjs`
+   * is not a cost increase — with 38 clips regenerated on its own rig. `harness/evidence/_gen1_integration.mjs`
    * asserts the body that LOADED is that file, because the fallback below is silent by design and
    * a fallback nobody notices is how this shipped as "the new robot" for a whole round without
    * ever being on screen.
@@ -434,7 +434,7 @@ export default async function view(args = {}) {
    * reason the audit missed it is that `resetRound`'s refit loop only ever ADDED: it read
    * `if (occupant(socket) !== 'empty') continue;`, so a socket that still held **last round's
    * gadget** was, by that test, already correct. A reset that can only fill sockets can never
-   * empty one, and everything below survived a respawn (measured, `harness/_reset2-loadout.mjs`,
+   * empty one, and everything below survived a respawn (measured, `harness/evidence/_reset2-loadout.mjs`,
    * one page, R pressed the way a player presses it):
    *
    *   · **rocket skates** — the one John saw. `rig.skates` is NOT a socket occupant: they mount
@@ -883,7 +883,7 @@ export default async function view(args = {}) {
     // ⚠️ AND THE POPULATION MUST NOT BE A TELL FROM THE OTHER END EITHER. `connectorDressing` in
     // `blind` derives every cue from a seeded hash of (run seed, connector id) and NEVER from
     // the connector's state, so the interconnect draws from the same distribution as its 35
-    // neighbours. That is measured, not argued: `harness/_tmp_dig_dress_correlation.mjs` sweeps
+    // neighbours. That is measured, not argued: `harness/evidence/_tmp_dig_dress_correlation.mjs` sweeps
     // 512 seeds and `conn-1.mjs` C6 asserts the state-blindness in the built house.
     panels: room.panels,
     tells: TELLS,
@@ -2558,7 +2558,7 @@ export default async function view(args = {}) {
     };
   };
   /**
-   * 🚨 THE WHOLE-HOUSE READOUT, published for `harness/_gen1_integration.mjs`.
+   * 🚨 THE WHOLE-HOUSE READOUT, published for `harness/evidence/_gen1_integration.mjs`.
    *
    * Every piece of this build had a passing probe of its own while the COMBINATION was broken:
    * the hunter walked the authored house's patrol route through a generated building, and no
@@ -3943,7 +3943,7 @@ export default async function view(args = {}) {
      * 1.2 m above the floor in the CENTRE of each room, fall, land and `rest`, and a resting
      * piece is scenery that never ages out.
      *
-     * 📉 **Measured on the shipped `DebrisSystem`, headless** (`harness/_debris3-warmup.mjs`,
+     * 📉 **Measured on the shipped `DebrisSystem`, headless** (`harness/evidence/_debris3-warmup.mjs`,
      * the real burst, the real spaces, 30 s of integration): **72 of the 90 pieces come to rest,
      * exactly 12 in every one of the six rooms**, and they are still there after a full 63-blow
      * dig somewhere else — including in the five rooms the player never entered.

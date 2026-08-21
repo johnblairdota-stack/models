@@ -251,7 +251,7 @@ export function chrome(opts = {}) {
  * ============================================================================
  *
  * Three separate faults compounded, and the two that were previously written down here
- * were both wrong. All numbers below are from `harness/_tmp_fxglow.mjs`, which reads the
+ * were both wrong. All numbers below are from `harness/evidence/_tmp_fxglow.mjs`, which reads the
  * PRE-TONEMAP half-float target and the final canvas at the SAME pixel, so "the sprite
  * never deposited light" and "the tone curve ate the light it deposited" can be told apart.
  *

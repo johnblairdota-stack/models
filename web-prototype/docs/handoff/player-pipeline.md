@@ -45,7 +45,7 @@ uniform — 2.06 m per uv unit at a p75/p25 spread of 1.094.
     ?fixmax=0.01                 THE KIT CONTROL — every fixture ray is rejected and the view THROWS
     ?grip= ?griplen=             hammer roll and grip position
 
-**Every feature above reverts on its own, and `harness/_fd2-ring.mjs` is the bone rule's gate:
+**Every feature above reverts on its own, and `harness/evidence/_fd2-ring.mjs` is the bone rule's gate:
 32 pass, exactly 3 controls that must fail.**
 
 ## Where the surface got to
@@ -245,7 +245,7 @@ assume. **Not done.**
 `char-lineup.js` strips it by name and logs how many it dropped.
 
 **The slice: `char.lineup`** — `src/views/char-lineup.js`, registered in `views.js`, captured by
-`harness/_lineup_shot.mjs`. Three robots, one ground line, one light rig, all normalised to 1.7 m:
+`harness/evidence/_lineup_shot.mjs`. Three robots, one ground line, one light rig, all normalised to 1.7 m:
 
 | | tris | surface |
 |---|---|---|
@@ -363,11 +363,11 @@ itself billed 0.
 1. ✅ **The JOINT CREASES are built (2026-08-16)** — the spec's five "dark ring ... in a crease"
    lines: elbow, knee and ankle actuator rings, plus the hip and shoulder detach creases, which are
    stronger because the spec says "much darker" on those two lines and no others.
-   `harness/_fd2-ring.mjs` is the rule's gate (13 pass / 2 controls that must fail); `?dlringctl=1`
+   `harness/evidence/_fd2-ring.mjs` is the rule's gate (13 pass / 2 controls that must fail); `?dlringctl=1`
    is the FRAME's control and it is a picture, not an assertion — a ring at a wrong distance still
    renders as a ring, so the rule gate cannot see that half.
 
-   Measured whole-figure against `baseline_front`, `harness/_kit8_shellvalue.mjs` on a `?bg=ff00ff`
+   Measured whole-figure against `baseline_front`, `harness/evidence/_kit8_shellvalue.mjs` on a `?bg=ff00ff`
    shot, neutrality cut 45 (⚠️ **the chroma shot is not optional — on the default gradient
    background the mask takes 86% of the frame and every number is meaningless**):
 
@@ -553,7 +553,7 @@ itself billed 0.
    | the material's curvature response | `?rseams=0&occ=0&seams=0` on bf65 moves 1647 → **1553** against the 1333 bar — 30% of the excess, and the band is visually unchanged |
 
    🚨 **AND THE OBSERVATION THAT DROVE ROUNDS 9–10 IS MEASURED FALSE. The band is NOT the hem's
-   downward-facing underside.** `harness/_hipx2_whatisdark.mjs` raycasts every dark pixel in the ROI
+   downward-facing underside.** `harness/evidence/_hipx2_whatisdark.mjs` raycasts every dark pixel in the ROI
    at the captured frame (frame pinned by `__rrr.settle(12)`, so it is the same frame the bar was set
    on) and reports what it hits. Of 1333 dark pixels on n30, **11.9% sit on downward-facing surface
    (bf65: 6.0%)**; the median face normal is **n_y +0.229 (facing UP)** against +0.548 for the ROI's
@@ -724,7 +724,7 @@ also ran the full identity kit unconditionally. It now takes the same branch `me
 — a body with `material.map` gets `attachChestWordmark`, everything else gets the whole kit.
 **Six clips failed to load before this and the probe reported "nothing measured".**
 
-🚨 **`harness/_anim_check.mjs` IS BUILT BUT ITS RESULTS ARE WORTHLESS AS OF THIS WRITING. DO NOT
+🚨 **`harness/evidence/_anim_check.mjs` IS BUILT BUT ITS RESULTS ARE WORTHLESS AS OF THIS WRITING. DO NOT
 READ ITS "OK" AS A PASS.** It scrubs each clip to six phases, reads the SKINNED vertex positions
 back and looks for explosion / collapse / ground break. Every phase of every clip returns
 **0.0% travel and vol/bind exactly 1.000** — impossible for a real animation.
@@ -767,7 +767,7 @@ mid-swing, which would read as a deformation bug.
 
     ?anim=<name>   preselect a clip (this is what makes it capturable)
     ?ui=0          hide the bar for a clean frame
-    node harness/_lineup_shot.mjs --names --anim Attack
+    node harness/evidence/_lineup_shot.mjs --names --anim Attack
 
 Published for the harness: `__lineupClips` (per rig: clip count and names) and `__lineupAnim`
 (which rigs carry the selected clip).
@@ -785,7 +785,7 @@ at phase 0.37."* `Attack`'s grip is unsolved and carries Heavy's value as a labe
 figure reads as "the new rig is broken" — which is what it looked like, and what the previous
 message reported. The row makes it one glance.
 
-**Still true:** `harness/_anim_check.mjs` remains broken (0.0% travel on a known-good body) and
+**Still true:** `harness/evidence/_anim_check.mjs` remains broken (0.0% travel on a known-good body) and
 must not be trusted. It is now also largely redundant — `char.lineup` with `?anim=` answers the
 same question by eye, which is the check that actually caught this.
 
@@ -851,11 +851,11 @@ animation section was written.
 ### VALIDATION IS BUILT AND WAITING
 
 `char.lineup` + `NEWBOT.bat` is the tool for judging the result: every rig, one ground line, one
-clock, a button per clip. `node harness/_lineup_shot.mjs --names --anim <Name>` captures any one of
+clock, a button per clip. `node harness/evidence/_lineup_shot.mjs --names --anim <Name>` captures any one of
 them. **Use it on every regenerated clip** — it is what caught that `Attack` was a clip fault and
 not a rig fault, in one glance.
 
-⚠️ `harness/_anim_check.mjs` still reports 0.0% travel on a known-good body. **Do not trust it.**
+⚠️ `harness/evidence/_anim_check.mjs` still reports 0.0% travel on a known-good body. **Do not trust it.**
 
 ### The clip set to regenerate — LOCOMOTION **AND SEATED** (John, 2026-08-19)
 
@@ -900,7 +900,7 @@ whether it has the selected clip — `unit4h:NO CLIP  lumi:yes  friendly:yes`.
 **← → step through the list, Esc returns every rig to rest.** Added because reviewing 38 clips
 through a mouse would not actually get done; hold one key and watch the row.
 
-`?anim=<name>` still preselects, so `node harness/_lineup_shot.mjs --names --anim <Name>` captures
+`?anim=<name>` still preselects, so `node harness/evidence/_lineup_shot.mjs --names --anim <Name>` captures
 any single clip unchanged.
 
 ## THE MESHY DOWNLOAD DIALOG DOES THE MERGING FOR US (2026-08-19, measured in the app)
@@ -945,7 +945,7 @@ against `friendly_rigged.glb`: **0.00 deg worst rest direction, 0.0% worst bone 
 the control the copied build failed at 114.86 deg. `?clip=fnative` on `mesh.animated`, and
 `char.lineup` now stands this file in the row (`?bad=1` puts `friendly_merged.glb` back beside it).
 
-**`harness/_anim_check.mjs` worst-of-six-phases, on the new file:**
+**`harness/evidence/_anim_check.mjs` worst-of-six-phases, on the new file:**
 
 | clip | ground/H | drift/H | tilt | reading |
 |---|---|---|---|---|
@@ -1007,7 +1007,7 @@ player. Old frame-cost and silhouette numbers for "the game" describe a differen
 game loading the procedural player, and the fallback in `game.js` is silent by design. The new
 probe caught it on its first run — `body procedural fallback`.
 
-**`harness/_gen1_integration.mjs` — the one boot that checks the COMBINATION.** Seeds 4, 5, 6, 9:
+**`harness/evidence/_gen1_integration.mjs` — the one boot that checks the COMBINATION.** Seeds 4, 5, 6, 9:
 
 | | seed 4 | seed 5 | seed 6 | seed 9 |
 |---|---|---|---|---|

@@ -383,7 +383,7 @@ export const GRADES = {
   // bug is worth re-deriving whenever the bug is fixed.**
   //
   // What actually fixed it was not exposure and not the shadows. Swept in one boot with
-  // `harness/_tmp_eo11_grade.mjs` (top-decile (r-b)/L, then median):
+  // `harness/evidence/_tmp_eo11_grade.mjs` (top-decile (r-b)/L, then median):
   //     shadowTint -> neutral            0.193      (dark tiles 1.019 -> 0.942, barely moves)
   //     exposure 1.05 / 1.18 / 1.30      0.188 / 0.178 / 0.170   and 1.18 breaks the median
   //     gain -> [1,1,1]                  **0.138**  median 49.7
@@ -402,7 +402,7 @@ export const GRADES = {
   // Every one of those is a consequence of the lighting rebalance in `room-ballroom.js`
   // (`?daylight=flat` puts BOTH back, and the view carries the old values so the ablation is a
   // real reproduction) and each was solved on the same boot as the thing it trades against,
-  // with `harness/_eo12_gradesweep.mjs` printing the gate and the 32-px macro variation in one
+  // with `harness/evidence/_eo12_gradesweep.mjs` printing the gate and the 32-px macro variation in one
   // table. That pairing is the point: they pull against each other and no existing tool could
   // see both.
   //
@@ -430,7 +430,7 @@ export const GRADES = {
   // white blob — NOW HAS A MEASURED MECHANISM, and it is bloom, not the shadow map and not the
   // spot's intensity.
   //
-  // ⚠ PROVED BY ABLATION, NOT ASSUMED. `harness/_eo15_hotspot_sweep.mjs` boots this view once and
+  // ⚠ PROVED BY ABLATION, NOT ASSUMED. `harness/evidence/_eo15_hotspot_sweep.mjs` boots this view once and
   // sweeps `setGrade()` patches live, reading a local-contrast stat (std/mean over 8x8 blocks) on
   // the hotspot region alongside `grade.mjs`'s own top-decile chroma:
   //
@@ -473,7 +473,7 @@ export const GRADES = {
     // ROUND 15: 1.28 -> 1.50 for the bloom-threshold fix (see the note above), then -> 1.55
     // alongside `toeCrush` below once ITEMS 2 and 3 (room-ballroom.js: the vestibule and drape
     // albedos) needed a second, joint pass — see that comment for the full reasoning. Solved
-    // together on one boot, `harness/_eo15_vest_sweep.mjs`, because exposure and toeCrush both
+    // together on one boot, `harness/evidence/_eo15_vest_sweep.mjs`, because exposure and toeCrush both
     // move median AND toe and cannot be tuned one item at a time without re-fighting each other.
     exposure: 1.55,
     gain: [1.0, 1.0, 1.0],
@@ -494,7 +494,7 @@ export const GRADES = {
     // bringing them up to a legible red promotes a chunk of the frame's own darkest decile
     // rather than just recolouring a few pixels. Brightening the VESTIBULE too (ITEM 2) costs
     // the same budget a second time (from literal (0,0,0) — see that comment). Both items were
-    // swept jointly against toeCrush AND exposure together (`harness/_eo15_vest_sweep.mjs`,
+    // swept jointly against toeCrush AND exposure together (`harness/evidence/_eo15_vest_sweep.mjs`,
     // which patches `kit:drape`, `kit:vest` and the grade in one boot): toeCrush alone
     // (0.008/0.010/0.012) traded toe for median 1-for-1ish (0.010 -> toe 7.5, median 32.0) but
     // left no room for the vestibule too; adding exposure 1.50 -> 1.55 back on top recovers the

@@ -11,6 +11,6 @@ Brighten tally LED while tipping. Critic parks on mesh world pos, asserts ballro
 
 - `docs/slices/task-furn-feel-r9.md`
 - `src/destruction/furnprop.js` — tip/hold phases; tally flash
-- `harness/_furn-feel-critic.mjs` — park assert + mid-tip at 0.45 s
+- `harness/evidence/_furn-feel-critic.mjs` — park assert + mid-tip at 0.45 s
 
 Stop: WOWED or PASS-no-hates.

@@ -71,7 +71,7 @@ and the full argument is in `src/game/wall.js` above the table itself. What belo
 # record a real drive and dump the whole smoothed-depth history (3 seeds x 2 aiming models)
 node harness/playtest.mjs --view game.play --script harness/scenarios/_visible1-gap.mjs --port 5361 --q "seed=s4&dig=1"
 # then price ANY candidate DAMAGE_BANDS row against that one drive, offline, in a second
-node harness/_visible1-analyse.mjs
+node harness/evidence/_visible1-analyse.mjs
 # and photograph both arms on one crater, one camera, one page, blow by blow
 node harness/playtest.mjs --view game.play --script harness/scenarios/_visible1-shots.mjs --port 5363 --q "seed=s4&dig=1" --shots
 ```
@@ -551,7 +551,7 @@ node harness/playtest.mjs --view game.play --script harness/scenarios/dig-link.m
 node harness/playtest.mjs --view game.play --script harness/scenarios/dig-low.mjs      --port 5275 --q "seed=s4&dig=1" --shots   # who fits through a dug bay
 node harness/playtest.mjs --view game.play --script harness/scenarios/dig-fx.mjs       --port 5281 --q "seed=s4&dig=1"           # what a real dig's FX costs
 node harness/playtest.mjs --view game.play --script harness/scenarios/dig-promoted.mjs --port 5280 --q "seed=s4&dig=1"           # + the post-UNLOCK worst case
-node harness/_tmp_dig_dress_correlation.mjs 2048                                                                                 # dressing vs the answer, 2048 seeds
+node harness/evidence/_tmp_dig_dress_correlation.mjs 2048                                                                                 # dressing vs the answer, 2048 seeds
 ```
 
 ### 🚨 THE DRESSING TELL IS CLOSED, AND IT WAS THE ONE THAT BROKE THE DESIGN'S CORE PROMISE
@@ -569,7 +569,7 @@ a segment's is the room-side face**, so copying 0.17 across would have floated e
 off the wall).
 
 ✅ **AND THE POPULATION DOES NOT LEAK FROM THE OTHER END EITHER — 2048 seeds, 73 728 segment draws**
-(`harness/_tmp_dig_dress_correlation.mjs`, the pure-node sweep `_tmp_seam_correlation.mjs`
+(`harness/evidence/_tmp_dig_dress_correlation.mjs`, the pure-node sweep `_tmp_seam_correlation.mjs`
 pioneered):
 
 | cue | the segment population | the live interconnect | stderr |

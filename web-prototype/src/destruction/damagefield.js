@@ -102,7 +102,7 @@ export const CELL = 0.094;
  * a cost — the grain was still hard at depth 0.99, where nothing can see it. With the grain's
  * depth taper and its area bias (both in `GRAIN`), the shipped 0.52 / 0.31 hold **0.199 m²·depth
  * and 66 s** with the grain fully on, so this number did not have to move at all.
- * ⚠️ 15 combinations were driven to establish that (`harness/_tmp_lobesim.mjs`); larger radii at
+ * ⚠️ 15 combinations were driven to establish that (`harness/evidence/_tmp_lobesim.mjs`); larger radii at
  * constant per-blow are strictly WORSE (R 0.64 reads 88 s), because the probe cost rises with the
  * lower strength and the search formula multiplies the probe by the number of duds.
  */
@@ -163,7 +163,7 @@ export const RESIST = 3.0;
  * ⚠️ **DAMAGE PER BLOW, NEVER THE COOLDOWN.** `WEAPON_COOLDOWN.sledge` is choreography
  * `sledge-check` gates and John has never complained about it.
  *
- * 📐 **SWEPT HEADLESS BEFORE IT WAS CHOSEN** (`harness/_tmp_lobesim.mjs --strength`, 8 seeded
+ * 📐 **SWEPT HEADLESS BEFORE IT WAS CHOSEN** (`harness/evidence/_tmp_lobesim.mjs --strength`, 8 seeded
  * interconnects, `dig-free.mjs`'s own drives — `x N` here is `STRENGTH * N`):
  *
  *   | base | m²·depth per blow | probe | breakthrough | search |
@@ -213,7 +213,7 @@ export const DIG_BASE = 8;
  * holds for any swing between **0.70 s (50 s) and 1.10 s (78 s)**; outside that, retune `STRENGTH`
  * here rather than anywhere else, because it is the only number both figures scale with.
  *
- * 🔴 **ROUND 8 RE-MEASURED ALL THREE AGAINST `GRAIN`** (`harness/_tmp_lobesim.mjs`, 12 seeded
+ * 🔴 **ROUND 8 RE-MEASURED ALL THREE AGAINST `GRAIN`** (`harness/evidence/_tmp_lobesim.mjs`, 12 seeded
  * interconnects taken from `dig.js` itself — it reproduces `dig-free.mjs`'s own drives and its own
  * arithmetic, and with the grain off it prints **6 / 48 / 66 s**, i.e. what `dig-free.mjs` prints
  * in the browser, which is what makes it usable as an instrument):
@@ -314,7 +314,7 @@ export const LOBE_CELL = 0.55;
  * **A per-blow angular wobble is defined in the BLOW'S OWN POLAR FRAME, so it does not tile:** the
  * bay blow A leaves at bearing 40 degrees is filled by blow B, 30 cm away, whose own bay is
  * somewhere else entirely. Measured on `chunk-thick.mjs`'s crater drive, 15 craters,
- * `harness/_tmp_lobeshape.mjs`:
+ * `harness/evidence/_tmp_lobeshape.mjs`:
  *
  *   | brush | convexity | median notch | shallowest of 15 |
  *   |---|---|---|---|
@@ -386,7 +386,7 @@ export const LOBE_CELL = 0.55;
  * ---------------------------------------------------------------------------
  * 📊 **WHAT IT IS WORTH, ON THE DELIVERED IMAGE, SAME STATION AND SAME DRIVE**
  * ---------------------------------------------------------------------------
- * `harness/_tmp_outlineconvex.mjs` scores the PNG a critic looks at, not the field. Two full runs
+ * `harness/evidence/_tmp_outlineconvex.mjs` scores the PNG a critic looks at, not the field. Two full runs
  * of `chunk-thick.mjs` on seed s4, identical in every respect but this constant:
  *
  *   | frame | GRAIN 0 | GRAIN 0.115 |
@@ -483,7 +483,7 @@ export const SHED_AT = 0.55;
  * one per cent of the material — it reaches only the few cells the range test was excluding.
  *
  * 📊 **WHAT IT IS WORTH, ON THE DELIVERED FRAMES** (`critic-dig-6`'s own island detector,
- * `harness/_critic6_islands.mjs`, run over `chunk-thick`'s evidence set before and after):
+ * `harness/evidence/_critic6_islands.mjs`, run over `chunk-thick`'s evidence set before and after):
  *
  *   | frame | islands, floor 0 | islands, floor 0.28 |
  *   |---|---|---|

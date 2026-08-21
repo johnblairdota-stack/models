@@ -66,7 +66,7 @@ export default async function view(args = {}) {
     // is a corridor with a stair and an apse past Z0), so this pads the apse end by 6 m
     // rather than measuring it. Good enough for eyeballing floor/ceiling/wall share live;
     // not a source of record the way the ballroom's box (lifted verbatim from
-    // `harness/_eo13_cam.mjs`) is.
+    // `harness/evidence/_eo13_cam.mjs`) is.
     roomBox: { x0: -G.w / 2, x1: G.w / 2, y0: 0, y1: G.h, z0: Z0 - 6, z1: Z1 },
   });
   engine.pipeline.setGrade(GRADES.gallery);

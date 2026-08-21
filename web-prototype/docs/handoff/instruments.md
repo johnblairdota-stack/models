@@ -194,7 +194,7 @@ earlier undocumented pass and was ON BY DEFAULT for every live non-capture page 
 gated so a view with no flag constructs no controls at all.
 - **Paste-ready readout + copy button** — prints `cameraPos:[…], target:[…], fov:N`, literally the
   shape `studio()`/`estate()` accept, so a shot can go straight into source or an agent brief.
-- **LIVE COMPOSITION READOUT** — `harness/_eo13_cam.mjs`'s per-pixel room-box ray-cast ported into
+- **LIVE COMPOSITION READOUT** — `harness/evidence/_eo13_cam.mjs`'s per-pixel room-box ray-cast ported into
   the overlay, so floor/ceiling/wall fractions update **as you orbit**. **This is the instrument
   that would have caught the ballroom framing before twelve rounds of surface polish went into it.**
   ⚠️ **THE LEAD REPORTED IT BROKEN IN A PRODUCTION BUILD (`floor 0.0% … out 100.0%`) AND THE FAULT
@@ -603,7 +603,7 @@ front, so picks return a *different, closer* mesh; unreachable geometry returns 
 at a flat distance, because you are looking at the panel around the hole. **A flat spread is not
 proof of a flat object — it is equally the signature of never having sampled the aperture.**
 
-**The tool that settles it in one run is `harness/_tmp_geoprobe.mjs --pick`** — a camera→pixel
+**The tool that settles it in one run is `harness/evidence/_tmp_geoprobe.mjs --pick`** — a camera→pixel
 raycast returning which mesh owns a pixel, plus an ASCII ownership raster. It found the plug,
 the off-screen mirror and the buried corridor. ⚠️ It only works where meshes are NAMED:
 `unit4h.js` and `hunter.js` name theirs, `src/gadgets/*` does not, which makes the gadget group

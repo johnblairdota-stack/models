@@ -781,7 +781,7 @@ his PC load ran while several agents were saturating the same machine.**
 
 ### The real shape: 97% of the cold load is shader compilation, and the SECOND load is already fast
 Nobody had ever measured a warm load, because every harness tool launches a fresh Chrome profile and
-therefore only ever measures a cold one. `harness/_boot1-cache.mjs` (new) reuses one profile:
+therefore only ever measures a cold one. `harness/evidence/_boot1-cache.mjs` (new) reuses one profile:
 
 | load (same profile) | ready | lap | programs |
 |---|---|---|---|
