@@ -383,6 +383,27 @@ export function startShow({ port = 5183, code = makeCode(), stamp = Date.now(), 
          * latecomer — it owns a chair with a role on it, and `seatJoin` is the one rule that
          * hands it back.
          */
+        /**
+         * 🚨 **ONE SOCKET, ONE CHAIR, AND THE SECOND ASK IS REFUSED RATHER THAN SEATED.**
+         *
+         * There was no "you already hold a seat" check at all. Four `{t:'join'}` down one
+         * connection seated four players and delivered four `you` panels to one screen — one of
+         * them a Production panel naming a real human as a teammate. A single extra chair knows
+         * both traitors 24.9% of the time; two chairs 46.4%; four chairs 79.0%.
+         *
+         * ⚠️ AND IT IS ALSO WHAT MAKES `bye()` CORRECT. `seat` is one binding in this closure, so
+         * a socket that could hold four chairs dropped only the LAST of them on close and left
+         * the rest `live: true` behind a dead connection — phantom players, dealt cards, counted
+         * in a threshold that then needed every real voter in the room. A critic reached seven
+         * phantom-inclusive players and 4 of 4 real voters, unanimity, in four messages, with the
+         * server answering `{"ok":true}` each time. That is precisely what `freezeRoster`'s own
+         * header exists to prevent, arrived at from the other side. With one chair per socket the
+         * closure cannot be wrong about which chair it holds.
+         */
+        if (seat) {
+          send(sock, { t: 'refused', why: 'this phone already has a chair', was: 'join' });
+          return;
+        }
         const mine = m.token && [...lobby.seats.values()].find((st) => st.token === m.token);
         if (show && !mine) {
           note(lobby, 'seat.refused', { name: (m.name || '').slice(0, 14), reason: 'already rolling' });

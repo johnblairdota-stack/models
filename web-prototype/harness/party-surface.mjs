@@ -626,6 +626,102 @@ for (const p of lease.phones) p.close();
 lease.tv.close();
 await lease.h.close();
 
+// ---------------------------------------------------------------- W7 · one socket, one chair
+/**
+ * 🚨 **`{t:'join'}` HAD NO "YOU ALREADY HOLD A SEAT" CHECK.** Four joins down one connection seated
+ * four players and delivered four `you` panels to one screen, one of them a Production panel
+ * naming a real human as a teammate. And the closure's `seat` is one binding, so closing that tab
+ * dropped only the LAST chair and left the rest `live: true` behind a dead socket — phantom
+ * players, dealt cards, counted in a threshold that then needed every real voter in the room.
+ *
+ * The two halves are measured separately below because they fail separately: the first is a leak,
+ * the second is a vote that cannot resolve.
+ */
+async function chairProbe(mod, port, code) {
+  const h = mod.startShow({ port, code });
+  await sleep(120);
+  const tv = await open(port, '?role=tv');
+  const honest = [];
+  for (let i = 0; i < 4; i++) {
+    const p = await open(port);
+    p.send({ t: 'join', name: `R${i + 1}`, token: null, boot: 500 });
+    honest.push(p);
+  }
+  await sleep(200);
+  const before = h.lobby.seats.size;
+
+  const greedy = await open(port);
+  for (let i = 0; i < 4; i++) greedy.send({ t: 'join', name: `G${i + 1}`, token: null, boot: 400 });
+  await sleep(250);
+  const afterJoins = h.lobby.seats.size;
+
+  tv.send({ t: 'start' });
+  await sleep(250);
+  const cards = greedy.of('event').map((m) => m.ev).filter((ev) => ev.type === 'role.card').length;
+
+  greedy.close();
+  await sleep(250);
+  const liveAfterClose = [...h.lobby.seats.values()].filter((x) => x.live).length;
+  const honestLive = honest.filter((p) => p.ws.readyState === 1).length;
+  return { h, tv, honest, greedy, before, afterJoins, cards, liveAfterClose, honestLive,
+    refusals: greedy.of('refused').length, seated: greedy.of('seated').length };
+}
+
+const CHAIR_PORT = 5256;
+const CHAIR_CTL_PORT = 5257;
+const chairs = await chairProbe({ startShow }, CHAIR_PORT, 'chr');
+{
+  t('W7 arm · four honest phones were seated first, so the probe is not measuring an empty lobby',
+    chairs.before === 4 && chairs.honestLive === 4,
+    `${chairs.before} seats before the greedy socket asked for four more`);
+  t('W7 · four joins down one socket buy one chair, and the other three are refused with a reason',
+    chairs.afterJoins === 5 && chairs.refusals === 3
+    && chairs.greedy.of('refused').every((r) => r.was === 'join'),
+    `${chairs.afterJoins} seats · ${chairs.refusals} refusals · ${JSON.stringify(chairs.greedy.of('refused')[0] || null)}`);
+  t('W7b · so one screen is dealt one card, and no second `you` panel reaches it',
+    chairs.cards === 1,
+    `${chairs.cards} role card(s) on a socket that asked to be four players`);
+  t('W7c · and closing that tab takes exactly its own chair — no phantom is left behind it',
+    chairs.liveAfterClose === 4,
+    `${chairs.liveAfterClose} live seats after the close, from ${chairs.afterJoins} at the bell`);
+}
+
+// ---------------------------------------------------------------- W7 control
+{
+  const ctl4 = controlOf('chairs', [
+    [[
+      '        if (seat) {',
+      "          send(sock, { t: 'refused', why: 'this phone already has a chair', was: 'join' });",
+      '          return;',
+      '        }',
+      '',
+    ].join('\n'), ''],
+  ]);
+  t('W7 control arm · the edit that removes the one-chair check applied',
+    ctl4.applied, ctl4.missed.length ? `did not apply: ${ctl4.missed.join(' | ')}` : 'the join branch has no seat check again');
+
+  const mod = await ctl4.load();
+  const bad = await chairProbe(mod, CHAIR_CTL_PORT, 'cctl');
+  t('W7 control · the same four joins seat four players down one connection',
+    bad.afterJoins === 8 && bad.refusals === 0 && bad.seated >= 4,
+    `${bad.before} seats before, ${bad.afterJoins} after · ${bad.seated} "seated" frames to one socket`);
+  t('W7b control · and one screen is dealt four cards, which is four players\' worth of the game',
+    bad.cards === 4, `${bad.cards} role cards on one socket`);
+  t('W7c control · closing that one tab leaves three live players nobody can see or vote',
+    bad.liveAfterClose === 7,
+    `${bad.liveAfterClose} live seats after one close — the threshold counts them and the room cannot`);
+
+  bad.greedy.close();
+  for (const p of bad.honest) p.close();
+  bad.tv.close();
+  await bad.h.close();
+  ctl4.rm();
+}
+
+for (const p of chairs.honest) p.close();
+chairs.tv.close();
+await chairs.h.close();
+
 // ---------------------------------------------------------------- W4 · and it still comes home
 /**
  * 🚨 REPLAYABILITY IS THE REASON THE SEEDS ARE REPORTED AT ALL, AND IT SURVIVES. They come home in
