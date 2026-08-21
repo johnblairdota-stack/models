@@ -397,6 +397,229 @@ const ROLE_NAMES = ['cameraOp', 'soundie', 'fixer', 'producer', 'continuity', 's
   }
 }
 
+// ---------------------------------------------------------------- H13 · the television shows the house
+/**
+ * 🚨 **THE PAGE SIX OF EIGHT PLAYERS WATCH DID NOT CONTAIN THE EXPEDITION.**
+ *
+ * `show-tv.html` had zero references to the 3D feed — no iframe, no `party.expedition`, no
+ * `role=sim`. For ninety seconds the television showed the word EXPEDITION, a countdown ring and
+ * eight static dots, and `src/views/expedition.js` — Director, mansion, shot solver, broadcast
+ * overlay — was a separate page nothing composited. `progress/storyboard/08-expedition.png` is a
+ * photograph of it, with all eight phones below reading *"Watch the television."*
+ *
+ * This arm drives the SHIPPED television in real Chromium against a real `show.mjs`, through a
+ * real casting phase into a real expedition, and looks at what is on the screen. Three arms, and
+ * each is the others' control:
+ *
+ *   **house**    a stub origin that announces itself the way `expedition.js` does → feed on air
+ *   **silent**   a stub origin that loads and says nothing → mounted, never aired
+ *   **off**      no house at all, which is the configuration that ships today → no frame, and the
+ *                expedition still plays as text
+ *
+ * ⚠️ WHAT THIS CANNOT SEE: the mansion itself. This box has no GPU and software-rasterises the
+ * house at minutes per frame, so the stub stands in for the vite server. Everything about the
+ * COMPOSITION is real — the page, the socket, the phases, the iframe, the handshake, the layout —
+ * and nothing here proves a single pixel of the corridor. Said plainly rather than skipped.
+ */
+{
+  const CHROME = process.env.RRR_CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+  if (!existsSync(CHROME)) {
+    skipped('H13 the television', `no Chromium at ${CHROME}; nothing has laid out show-tv.html, so whether the feed airs is UNGATED on this machine`);
+  } else {
+    const res = await tvSweep(CHROME);
+    if (res.error) {
+      skipped('H13 the television', `Chromium present but the run failed: ${res.error}`);
+    } else {
+      const { house, silent, off, later } = res;
+      t('H13 arm · the shipped television reached a real expedition with a house attached',
+        house.phase === 'EXPEDITION' && !!house.feed,
+        `phase ${house.phase} · ${house.railSeats} nameplates · viewport ${house.vw}×${house.vh}`);
+
+      t('H13 · the expedition is ON THE TELEVISION — the feed is mounted, aired and full bleed',
+        !!house.feed && house.feed.visible && house.feed.w >= house.vw * 0.8,
+        house.feed ? `${Math.round(house.feed.w)}×${Math.round(house.feed.h)} of ${house.vw}×${house.vh}` : 'NO FEED ELEMENT AT ALL');
+
+      t('H13b · it is pointed at the expedition view, over a socket with no identity on it',
+        !!house.feed && /view=party\.expedition/.test(house.feed.src) && /role%3Dsim|role=sim/.test(house.feed.src)
+        && !/token|name=|playerId|p[1-8]\b/.test(house.feed.src),
+        house.feed ? house.feed.src : '—');
+
+      t('H13c · §4\'s furniture stays: the nameplate rail is up, on a plate, beside the picture',
+        house.railVisible && house.railSeats === 5 && !house.circleVisible && house.stage === '',
+        `rail ${house.railSeats} seats · circle ${house.circleVisible ? 'still drawn' : 'yielded'} · stage "${house.stage}"`);
+
+      t('H13d · and in the next phase the feed leaves the screen and the circle comes back',
+        later.phase !== 'EXPEDITION' && !(later.feed && later.feed.visible) && later.circleVisible && !later.railVisible,
+        `${later.phase}: feed ${later.feed && later.feed.visible ? 'STILL ON AIR' : 'off'} · circle ${later.circleVisible ? 'back' : 'MISSING'}`);
+
+      // ---- the controls, and they are measurements rather than assertions about a literal
+      t('H13 control · a house that mounts but never announces itself is NEVER aired',
+        !!silent.feed && !silent.feed.visible && silent.circleVisible && silent.stage !== '',
+        silent.feed ? `frame mounted, feed ${silent.feed.visible ? 'AIRED ANYWAY' : 'held off'} — the handshake is what airs it, not the mount` : 'no frame mounted at all');
+
+      t('H13e · with no house at all the expedition still plays, which is what ships today',
+        off.feed === null && off.circleVisible && /into the/i.test(off.stage),
+        `no frame · stage reads "${off.stage.slice(0, 60)}"`);
+
+      t('H13 control · and the detector really can tell the three apart, so H13 is a difference',
+        (house.feed && house.feed.visible) === true && (silent.feed && silent.feed.visible) === false && off.feed === null,
+        'aired / mounted-but-dark / absent — three states, one detector');
+    }
+  }
+}
+
+/**
+ * Drive the real `show-tv.html` in real Chromium against a real `show.mjs`, three ways.
+ * No dependencies: CDP over a socket, the same way `renderSweep` does it.
+ */
+async function tvSweep(chromePath) {
+  const SHOW = 5242, STUB = 5241, CDP = 9378;
+  let proc = null, stub = null, show = null, phones = [];
+  const { startShow } = await import('../net/party/show.mjs');
+  const { PHASE } = await import('../src/party/phases.js');
+  const http = await import('node:http');
+  try {
+    /**
+     * The stand-in for `npm run party:house`. `/silent` loads and says nothing; every other path
+     * posts the one message `expedition.js` posts from `markReady()`. That message is the whole
+     * contract between the two halves, so a stub that sends it exercises the real path.
+     */
+    stub = http.createServer((req, res) => {
+      const quiet = req.url.startsWith('/silent');
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(`<!doctype html><meta charset="utf-8"><title>house</title>
+        <body style="margin:0;background:#101418"><script>${quiet ? '' : "parent.postMessage({t:'rrr.feed',ready:true},'*');"}</script>`);
+    });
+    await new Promise((r) => stub.listen(STUB, '127.0.0.1', r));
+
+    const nonce = `t${process.pid}${pass}${fail}`;
+    proc = spawn(chromePath, ['--headless=new', '--no-sandbox', '--disable-gpu',
+      `--remote-debugging-port=${CDP}`, '--window-size=1920,1080',
+      `--user-data-dir=/tmp/rrr-tv-${process.pid}`, `http://127.0.0.1:${STUB}/?${nonce}`], { stdio: 'ignore' });
+    /**
+     * ⚠️ AN `uncaughtException` LISTENER TURNS A CRASH INTO A CLEAN EXIT, AND THAT IS HOW A GATE
+     * LIES. Registering one suppresses node's default "print it and exit 1" — so a TypeError in
+     * an arm printed nothing, skipped every assertion after it and the run finished **0**. It
+     * kills the browser AND ends the process the way an uncaught exception is supposed to.
+     */
+    const reap = () => { try { proc.kill(); } catch { /* already gone */ } };
+    process.once('exit', reap);
+    process.once('uncaughtException', (e) => { reap(); console.error(e); process.exit(1); });
+    await new Promise((r) => setTimeout(r, 2600));
+
+    const list = await (await fetch(`http://127.0.0.1:${CDP}/json/list`)).json();
+    const target = list.find((x) => x.type === 'page' && x.url.includes(nonce));
+    if (!target) throw new Error(`no page target carrying this run's nonce on ${CDP}`);
+    const ws = new WebSocket(target.webSocketDebuggerUrl);
+    await new Promise((r) => { ws.onopen = r; });
+    let id = 0; const waits = new Map();
+    ws.onmessage = (e) => { const m = JSON.parse(e.data); if (waits.has(m.id)) { waits.get(m.id)(m); waits.delete(m.id); } };
+    /**
+     * ⚠️ EVERY CDP CALL HAS A DEADLINE, AND `location.href = …` IS NOT HOW A GATE NAVIGATES.
+     * Both cost a run. An eval that starts a navigation never gets its reply back — the execution
+     * context that would have answered is gone — so this hung for ever with a Chromium sitting
+     * idle beside it, and a gate that hangs is worse than one that fails: nobody knows which of
+     * the twenty-six stopped. `Page.navigate` is a command with a reply, and the deadline turns
+     * any other stall into a red line with a method name on it.
+     */
+    const call = async (method, params = {}) => {
+      const i = ++id;
+      const p = new Promise((res, rej) => {
+        waits.set(i, res);
+        setTimeout(() => { if (waits.delete(i)) rej(new Error(`${method} timed out after 20s`)); }, 20000);
+      });
+      ws.send(JSON.stringify({ id: i, method, params }));
+      const r = await p;
+      if (r.error) throw new Error(`${method}: ${r.error.message}`);
+      return r.result;
+    };
+    const js = async (expr) => {
+      const r = await call('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true });
+      if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || 'eval failed');
+      return r.result?.value;
+    };
+    const goto = async (url, ready = 'document.readyState === "complete" && !!document.getElementById("phase")') => {
+      await call('Page.navigate', { url });
+      for (let i = 0; i < 50; i++) {
+        await new Promise((r) => setTimeout(r, 100));
+        if (await js(ready).catch(() => false)) return;
+      }
+      throw new Error(`page never finished loading: ${url}`);
+    };
+
+    /** What is actually on the screen. `.hide` is `display:none!important`, so a rect of 0 is off. */
+    const READ = `(() => {
+      const vis = (el) => { if (!el) return false; const r = el.getBoundingClientRect(); return r.width > 1 && r.height > 1; };
+      const f = document.getElementById('feed');
+      const rail = document.getElementById('rail');
+      return {
+        phase: (document.getElementById('phase').textContent || '').trim(),
+        feed: f ? { src: f.getAttribute('src'), visible: vis(f),
+                    w: f.getBoundingClientRect().width, h: f.getBoundingClientRect().height } : null,
+        circleVisible: vis(document.getElementById('circle')),
+        railVisible: vis(rail), railSeats: rail ? rail.children.length : 0,
+        stage: (document.getElementById('stage').textContent || '').trim(),
+        vw: innerWidth, vh: innerHeight,
+      };
+    })()`;
+
+    /** One arm: a fresh show, five phones, cast through to a real EXPEDITION, then look. */
+    const arm = async (houseArg, alsoAfter = false) => {
+      show = startShow({ port: SHOW, code: 'shot', stamp: 1700000000000 });
+      phones = [];
+      for (let i = 0; i < 5; i++) {
+        const p = new WebSocket(`ws://127.0.0.1:${SHOW}/`);
+        await new Promise((r) => { p.onopen = r; });
+        p.onmessage = (e) => { const m = JSON.parse(e.data); if (m.t === 'ping') p.send(JSON.stringify({ t: 'pong', at: m.at })); };
+        p.send(JSON.stringify({ t: 'join', name: `R${i + 1}`, token: null, boot: 500 }));
+        phones.push(p);
+      }
+      await new Promise((r) => setTimeout(r, 250));
+      await goto(`http://127.0.0.1:${SHOW}/?house=${houseArg}`);
+      await new Promise((r) => setTimeout(r, 500));
+      show.begin(Date.now());
+      const sess = show.sessionNow();
+      for (let i = 0; i < 8 && sess.state.phase !== PHASE.EXPEDITION; i++) { sess.skip(Date.now()); await new Promise((r) => setTimeout(r, 120)); }
+      await new Promise((r) => setTimeout(r, 700));
+      const at = await js(READ);
+      let after = null;
+      if (alsoAfter) {
+        sess.skip(Date.now());
+        await new Promise((r) => setTimeout(r, 600));
+        after = await js(READ);
+      }
+      /**
+       * ⚠️ THE BROWSER'S OWN SOCKET KEEPS THE SERVER ALIVE. `server.close()` stops listening and
+       * then WAITS for every live connection, and the television is one — so closing the show
+       * while the page still holds its socket never resolves. Park the page on the stub first,
+       * then drop the phones, then close.
+       */
+      await goto(`http://127.0.0.1:${STUB}/parked`, 'document.readyState === "complete"').catch(() => {});
+      for (const p of phones) { try { p.close(); } catch { /* gone */ } }
+      await new Promise((r) => setTimeout(r, 200));
+      try { show.lobby.tv && show.lobby.tv.destroy(); } catch { /* already gone */ }
+      await show.close();
+      show = null;
+      await new Promise((r) => setTimeout(r, 150));
+      return { at, after };
+    };
+
+    const a = await arm(`http://127.0.0.1:${STUB}`, true);
+    const b = await arm(`http://127.0.0.1:${STUB}/silent`);
+    const c = await arm('off');
+
+    proc.kill();
+    await new Promise((r) => stub.close(r));
+    return { house: a.at, later: a.after, silent: b.at, off: c.at };
+  } catch (e) {
+    try { proc && proc.kill(); } catch { /* gone */ }
+    try { for (const p of phones) p.close(); } catch { /* gone */ }
+    try { show && await show.close(); } catch { /* gone */ }
+    try { stub && stub.close(); } catch { /* gone */ }
+    return { error: e.message };
+  }
+}
+
 /** Render the real overlay in real Chromium and measure it. No dependencies — CDP over a socket. */
 async function renderSweep(chromePath) {
   const CDP = 9377;
@@ -454,8 +677,15 @@ async function renderSweep(chromePath) {
     proc = spawn(chromePath, ['--headless=new', '--no-sandbox', '--disable-gpu',
       `--remote-debugging-port=${CDP}`, '--window-size=1920,1080', `http://127.0.0.1:5188/?${nonce}`], { stdio: 'ignore' });
     // Kill the browser even if this process dies unexpectedly, so the next run gets a clean port.
+    /**
+     * ⚠️ AN `uncaughtException` LISTENER TURNS A CRASH INTO A CLEAN EXIT, AND THAT IS HOW A GATE
+     * LIES. Registering one suppresses node's default "print it and exit 1" — so a TypeError in
+     * an arm printed nothing, skipped every assertion after it and the run finished **0**. It
+     * kills the browser AND ends the process the way an uncaught exception is supposed to.
+     */
     const reap = () => { try { proc.kill(); } catch { /* already gone */ } };
-    process.once('exit', reap); process.once('uncaughtException', reap);
+    process.once('exit', reap);
+    process.once('uncaughtException', (e) => { reap(); console.error(e); process.exit(1); });
     await new Promise((r) => setTimeout(r, 2600));
 
     const list = await (await fetch(`http://127.0.0.1:${CDP}/json/list`)).json();

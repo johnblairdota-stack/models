@@ -172,7 +172,18 @@ export default async function view(args = {}) {
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:20';
   document.body.appendChild(overlay);
-  const bx = createBroadcast({ mount: overlay });
+  /**
+   * 🚨 `?chrome=feed` — THIS VIEW IS THE PICTURE INSIDE SOMEBODY ELSE'S TELEVISION.
+   * `net/party/show-tv.html` composites this page in as a frame during EXPEDITION and already
+   * carries §4's permanent furniture: the show bug, the camera wall, the segment clock and the
+   * nameplate rail, all drawn from the frame the SERVER projected for the TV. This process is
+   * never sent a roster — the sim's brief is four fields on purpose — so the rail here could only
+   * ever be empty, and a second camera counter fed from a different quantity is how a television
+   * ends up disagreeing with itself in front of eight people. The lower third and the shot bug
+   * are the two things only this side knows, and they stay.
+   */
+  const EMBEDDED = qs.get('chrome') === 'feed';
+  const bx = createBroadcast({ mount: overlay, furniture: !EMBEDDED });
 
   const director = createDirector({ world: {} });
   let camerasUnlocked = Math.max(1, +(qs.get('cams') ?? 1));
@@ -451,6 +462,21 @@ export default async function view(args = {}) {
     room.setViewpoint(engine.camera.position, d, 1);
   }
   engine.markReady();
+
+  /**
+   * 🚨 THE ONE THING THIS PAGE SAYS TO THE TELEVISION, AND THE ONLY REASON A PARTY WITH NO HOUSE
+   * STILL WORKS. `show-tv.html` shows the feed only after this message arrives, so a television
+   * pointed at a vite server that is not running gets no message, shows no frame, and plays the
+   * expedition exactly as it shipped — a circle and a line of text. A `load` event could not
+   * carry that: Chromium fires one for its own connection-refused page too.
+   *
+   * `'*'` is the right target here and is not a hole: the payload is a boolean, and the TV checks
+   * `e.source === iframe.contentWindow` rather than trusting an origin string, because the host
+   * may have started the house on any port.
+   */
+  if (window.parent && window.parent !== window) {
+    window.parent.postMessage({ t: 'rrr.feed', ready: true }, '*');
+  }
 
   /**
    * 🚨 `engine.start()` OR NOTHING EVER RENDERS. The engine does not start its own loop —

@@ -42,6 +42,18 @@
 
   main{position:relative;min-height:0}
   #circle{position:absolute;inset:0}
+
+  /**
+   * 📺 THE LIVE FEED. The mansion renders in `src/views/expedition.js`, which needs a bundler and
+   * a GPU, so it cannot be part of this zero-dependency page — it is composited in as a frame and
+   * this page keeps the furniture. Full bleed, behind everything, and only during EXPEDITION.
+   */
+  #feed{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000;border-radius:12px}
+  /* §4's nameplate rail: seat order, along the bottom, on an opaque plate — never on the feed. */
+  #rail{position:absolute;left:0;right:0;bottom:0;display:flex;gap:clamp(6px,.8vw,14px)}
+  #rail .seat{position:static;transform:none;width:auto;flex:1 1 0;min-width:0;
+              background:var(--panel);border:1px solid var(--edge);border-radius:12px;
+              padding:clamp(6px,.9vh,14px) clamp(4px,.5vw,12px)}
   .seat{position:absolute;transform:translate(-50%,-50%);text-align:center;width:clamp(110px,13vw,210px)}
   .seat .dot{width:clamp(26px,3vw,54px);height:clamp(26px,3vw,54px);border-radius:50%;margin:0 auto clamp(4px,.6vh,10px);
              display:grid;place-items:center;font:700 clamp(12px,1.2vw,20px)/1 ui-sans-serif;color:#0b0d12}
@@ -112,8 +124,9 @@
   </div>
 </header>
 
-<main>
+<main id="main">
   <div id="circle"></div>
+  <div id="rail" class="hide"></div>
   <div class="stage" id="stage"></div>
 
   <div class="lobby" id="lobby">
@@ -143,6 +156,65 @@
 
   let frame = null, seats = [], code = '', joinUrl = '', started = false, special = null;
 
+  /**
+   * 📺 **THE LIVE FEED — the ninety seconds this page exists for, and it was not on it.**
+   *
+   * Under D1 six of eight players see nothing but this screen during EXPEDITION. What they saw
+   * was the word EXPEDITION, a countdown ring and eight static dots: `src/views/expedition.js` —
+   * the Director, the mansion, the shot solver — was a SEPARATE PAGE that nothing composited.
+   * `progress/storyboard/08-expedition.png` is a photograph of that, with all eight phones below
+   * reading "Watch the television."
+   *
+   * 🚨 IT IS A FRAME, NOT AN IMPORT, AND THAT IS FORCED RATHER THAN CHOSEN. The mansion imports
+   * `three` by bare specifier and needs a bundler; this page is served as text by a node server
+   * with no `node_modules` (see `show.mjs`'s header — *"zero dependencies, no build step … a party
+   * server you cannot start at a party does not get started"*). So the house runs under vite on
+   * its own port and is composited in here.
+   *
+   * 🚨 AND THE PARTY MUST STILL PLAY WITH NO HOUSE AT ALL, BECAUSE THAT IS THE SHIPPED
+   * CONFIGURATION TODAY. The feed is shown only once the mansion has said it is up — one
+   * `postMessage` from `expedition.js`'s `markReady()`. No message, no feed, and EXPEDITION falls
+   * back to exactly the page that shipped: the circle and the stage line. There is no timeout, no
+   * spinner and no error card, because §6.5 forbids all three on this screen.
+   *
+   * 🚨 THE FRAME IS TOLD A WING AND A SOCKET, AND NOTHING ELSE. It joins as `role=sim`, which
+   * `show.mjs` briefs with four fields and no roster — so the 3D half never holds an identity and
+   * the nameplate rail below is drawn HERE, from the frame the server projected for the TV.
+   */
+  const HOUSE = (() => {
+    const q = new URLSearchParams(location.search).get('house');
+    if (q === 'off') return null;                       // a party with no 3D half, on purpose
+    return q || location.protocol + '//' + location.hostname + ':5178';   // `npm run party:house`
+  })();
+  let feedEl = null, feedReady = false;
+
+  function mountFeed() {
+    if (feedEl || !HOUSE) return;
+    const join = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/?role=sim';
+    feedEl = document.createElement('iframe');
+    feedEl.id = 'feed';
+    feedEl.className = 'hide';
+    // The mansion has a soundtrack and this frame is cross-origin: without the delegation the
+    // autoplay policy suspends its AudioContext and the television is silent — broadcast §3.
+    feedEl.setAttribute('allow', 'autoplay');
+    feedEl.setAttribute('scrolling', 'no');
+    // `chrome=feed` — the overlay inside the frame keeps the lower third and the shot bug and
+    // drops the show bug, the camera wall and the segment clock, which THIS page already carries.
+    // Two camera counters disagreeing by one is worse television than either of them alone.
+    feedEl.src = HOUSE + '/?view=party.expedition&chrome=feed&join=' + encodeURIComponent(join);
+    $('main').insertBefore(feedEl, $('circle'));
+  }
+
+  // The only thing the house is allowed to say to this page, and it is checked by SOURCE rather
+  // than by origin string: the house may be on any port the host started it on.
+  addEventListener('message', (e) => {
+    if (!feedEl || e.source !== feedEl.contentWindow) return;
+    if (e.data && e.data.t === 'rrr.feed' && e.data.ready && !feedReady) {
+      feedReady = true;
+      if (frame) render();
+    }
+  });
+
   // ---------------------------------------------------------------- the circle
   function drawCircle() {
     const box = $('circle');
@@ -168,6 +240,29 @@
         + '<div class="nm">' + esc(p.name) + '</div>'
         + '<div class="tag">' + tag + '</div>'
         + '<div class="claim">' + (p.claim ? '“' + esc(p.claim) + '”' : '') + '</div>'
+        + '</div>';
+    }).join('');
+  }
+
+  /**
+   * §4's permanent nameplate rail, which the circle becomes while the feed is up: *"name, current
+   * public claim, ALIVE / OUT, and this round's RUNNER / GUIDE badges. Never alignment, never true
+   * role."* Same five fields the circle draws, laid along the bottom on an opaque plate — §4 puts
+   * nothing important straight on the feed.
+   */
+  function drawRail() {
+    const players = (frame && frame.players) || [];
+    $('rail').innerHTML = players.map((p) => {
+      const isRunner = frame.pair && frame.pair.runner === p.id;
+      const isGuide = frame.pair && frame.pair.guide === p.id;
+      // The same non-colour channel the circle uses, because half a party room is looking at the
+      // screen sideways: ✕ taken, ⚒ evicted, ⬤ alive. Never a word about what any of them was.
+      const mark = p.alive ? '⬤' : (p.taken ? '✕' : '⚒');
+      const cls = 'seat' + (p.alive ? '' : ' out') + ((isRunner || isGuide) ? ' crew' : '');
+      return '<div class="' + cls + '">'
+        + '<div class="nm">' + mark + ' ' + esc(p.name) + '</div>'
+        + '<div class="claim">' + (p.claim ? '“' + esc(p.claim) + '”' : '—') + '</div>'
+        + '<div class="tag">' + (isRunner ? '▶ runner' : isGuide ? '◉ guide' : '') + '</div>'
         + '</div>';
     }).join('');
   }
@@ -342,7 +437,19 @@
     $('lobby').classList.toggle('hide', started);
     $('ep').textContent = frame.phase === 'REUNION' ? 'The Reunion' : 'Episode ' + frame.episode;
     $('phase').textContent = frame.phase;
-    $('stage').innerHTML = (STAGE[frame.phase] || (() => ''))();
+
+    /**
+     * 🚨 THE FEED AIRS DURING EXPEDITION AND IN NO OTHER PHASE. It is the only phase with anything
+     * happening in the house; a live corridor under the vote would be the Director editing an
+     * argument. And it airs only once the house has said it is up — with no house the circle and
+     * the stage line are what EXPEDITION has always been, which is a party that still plays.
+     */
+    const onAir = !!feedEl && feedReady && frame.phase === 'EXPEDITION';
+    if (feedEl) feedEl.classList.toggle('hide', !onAir);
+    $('rail').classList.toggle('hide', !onAir);
+    $('circle').classList.toggle('hide', onAir);
+    $('stage').classList.toggle('hide', onAir);
+    $('stage').innerHTML = onAir ? '' : (STAGE[frame.phase] || (() => ''))();
     const c = frame.cameras || {};
     $('cams').textContent = (c.unlocked || 0) + '/' + (c.needed || 0);
     $('campips').innerHTML = Array.from({ length: c.needed || 0 },
@@ -350,7 +457,7 @@
     $('alarms').textContent = (frame.incident || {}).alarms || 0;
     $('crewline').textContent = frame.pair && frame.pair.runner
       ? nameOf(frame.pair.runner) + ' runs · ' + nameOf(frame.pair.guide) + ' guides' : '—';
-    drawCircle();
+    if (onAir) drawRail(); else drawCircle();
     paintClock();
   }
 
@@ -378,7 +485,13 @@
       const m = JSON.parse(e.data);
       if (m.t === 'hello') { code = m.code; joinUrl = m.url; renderLobby(); }
       if (m.t === 'roster') { seats = m.players; started = m.started; renderLobby(); if (started) render(); }
-      if (m.t === 'state') { frame = m.frame; started = true; render(); }
+      /**
+       * 🚨 THE HOUSE IS LOADED WHEN THE SHOW ROLLS, NOT WHEN THE EXPEDITION OPENS. A mansion is
+       * seconds of loading; mounting it at the top of EXPEDITION spends them out of the ninety
+       * that are the segment. It stays mounted for the whole show and re-arms on each `brief`,
+       * which is why `expedition.js` has a brief handler at all.
+       */
+      if (m.t === 'state') { frame = m.frame; started = true; mountFeed(); render(); }
       if (m.t === 'event') onEvent(m.ev);
       if (m.t === 'reunion') { special = { ...m.special, outcome: m.outcome }; render(); }
       if (m.t === 'notice' && !m.ok) { $('startHint').textContent = m.why; }
@@ -392,7 +505,9 @@
     if (e.code === 'Space') { e.preventDefault(); ws && ws.send(JSON.stringify({ t: 'start' })); }
     if (e.key === 's' || e.key === 'S') ws && ws.send(JSON.stringify({ t: 'skip' }));
   });
-  addEventListener('resize', () => { if (started) drawCircle(); });
+  // The circle is laid out in pixels, so it is the one thing that has to be redrawn on a resize.
+  // The rail is flexbox and looks after itself.
+  addEventListener('resize', () => { if (started && !$('circle').classList.contains('hide')) drawCircle(); });
   setInterval(paintClock, 100);
   renderLobby();
   connect();

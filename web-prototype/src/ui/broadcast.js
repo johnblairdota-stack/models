@@ -100,14 +100,27 @@ const CSS = `
 .rrr-card{position:absolute;inset:12% 18%;display:grid;place-items:center;font-size:4vh;font-weight:700;
   letter-spacing:.2em;background:${INK.plate};border:1px solid ${INK.edge};border-radius:1vh}
 .rrr-hide{display:none}
+
+/* 🚨 THE FEED CUT — WHAT THIS OVERLAY DROPS WHEN IT IS COMPOSITED INTO A PAGE THAT ALREADY HAS
+   FURNITURE. net/party/show-tv.html embeds the mansion as a frame and carries the show bug, the
+   camera wall, the segment clock and the nameplate rail itself, drawn from the frame the SERVER
+   projected — which the 3D half deliberately never receives (it has no roster, by contract). Two
+   camera counters on one screen disagreeing by one is worse television than either alone, so the
+   duplicates go and the two things only this side knows — the lower third and the shot bug —
+   stay. Standalone, nothing is hidden and the overlay is §4 entire. */
+.rrr-bx.rrr-feed .rrr-top,
+.rrr-bx.rrr-feed .rrr-seg,
+.rrr-bx.rrr-feed .rrr-rail{display:none}
 `;
 
 /**
  * @param {object} o
- * @param {HTMLElement} o.mount   where the overlay is attached — usually over the canvas
- * @param {Document} [o.doc]      injected so a gate can drive it without a global `document`
+ * @param {HTMLElement} o.mount    where the overlay is attached — usually over the canvas
+ * @param {Document} [o.doc]       injected so a gate can drive it without a global `document`
+ * @param {boolean} [o.furniture]  false when this overlay is composited into a page that already
+ *                                 carries §4's permanent furniture — see `.rrr-feed` in the CSS
  */
-export function createBroadcast({ mount, doc = (typeof document !== 'undefined' ? document : null) }) {
+export function createBroadcast({ mount, doc = (typeof document !== 'undefined' ? document : null), furniture = true }) {
   if (!doc) throw new Error('createBroadcast needs a document');
   if (!doc.getElementById('rrr-bx-css')) {
     const st = doc.createElement('style');
@@ -117,7 +130,7 @@ export function createBroadcast({ mount, doc = (typeof document !== 'undefined' 
   }
 
   const el = (cls, tag = 'div') => { const n = doc.createElement(tag); n.className = cls; return n; };
-  const box = el('rrr-bx');
+  const box = el('rrr-bx' + (furniture ? '' : ' rrr-feed'));
   const top = el('rrr-top'), mid = el('rrr-mid'), bot = el('rrr-bot');
   const show = el('rrr-show rrr-plate'), cams = el('rrr-cams rrr-plate');
   const wall = el('rrr-wall', 'span');
