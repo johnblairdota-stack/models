@@ -51,9 +51,24 @@ has never been called; it needs no mansion, no Hunter, no Director. Roughly ten 
 `session.js`, four `self` rows in `entitle.js`, six in `show-phone.html`. Honest costs: at 8
 players it says NO three times in four, and the Glitched only contradicts it in about 22% of games.
 
-Related and cheap: **`GUARANTEED` colliding with `COMPOSITION` makes three cards structurally
-undealable** — the Static and the Method Actor can never appear at 4, 5 or 6 players; the Fixer can
-never appear at 8. Nobody decided that; it falls out of two tables.
+Related and cheap: **`GUARANTEED` colliding with `COMPOSITION` makes cards structurally
+undealable.** Now measured — `harness/evidence/_cast-table.mjs`, 24 assertions, 600,000 deals
+through the real `dealCast`, two unrelated seed families — and **this entry undercounted it.**
+
+It is **four cards across six role/count pairs**, each at 0 appearances in 40,000 deals: the
+Static and the Method Actor at 5 and at 6, **the Plant at 6** (missed here originally), and the
+Fixer at 8. And it is *structural*, not statistical — `pick()` fills a kind's slots with the
+guarantees first, so when a guarantee is as long as its kind's slot count the draw is handed an
+empty pool. `C1b` reads that off the shipped tables rather than inferring it from a zero count.
+
+Two more the sweep turned up:
+
+- **The Static and the Method Actor at 4 players is a different cause with the same symptom.**
+  `COMPOSITION[4].outsider` is 0, so four-player games have **no Outsider at all**. That is a
+  table decision, not a collision, and no candidate fix touches it. Whether it was made on
+  purpose is not readable from the tables.
+- **`contestant` is unreachable at 5, 6 and 8** for the same reason — no contestant slot, and the
+  `while (bag.length < count)` filler never fires because every row already sums to its count.
 
 ---
 
@@ -139,6 +154,38 @@ distance.**
 - **The show keeps shooting after it is over.** `foldWin` fires on the winning camera but
   `closeEpisode()` only runs when the phase queue empties: **71.3% of games execute someone after
   the result is locked.**
+
+---
+
+## The instrument that carries the balance verdict is measuring an ability that does not ship
+
+**`party-sim` S1 asserts "no player count is degenerate in the camera race" against a 25–75%
+band, and it passes only because the simulation gives evil a lever the build does not
+implement.** S1 is deliberately a degeneracy check rather than a balance assertion — its own
+header refuses the full-game band on the grounds that *"asserting it here would be asserting
+that half the game exists when it does not"*. That refusal is sound. The problem is the other
+half: the half it *does* model includes an ability nothing emits. Measured by
+`_cast-table` C4 through `party-sim`'s own `playMatch`, extracted from its source rather than
+reimplemented:
+
+| good win rate | 4p | 5p | 6p | 7p | 8p |
+|---|---|---|---|---|---|
+| spike ON — as `party-sim` runs today | 57.8% | 64.6% | 35.2% | 39.0% | 36.4% |
+| spike OFF — the shipped game | **83.4%** | **90.2%** | **78.4%** | **82.0%** | **78.8%** |
+
+**All five counts sit above the band's 75% ceiling** without the modelled lever — 78.4% is the
+lowest of them. (The measuring agent reported "four of five"; the table it supplied shows five,
+and a larger-n re-run is in flight to settle it. Take the shape as established and the exact
+count as pending.) `C5` re-derives the
+defect from the tree every run so the caveat cannot outlive it: `noise.spike` is declared in
+`events.js` FAILURE_KINDS and emitted in none of ten shipped modules; the only firing code is
+`policy.js:114`'s `spikesThisEpisode`, a bot-policy helper consumed by `party-sim`'s own
+expedition model.
+
+So the honest reading of the shipped game is **good wins about four times in five**, and every
+balance number anyone has quoted on this project is from the other game. Building the Producer
+spike is therefore not a polish item — it is the thing that makes the suite's balance verdict
+true. Do not "fix" S1 to match; the band is not what is wrong.
 
 ---
 

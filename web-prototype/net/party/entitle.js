@@ -83,6 +83,25 @@ export const MATRIX = [
   ['you.teammates[].claimDraft', 'evil'],   // the Production Panel, and the ONLY draft on any wire
   ['you.acted',                'self'],    // has THIS phone tapped yet this phase — never anyone else's
 
+  // 🚨 THE FIRST PRIVATE INFORMATION IN THE GAME THAT IS NOT A ROLE CARD. Continuity's readings,
+  // oldest first. `party-private` measured the whole private wire at one envelope per player per
+  // GAME — the card, dealt in episode one, and nothing else written to anybody for the remaining
+  // four episodes. These rows are what moves that ceiling.
+  //
+  // ⚠️ `self` AND NOTHING WEAKER. The value is the point, but `episode`/`runner`/`guide` are just
+  // as private: a reading that names the pair it was taken on is a dossier entry, and knowing
+  // that SOMEBODY holds one narrows the informing role to whoever it reached. The frame carries
+  // the array only when it is non-empty for exactly that reason — see `fullFor`.
+  //
+  // ⚠️ AND THERE IS NO ROW FOR WHETHER IT WAS POISONED, DELIBERATELY. `resolveInformation`
+  // computes it and `session.js` throws it away: a holder who could see that their own reading
+  // was falsified would know they are the Glitched, and neither filter being visible to the
+  // holder is precisely what stops the room treating a readout as proof.
+  ['you.readings[].episode',   'self'],
+  ['you.readings[].runner',    'self'],
+  ['you.readings[].guide',     'self'],
+  ['you.readings[].value',     'self'],
+
   // ---- the room
   ['players[].id',             'all'],
   ['players[].seat',           'all'],

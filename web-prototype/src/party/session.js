@@ -37,7 +37,7 @@ import { ROOMS, hunterVisibleToGuide, camerasLive } from './coverage.js';
 import { guideSight } from './darkrun.js';
 import { HOUSE, WINGS } from './houseplan.js';
 import { applyTake, applyEviction, resolveContact, MODE, PLATE } from './taken.js';
-import { cardFor } from './roles.js';
+import { cardFor, pairContainsProduction, resolveInformation } from './roles.js';
 import { tallyCasting, refuse as refuseChair } from './ballot.js';
 import { tallyVote, executioner, nominate as proposeNomination, reckoningClosed, NO_ONE } from './vote.js';
 import { foldWin, OUTCOME } from './win.js';
@@ -260,6 +260,15 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
   // it. Snapshotted at the call, aired at RECAP, and null when no call was made. See
   // `onEnter[PHASE.RECAP]` for why this is a boolean and not the Hunter's room.
   let callSight = null;
+
+  /**
+   * 🚨 **THE PRIVATE DOSSIER, AND IT IS A LIST BECAUSE ONE BOOLEAN IS NOT AN ASSET.**
+   * playerId → the readings that player has been handed, oldest first. A single reading is a
+   * fact; five readings across a season, each naming the pair it was taken on, is something a
+   * player can spend, hoard, or lie about — which is the thing the DEBRIEF has never had.
+   * `party-private` measures the census this moves.
+   */
+  const readings = new Map();
   let takenThisEpisode = [];
   /**
    * This episode's ballots, kept so `refuse()` can re-tally the slot from the SAME votes rather
@@ -320,6 +329,11 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
     if (state.ballots && state.ballots.length) base.ballots = state.ballots.map((b) => ({ ...b }));
     if (!sock.isTV) {
       base.you = { ...viewFor(deal, sock.playerId).you, acted: pending.acted.has(sock.playerId), ...card(sock.playerId) };
+      // ⚠️ ONLY WHEN NON-EMPTY, so a frame never carries an empty `readings` for the seven
+      // players who hold no informing card — an always-present empty array is a tell that says
+      // "you are not the one with the readings" to anybody who opens devtools on their own phone.
+      const mine = readings.get(sock.playerId);
+      if (mine && mine.length) base.you.readings = mine.map((r) => ({ ...r }));
     }
     // 🚨 S3. The Hunter is on the guide's map only where a live camera watches AND the wall does
     // not hide it. Two independent honest-error sources, compounded — `darkrun.js`'s header.
@@ -578,6 +592,66 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
     }
   }
 
+  /**
+   * 🚨 **THE FIRST ROLE THAT ACTUALLY FIRES.** Twelve of the thirteen cards in `roles.js` are
+   * text: `resolveInformation`, `pairContainsProduction` and `falsify` were written, gated by
+   * `role-script` 24/24, and had no caller anywhere in the product tree. `role-script` was green
+   * over a system where no role had ever run, because all 24 of its assertions read data
+   * literals — a model standing in for something that does not exist, which is the one direction
+   * that rule permits, right up until the thing exists.
+   *
+   * Continuity is first because it needs nothing: no mansion, no Hunter, no Director, no engine.
+   * It is a function of the deal and the announced pair, both of which are in scope here.
+   *
+   * 🚨 **THE HOLDER IS WHOEVER *BELIEVES* THEY ARE CONTINUITY, NEVER WHOEVER IS.** `viewFor`
+   * returns `cover ?? role`, so a Glitched dealt a Continuity cover reads this card, and must
+   * receive a reading like anybody else — a card that silently stopped producing readings would
+   * tell its holder they are the Glitched, which is the one fact that card exists to withhold.
+   * `card()` above derives from `viewFor` for exactly this reason and says so.
+   *
+   * ⚠️ AND THE POISON IS APPLIED BY `resolveInformation`, NOT HERE. It takes the honest answer
+   * and falsifies it for a Glitched holder; `falsify` returns a PLAUSIBLE opposite rather than a
+   * nonsense value, because a nonsense value announces the poison. Neither filter is visible to
+   * the holder, which is what stops the room treating a readout as proof.
+   *
+   * ⚠️ THE PLANT IS WHY THIS CAN BE HONESTLY WRONG A SECOND WAY. `pairContainsProduction` is
+   * handed `plantIds` and the Plant registers as good, so a pair containing only the Plant reads
+   * NO and the reading is true-as-far-as-it-goes. Two independent sources of honest error on one
+   * boolean is the design; see `roles.js`'s header.
+   *
+   * ⚠️ THE DEAD TAKE NO READINGS. A card is not an estate.
+   */
+  function fireContinuity() {
+    const pair = [state.pair.runner, state.pair.guide].filter(Boolean);
+    if (pair.length !== 2) return;
+    const alignmentOf = Object.fromEntries(deal.seats.map((s) => [s.id, s.alignment]));
+    const plantIds = deal.seats.filter((s) => s.role === 'plant').map((s) => s.id);
+    const truth = pairContainsProduction(pair, alignmentOf, plantIds);
+    for (const seat of deal.seats) {
+      const p = state.players.find((x) => x.id === seat.id);
+      if (!p || !p.alive) continue;
+      if (viewFor(deal, seat.id).you.role !== 'continuity') continue;
+      const { value, poisoned } = resolveInformation({
+        role: 'continuity', truth, holderGlitched: seat.role === 'glitched',
+      });
+      const reading = {
+        episode: state.episode, runner: state.pair.runner, guide: state.pair.guide, value,
+      };
+      if (!readings.has(seat.id)) readings.set(seat.id, []);
+      readings.get(seat.id).push(reading);
+      // ⚠️ `poisoned` IS NOT ON THE EVENT AND MUST NEVER BE. It is the ground truth of whether
+      // this holder is the Glitched, and the Reunion is where that comes out — `log.reunion()`
+      // is `log.all()`, and a SEALED companion event is the shape to add if it is ever wanted.
+      record({
+        ...makeEvent('reading.taken', VIS.SELF, {
+          role: 'continuity', episode: state.episode, value,
+          runner: state.pair.runner, guide: state.pair.guide,
+        }), for: seat.id,
+      });
+      void poisoned;
+    }
+  }
+
   function resolveCasting() {
     const alive = living();
     // 🚨 A PHONE THAT NEVER TAPPED STILL CASTS A BALLOT, AND IT IS AN ABSTENTION RATHER THAN A
@@ -626,6 +700,8 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
     // CASTING entry so the board never shows last episode's slate beside this episode's pair.
     state.ballots = ballots.map((b) => ({ voter: b.voter, runner: b.runner, guide: b.guide }));
     record(makeEvent('cast.pair', VIS.PUBLIC, { runner: cast.runner, guide: cast.guide }));
+    // The card reads *"as a pair is announced"*, and this is where a pair first exists.
+    fireContinuity();
   }
 
   /**
