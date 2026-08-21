@@ -105,6 +105,38 @@ function literalMessages(text, callRe) {
   return out;
 }
 
+/**
+ * Every `<name>.<field>` read off a value, following it through the local calls it is handed to.
+ *
+ * 🚨 A HANDLER THAT SAYS `if (m.t === 'brief') arm(m)` READS EVERY FIELD `arm` READS, AND A SCAN
+ * THAT STOPPED AT THE BRANCH WOULD REPORT THAT IT READS NONE — which is a field-parity assertion
+ * passing because it found nothing to check. `views/expedition.js` hands the brief to `arm(b)`,
+ * which hands it to `readBrief(b)`, which is where `b.wing`, `b.cameras`, `b.episode` and
+ * `b.worldSeed` actually are. Two hops, so the follow goes three deep and stops.
+ */
+function readsOf(text, name, scope, depth = 3, seen = new Set()) {
+  const out = new Set();
+  for (const m of scope.matchAll(new RegExp(`\\b${name}\\.([A-Za-z_$][\\w$]*)`, 'g'))) out.add(m[1]);
+  if (depth <= 0) return out;
+  for (const call of scope.matchAll(new RegExp(`\\b([A-Za-z_$][\\w$]*)\\(\\s*${name}\\s*[,)]`, 'g'))) {
+    const fn = call[1];
+    if (seen.has(fn) || /^(if|for|while|switch|return|typeof|Number|String|Boolean|Math|JSON|Object|Array)$/.test(fn)) continue;
+    seen.add(fn);
+    const def = text.match(new RegExp(`(?:function\\s+${fn}\\s*\\(|const\\s+${fn}\\s*=\\s*(?:async\\s*)?\\()`));
+    if (!def) continue;
+    const open = text.indexOf('(', def.index + def[0].length - 1);
+    const params = balancedParen(text, open);
+    if (params == null) continue;
+    const first = (params.split(',')[0] || '').trim().replace(/\s*=.*$/, '');
+    if (!/^[A-Za-z_$][\w$]*$/.test(first)) continue;
+    const bodyAt = text.indexOf('{', open + params.length);
+    const body = balanced(text, bodyAt);
+    if (body == null) continue;
+    for (const f of readsOf(text, first, body, depth - 1, seen)) out.add(f);
+  }
+  return out;
+}
+
 /** The text inside the braces starting at `at`, brace-matched, string-aware enough for this tree. */
 function balanced(text, at) {
   if (text[at] !== '{') return null;
@@ -312,7 +344,7 @@ const simHandles = (() => {
     const at = body.indexOf(`m.t === '${ty}'`);
     const next = types.map((o) => body.indexOf(`m.t === '${o}'`)).filter((i) => i > at);
     const chunk = body.slice(at, next.length ? Math.min(...next) : body.length);
-    for (const f of chunk.matchAll(/\bm\.([A-Za-z_$][\w$]*)/g)) if (f[1] !== 't') out.get(ty).add(f[1]);
+    for (const f of readsOf(EXPED, 'm', chunk)) if (f !== 't') out.get(ty).add(f);
   }
   return out;
 })();
@@ -347,42 +379,24 @@ const showHandles = (() => {
 // P1 · show -> sim
 // =============================================================================================
 /**
- * 🚨 **A MESSAGE SENT INTO THE HOUSE THAT THE HOUSE DOES NOT HANDLE — REPORTED, NOT TOLERATED.**
+ * ⚠️ **THIS SEAM CARRIED A NAMED EXEMPTION FOR EXACTLY ONE COMMIT AND THE ARM RETIRED IT.**
+ * `{t:'brief'}` was sent by `show.mjs`, pinned by `show-wire` X10, and handled by nothing — the
+ * view took the wing, the seed, the episode and the camera count off its own query string. It was
+ * listed here with its argument and an arm that went red the moment either end moved. The
+ * television build then taught `views/expedition.js` to read the brief, the arm went red on the
+ * next run, and the entry came out. That is what a list with an arm on it is for: the exemption
+ * could not outlive the disagreement it described.
  *
- *   brief   `show.mjs` sends `{t:'brief', wing, cameras, worldSeed, episode}` when the sim socket
- *           connects and again when EXPEDITION opens, and `show-wire` X10 pins its exact shape.
- *           `src/views/expedition.js` has no `brief` branch: it takes the wing, the seed, the
- *           episode and the camera count from its own query string at load
- *           (`qs.get('wing')`, `qs.get('seed')`, `qs.get('ep')`, `qs.get('cams')`), so the brief
- *           is redundant traffic that arrives and is dropped.
- *
- *           **This is a live disagreement between two files and neither end is this gate's to
- *           settle.** `views/expedition.js` and `show-wire.mjs` belong to the television build.
- *           Either the view starts reading the brief — at which point it stops being a query
- *           string away from a stale wing on reconnect — or `show.mjs` stops sending it and X10
- *           goes with it. P1 arm below goes red the moment either happens, so this entry cannot
- *           outlive the disagreement it describes.
- *
- * The other half of the same seam has been closed rather than listed: `{t:'cams'}` was a handler
- * with no producer anywhere in the tree, and its producer is in `show.mjs`, which is this
- * author's to write. See `pushCams` there.
+ * The other half was closed in `show.mjs`: `{t:'cams'}` was a handler with no producer anywhere
+ * in the tree, so a camera lit mid-show never reached the house drawing it. See `pushCams`.
  */
-const AWAITING_A_CONSUMER = new Map([
-  ['brief', 'views/expedition.js reads wing, seed, episode and cameras off its query string instead; show-wire X10 pins the message. One of the two has to move and neither is this file\'s'],
-]);
 {
   const emits = setOf(showToSim.keys()), reads = setOf(simHandles.keys());
-  const deadTraffic = only(emits, reads).filter((x) => !AWAITING_A_CONSUMER.has(x));
+  const deadTraffic = only(emits, reads);
   const deadHandler = only(reads, emits);
   t('P1 · every message `show.mjs` sends the mansion is one `views/expedition.js` handles',
     deadTraffic.length === 0,
-    deadTraffic.length ? `sent and never handled: ${deadTraffic.map((x) => `{t:'${x}'}`).join(', ')}`
-      : `${[...emits].join(', ')} — ${[...AWAITING_A_CONSUMER.keys()].join(', ')} named above and still unhandled`);
-  const settled = [...AWAITING_A_CONSUMER.keys()].filter((x) => reads.has(x) || !emits.has(x));
-  t('P1 arm · and the one message named as unhandled is still both sent and unhandled',
-    settled.length === 0,
-    settled.length ? `resolved — delete the entry and let P1 assert it: ${settled.join(', ')}`
-      : `{t:'brief'} is sent by show.mjs and handled by nothing`);
+    deadTraffic.length ? `sent and never handled: ${deadTraffic.map((x) => `{t:'${x}'}`).join(', ')}` : `${[...emits].join(', ')}`);
   t('P1b · and every message the mansion handles is one something sends',
     deadHandler.length === 0,
     deadHandler.length ? `handled and never sent: ${deadHandler.map((x) => `{t:'${x}'}`).join(', ')}` : `${[...reads].join(', ')}`);
@@ -712,9 +726,12 @@ function framePathsRead(file) {
     const body = balanced(briefRenamed, m.index + m[0].lastIndexOf('{'));
     return setOf([...topLevelPairs(body)].map(([, k]) => k).filter((k) => k !== 't'));
   })();
-  t('P9.1 control · rename the brief\'s field and the extractor sees a different set — the scan is reading the wire',
-    !renamedBrief.has('cameras') && renamedBrief.has('unlocked'),
-    `[${[...renamedBrief].join(', ')}] instead of [${[...(showToSim.get('brief') || [])].join(', ')}]`);
+  const wantsBrief = simHandles.get('brief') || new Set();
+  const wouldMiss = [...wantsBrief].filter((f) => !renamedBrief.has(f));
+  t('P9.1 control · rename the brief\'s field to `unlocked` and P1c goes red — the house still reads `cameras`',
+    wantsBrief.size > 0 && wouldMiss.includes('cameras'),
+    `the house reads [${[...wantsBrief].join(', ')}]; the renamed brief sends [${[...renamedBrief].join(', ')}]`
+    + ` — missing ${wouldMiss.join(', ')}`);
 
   // ---- P2c: make `simReport` read a field the mansion does not send
   const greedy = SESSION.replace('room: msg.runner.room ?? null', 'room: msg.runner.zone ?? null');
