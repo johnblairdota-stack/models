@@ -34,7 +34,9 @@ import { SPACES, ANCHORS } from '../src/game/spaces.js';
 import { ROOMS, coveredRooms } from '../src/party/coverage.js';
 import { HOUSE, EXTENT, roomAt } from '../src/party/houseplan.js';
 import { ROOM_LABEL } from '../src/party/captions.js';
-import { TERMINAL_AT, TERMINAL_REACH, EXPEDITION_SECONDS, TELL_FOR_STATE, tellFor } from '../src/views/expedition.js';
+import { TERMINAL_AT, TERMINAL_REACH, EXPEDITION_SECONDS, TELL_FOR_STATE, tellFor, readBrief } from '../src/views/expedition.js';
+import { startShow } from '../net/party/show.mjs';
+import { camerasLive } from '../src/party/coverage.js';
 import { KIND } from '../src/party/director.js';
 import { mapRooms, createRig } from '../src/game/director-rig.js';
 import { bugFor } from '../src/party/shots.js';
@@ -324,6 +326,91 @@ const engaged = (s) => {
   const strayKind = Object.values(TELL_FOR_STATE).filter((k) => !KIND.includes(k));
   t('E8d · and every kind it emits is one of §1.2\'s twelve, which has no room for a new one',
     strayKind.length === 0, strayKind.join(', ') || Object.values(TELL_FOR_STATE).join(' '));
+}
+
+// ---------------------------------------------------------------- E11 · the brief is read
+/**
+ * 🚨 **THE SERVER HAS BEEN BRIEFING THE HOUSE SINCE THE SOCKET EXISTED, AND THE HOUSE HAD NO
+ * BRANCH FOR IT.** `show.mjs` sends `{t:'brief', wing, cameras, worldSeed, episode}` on connect
+ * and at the top of every expedition. The view's handler accepted `drive` and `cams` and dropped
+ * the brief: `wing` was bound once from a query string and never reassigned, so the runner drove
+ * to the wrong room's terminal, the lower third named the wrong room, and `session.js`'s
+ * `simReport` reads only `msg.outcome` — so the mismatch was discarded in silence.
+ *
+ * This takes a brief off a REAL show, through a real `role=sim` socket, and holds what the view
+ * recovers from it against what the session put in.
+ */
+{
+  const PORT = 5243;
+  const show = startShow({ port: PORT, code: 'brief', stamp: 1700000000000 });
+  const opened = [];
+  const open = (q = '') => new Promise((res) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${PORT}/${q}`);
+    const msgs = [];
+    ws.onmessage = (e) => { const m = JSON.parse(e.data); msgs.push(m); if (m.t === 'ping') ws.send(JSON.stringify({ t: 'pong', at: m.at })); };
+    ws.onopen = () => res({ ws, msgs });
+    ws.onerror = () => res({ ws, msgs });
+  });
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  await wait(120);
+  for (let i = 0; i < 5; i++) {
+    const p = await open();
+    p.ws.send(JSON.stringify({ t: 'join', name: `R${i + 1}`, token: null, boot: 500 }));
+    opened.push(p);
+  }
+  await wait(200);
+  const sim = await open('?role=sim');
+  opened.push(sim);
+  show.begin(Date.now());
+  const sess = show.sessionNow();
+  for (let i = 0; i < 8 && sess.state.phase !== PHASE.EXPEDITION; i++) { sess.skip(Date.now()); await wait(80); }
+  await wait(250);
+
+  const brief = [...sim.msgs].reverse().find((m) => m.t === 'brief');
+  t('E11 arm · a real show briefed a real simulator socket', !!brief, JSON.stringify(brief));
+
+  const got = readBrief(brief || {});
+  const want = {
+    wing: sess.state.expedition.room,
+    cameras: camerasLive(sess.state.cameras.unlocked),
+    episode: sess.state.episode,
+    worldSeed: sess.state.worldSeed,
+  };
+  t('E11 · the view recovers the wing, the camera count, the episode and the seed the server sent',
+    JSON.stringify(got) === JSON.stringify({ wing: want.wing, cameras: want.cameras, episode: want.episode, worldSeed: want.worldSeed }),
+    `${JSON.stringify(got)} vs ${JSON.stringify(want)}`);
+
+  t('E11b · and the wing it recovers is a real room with a real terminal in it',
+    ROOMS.includes(got.wing) && !!TERMINAL_AT[got.wing],
+    `${got.wing} → ${TERMINAL_AT[got.wing]}`);
+
+  t('E11 control · a brief that carries nonsense moves nothing, rather than moving half of it',
+    JSON.stringify(readBrief({ t: 'brief', wing: 'kitchen', cameras: '3', episode: null })) === '{}',
+    'half a brief is worse than none');
+
+  /**
+   * The other half of the seam, and the one `wire-parity` is being built to hold from both ends:
+   * every `t` this process sends the simulator has a branch, and every branch has a sender.
+   */
+  const showSrc = readFileSync(new URL('../net/party/show.mjs', import.meta.url), 'utf8');
+  const viewSrc = readFileSync(new URL('../src/views/expedition.js', import.meta.url), 'utf8');
+  const emitted = new Set([...showSrc.matchAll(/send\(simSock,\s*\{\s*t:\s*'(\w+)'/g)].map((m) => m[1]));
+  if (/send\(simSock, briefFor/.test(showSrc) || /briefFor\(/.test(showSrc)) emitted.add('brief');
+  const consumed = new Set([...viewSrc.matchAll(/m\.t === '(\w+)'/g)].map((m) => m[1]));
+  const deaf = [...emitted].filter((k) => !consumed.has(k));
+  const dead = [...consumed].filter((k) => !emitted.has(k));
+  t('E11c · every message the server sends the house has a branch in the house',
+    deaf.length === 0, deaf.length ? `no branch for ${deaf.join(', ')}` : `emitted {${[...emitted].join(', ')}}`);
+  t('E11d · and every branch in the house has something that sends it',
+    dead.length === 0, dead.length ? `nothing sends ${dead.join(', ')}` : `consumed {${[...consumed].join(', ')}}`);
+  t('E11 control · the two sets are read from the two files rather than declared here',
+    emitted.size >= 2 && consumed.size >= 2 && emitted.size === consumed.size,
+    `${emitted.size} emitted · ${consumed.size} consumed`);
+
+  for (const o of opened) { try { o.ws.close(); } catch { /* gone */ } }
+  await wait(150);
+  await show.close();
 }
 
 // ---------------------------------------------------------------- E10 · the cameras are in the rooms

@@ -66,6 +66,26 @@ export const TERMINAL_AT = Object.freeze({
 });
 
 /**
+ * 🛰️ **THE SIMULATOR'S BRIEF, READ.** `show.mjs` sends `{t:'brief', wing, cameras, worldSeed,
+ * episode}` on connect and at the top of every expedition, and the view's socket handler had no
+ * branch for it — `wing` was bound once from a query string and never reassigned, so the runner
+ * drove to the wrong room's terminal and the lower third named the wrong room.
+ *
+ * Pure and exported so `expedition-wire` E11 can take a brief off a REAL show and prove this
+ * recovers what the server put in it, without a GPU. Anything malformed is dropped rather than
+ * applied: a brief is the only message that can move the whole segment, and half of one is worse
+ * than none.
+ */
+export function readBrief(b = {}) {
+  const out = {};
+  if (typeof b.wing === 'string' && ROOMS.includes(b.wing)) out.wing = b.wing;
+  if (Number.isInteger(b.cameras)) out.cameras = Math.max(1, b.cameras);
+  if (Number.isFinite(b.episode)) out.episode = b.episode;
+  if (Number.isFinite(b.worldSeed)) out.worldSeed = b.worldSeed;
+  return out;
+}
+
+/**
  * `hunter-ai.js`'s state ladder, mapped onto `director.js`'s closed list of kinds. **Absent means
  * silent**, and the absences are the load-bearing half: PATROL is nothing happening, BREACH and
  * GROW announce themselves through their own authored hooks rather than through a state
@@ -218,21 +238,25 @@ export default async function view(args = {}) {
   const EMBEDDED = qs.get('chrome') === 'feed';
   const bx = createBroadcast({ mount: overlay, furniture: !EMBEDDED });
 
-  const director = createDirector({ world: {} });
+  /**
+   * ⚠️ THE DIRECTOR AND THE RIG ARE REBUILT PER EPISODE, NOT PER PAGE. §3's cutaway budget is
+   * stated *"per expedition"*, and the camera roster is derived from the world seed the SERVER
+   * chose — which this process does not learn until its first brief. Both are `let` for that
+   * reason; every call site reaches through the binding rather than holding a copy.
+   */
+  let director = createDirector({ world: {} });
   let camerasUnlocked = Math.max(1, +(qs.get('cams') ?? 1));
-  const rig = createRig({
-    camera: engine.camera, room, worldSeed: +(qs.get('seed') ?? 7),
-    subjects: () => ({
-      runner: { x: player.pos.x, y: player.pos.y, z: player.pos.z, yaw: player.facing, eyeHeight: player.eyeHeight },
-      hunter: { x: hunter.root.position.x, y: hunter.root.position.y, z: hunter.root.position.z, yaw: 0, eyeHeight: hunter.height * 0.8 },
-    }),
-    unlocked: () => camerasUnlocked,
+  let worldSeed = +(qs.get('seed') ?? 7);
+  const subjects = () => ({
+    runner: { x: player.pos.x, y: player.pos.y, z: player.pos.z, yaw: player.facing, eyeHeight: player.eyeHeight },
+    hunter: { x: hunter.root.position.x, y: hunter.root.position.y, z: hunter.root.position.z, yaw: 0, eyeHeight: hunter.height * 0.8 },
   });
+  let rig = createRig({ camera: engine.camera, room, worldSeed, subjects, unlocked: () => camerasUnlocked });
 
   // ---------------------------------------------------------------- the expedition
   // Default to the gallery: it is the wing the solo director can actually reach — see its note.
-  const wing = qs.get('wing') && ROOMS.includes(qs.get('wing')) ? qs.get('wing') : 'gallery';
-  const terminal = room.anchor(TERMINAL_AT[wing]) ?? room.spawn.player[0].clone();
+  let wing = qs.get('wing') && ROOMS.includes(qs.get('wing')) ? qs.get('wing') : 'gallery';
+  let terminal = room.anchor(TERMINAL_AT[wing]) ?? room.spawn.player[0].clone();
   let clock = EXPEDITION_SECONDS;
   let outcome = null;
   const state = {
@@ -369,8 +393,79 @@ export default async function view(args = {}) {
         heading = m.heading;
         detent = Math.max(0, Math.min(DETENT.length - 1, m.detent));
       }
-      if (m.t === 'cams' && Number.isInteger(m.unlocked)) camerasUnlocked = m.unlocked;
+      /**
+       * 🚨 **THE SERVER SENDS A BRIEF ON EVERY EXPEDITION AND THIS HANDLER DID NOT HAVE A BRANCH
+       * FOR IT.** `show.mjs` has sent `{t:'brief', wing, cameras, worldSeed, episode}` on connect
+       * and at the top of every expedition since the socket existed. The view accepted `drive` and
+       * `cams` and dropped the brief on the floor: `wing` was bound once from a query string and
+       * never reassigned, so **the runner drove to the wrong room's terminal**, the lower third
+       * named the wrong room, and `session.js`'s `simReport` reads only `msg.outcome` — so the
+       * mismatch was discarded in silence rather than caught.
+       *
+       * The seed matters as much as the wing. `director-rig.js` derives the camera roster from
+       * `cameraRoster(worldSeed)` and the guide's sight is gated on exactly that roster; a house
+       * running on the query-string default of 7 while the server graded a different seed would
+       * put rooms on the television the guide cannot see, which is S3 undone from the renderer.
+       */
+      if (m.t === 'brief') arm(m);
+      // ⚠️ THE BRIEF'S FIELD IS `cameras` AND THIS ONE IS `unlocked` — two names, one quantity,
+      // and reading the wrong one here is why this branch looked dead. `show.mjs` sends
+      // `camerasLive()` under both, so the house and the scoreboard agree mid-expedition.
+      if (m.t === 'cams' && Number.isInteger(m.unlocked)) camerasUnlocked = Math.max(1, m.unlocked);
     };
+  }
+
+  /**
+   * 🎬 **ARM THE SEGMENT.** The house is loaded once and plays every episode of the show, so a
+   * brief is not just four numbers to store — it is the top of a new ninety seconds. Everything
+   * with a per-expedition lifetime is rebuilt: the clock, the outcome, both bodies, the Director
+   * (whose cutaway budget §3 states *"per expedition"*), the caption arbiter's repeat memory, and
+   * the camera roster when the seed is one this process has not seen.
+   *
+   * ⚠️ THE HUNTER'S OWN RESET IS THE HUNTER'S. `hunter-ai.js:499`'s `resetCombat` says which four
+   * pieces of state are invisible from outside and therefore the ones that survive a round
+   * boundary — a strike timer, a stun resist, a door, and the commit latch — and that *"perception
+   * and the route are the view's to reset (it owns the spawn)"*. Both halves are here.
+   */
+  function arm(b = {}) {
+    const v = readBrief(b);
+    if (v.wing) {
+      wing = v.wing;
+      terminal = room.anchor(TERMINAL_AT[wing]) ?? room.spawn.player[0].clone();
+      state.expedition.room = wing;
+    }
+    if (v.cameras !== undefined) camerasUnlocked = v.cameras;
+    if (v.episode !== undefined) state.episode = v.episode;
+    if (v.worldSeed !== undefined && v.worldSeed !== worldSeed) {
+      worldSeed = v.worldSeed;
+      rig = createRig({ camera: engine.camera, room, worldSeed, subjects, unlocked: () => camerasUnlocked });
+    }
+
+    clock = EXPEDITION_SECONDS;
+    outcome = null;
+    state.expedition.outcome = null;
+    state.cameras.unlocked = camerasUnlocked;
+    window.__rrrExpedition = null;
+
+    player.pos.copy(room.spawn.player[0]);
+    player.facing = Math.PI;
+    heading = player.facing;
+    detent = 0;
+    lightRig.snapTo(room.spaceAt(player.pos) ?? room.spaces[0]);
+
+    hunter.root.position.copy(room.spawn.hunter);
+    hunter.awareness = 0;
+    hunter.state = 'PATROL';
+    hunter.target = null;
+    hunter.contact = 0;
+    hunter.searchTimer = 0;
+    hunter.resetCombat();
+
+    lastRoom = null;
+    lastState = null;
+    director = createDirector({ world: {} });
+    thirds = createLowerThirds();
+    bx.setShot(null);
   }
 
   // ---------------------------------------------------------------- the loop
@@ -415,7 +510,7 @@ export default async function view(args = {}) {
    * 🚨 THE ROOM RULE — a caption may only name the room the camera is in — lives in the arbiter,
    * because it is an information rule and belongs where a gate can hold it. See `captions.js`.
    */
-  const thirds = createLowerThirds();
+  let thirds = createLowerThirds();
   const say = (kind, t, where) => {
     const at = where === undefined ? lastRoom : where;
     const cap = thirds.offer({ kind, room: at ?? wing, rank: rankOf(kind) }, t, lastRoom ?? wing);
