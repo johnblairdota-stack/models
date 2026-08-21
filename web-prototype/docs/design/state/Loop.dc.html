@@ -1,0 +1,95 @@
+<script src="./support.js"></script>
+<div class="board">
+<style>
+:root{--ink:#f2f4f8;--dim:#8b93a3;--bg:#0b0d12;--panel:#161b25;--edge:#262d3d;--live:#4cc27a;--gone:#e4483a;--warn:#e0b23c}
+*{box-sizing:border-box;margin:0;padding:0}
+.board{width:1240px;height:900px;background:var(--bg);color:var(--ink);
+  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;padding:36px 38px;display:flex;flex-direction:column;gap:18px}
+h1{font-size:28px;font-weight:700;letter-spacing:-.02em}
+.lede{font-size:14px;color:var(--dim);line-height:1.5;max-width:1000px}
+.lede code,code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:#a9b4c8}
+.track{display:flex;align-items:stretch;gap:6px}
+.ph{flex:1;background:var(--panel);border:1px solid var(--edge);border-radius:12px;padding:12px 10px;text-align:center;position:relative}
+.ph .n{font-size:11px;letter-spacing:.07em;font-weight:700;text-transform:uppercase}
+.ph .s{font-size:19px;font-weight:700;margin-top:6px;letter-spacing:-.02em}
+.ph .u{font-size:10px;color:var(--dim);margin-top:2px;letter-spacing:.08em}
+.ph.wrap{background:#131a26;border-color:#2c3a52}
+.ph.hot{border-color:#2f4a38}.ph.hot .s{color:var(--live)}
+.ph.cut{opacity:.45}
+.ep{border:1px dashed #33405a;border-radius:14px;padding:10px 10px 12px;flex:1;position:relative;display:flex;gap:6px}
+.ep::before{content:"an episode, ×5";position:absolute;top:-9px;left:16px;background:var(--bg);padding:0 8px;
+  font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#5f6e8a}
+.outer{display:flex;align-items:stretch;gap:8px}
+.grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;flex:1;min-height:0}
+.card{background:var(--panel);border:1px solid var(--edge);border-radius:14px;padding:16px 18px}
+.card h3{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);font-weight:600;margin-bottom:11px}
+.card li{list-style:none;font-size:13.5px;line-height:1.45;padding:8px 0;border-top:1px solid var(--edge)}
+.card li:first-child{border-top:0}
+.card li b{font-weight:600}
+.card li span{display:block;color:var(--dim);font-size:12px;margin-top:3px;line-height:1.4}
+.budget{display:flex;gap:24px;align-items:center;background:var(--panel);border:1px solid var(--edge);border-radius:14px;padding:14px 20px}
+.budget div span{display:block;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);margin-bottom:4px}
+.budget div b{font-size:20px;font-weight:700;letter-spacing:-.02em}
+.warnbar{background:#1d1710;border:1px solid #3d3016;border-left:3px solid var(--warn);border-radius:12px;padding:12px 16px;
+  font-size:13px;line-height:1.5;color:#e8dcc4}
+.warnbar b{color:var(--warn)}
+</style>
+<h1>The episode, as it actually runs</h1>
+<div class="lede">Ten phases, all of them on a clock the server owns. <b>Time is an argument</b> — <code>session.js</code> holds no <code>setInterval</code>, no <code>Date.now()</code> and no <code>Math.random()</code>, which is why a thousand matches can be played in a worker in seconds and why one seed deals byte-identically twice.</div>
+
+<div class="outer">
+  <div class="ph wrap" style="flex:0 0 110px"><div class="n">Premiere</div><div class="s">150</div><div class="u">sec</div></div>
+  <div class="ep">
+    <div class="ph"><div class="n">Casting</div><div class="s">45</div><div class="u">sec</div></div>
+    <div class="ph hot"><div class="n">Expedition</div><div class="s">90</div><div class="u">sec · 3D</div></div>
+    <div class="ph"><div class="n">Recap</div><div class="s">20</div><div class="u">sec</div></div>
+    <div class="ph"><div class="n">Debrief</div><div class="s">75</div><div class="u">sec</div></div>
+    <div class="ph cut"><div class="n">Reckoning</div><div class="s">45–90</div><div class="u">+15 / nom</div></div>
+    <div class="ph cut"><div class="n">Vote</div><div class="s">25</div><div class="u">sec</div></div>
+    <div class="ph cut"><div class="n">Execution</div><div class="s">20</div><div class="u">sec</div></div>
+    <div class="ph cut"><div class="n">Verdict</div><div class="s">15</div><div class="u">sec</div></div>
+  </div>
+  <div class="ph wrap" style="flex:0 0 110px"><div class="n">Reunion</div><div class="s">240</div><div class="u">sec</div></div>
+</div>
+<div class="lede" style="margin-top:-8px">The four faded phases <b>do not run in episode 1</b>. Nobody has anything to go on in the premiere, and an eviction decided on nothing is the fastest way to teach a table that the vote is arbitrary — episode 1's job is to teach the loop. <code>phases.js · orderFor()</code></div>
+
+<div class="grid">
+  <div class="card">
+    <h3>Who decides what</h3>
+    <ul>
+      <li><b>The guide</b> picks the chair and speaks<span>one spoken word per expedition — the only frame difference on any phone all game is the guide hearing it echoed back</span></li>
+      <li><b>The runner</b> drives the robot<span>throttle and bearing from the phone; the drivable-frame contract keys off throttle alone because the wire has no idle</span></li>
+      <li><b>Everyone else</b> watches the television<span>and, at Debrief, argues from a board they can all read equally</span></li>
+      <li><b>The server</b> owns the clock, the deal and the truth<span>the television is a client; its report is accepted only during EXPEDITION and only the fields named</span></li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3>What the wire lets through</h3>
+    <ul>
+      <li><b>Deny by default, field by field</b><span>one declarative table in <code>net/party/entitle.js</code>; the server projects from it and a gate checks the observed wire against it</span></li>
+      <li><b>The table is shared, the projection is not</b><span>or a bug in the filter would pass its own gate</span></li>
+      <li><b>A claim is published, and publishing is one-way</b><span>rowed <code>all</code> — the dead may not publish one</span></li>
+      <li><b>A vote may change until the phase closes</b><span>and is not aired until then</span></li>
+      <li><b><code>log.reunion()</code> is <code>log.all()</code></b><span>the reunion withholds nothing; everything the show ever knew comes out</span></li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3>Where the loop still leaks</h3>
+    <ul>
+      <li><b>71.3% of games execute after the result is locked</b><span><code>foldWin</code> fires on the winning camera; <code>closeEpisode()</code> waits for the phase queue to empty</span></li>
+      <li><b>The vote is worth +2.1 points over guessing</b><span>n = 14,064, and it does not improve across episodes</span></li>
+      <li><b>The Debrief argues about six shared facts</b><span>116 of 126 log entries a game are public; nobody holds anything anyone wants</span></li>
+    </ul>
+  </div>
+</div>
+
+<div class="budget">
+  <div><span>Five episodes, no nominations</span><b>32 min 40 s</b></div>
+  <div><span>Five episodes, three nominations each</span><b>35 min 40 s</b></div>
+  <div><span>Episode cap</span><b>5</b></div>
+  <div style="flex:1;text-align:right;color:var(--dim);font-size:12.5px;line-height:1.5">
+    <code>EPISODE_CAP</code> is what keeps the worst case inside forty minutes.<br>An evening is one session, start to Reunion, no reset.</div>
+</div>
+
+<div class="warnbar"><b>The Expedition is the only phase that touches the engine.</b> Everything else is pure — <code>src/party/*</code> has no THREE, no DOM and no engine at all, so it runs in a browser, in bare node and in a Cloudflare worker. Two import lines once put 4,900 lines of the retired survival mode into the party bundle; <code>harness/dead-import.mjs</code> is why that cannot happen twice.</div>
+</div>

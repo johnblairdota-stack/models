@@ -1,0 +1,77 @@
+<script src="./support.js"></script>
+<div class="board">
+<style>
+:root{--ink:#f2f4f8;--dim:#8b93a3;--bg:#0b0d12;--panel:#161b25;--edge:#262d3d;--live:#4cc27a;--gone:#e4483a;--warn:#e0b23c}
+*{box-sizing:border-box;margin:0;padding:0}
+.board{width:1040px;height:1280px;background:var(--bg);color:var(--ink);
+  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;padding:36px 38px;display:flex;flex-direction:column;gap:16px}
+h1{font-size:28px;font-weight:700;letter-spacing:-.02em}
+.lede{font-size:14px;color:var(--dim);line-height:1.5;max-width:840px}
+.hero{background:#1a1220;border:1px solid #3a2438;border-left:3px solid var(--gone);border-radius:14px;padding:18px 20px}
+.hero .lab{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gone);margin-bottom:8px}
+.hero .q{font-size:19px;font-weight:600;line-height:1.4}
+.hero .d{font-size:13px;color:var(--dim);line-height:1.55;margin-top:9px}
+.hero .d b{color:#d9dfea;font-weight:600}
+h2{font-size:12px;letter-spacing:.11em;text-transform:uppercase;color:var(--dim);margin-top:6px}
+.item{background:var(--panel);border:1px solid var(--edge);border-radius:13px;padding:14px 16px;display:flex;gap:14px}
+.cost{flex:0 0 74px;font-size:11px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--warn);
+  border-right:1px solid var(--edge);padding-right:12px;line-height:1.45;padding-top:2px}
+.cost.big{color:var(--gone)} .cost.sm{color:var(--live)}
+.t{font-size:14.5px;font-weight:600;line-height:1.35}
+.p{font-size:12.5px;color:var(--dim);line-height:1.5;margin-top:5px}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:#a9b4c8}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.mini{background:var(--panel);border:1px solid var(--edge);border-radius:13px;padding:13px 15px}
+.mini .t{font-size:13.5px} .mini .p{font-size:12px}
+.note{font-size:12.5px;color:var(--dim);line-height:1.55;border-top:1px solid var(--edge);padding-top:13px;margin-top:auto}
+</style>
+<h1>Found and not built</h1>
+<div class="lede">Measured by critics, verified by hand where it says so, ordered by what it costs the show — not by what it costs to fix. Source: <code>web-prototype/docs/rrr-open-findings.md</code>.</div>
+
+<div class="hero">
+  <div class="lab">The one that decides whether there is a game</div>
+  <div class="q">No player holds private information that anyone else wants.</div>
+  <div class="d">Over a full five-episode eight-player game: <b>126 log entries, 116 of them public</b>, and every player receives exactly one private event in the whole game — their own role card. Across 31 phase-frames × 8 phones the only non-<code>you</code> difference anywhere is the guide hearing their own spoken word echoed back. So the Debrief is eight people reasoning about six facts they all share.<br><br>
+  The mode bible asks that every event have two plausible explanations. The build passes that and fails the precondition it never states: <b>there has to be more than one event.</b></div>
+</div>
+
+<h2>Cheapest real fix, argued independently by two critics</h2>
+<div class="item"><div class="cost sm">~10 lines<br>session.js<br>+10 rows</div><div>
+  <div class="t">Fire Continuity automatically every episode as a SELF reading</div>
+  <div class="p"><code>pairContainsProduction()</code> is already written, already gated, and has never been called. It needs no mansion, no Hunter, no Director. Honest costs: at eight players it says NO three times in four, and the Glitched contradicts it in about 22% of games. That is still one private fact per player per episode where there are now zero.</div>
+</div></div>
+<div class="item"><div class="cost sm">two tables</div><div>
+  <div class="t">Three role cards are structurally undealable</div>
+  <div class="p"><code>GUARANTEED</code> collides with <code>COMPOSITION</code>: the Static and the Method Actor can never appear at 4, 5 or 6 players, and the Fixer can never appear at 8. Nobody decided that — it falls out of two tables that were written apart.</div>
+</div></div>
+
+<h2>The room is watching a screen that cannot tell it anything</h2>
+<div class="item"><div class="cost">mesh +<br>HUD mark</div><div>
+  <div class="t">The terminal has no mesh, no light, no prop and no HUD mark</div>
+  <div class="p"><code>TERMINAL_AT</code> is six anchor names and <code>TERMINAL_REACH</code> is a 2.2 m disc, so the objective exists only as a coordinate. Blind-sweep worst case measured at <b>21 s</b> at RUN in the ballroom. Meanwhile <code>lit</code> — the camera unlock the entire win condition runs on — is delivered with no on-screen cause.</div>
+</div></div>
+<div class="item"><div class="cost">wire +<br>safe-hold</div><div>
+  <div class="t">The phone sends an absolute compass bearing, unthrottled</div>
+  <div class="p">The UX spec calls for yaw <em>rate</em> at 20 Hz capped at <code>MOVE.turnRate</code>. An absolute bearing has no idle value, no rate cap and no "thumb is off the stick" signal — which is why the drivable-frame contract had to key off throttle alone. With no ack or retransmit, a dropped packet latches the last bearing and drives the robot into a wall. One job, not two.</div>
+</div></div>
+<div class="item"><div class="cost sm">two files</div><div>
+  <div class="t">Nothing on either screen makes a sound or vibrates</div>
+  <div class="p">Zero <code>AudioContext</code>, zero <code>navigator.vibrate</code>. Every state change the room must notice is visual only — on a television half of them are looking at sideways, and a phone the game's own copy told them to put face down.</div>
+</div></div>
+
+<h2>Accessibility, measured</h2>
+<div class="grid2">
+  <div class="mini"><div class="t">The eight-seat palette is not colour-blind safe</div><div class="p">Viénot/Brettel with CIEDE2000 across all 28 pairs: seat 2 vs seat 5 is <b>ΔE 3.3</b> under deuteranopia — the same colour. Amber and teal are 0.7 L* apart, so luminance does not rescue it. Roughly a one-in-three chance per evening with four men on a sofa. The gate is worth more than the repalette. <code>_room-probe3.mjs</code></div></div>
+  <div class="mini"><div class="t">At 8 m the evidence board is at the acuity limit</div><div class="p">On a 55" 1080p panel: public claim 6.5 arcmin, RUNNER/GUIDE badge 5.5, footer 4.6 — against 5 for detection and ~16 for comfortable reading. And the seat number inside the dot, the non-colour channel that saves the deuteranope, is 5.5. <b>The channel that rescues one failure fails first at distance.</b></div></div>
+</div>
+
+<h2>The economy</h2>
+<div class="grid2">
+  <div class="mini"><div class="t">The vote is worth +2.1 points over guessing</div><div class="p">n = 14,064. 24.8% of executed players were Production against a 22.7% random-nominee baseline, and it does not improve across episodes. At 4–5 players the guide of a <em>failed</em> expedition is <b>less</b> likely to be Production than a random living player.</div></div>
+  <div class="mini"><div class="t">The show keeps shooting after it is over</div><div class="p"><code>foldWin</code> fires on the winning camera but <code>closeEpisode()</code> only runs when the phase queue empties: <b>71.3% of games execute someone after the result is locked.</b></div></div>
+  <div class="mini"><div class="t">Reveal <code>hunter.placed</code> at RECAP</div><div class="p">One <code>VIS</code> constant. Every call becomes checkable the moment the episode ends, turning a coin into a per-guide track record.</div></div>
+  <div class="mini"><div class="t">The camera objective's back half buys nothing</div><div class="p">Coverage is total from the <em>second</em> earned light, so lights beyond that move the guide's sight by exactly zero. Three documents disagree about the target table — do not let anyone reconcile them silently.</div></div>
+</div>
+
+<div class="note">Not listed here: solo mode. <code>party-loop.md</code> calls it the art bed and not a shipping mode, and its entire play-facing gate suite cannot run in this environment — 196 of 533 harness files import Playwright and the browser cache is empty. Its exit siege is measurably broken and its win condition is 7.3–23.8 seconds long. Recorded so nobody rediscovers it.</div>
+</div>

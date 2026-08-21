@@ -1,0 +1,59 @@
+<script src="./support.js"></script>
+<div class="board">
+<style>
+:root{--ink:#f2f4f8;--dim:#8b93a3;--bg:#0b0d12;--panel:#161b25;--edge:#262d3d;--live:#4cc27a;--gone:#e4483a;--warn:#e0b23c}
+*{box-sizing:border-box;margin:0;padding:0}
+.board{width:1040px;height:1000px;background:var(--bg);color:var(--ink);
+  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;padding:36px 38px;display:flex;flex-direction:column;gap:18px}
+h1{font-size:28px;font-weight:700;letter-spacing:-.02em}
+.lede{font-size:14px;color:var(--dim);line-height:1.5;max-width:820px}
+.row{background:var(--panel);border:1px solid var(--edge);border-radius:14px;padding:16px 18px;display:flex;gap:16px;align-items:flex-start}
+.num{width:30px;height:30px;flex:0 0 30px;border-radius:50%;background:#1e2534;border:1px solid var(--edge);
+  display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--gone)}
+.body{flex:1;min-width:0}
+.what{font-size:15.5px;font-weight:600;line-height:1.35}
+.why{font-size:13px;color:var(--dim);line-height:1.5;margin-top:6px}
+.meas{margin-top:9px;display:flex;flex-wrap:wrap;gap:7px}
+.tag{font-size:11.5px;padding:4px 9px;border-radius:7px;background:#101623;border:1px solid var(--edge);color:#b6c0d2;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.tag.was{color:var(--gone);border-color:#3a2226}
+.tag.now{color:var(--live);border-color:#1e3a2b}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:#a9b4c8}
+.foot{margin-top:auto;border-top:1px solid var(--edge);padding-top:14px;font-size:13px;color:var(--dim);line-height:1.55}
+.foot b{color:var(--ink);font-weight:600}
+</style>
+<h1>Five Fatals, closed</h1>
+<div class="lede">Every one was live in a suite that was 464 assertions and entirely green. Each was verified by hand before it was touched, and each closure carries the instrument that proved it.</div>
+
+<div class="row"><div class="num">1</div><div class="body">
+  <div class="what">The Hunter could never be where the runner went</div>
+  <div class="why">A shared FNV hash meant the wing draw and the Hunter placement were locked in parity: the two draws were the same number, so the Hunter was structurally excluded from the room the expedition entered. The show had no chase in it.</div>
+  <div class="meas"><span class="tag was">collision 0%</span><span class="tag now">16.7% — chance</span><span class="tag">src/party/session.js · pick()</span></div>
+</div></div>
+
+<div class="row"><div class="num">2</div><div class="body">
+  <div class="what">The first fix left cross-episode structure behind</div>
+  <div class="why">The proposed remedy — a matching-parity salt — measured 32–35% collision, double chance. A <code>&gt;&gt;&gt; 8</code> shift fixed the rate and left the shape: wing repeated across episodes 57% of the time and a delta of 3 never once occurred in a million deals. The murmur3 finalizer closed both axes.</div>
+  <div class="meas"><span class="tag was">repeat 57% · delta-3 = 0 / 1e6</span><span class="tag now">flat on both axes</span></div>
+</div></div>
+
+<div class="row"><div class="num">3</div><div class="body">
+  <div class="what">No page rendered the expedition</div>
+  <div class="why">The single most expensive thing in the build — a procedural mansion, a physics robot, an AI Hunter — was on no screen. The television drew a static circle and held it for ninety seconds while eight people watched. The gates were green because they measured the simulation, not the view.</div>
+  <div class="meas"><span class="tag was">TV: static circle, 90 s</span><span class="tag now">real ballroom, drivable frame</span><span class="tag">src/views/expedition.js</span></div>
+</div></div>
+
+<div class="row"><div class="num">4</div><div class="body">
+  <div class="what">The incident counter was a public lie detector</div>
+  <div class="why">Alarms incremented on paths that never emitted noise, so the count was a channel the fiction never authorised: the room could read from a number what no character had witnessed. Every increment now routes through <code>emitNoise()</code>, which is the only thing that can raise it.</div>
+  <div class="meas"><span class="tag now">one writer, gated</span><span class="tag">session.js · emitNoise()</span></div>
+</div></div>
+
+<div class="row"><div class="num">5</div><div class="body">
+  <div class="what">Any phone could read every role from a URL</div>
+  <div class="why"><code>/report</code> served <code>castSeed</code> unconditionally. Worse, the seeds were <em>derivable</em> from values the entitlement matrix published on purpose — an eight-player traitor list reconstructed from public frames alone 80.4% of the time. Deleting the field was not enough; the row had to leave the matrix and the gate had to learn to look for reconstruction, not for the field name.</div>
+  <div class="meas"><span class="tag was">80.4% traitor recovery</span><span class="tag now">16.7% — chance</span><span class="tag">net/party/entitle.js · party-isolation I11</span></div>
+</div></div>
+
+<div class="foot">The common cause was not carelessness. Every one of these gates <b>could</b> go red, and every one shipped a control that failed on cue. What none of them did was measure the artefact that ships — they measured a model of it, and the model was correct.</div>
+</div>

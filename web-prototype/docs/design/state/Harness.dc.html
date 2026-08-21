@@ -1,0 +1,71 @@
+<script src="./support.js"></script>
+<div class="board">
+<style>
+:root{--ink:#f2f4f8;--dim:#8b93a3;--bg:#0b0d12;--panel:#161b25;--edge:#262d3d;--live:#4cc27a;--gone:#e4483a;--warn:#e0b23c}
+*{box-sizing:border-box;margin:0;padding:0}
+.board{width:1040px;height:920px;background:var(--bg);color:var(--ink);
+  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;padding:36px 38px;display:flex;flex-direction:column;gap:18px}
+h1{font-size:28px;font-weight:700;letter-spacing:-.02em}
+.lede{font-size:14px;color:var(--dim);line-height:1.5}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:#a9b4c8}
+.gates{display:flex;flex-wrap:wrap;gap:6px;background:var(--panel);border:1px solid var(--edge);border-radius:14px;padding:14px}
+.g{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;padding:5px 9px;border-radius:7px;
+  background:#101623;border:1px solid #22293a;color:#9fb8a8}
+.g.b{color:#8f9db5}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.card{background:var(--panel);border:1px solid var(--edge);border-radius:14px;padding:16px 18px}
+.card h3{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);font-weight:600;margin-bottom:11px}
+.card li{list-style:none;font-size:13px;line-height:1.45;padding:8px 0;border-top:1px solid var(--edge)}
+.card li:first-child{border-top:0}
+.card li span{display:block;color:var(--dim);font-size:12px;margin-top:3px;line-height:1.4}
+.growth{display:flex;align-items:center;gap:18px;background:var(--panel);border:1px solid var(--edge);border-radius:14px;padding:16px 20px}
+.growth .was{font-size:30px;font-weight:700;color:var(--dim);letter-spacing:-.02em}
+.growth .arrow{font-size:20px;color:var(--edge)}
+.growth .now{font-size:38px;font-weight:700;color:var(--live);letter-spacing:-.03em}
+.growth .lab{font-size:12px;color:var(--dim);line-height:1.5;flex:1}
+.rule{background:linear-gradient(90deg,#1a1712,#141721);border:1px solid #3a3016;border-left:3px solid var(--warn);
+  border-radius:14px;padding:20px 22px;margin-top:auto}
+.rule .lab{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--warn);margin-bottom:9px}
+.rule p{font-size:19px;line-height:1.5;font-weight:500}
+.rule .src{font-size:12.5px;color:var(--dim);margin-top:10px;line-height:1.55}
+</style>
+<h1>The harness</h1>
+<div class="lede">One <code>.mjs</code> per gate, whose header is often longer than its code — that is where a number survives its author's death. Assertions are letter-numbered, file-local and quotable (<code>R1</code>, <code>E4b</code>, <code>X15c</code>) so they can be cited from a commit. <b>Do not "fix" a gate to make it green: if a change turns one red, that is a finding.</b></div>
+
+<div class="growth">
+  <div class="was">464</div><div class="arrow">→</div><div class="now">990</div>
+  <div class="lab">assertions, across 24 gates then 32 now. Zero failed, three skipped — and a SKIP is never a PASS, because the suite was twice damaged by an instrument that returned a confident wrong number rather than admitting it could not measure.</div>
+</div>
+
+<div class="gates">
+<span class="g">role-deal</span><span class="g">party-anon</span><span class="g">party-isolation</span><span class="g">party-taken</span><span class="g">guide-coverage</span><span class="g">party-log</span><span class="g">party-sockets</span><span class="g">vote-table</span><span class="g">cast-ballot</span><span class="g">win-machine</span><span class="g">round-loop</span><span class="g">dark-run</span><span class="g">director-cut</span><span class="g">task-deck</span><span class="g">role-script</span><span class="g">reunion-truth</span><span class="g">party-noise</span><span class="g">party-sim</span><span class="g">join-spike</span><span class="g">live-session</span><span class="g">show-wire</span><span class="g">party-surface</span><span class="g">shot-solver</span><span class="g">expedition-wire</span><span class="g">premiere-stage</span><span class="g">hunter-draw</span><span class="g">engine-take</span><span class="g">wire-parity</span><span class="g">door-hop</span><span class="g">wing-draw</span><span class="g">drivable-frame</span><span class="g">dead-import</span>
+</div>
+
+<div class="two">
+  <div class="card">
+    <h3>What every gate keeps</h3>
+    <ul>
+      <li><b>The arm — usually <code>R0</code> or <code>B0</code> — refuses a vacuous green</b><span>the first assertion proves the file has something to measure, and SKIPs with a reason if not</span></li>
+      <li><b>Every assertion ships a control that must fail, and the control runs every run</b><span>a check that fires on everything and one that fires on nothing look identical to a run that only asks the shipped arm</span></li>
+      <li><b>The control mutates the real artefact</b><span>the shipped file, the shipped projection — never a string the control wrote itself on the same line</span></li>
+      <li><b>Bands, not absolutes</b><span><code>escape</code> E1's hard <code>4</code> passed for a year and then failed on a generated house</span></li>
+      <li><b>Seeded determinism</b><span>one seed, one deal, byte-identical twice. Sweeps are seeds × counts × policies, not one lucky run.</span></li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3>The runner</h3>
+    <ul>
+      <li><b>The gate list lives in <code>harness/gates.mjs</code>, once</b><span>a committed, top-level, unprefixed <code>harness/*.mjs</code> that names itself in a summary line and is <em>not</em> in <code>GATES</code> fails the run — two gates once sat unrun for want of a list entry</span></li>
+      <li><b>It never short-circuits</b><span>it spawns every gate and prints one suite total; it replaced an <code>&amp;&amp;</code> chain that stopped at the first red</span></li>
+      <li><b>No assertion may ever live in it</b><span>the runner is a launcher and a tally</span></li>
+      <li><b>~450 probes are kept on purpose</b><span><code>harness/evidence/_*.mjs</code> — a probe is the record of a finding, cited by name from the header of the source it explains. Do not delete one to tidy up.</span></li>
+    </ul>
+  </div>
+</div>
+
+<div class="rule">
+  <div class="lab">What the suite could not see, and now can</div>
+  <p>A model may stand in for something that does not exist yet. It may never stand in for something that does.</p>
+  <div class="src">The old discipline polices whether an assertion <em>can</em> go red. It says nothing about whether the thing underneath it is the thing that ships — which is how five Fatal bugs lived inside a fully green suite. The sentence now sits in <code>wire-parity</code>'s header, where a gate's argument belongs.</div>
+</div>
+</div>

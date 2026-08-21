@@ -1,0 +1,16 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html",    "x": 0,    "y": 0,    "w": 1440, "h": 980,  "title": "State of the build" },
+    { "file": "Loop.dc.html",    "x": 1560, "y": 0,    "w": 1240, "h": 900,  "title": "The episode" },
+    { "file": "Fixed.dc.html",   "x": 0,    "y": 1180, "w": 1040, "h": 1000, "title": "Five Fatals, closed" },
+    { "file": "Open.dc.html",    "x": 1160, "y": 1180, "w": 1040, "h": 1280, "title": "Found and not built" },
+    { "file": "Harness.dc.html", "x": 2320, "y": 1180, "w": 1040, "h": 920,  "title": "The harness" }
+  ],
+  "annotations": [
+    { "id": "top-note", "x": 0, "y": -150, "w": 620,
+      "text": "Prime Time, 21 August 2026. Every number on this canvas was measured by an instrument that is committed to the tree — nothing here is an estimate." },
+    { "id": "next-note", "x": 1160, "y": 2520, "w": 520,
+      "text": "Start here next session: fire Continuity as a SELF reading. ~10 lines in session.js. It is the only cheap change that puts a private fact in someone's hand." }
+  ],
+  "launch": { "view": "canvas" }
+}

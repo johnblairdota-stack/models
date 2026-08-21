@@ -1,0 +1,87 @@
+<script src="./support.js"></script>
+<div class="board">
+<style>
+:root{--ink:#f2f4f8;--dim:#8b93a3;--bg:#0b0d12;--panel:#161b25;--edge:#262d3d;--live:#4cc27a;--gone:#e4483a;--warn:#e0b23c}
+*{box-sizing:border-box;margin:0;padding:0}
+.board{width:1440px;height:980px;background:var(--bg);color:var(--ink);
+  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;padding:40px 44px;display:flex;flex-direction:column;gap:22px}
+.head{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:1px solid var(--edge);padding-bottom:18px}
+.title{font-size:38px;font-weight:700;letter-spacing:-.02em}
+.sub{font-size:15px;color:var(--dim);margin-top:6px}
+.stamp{text-align:right;font-size:13px;color:var(--dim);line-height:1.7}
+.stamp b{color:var(--live);font-weight:600}
+.strip{display:grid;grid-template-columns:repeat(5,1fr);gap:14px}
+.stat{background:var(--panel);border:1px solid var(--edge);border-radius:16px;padding:18px 20px}
+.stat .n{font-size:40px;font-weight:700;letter-spacing:-.03em;line-height:1}
+.stat .k{font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.09em;margin-top:10px}
+.stat.g .n{color:var(--live)} .stat.r .n{color:var(--gone)} .stat.w .n{color:var(--warn)}
+.cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;flex:1;min-height:0}
+.col{background:var(--panel);border:1px solid var(--edge);border-radius:16px;padding:20px 20px 16px;display:flex;flex-direction:column;gap:12px}
+.ch{display:flex;align-items:center;gap:9px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+.dot{width:9px;height:9px;border-radius:50%}
+.d-live{background:var(--live)} .d-warn{background:var(--warn)} .d-gone{background:var(--gone)}
+li{list-style:none;font-size:14px;line-height:1.45;padding:9px 0;border-top:1px solid var(--edge);color:var(--ink)}
+li:first-child{border-top:0}
+li span{display:block;color:var(--dim);font-size:12.5px;margin-top:3px;line-height:1.4}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:#a9b4c8}
+.rule{background:linear-gradient(90deg,#161b25,#131722);border:1px solid var(--edge);border-left:3px solid var(--warn);
+  border-radius:14px;padding:18px 22px}
+.rule .lab{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--warn);margin-bottom:8px}
+.rule p{font-size:18px;line-height:1.5;font-weight:500}
+.rule .src{font-size:12px;color:var(--dim);margin-top:8px}
+</style>
+<div class="head">
+  <div>
+    <div class="title">Run Robot Run: Prime Time</div>
+    <div class="sub">Social deception for a television and up to eight phones · state of the build</div>
+  </div>
+  <div class="stamp">21 August 2026 · branch <code>claude/rrr-social-deception-mode-vfl7w0</code><br>
+    party mode <b>shipping</b> · survival mode retired</div>
+</div>
+
+<div class="strip">
+  <div class="stat g"><div class="n">990</div><div class="k">assertions passed</div></div>
+  <div class="stat r"><div class="n">0</div><div class="k">failed</div></div>
+  <div class="stat w"><div class="n">3</div><div class="k">skipped</div></div>
+  <div class="stat"><div class="n">32</div><div class="k">gates, four at a time</div></div>
+  <div class="stat"><div class="n">5</div><div class="k">fatal bugs closed</div></div>
+</div>
+
+<div class="cols">
+  <div class="col">
+    <div class="ch"><i class="dot d-live"></i>Ships and is measured</div>
+    <ul>
+      <li>The full five-episode loop<span>Deal · Expedition · Debrief · Vote · Recap, seeded and deterministic</span></li>
+      <li>The 3D ballroom expedition<span>real house, real Hunter, phones drive the robot, TV renders it</span></li>
+      <li>Deny-by-default entitlement<span>one declarative table, field-by-field; <code>log.reunion() === log.all()</code></span></li>
+      <li>Server-authoritative seats<span>host-key lease, one chair per socket, away detection</span></li>
+      <li>Pure rules core<span><code>src/party/*</code> runs in a worker, in bare node, on a phone</span></li>
+      <li>A gate runner with a single list<span><code>harness/gates.mjs</code>; an unlisted top-level gate fails the run</span></li>
+    </ul>
+  </div>
+  <div class="col">
+    <div class="ch"><i class="dot d-warn"></i>Ships, not measured</div>
+    <ul>
+      <li>The phone's <code>mount()</code> contract<span>stopped CLEAR and HOLD being rebuilt 450× an expedition — <code>phone-hands</code>'s six browser arms have never been observed to complete, so it is deliberately not in <code>GATES</code></span></li>
+      <li>Two tabs are two chairs<span>the per-socket guard cannot see one person on two sockets; source address would refuse eight harness phones on localhost. A product decision, not a patch.</span></li>
+      <li><code>report()</code> is a free-form bag<span>both known writers are closed and a gate walks the whole response; nothing structurally stops the next field</span></li>
+    </ul>
+  </div>
+  <div class="col">
+    <div class="ch"><i class="dot d-gone"></i>Does not exist</div>
+    <ul>
+      <li>Private information<span>126 log entries a game, 116 public. Every player receives exactly one private event: their own role card.</span></li>
+      <li>Twelve of thirteen role powers<span><code>roles.js</code> is imported for <code>cardFor</code> and nothing else</span></li>
+      <li>The terminal on screen<span>no mesh, no light, no prop, no HUD mark — the win condition runs on a coordinate only the code knows</span></li>
+      <li>Sound and haptics<span>zero <code>AudioContext</code>, zero <code>navigator.vibrate</code> on either screen</span></li>
+      <li>A colour-blind-safe palette<span>seat 2 vs seat 5 is ΔE 3.3 under deuteranopia — the same colour</span></li>
+    </ul>
+  </div>
+</div>
+
+<div class="rule">
+  <div class="lab">The rule this build was actually about</div>
+  <p>A model may stand in for something that does not exist yet. It may never stand in for something that does.</p>
+  <div class="src">Five Fatal bugs passed a fully green suite. Every one was a gate measuring a model, a fixture or a hand-built artefact instead of the code that ships. Now in <code>wire-parity</code>'s header.</div>
+</div>
+</div>
