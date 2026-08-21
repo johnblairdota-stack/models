@@ -32,6 +32,8 @@ import { TEN_FOOT, SIZES_VH, INK } from '../src/ui/broadcast.js';
 import { ROOMS } from '../src/party/coverage.js';
 import { SHOTS, KIND } from '../src/party/director.js';
 import { camerasNeeded } from '../src/party/win.js';
+import { ROLES } from '../src/party/cast.js';
+import { SCRIPT } from '../src/party/roles.js';
 
 let pass = 0, fail = 0, skip = 0;
 const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' · ' + d : ''}`); } else { fail++; console.log(`  FAIL ${n}${d ? ' · ' + d : ''}`); } return c; };
@@ -106,7 +108,62 @@ const composited = (color, bg, alpha) => {
 };
 
 const PLAYER_IDS = ROSTER.map((_, i) => `p${i + 1}`);
-const ROLE_NAMES = ['cameraOp', 'soundie', 'fixer', 'producer', 'continuity', 'stuntDouble', 'glitched', 'contestant'];
+/**
+ * 🚨 **THE NEEDLE LIST IS DERIVED FROM THE ROLE TABLE, BECAUSE A GATE-SIDE COPY OF IT GUARANTEES
+ * THE OPPOSITE OF WHAT T5 PROMISES.**
+ *
+ * This was a hand-written array of eight strings and it was the needle list for every anonymity
+ * sweep below — H7, H8, H12, the strictest guarantee in the design. It had drifted so far that it
+ * was *wrong in both directions*: it named `soundie`, which is not a role in this game and never
+ * has been, and it was missing **six of the twelve roles `cast.js` actually deals** —
+ * `focusPuller`, `editor`, `fanFavourite`, `theStatic`, `methodActor`, `plant`. A caption reading
+ * `THE PLANT IS IN THE CELLAR` would have swept clean. Add a role upstream and the scan silently
+ * stopped looking for it, which is the whole failure mode.
+ *
+ * **`cast.js`'s `ROLES` is the source, and `roles.js`'s `SCRIPT` is the second half of it.** A
+ * role reaches a player only through `dealCast`, so `ROLES` is the closed list of what can leak;
+ * but what a *television* would print is the display name, and `stuntDouble` as a needle does not
+ * match `Stunt Double` on a screen. So both go in the list, and H0c asserts the two tables still
+ * describe the same twelve cards.
+ */
+const rolesInSource = (text) => {
+  const block = text.match(/export const ROLES = \{([\s\S]*?)\n\};/);
+  if (!block) return [];
+  return [...block[1].matchAll(/^ {2}([A-Za-z_$][\w$]*):/gm)].map((m) => m[1]);
+};
+const ROLE_IDS = Object.keys(ROLES);
+const ROLE_LABELS = ROLE_IDS.map((id) => SCRIPT[id] && SCRIPT[id].name).filter(Boolean);
+const ROLE_NAMES = [...new Set([...ROLE_IDS, ...ROLE_LABELS])];
+
+// ---------------------------------------------------------------- H0c · the needle list is real
+{
+  const castSrc = readFileSync(new URL('../src/party/cast.js', import.meta.url), 'utf8');
+  const inSource = rolesInSource(castSrc);
+  t('H0c arm · the anonymity needles are non-empty and are the whole dealt role table',
+    ROLE_IDS.length > 0 && ROLE_NAMES.length > 0 && inSource.length > 0
+      && inSource.length === ROLE_IDS.length && inSource.every((r) => ROLE_IDS.includes(r)),
+    `${ROLE_IDS.length} roles + ${ROLE_LABELS.length} display names = ${ROLE_NAMES.length} needles`);
+  t('H0c2 arm · and every card `cast.js` deals has a line in `roles.js`, so neither table can grow alone',
+    ROLE_IDS.length === Object.keys(SCRIPT).length && ROLE_IDS.every((r) => r in SCRIPT),
+    `ROLES ${ROLE_IDS.length} · SCRIPT ${Object.keys(SCRIPT).length}`);
+
+  // The control: add a role UPSTREAM and the scan has to notice it.
+  const doctored = castSrc.replace(
+    /^ {2}plant:( +)\{/m,
+    '  gaffer:$1{ kind: \'minion\',     alignment: EVIL, informs: false },\n  plant:$1{');
+  t('H0c mutation arm · the extra role really landed in the shipped text — the control is not a no-op',
+    doctored !== castSrc, 'a thirteenth card spliced into `cast.js`\'s ROLES');
+  const grown = rolesInSource(doctored);
+  t('H0c control · a role added to `cast.js` appears in the derived needles, where the old literal missed it',
+    grown.length === inSource.length + 1 && grown.includes('gaffer')
+      && namesIn('CAM 03 · EAST GALLERY · GAFFER', grown).length > 0
+      && namesIn('CAM 03 · EAST GALLERY · GAFFER', ROLE_NAMES).length === 0,
+    'derived list grows with the table; the hand-written one did not');
+  t('H0c control b · and the six roles the old hand-written list had dropped are needles now',
+    ['focusPuller', 'editor', 'fanFavourite', 'theStatic', 'methodActor', 'plant'].every((r) => ROLE_NAMES.includes(r))
+      && namesIn('THE PLANT IS IN THE CELLAR', ROLE_NAMES).length > 0,
+    'and `soundie`, which the old list named, is not a role at all: ' + String(ROLE_IDS.includes('soundie')));
+}
 
 // ---------------------------------------------------------------- H0 · the arm
 {
@@ -339,22 +396,40 @@ const ROLE_NAMES = ['cameraOp', 'soundie', 'fixer', 'producer', 'continuity', 's
 
 // ---------------------------------------------------------------- H10 · the rail cannot show a role
 {
-  // A poisoned frame: everything the matrix refuses, handed straight to the rail.
-  const poisoned = {
+  /**
+   * A poisoned frame: everything the matrix refuses, handed straight to the rail.
+   *
+   * ⚠️ EIGHT SEATS CANNOT HOLD THIRTEEN CARDS, so the frame is dealt twice at different offsets
+   * and the arm below asserts every role in the table went through the rail at least once. The
+   * scan itself is `namesIn` against the DERIVED needles — it used to be a hand-typed alternation
+   * naming four roles and `soundie`, so nine of the thirteen could have ridden through untouched.
+   */
+  const poisonedAt = (offset) => ({
     episode: 3,
     pair: { runner: 'p2', guide: 'p5' },
     players: ROSTER.map((name, i) => ({
       id: `p${i + 1}`, seat: i, name, alive: i !== 5, taken: i === 5, claim: i % 2 ? 'fixer' : null,
-      alignment: i < 2 ? 'evil' : 'good', role: ROLE_NAMES[i], claimDraft: 'producer',
+      alignment: i < 2 ? 'evil' : 'good', role: ROLE_IDS[(i + offset) % ROLE_IDS.length], claimDraft: 'producer',
     })),
-  };
+  });
+  const offsets = Array.from({ length: Math.ceil(ROLE_IDS.length / ROSTER.length) }, (_, k) => k * ROSTER.length);
+  const frames = offsets.map(poisonedAt);
+  const poisoned = frames[0];
   const rail = railFor(poisoned);
-  const blob = JSON.stringify(rail);
+  const dealt = new Set(frames.flatMap((f) => f.players.map((p) => p.role)));
+  t('H10 arm · every card in the table was actually handed to the rail, so H10 sweeps all of them',
+    dealt.size === ROLE_IDS.length && ROLE_IDS.every((r) => dealt.has(r)),
+    `${dealt.size} of ${ROLE_IDS.length} roles across ${frames.length} frame(s)`);
+  // The one exemption, named rather than quiet: §4 puts a PUBLISHED claim on the rail on purpose.
+  const published = new Set(frames.flatMap((f) => f.players.map((p) => p.claim).filter(Boolean)));
+  const railNeedle = [...ROLE_NAMES, 'evil', 'good', 'claimDraft'].filter((n) => !published.has(n));
+  const hits = frames.flatMap((f) => namesIn(JSON.stringify(railFor(f)), railNeedle));
   t('H10 · the rail drops alignment, role and draft even when handed all three',
-    !/evil|good|claimDraft|producer|cameraOp|soundie|stuntDouble|glitched/.test(blob),
-    'it reads five fields and copies nothing else');
+    hits.length === 0, hits.join(' / ') || `it reads five fields and copies nothing else · ${railNeedle.length} needles`);
   t('H10 control · the poison really was in the input, so H10 is not scanning a clean frame',
-    /evil/.test(JSON.stringify(poisoned)) && /claimDraft/.test(JSON.stringify(poisoned)));
+    frames.every((f) => namesIn(JSON.stringify(f), railNeedle).length > 0)
+      && /claimDraft/.test(JSON.stringify(poisoned)),
+    `the input trips ${namesIn(JSON.stringify(poisoned), railNeedle).length} of the same needles`);
   t('H10b · a published claim survives, because §4 puts it on the rail on purpose',
     rail.some((r) => r.claim === 'fixer') && rail.some((r) => r.claim === '—'),
     'published claims and the default dash');
