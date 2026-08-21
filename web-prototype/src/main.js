@@ -32,6 +32,10 @@ if (!entry) {
   fail(new Error(`unknown view "${viewId}".\n\nknown:\n${VIEWS.map((v) => '  ' + v.id).join('\n')}`));
 } else {
   bootMsg.textContent = entry.title;
+  if (String(viewId).startsWith('party.')) {
+    const hint = document.getElementById('boothint');
+    if (hint) hint.textContent = 'joining the room…';
+  }
 
   // NOTE: do not add a loading overlay from here. `#boot` in index.html is z-index:100 and
   // covers the whole app until the view resolves, so anything created in JS lands underneath

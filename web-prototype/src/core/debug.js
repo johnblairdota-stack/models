@@ -31,5 +31,7 @@ export function debugChrome(viewId) {
   }
   const id = viewId ?? qs.get('view') ?? '';
   if (String(id) === 'furn.smash') return false;
+  // party.host / party.phone are the sit-down night, not the asset board.
+  if (String(id).startsWith('party.')) return false;
   return !String(id).startsWith('game.');
 }

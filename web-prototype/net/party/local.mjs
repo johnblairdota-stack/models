@@ -90,7 +90,7 @@ function getRoom(code, opts) {
     send: (id, frame) => outbox(id, { t: 'state', frame }),
     emit: (id, ev) => outbox(id, { t: 'event', ev }),
   });
-  r = { code, game, conns, seatsTaken: new Set(), tvTaken: false };
+  r = { code, game, conns, seatsTaken: new Set(), tvTaken: false, ballots: new Map(), show: 'lobby' };
   rooms.set(code, r);
   return r;
 }
@@ -101,13 +101,25 @@ function getRoom(code, opts) {
  * 🚨 A RECONNECT IS BOUND BY TOKEN, NEVER BY ORDER OF ARRIVAL. Binding by arrival means a phone
  * that drops during CASTING comes back as somebody else and is handed their role. The token is
  * minted once per seat and is the only thing that reclaims it.
+ *
+ * 🚨 THE HOST ASKS FOR THE TV. Without `wantTV`, phones fill first (same as before — the TV
+ * socket is last in `createRoom`'s list). With it, this connection is the spectator or nothing;
+ * a host that failed over to a robot seat would be playing, and the TV would be empty.
  */
-export function bindConnection(room, { token }) {
+export function bindConnection(room, { token, wantTV = false }) {
   if (token) {
     for (const [id, c] of room.conns) if (c.token === token) return { id, token, resumed: true };
     for (const s of room.game.sockets) {
       if (s.token === token) return { id: s.id, token, resumed: true };
     }
+  }
+  if (wantTV) {
+    const tv = room.game.sockets.find((s) => s.isTV);
+    if (!tv || room.tvTaken) return null;
+    const fresh = crypto.randomBytes(8).toString('hex');
+    tv.token = fresh;
+    room.tvTaken = true;
+    return { id: tv.id, token: fresh, resumed: false };
   }
   for (const s of room.game.sockets) {
     if (s.isTV) { if (room.tvTaken) continue; }
@@ -118,6 +130,39 @@ export function bindConnection(room, { token }) {
     return { id: s.id, token: fresh, resumed: false };
   }
   return null;                                   // room full
+}
+
+/** Occupancy + published names. No roles, no alignment, no deal. */
+export function lobbySnapshot(room) {
+  return {
+    t: 'lobby',
+    code: room.code,
+    phase: room.game.state.phase,
+    episode: room.game.state.episode,
+    seats: room.game.sockets.map((s) => {
+      const player = s.playerId ? room.game.state.players.find((p) => p.id === s.playerId) : null;
+      const joined = s.isTV ? room.tvTaken : room.seatsTaken.has(s.id);
+      return {
+        id: s.id,
+        playerId: s.playerId,
+        isTV: !!s.isTV,
+        name: player?.name ?? (s.isTV ? 'TV' : s.id),
+        seat: player?.seat ?? null,
+        joined,
+        connected: room.conns.has(s.id),
+      };
+    }),
+  };
+}
+
+/** Per-socket write. The same object may be public; the buffer is never shared. */
+function push(room, id, msg) {
+  const c = room.conns.get(id);
+  if (c && !c.sock.destroyed) c.sock.write(encodeFrame(JSON.stringify(msg)));
+}
+
+function fanout(room, msg) {
+  for (const id of room.conns.keys()) push(room, id, msg);
 }
 
 // ---------------------------------------------------------------- server
@@ -136,24 +181,43 @@ export function startServer({ port = 5181, count = 8, castSeed = 1, worldSeed = 
 
     const url = new URL(req.url, 'http://x');
     const room = getRoom(url.searchParams.get('room') || code, { count, castSeed, worldSeed });
-    const bound = bindConnection(room, { token: url.searchParams.get('token') });
+    const seatParam = (url.searchParams.get('seat') || url.searchParams.get('role') || '').toLowerCase();
+    const bound = bindConnection(room, {
+      token: url.searchParams.get('token'),
+      wantTV: seatParam === 'tv' || seatParam === 'host',
+    });
 
     if (!bound) {
       sock.write(encodeFrame(JSON.stringify({ t: 'full', capacity: CAPACITY })));
       return sock.end();
     }
     room.conns.set(bound.id, { sock, token: bound.token });
-    sock.write(encodeFrame(JSON.stringify({ t: 'welcome', id: bound.id, token: bound.token, resumed: bound.resumed })));
+    const self = room.game.sockets.find((x) => x.id === bound.id);
+    const player = self?.playerId ? room.game.state.players.find((p) => p.id === self.playerId) : null;
+    // Welcome names THIS socket. It is not a snapshot of anyone else.
+    sock.write(encodeFrame(JSON.stringify({
+      t: 'welcome',
+      id: bound.id,
+      token: bound.token,
+      resumed: bound.resumed,
+      isTV: !!self?.isTV,
+      playerId: self?.playerId ?? null,
+      seat: player?.seat ?? null,
+      name: player?.name ?? null,
+    })));
 
     // 🚨 A RESUMING SOCKET IS CAUGHT UP THROUGH THE SAME FILTER, NOT WITH A FULL SNAPSHOT.
     // `net/server.mjs`'s `welcome` hands every joiner every peer's state (L335-336) — the
     // classic leak, and the one `phone-drop` P2 exists to refuse.
-    if (bound.resumed) {
-      const s = room.game.sockets.find((x) => x.id === bound.id);
-      for (const ev of room.game.replayFor(s)) {
+    // A late first-join uses the same replay: entitled events only.
+    if (self) {
+      for (const ev of room.game.replayFor(self)) {
         sock.write(encodeFrame(JSON.stringify({ t: 'event', ev, replay: true })));
       }
+      room.game.syncOne(bound.id);
     }
+    push(room, bound.id, { t: 'show', beat: room.show });
+    fanout(room, lobbySnapshot(room));
 
     let buf = Buffer.alloc(0);
     sock.on('data', (chunk) => {
@@ -165,21 +229,62 @@ export function startServer({ port = 5181, count = 8, castSeed = 1, worldSeed = 
         if (f.opcode === 9) { sock.write(encodeFrame(f.payload, 10)); continue; }
         if (f.opcode !== 1) continue;
         let msg; try { msg = JSON.parse(f.payload.toString('utf8')); } catch { continue; }
-        if (msg.t === 'start') { room.game.start(); }
-        if (msg.t === 'episode') { room.game.playEpisode(msg.opts || {}); }
+        handleClient(room, bound, self, msg);
       }
     });
-    sock.on('close', () => room.conns.delete(bound.id));
-    sock.on('error', () => room.conns.delete(bound.id));
+    sock.on('close', () => { room.conns.delete(bound.id); fanout(room, lobbySnapshot(room)); });
+    sock.on('error', () => { room.conns.delete(bound.id); fanout(room, lobbySnapshot(room)); });
   });
 
   server.listen(port);
   return { server, rooms, close: () => new Promise((r) => server.close(r)) };
 }
 
+function livingIds(room) {
+  return room.game.state.players.filter((p) => p.alive).map((p) => p.id);
+}
+
+function handleClient(room, bound, self, msg) {
+  const isTV = !!self?.isTV;
+  if (msg.t === 'name' && self && !isTV) {
+    room.game.setName(self.playerId, msg.name);
+    fanout(room, lobbySnapshot(room));
+    return;
+  }
+  if (msg.t === 'ballot' && self && !isTV && self.playerId) {
+    const living = new Set(livingIds(room));
+    const runner = living.has(msg.runner) ? msg.runner : null;
+    const guide = living.has(msg.guide) ? msg.guide : null;
+    if (runner && guide && runner !== guide) {
+      room.ballots.set(self.playerId, { voter: self.playerId, runner, guide });
+      fanout(room, { t: 'ballots', votes: [...room.ballots.values()] });
+    }
+    return;
+  }
+  if (msg.t === 'show' && typeof msg.beat === 'string') {
+    room.show = msg.beat;
+    fanout(room, { t: 'show', beat: room.show });
+    return;
+  }
+  // start / episode stay callable from any socket so party-sockets (which drives
+  // phone-0) keeps working. The host view is the only UI that sends them.
+  if (msg.t === 'start') { room.game.start(); fanout(room, lobbySnapshot(room)); }
+  if (msg.t === 'casting') { room.game.beginCasting(); room.show = 'casting'; fanout(room, { t: 'show', beat: 'casting' }); }
+  if (msg.t === 'episode') {
+    const votes = [...room.ballots.values()];
+    room.game.playEpisode({ ...(msg.opts || {}), ...(votes.length ? { ballots: votes } : {}) });
+    room.show = 'casting';
+    fanout(room, { t: 'show', beat: 'casting' });
+    fanout(room, lobbySnapshot(room));
+  }
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   const argv = process.argv.slice(2);
   const port = +(argv[argv.indexOf('--port') + 1] || 5181);
   startServer({ port });
-  console.log(`prime time room server on ws://localhost:${port}/?room=test`);
+  console.log(`prime time room server on ws://localhost:${port}`);
+  console.log(`  host:  http://localhost:5178/?view=party.host`);
+  console.log(`  phone: http://localhost:5178/?view=party.phone&room=test`);
+  console.log(`  (npm run dev in another terminal — Vite is the page, this is the room)`);
 }

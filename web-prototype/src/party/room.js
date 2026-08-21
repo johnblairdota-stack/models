@@ -315,6 +315,30 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       return state.outcome;
     },
     start() { setPhase('LOBBY'); },
+    /** Host-driven: open CASTING and wait for phone ballots. `playEpisode` still starts here too. */
+    beginCasting() { setPhase('CASTING'); },
+    /**
+     * Published nameplate. 12 chars, same cap as the phone spec's cheap join. Does not broadcast —
+     * the transport decides when a frame or lobby snapshot should follow.
+     */
+    setName(playerId, name) {
+      const p = state.players.find((x) => x.id === playerId);
+      if (!p) return null;
+      const clean = String(name ?? '').replace(/[^\w \-.'’]/g, '').trim().slice(0, 12);
+      if (clean) p.name = clean;
+      return p.name;
+    },
+    /** Push the current projected frame to one socket — a late joiner, not a broadcast. */
+    syncOne(socketId) {
+      const sock = sockets.find((s) => s.id === socketId);
+      if (!sock) return;
+      const ctx = {
+        playerId: sock.playerId, alignment: sock.alignment, isTV: sock.isTV,
+        seatRole: sock.seatRole, ownerId: sock.playerId,
+      };
+      const { frame } = project(fullFor(sock), ctx);
+      send(sock.id, frame);
+    },
     /** Ground truth. Belongs to the gate and the Reunion. Never to a socket. */
     truth: () => ({
       seats: deal.seats.map((s) => ({ ...s })),
