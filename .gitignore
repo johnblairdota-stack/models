@@ -11,6 +11,14 @@ web-prototype/harness/out/
 .env
 .env.*
 *.local
+# `*.local` does not match `settings.local.json` — that dot is part of the name, not an
+# extension boundary — so the file sat tracked with one developer's outputStyle and permission
+# allowlist in it. Match the real shape.
+*.local.json
+**/.claude/settings.local.json
+
+# Runtime locks. `.claude/scheduled_tasks.lock` was committed holding a live session id and pid.
+**/.claude/scheduled_tasks.lock
 
 # OS / editor
 .DS_Store

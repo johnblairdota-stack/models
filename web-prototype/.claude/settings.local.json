@@ -1,8 +1,0 @@
-{
-  "outputStyle": "ELI5",
-  "permissions": {
-    "allow": [
-      "Bash(node harness/lint-glsl.mjs)"
-    ]
-  }
-}
