@@ -12,11 +12,29 @@ replaced the gate runner. What follows is what that session found and did not ha
 
 ## The one that decides whether there is a game
 
-**No player holds private information that anyone else wants.** Measured over a full five-episode
-eight-player game: 126 log entries, 116 of them PUBLIC, and **every player receives exactly one
-private event in the whole game — their own role card.** Across 31 phase-frames × 8 phones the only
-non-`you` difference anywhere is `call.said`, on one phone, and that is the guide getting their own
-spoken word echoed back.
+**No player holds private information that anyone else wants.** The claim stands. It is now
+gated — `harness/party-private.mjs`, 18 assertions over six complete games on both real servers —
+and the gate **corrected the original measurement in three places.** The corrections make the
+finding narrower and sharper, not weaker:
+
+1. **Not "exactly one private event" for everybody.** The two Production members get **two**:
+   `production.panel` is `VIS.EVIL` *and* carries `for`, so it reaches one phone rather than the
+   faction (`log.js`: *"the class says WHO MAY; `for` says WHO"*). The measured band is **[1, 2]**,
+   and everyone outside Production sits exactly on the floor — 6 of 8, 4 of 6, 4 of 5.
+2. **`call.said` was not the only non-`you` frame difference.** The guide's whole flyover is a
+   private surface and the first pass missed it: `flyover.hunter`, `flyover.room`,
+   `flyover.marks[].x/z/kind`, `flyover.plan[].id/x0/x1/z0/z1`. None of it is a leak — every path
+   is correctly rowed `guide`. The corrected sentence is the one worth keeping: **every byte on a
+   frame that one phone holds and the others do not belongs to whoever is currently the guide.
+   Nobody else, in any chair, at any moment, holds anything.**
+3. **113 frames per phone, not 31.** Frames re-broadcast on every input and clock event, not once
+   per phase, so the original "31 phase-frames" undercounted the surface by ~3.6×.
+
+And the part that matters most is unchanged: **every private envelope in every game is dealt in
+episode one. Nothing private is written to anybody for the remaining four episodes**, on either
+server, at any count. `126 = 116 PUBLIC + 8 SELF + 2 EVIL` turns out to be the wire union rather
+than `log.all()` — the right thing to have counted; a complete five-episode show writes ~183
+entries, ~28 of them SEALED and reaching nobody.
 
 So the Debrief is eight people reasoning about six facts they all share. The mode bible's own test
 is that every event should have at least two plausible explanations; the build passes that and

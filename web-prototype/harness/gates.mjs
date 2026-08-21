@@ -63,7 +63,8 @@
  * ~44 s measured. Every server-spawning gate already binds a distinct hardcoded port
  * (`show-wire` 5195 · `join-spike` 5196 · `party-sockets` 5197 · `expedition-wire` 5243 ·
  * `shot-solver` 5188/5241/5242/5244 · `party-surface` 5251-5261, one pair per section because
- * every assertion it makes has a control server standing beside it) and **`shot-solver` is the
+ * every assertion it makes has a control server standing beside it · `party-private` 5271-5279,
+ * six shipped captures and three control servers) and **`shot-solver` is the
  * only member that launches Chromium** (CDP 9377 and 9378, sequentially, under a pid-scoped profile), so no two pool slots
  * can ever want the same port. Check that before adding a gate that binds anything.
  *
@@ -97,7 +98,8 @@ const GATES = [
   'role-deal', 'party-anon', 'party-isolation', 'party-taken', 'guide-coverage', 'party-log',
   'party-sockets', 'vote-table', 'cast-ballot', 'win-machine', 'round-loop', 'dark-run',
   'director-cut', 'task-deck', 'role-script', 'reunion-truth', 'party-noise', 'party-sim',
-  'join-spike', 'live-session', 'show-wire', 'party-surface', 'shot-solver', 'expedition-wire',
+  'join-spike', 'live-session', 'show-wire', 'party-surface', 'party-private', 'shot-solver',
+  'expedition-wire',
   'premiere-stage',
   'hunter-draw', 'engine-take', 'wire-parity', 'door-hop', 'wing-draw', 'drivable-frame',
   'dead-import',
