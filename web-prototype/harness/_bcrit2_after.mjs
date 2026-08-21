@@ -21,6 +21,7 @@ const { DETENT } = await import(s_('party/darkrun.js'));
 const { createDirector } = await import(s_('party/director.js'));
 const { solve } = await import(s_('party/shots.js'));
 const { createRig } = await import(s_('game/director-rig.js'));
+const { rateGate, roomGate, NOISE_GAP, ROOM_SETTLE } = await import(s_('views/expedition.js'));
 const room = await RM.buildTestRoom({ work: (p) => p }, {});
 console.warn = realWarn;
 
@@ -65,6 +66,8 @@ function run({ seed = 1, stage = 2, cams = 3, old = false } = {}) {
   const feed = (kind, subjectId, t) => director.feed({ kind, subjectId, t, camerasUnlocked: cams, world: worldNow() });
 
   let heading = Math.PI, lastRoom = null, lastState = null;
+  // the same two gates the view uses — see rateGate/roomGate in views/expedition.js
+  const rooms = roomGate(old ? 0 : ROOM_SETTLE), loud = rateGate(old ? 0 : NOISE_GAP);
   const _p = new THREE.Vector3();
   const onAir = {}, subjAir = {};
   let unsolvable = 0, frames = 0, hunterCloseFrames = 0, sumHunterDist = 0, hunterShots = 0;
@@ -97,8 +100,9 @@ function run({ seed = 1, stage = 2, cams = 3, old = false } = {}) {
     noise.update(DT); hunter.update(DT, t);
 
     const here = room.spaceAt(root.position)?.id ?? null;
-    if (here && here !== lastRoom) { lastRoom = here; feed('place','runner',t); }
-    if (runner.noise > 0.55) feed('noise','runner',t);
+    const arrived = old ? (here && here !== lastRoom ? here : null) : rooms(here, t);
+    if (arrived) { lastRoom = arrived; feed('place','runner',t); }
+    if (old ? runner.noise > 0.55 : loud(t, runner.noise > 0.55)) feed('noise','runner',t);
     const hs = hunter.state;
     if (hs !== lastState) {
       lastState = hs;
