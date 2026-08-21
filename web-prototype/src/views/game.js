@@ -40,7 +40,7 @@ import { NoiseBus, NOISE_KIND } from '../game/noise.js';
  * LIVE: click to lock the pointer. WASD, shift to run, mouse to look, LMB fire, E to pick
  * up or refit a limb, Q to drop, R to reset.
  *
- * CAPTURE: a director drives the same inputs on a fixed 26 s loop so the view is a real
+ * CAPTURE: a director drives the same inputs on a fixed 28 s loop so the view is a real
  * playthrough rather than a diorama, and so `--at N` lands on the same frame every time.
  * Shoot the hero frame with `--at 15.5`; measure with `--perf` and NO `--at`, because the
  * engine's freeze skips the updaters and a frozen frame does not measure game logic.
@@ -531,8 +531,16 @@ export default async function view(args = {}) {
     position: room.spawn.hunter.clone(),
     noise, bangPolicy: BANG_POLICY,
   });
-  // seeded one part short of stage 2, so the first limb it takes in the demo is the one
-  // that grows it — the escalation has to be visible inside a 26 second loop
+  // Seeded one part short of stage 2, so the first limb it takes in the demo is the one that
+  // grows it — the escalation has to be visible inside a `LOOP`-length capture (28 s).
+  //
+  // ⚠️ **IT IS NOT BEHIND `engine.capture`, SO IT IS THE LIVE OPENING TOO, AND IT PUTS STAGE 3 OUT
+  // OF REACH IN THIS MODE.** A body has four sockets and `:3079` calls `run.down('p1')` the moment
+  // `caps.gait === 'down'`, which is the fourth take — so one life yields at most 2 + 4 = 6 absorbs
+  // against `HUNTER_GROWTH.toStage3 = 7`. Measured across 20 driven runs, 10 seeds and 2 policies:
+  // stage 2 in every one, stage 3 in none. `HUNTER_SPEED[3]`, the stage-3 rig and the `PASS_H`
+  // reasoning tuned for a 0.66 m body have never been on screen here. `engine-take` K6g holds the
+  // arithmetic; the party mode reaches stage 3 across a show because a show is many lives.
   hunter.absorbed = 2;
   hunter.setTargets([playerBody]);
   weapons.addBody(hunter.body);

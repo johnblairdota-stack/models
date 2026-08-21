@@ -128,8 +128,8 @@ export function readBrief(b = {}) {
  * `hunter-ai.js`'s state ladder, mapped onto `director.js`'s closed list of kinds. **Absent means
  * silent**, and the absences are the load-bearing half: PATROL is nothing happening, BREACH and
  * GROW announce themselves through their own authored hooks rather than through a state
- * comparison, and SEARCH is the state where it is GIVING UP — `hunter-ai.js:711` enters it when
- * awareness has fallen below `alertAt` and it is sweeping a last known point. Captioning that
+ * comparison, and SEARCH is the state where it is GIVING UP — `hunter-ai.js:727-731` enters it
+ * when awareness has fallen below `alertAt` and it is sweeping a last known point. Captioning that
  * "SOMETHING HEARD THAT", as this did, told the room the opposite of what had happened.
  *
  * 🚨 AND PURSUE IS ABSENT BECAUSE THE COMMITMENT IS A LATCH, NOT A STATE TEST. `_commitStep`
@@ -403,13 +403,16 @@ export default async function view(args = {}) {
   });
   hunter.setTargets([playerBody]);
   /**
-   * 🚨 **THE HUNTER'S OWN KILL ENDS THE EXPEDITION. `taken.js:27` SAID THIS WAS ALREADY WIRED AND
-   * NOTHING HAD EVER SUBSCRIBED TO IT** — *"`_attack` calls `this.onKill?.(c, socket, item)` at
-   * L1116. The party room subscribes there and applies the rule"*. `grep -rn onKill src/views/
-   * src/party/` found exactly one hit and it was that sentence.
+   * 🚨 **THE HUNTER'S OWN KILL ENDS THE EXPEDITION. `taken.js` SAID THIS WAS ALREADY WIRED AND
+   * NOTHING HAD EVER SUBSCRIBED TO IT.** Its header used to read — and this is the OLD text, kept
+   * as the record of what misled this file; `taken.js` has since been corrected, so do not go
+   * looking for the sentence there — *"`_attack` calls `this.onKill?.(c, socket, item)` at L1116.
+   * The party room subscribes there and applies the rule"*. `grep -rn onKill src/views/ src/party/`
+   * found exactly one hit and it was that sentence. (The call is at `hunter-ai.js:1132` today, and
+   * `taken.js` now points at the line in THIS file that actually subscribes.)
    *
    * What decided a take instead was `contact < 1.35`, a distance test in the loop below, and the
-   * Hunter cannot get that close: `hunter-ai.js:692` enters ATTACK at
+   * Hunter cannot get that close: `hunter-ai.js:710` enters ATTACK at
    * `seenD < reach * (stage*0.35 + 0.8)` and `_attack` immediately damps `vel` — it stops where
    * it is and swings, because `WEAPON_RANGE.hunterSlam` is 2.4 m and it is *built* to kill from
    * arm's length. Measured across three stages and three runner behaviours: minimum contact
@@ -417,7 +420,7 @@ export default async function view(args = {}) {
    * still while the Hunter took all four of its limbs finished the segment `'held'`.
    *
    * ⚠️ AND RAISING THE THRESHOLD IS THE WORSE FIX, WHICH IS WHY IT IS NOT THE ONE HERE.
-   * `hunter-ai.js:76-89` spends a page arguing that a kill must be *"something the player watched
+   * `hunter-ai.js:1097` spends a page arguing that a kill must be *"something the player watched
    * coming and failed to answer"* — entering reach starts an `ATTACK_WINDUP` of 0.85 s, and
    * stepping out of reach inside it means the swing lands on nothing. A distance test races that
    * windup and wins: in the one staging where 1.35 m *did* fire, it fired 0.32-0.83 s after the
@@ -673,8 +676,27 @@ export default async function view(args = {}) {
      * that follows the kill starts a GROW that has 1.4 s of `update` calls to complete and, until
      * the aftermath began ticking it below, got none: `arm()`'s `state = 'PATROL'` on the line
      * below this one is where the Hunter's growth used to be thrown away, every episode, for ever.
-     * Measured over eight takes: party mode ended at stage 1 and speed 2.05 where `game.js` ended
-     * at stage 3 and 3.35, with `onStage` — a tell wired last session — never firing once.
+     * Measured over eight takes: the Hunter ended at stage 1 and 2.05 m/s with `onStage` — a tell
+     * wired last session — never having fired once, against a table that wanted stage 3 and
+     * 3.35 m/s by the seventh absorb.
+     *
+     * 🚨 **AND WITH THIS LINE IN, THE PARTY MODE IS THE ONLY PLACE STAGE 3 HAS EVER HAPPENED.**
+     * An earlier version of this paragraph said the survival mode *"ended at stage 3 and 3.35"* and
+     * that was false — corrected here rather than quietly dropped, because the true version is the
+     * better argument. `views/game.js` seeds `hunter.absorbed = 2` at boot AND in `resetRound`
+     * (*"the escalation has to be visible inside a `LOOP`-length capture"*, and not behind
+     * `engine.capture`, so every live run opens one limb short of stage 2); a body has four
+     * sockets; and `game.js:3079` calls `run.down('p1')` the moment `caps.gait === 'down'`, which
+     * is the fourth take. So one life yields at most **2 + 4 = 6** absorbs against
+     * `HUNTER_GROWTH.toStage3 = 7`, and a solo critic measured stage 2 in 20 driven runs across 10
+     * seeds and 2 policies and stage 3 in none. `HUNTER_SPEED[3]`, the stage-3 rig and the `PASS_H`
+     * reasoning tuned for a 0.66 m body have never been on screen there.
+     *
+     * A party SHOW is many lives — the runner's body is refitted between episodes (see
+     * `refitRunner`) and the Hunter's `absorbed` is not reset — so with the growth surviving the
+     * segment boundary the seventh take lands stage 3 on the television. `engine-take` K6 drives
+     * it. That is the inversion worth recording: the mode with the shorter individual segment is
+     * the one that can reach the end of the curve.
      *
      * Silent, deliberately: the convulsion is the aftermath's to show, and `settleGrowth`'s own
      * note says why a sound landing at the top of a different segment is worse than no sound.
@@ -900,8 +922,9 @@ export default async function view(args = {}) {
      * person the whole Debrief is about was on screen for sixteen seconds. `shots.js` now refuses
      * the pose outright as a second line of defence; this is the first.
      *
-     * ⚠️ SEARCH IS NOT AN ALERT — IT IS THE STATE WHERE IT IS GIVING UP. `hunter-ai.js:711` enters
-     * SEARCH when awareness has fallen BELOW `alertAt` and it is sweeping the last known point.
+     * ⚠️ SEARCH IS NOT AN ALERT — IT IS THE STATE WHERE IT IS GIVING UP. `hunter-ai.js:727-731`
+     * enters SEARCH when awareness has fallen BELOW `alertAt` and it is sweeping the last known
+     * point.
      * Captioning that "SOMETHING HEARD THAT" told the room the opposite of what happened, and
      * firing a rank-3 event on it pinned the camera for the sweep. It emits nothing at all now.
      *

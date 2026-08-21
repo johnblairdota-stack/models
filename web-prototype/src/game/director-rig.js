@@ -42,7 +42,7 @@ export const SITE_HALF_ANGLE = 0.62;
 export const SITE_DROP = 0.45;
 export const SITE_INSET = 0.55;
 
-/** `player.js:1616`'s `BOOM_R`. The boom is not a line; see `probe.boom` below. */
+/** `player.js:1644`'s `BOOM_R`. The boom is not a line; see `probe.boom` below. */
 export const BOOM_RADIUS = 0.35;
 
 /**
@@ -143,12 +143,12 @@ export function createRig({ camera, room, subjects, unlocked, worldSeed, spaces 
      * How far a boom gets. The room's own ray, so the broadcast camera clips what the game clips.
      *
      * 🚨 THE BOOM HAS A WIDTH, AND ASKING WITH ONE RAY IS THE BUG THE SHIPPED RIG ALREADY FIXED.
-     * `player.js:1616` is `BOOM_R = 0.35`, described there as *"how wide the boom is when it asks
-     * what is behind it; 0 restores the single-ray test"* — and it exists because a single ray
-     * threads an open doorway while the lens, offset to the shoulder, ends up behind the plaster
-     * beside it. That is exactly what the first wired renders showed: a runner stepping through
-     * D1, the boom finding clear air down the middle of the door, and the television cutting to a
-     * close-up of a wall.
+     * `player.js:1644` is `BOOM_R = 0.35`, and the block above it says why the boom is asked with a
+     * bundle rather than a line — *"`boomRadius = 0` restores the single-ray behaviour exactly"* —
+     * which exists because a single ray threads an open doorway while the lens, offset to the
+     * shoulder, ends up behind the plaster beside it. That is exactly what the first wired renders
+     * showed: a runner stepping through D1, the boom finding clear air down the middle of the door,
+     * and the television cutting to a close-up of a wall.
      *
      * So the question is asked with a bundle — the centre line and four offsets at the boom's
      * radius — and the shortest answer wins. Five `blocksSight` calls a frame against one camera.

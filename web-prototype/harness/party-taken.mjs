@@ -4,7 +4,7 @@
  *
  *   node harness/party-taken.mjs
  *
- * Showstopper **S2**. `hunter-ai.js` `_attack` L1100-1117 takes a LIMB, and at L1109
+ * Showstopper **S2**. `hunter-ai.js` `_attack` L1108-1134 takes a LIMB, and at L1127
  *
  *     if (!socket) return;
  *
@@ -42,10 +42,10 @@ t('T1b · party contact does not consult the limb count',
 // ---------------------------------------------------------------- T2 · survival is untouched
 t('T2 · survival still takes a limb while one remains',
   resolveContact({ mode: MODE.SURVIVAL, occupiedSockets: 3 }).outcome === 'limb');
-t('T2b · survival still early-outs with nothing to take (hunter-ai.js L1109)',
+t('T2b · survival still early-outs with nothing to take (hunter-ai.js L1127)',
   resolveContact({ mode: MODE.SURVIVAL, occupiedSockets: 0 }).outcome === 'none');
 
-// ---------------------------------------------------------------- T3 · the L1109 hole is closed
+// ---------------------------------------------------------------- T3 · the L1127 hole is closed
 t('T3 · a four-limbs-gone player is still takeable in party mode',
   resolveContact({ mode: MODE.PARTY, occupiedSockets: 0 }).outcome === 'taken',
   'the exact case the survival rule returns early on');

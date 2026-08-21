@@ -24,7 +24,7 @@
  * ⚠️ THIS FILE CHANGES NOTHING IN `hunter-ai.js`, AND THAT IS DELIBERATE.
  * ---------------------------------------------------------------------------------------------
  * That file is tuned, gated and owned. It already exposes the seam this needs: `_attack` calls
- * `this.onKill?.(c, socket, item)` at L1132. **`src/views/expedition.js:429` is what subscribes** —
+ * `this.onKill?.(c, socket, item)` at L1132. **`src/views/expedition.js:432` is what subscribes** —
  * `hunter.onKill = () => finish('taken', simT)` — and the survival mode does not subscribe, so it
  * keeps its limb economy byte-for-byte. One engine, two rulesets, no branch inside the AI.
  * `engine-take` K5 drives the real `HunterAI` in the real house and asserts the take lands when

@@ -438,6 +438,54 @@ const fx = (n) => (n == null ? 'never' : n.toFixed(2));
       'the survival mode gets its 1.4 s for free, which is why the party mode never did');
   }
 
+  /**
+   * 🚨 **AND THE INVERSION THAT FALLS OUT OF IT: THE PARTY MODE IS THE ONLY PLACE STAGE 3 HAS EVER
+   * HAPPENED.**
+   *
+   * An earlier draft of this file's fix argued from *"`game.js` ends at stage 3 and 3.35"*, and
+   * that was false. `views/game.js` seeds `hunter.absorbed = 2` at boot and again in `resetRound`
+   * — deliberately, so the escalation is visible inside a capture loop, and NOT behind
+   * `engine.capture`, so it is the live opening too. A body has four sockets, and `game.js:3079`
+   * calls `run.down('p1')` the frame `caps.gait === 'down'`, which is the fourth take. So a single
+   * life yields at most `2 + 4 = 6` absorbs against `HUNTER_GROWTH.toStage3 = 7`: stage 3 is out
+   * of reach there, and a solo critic measured stage 2 in 20 driven runs and stage 3 in none.
+   *
+   * A party SHOW is many lives — the runner is refitted between episodes and `absorbed` is not
+   * reset — so K6 above is the first time the end of the growth curve has been reachable at all.
+   * The arithmetic is asserted from the SHIPPED constants and the SHIPPED source rather than from
+   * numbers written here, and the control is the same arithmetic with the seed removed.
+   */
+  {
+    const gameSrc = readFileSync(new URL('../src/views/game.js', import.meta.url), 'utf8');
+    const seeded = Number((gameSrc.match(/hunter\.absorbed = (\d+);/) || [])[1]);
+    const downs = /run\.down\('p1'\)/.test(gameSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''));
+    const sockets = EXP.LOADOUT_SOCKETS.length;
+    t('K6g arm · the survival mode\'s own source still seeds the Hunter and still ends the run at `down`',
+      Number.isFinite(seeded) && seeded > 0 && downs && sockets === 4,
+      `hunter.absorbed = ${seeded} · run.down('p1') on caps.gait === 'down' · ${sockets} sockets`);
+    t('K6g · so one solo life cannot reach stage 3 — the ceiling is below the threshold',
+      seeded + sockets < HUNTER_GROWTH.toStage3,
+      `${seeded} seeded + ${sockets} takes = ${seeded + sockets} absorbs vs toStage3 ${HUNTER_GROWTH.toStage3}`
+      + ` · so HUNTER_SPEED[3] = ${HUNTER_SPEED[3]} has never been on screen there`);
+    t('K6g2 · while a party show crosses it, because a show is many lives on one Hunter',
+      fixed.rows.some((r) => r.absorbed >= HUNTER_GROWTH.toStage3 && r.stage === 3),
+      `stage 3 at absorb ${fixed.rows.find((r) => r.stage === 3)?.absorbed} of the eight takes above`);
+    /**
+     * Two controls, because there are two ways to be wrong about this. The first shows the test is
+     * arithmetic on the shipped numbers rather than a constant — move the seed by one and it
+     * flips. The second names what the binding constraint actually is: NOT the seed (removing it
+     * entirely still leaves a life short) but the four sockets, which is why the answer would not
+     * change if somebody deleted the seed to "fix" it.
+     */
+    t('K6g control · move the seed by one and a solo life WOULD cross it — this is arithmetic, not a constant',
+      (seeded + 1) + sockets >= HUNTER_GROWTH.toStage3,
+      `${seeded + 1} + ${sockets} = ${seeded + 1 + sockets} ≥ ${HUNTER_GROWTH.toStage3}`);
+    t('K6g2 control · and deleting the seed does not lift the ceiling — the four sockets are what binds',
+      0 + sockets < HUNTER_GROWTH.toStage3,
+      `unseeded, a life tops out at ${sockets} absorbs, still short of ${HUNTER_GROWTH.toStage3}`
+      + ` — a single body cannot feed the Hunter enough, whatever it starts on`);
+  }
+
   t('K6 control · discard the growth at the boundary and the Hunter is stage 1 after eight takes',
     shipped.rows.every((r) => r.stage === 1) && shipped.rows[7].speed === HUNTER_SPEED[1],
     shipped.rows.map((r) => `ep${r.ep}:s${r.stage}/${r.speed}`).join(' '));
