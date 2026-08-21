@@ -129,13 +129,28 @@ const fold = (evts, count = 8, alignmentOf = align8) => foldWin(mk(evts), { coun
     counts.map((n) => `${n}p ${SHIPPED[n]} vs ${WIN_TARGETS[n].cameraTarget}`).join(' · '));
   // 🚨 THE FOURTH COPY, WHICH WAS IN THE 3D HALF. `views/expedition.js` painted the camera wall
   // from a literal `3` while the television beside it read `WIN_TARGETS`. It asks now.
+  //
+  // ⚠️ THE CONTROL USED TO BE `/needed:\s*\d/.test('cameras: { unlocked: …, needed: 3 },')` — the
+  // scan run over a string written on the same line. It proved the regex compiles and could not
+  // have gone red for any edit to `expedition.js`. It edits the shipped file now, and the arm
+  // below says the edit landed, so a refactor past the anchor reports itself.
   const expSrc = readFileSync(new URL('../src/views/expedition.js', import.meta.url), 'utf8');
-  const expBody = expSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const stripW = (x) => x.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const asksFor = (text) => {
+    const body = stripW(text);
+    return { asks: /camerasNeeded/.test(body), literal: /needed:\s*\d/.test(body) };
+  };
+  const expShipped = asksFor(expSrc);
   t('W10c · the expedition view asks for the target rather than keeping its own',
-    /camerasNeeded/.test(expBody) && !/needed:\s*\d/.test(expBody),
+    expShipped.asks && !expShipped.literal,
     'no camera denominator written down in the 3D half');
-  t('W10c control · the scan would notice a literal coming back',
-    /needed:\s*\d/.test('cameras: { unlocked: camerasUnlocked, needed: 3 },'));
+  const relapsed = expSrc.replace(
+    'cameras: { unlocked: camerasUnlocked, needed: camerasNeeded(8) },',
+    'cameras: { unlocked: camerasUnlocked, needed: 3 },');
+  t('W10c mutation arm · the literal really went back into the shipped file — the control is not a no-op',
+    relapsed !== expSrc, 'the wall painted from a 3 again, as it shipped');
+  t('W10c control · and with it back, W10c goes red',
+    asksFor(relapsed).literal, 'the scan finds the denominator written down');
 
   // The display was seeded at 1, so it read `needed/needed` after `SHIPPED[n] - 1` cameras were
   // lit, while the season could not be made until `cameraTarget` of them were. The gap is how

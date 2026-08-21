@@ -313,6 +313,38 @@ const engaged = (s) => {
   t('E8 · every state the AI can enter has a decision — a tell, or deliberate silence',
     undecided.length === 0, undecided.length ? `no decision for ${undecided.join(', ')}` : `${states.length} states, all accounted for`);
 
+  /**
+   * 🚨 **AND THE OTHER DIRECTION, WHICH IS THE ONE THIS BLOCK WAS MISSING.** E8 above catches a
+   * state the AI gained and nobody decided about. Nothing caught a state the AI LOST: a name
+   * removed or misspelled upstream sits in `SILENT_STATES` as dead cover for ever, and it silences
+   * a state that no longer exists while looking like a considered decision. Same for a tell mapped
+   * to a state the AI cannot enter — `tellFor` would never be asked for it.
+   */
+  const decided = (real) => ({
+    deadSilence: SILENT_STATES.filter((s) => !real.includes(s)),
+    deadTell: Object.keys(TELL_FOR_STATE).filter((s) => !real.includes(s)),
+  });
+  const live = decided(states);
+  t('E8a arm · the two decision tables are non-empty, so E8e is not passing over nothing',
+    SILENT_STATES.length > 0 && Object.keys(TELL_FOR_STATE).length > 0 && states.length > 0,
+    `${SILENT_STATES.length} silenced · ${Object.keys(TELL_FOR_STATE).length} told · ${states.length} states in the AI`);
+  t('E8e · and every state a decision was taken about is still a state the AI can enter',
+    live.deadSilence.length === 0 && live.deadTell.length === 0,
+    [...live.deadSilence.map((s) => `${s} silenced but gone`), ...live.deadTell.map((s) => `${s} told but gone`)].join(', ')
+      || `${SILENT_STATES.length + Object.keys(TELL_FOR_STATE).length} decisions, all about live states`);
+
+  // The mutation: a state renamed upstream, which is how dead cover gets made.
+  const renamed = src.replace(/this\.state = 'BREACH'/g, "this.state = 'BREACHING'");
+  const renamedStates = [...new Set([...renamed.matchAll(/this\.state\s*=\s*'([A-Z_]+)'/g)].map((m) => m[1]))].sort();
+  t('E8e mutation arm · BREACH really was renamed in the shipped AI text — the control is not a no-op',
+    renamed !== src && !renamedStates.includes('BREACH') && renamedStates.includes('BREACHING'),
+    `${renamedStates.length} states after the rename`);
+  t('E8e control · rename a state upstream and the silence it left behind is reported as dead',
+    decided(renamedStates).deadSilence.join() === 'BREACH'
+      && renamedStates.filter((s) => !(s in TELL_FOR_STATE) && !SILENT_STATES.includes(s)).join() === 'BREACHING',
+    'the old name goes dead AND the new one comes up undecided — both halves fire');
+
+
   t('E8b · SEARCH says nothing, because SEARCH is the Hunter giving up',
     tellFor('SEARCH', 1) === null && tellFor('PATROL', 1) === null,
     'it was "SOMETHING HEARD THAT" at rank 3, which is a lie that also held the camera');
@@ -350,21 +382,40 @@ const engaged = (s) => {
    * ⚠️ SCOPED TO THE UPDATE LOOP, AND `lastIndexOf` BECAUSE THE SOLO DIRECTOR REGISTERS ONE FIRST.
    * `finish()` opens with its own perfectly correct `if (outcome) return;` re-entry guard, and the
    * first draft of this assertion read that and failed the fix.
+   *
+   * ⚠️ **AND THE CONTROL USED TO RUN BOTH REGEXES OVER `'  if (outcome) return;'` — A STRING THIS
+   * FILE WROTE ON THE SAME LINE.** That is a proof that two regexes differ, not a proof about
+   * `expedition.js`; it could not have gone red for any edit to the view. The scan is a function
+   * over text now, and the control feeds it the SHIPPED file with the freeze put back.
    */
-  const loopAt = view.lastIndexOf('engine.onUpdate((dt, t)');
-  const head = view.slice(loopAt, loopAt + 300);
-  const frozen = /if\s*\(outcome\)\s*return\s*;/.test(head);
-  const hands = /if\s*\(outcome\)\s*return\s+\w+\(dt,\s*t\)/.test(head);
+  const scan = (text) => {
+    const loopAt = text.lastIndexOf('engine.onUpdate((dt, t)');
+    if (loopAt < 0) return { found: false, frozen: false, hands: false, drives: false };
+    const head = text.slice(loopAt, loopAt + 300);
+    const after = text.slice(text.indexOf('function aftermath'), loopAt);
+    return {
+      found: true,
+      frozen: /if\s*\(outcome\)\s*return\s*;/.test(head),
+      hands: /if\s*\(outcome\)\s*return\s+\w+\(dt,\s*t\)/.test(head),
+      drives: /rig\.apply\(/.test(after) && /bx\.tick\(/.test(after) && /director\.tick\(/.test(after),
+    };
+  };
+  const shipped = scan(view);
+  t('E13 arm · the update loop was located in the shipped view — E13 is reading something',
+    shipped.found, 'engine.onUpdate((dt, t) …');
   t('E13 · the loop hands the end of the episode to an aftermath rather than returning',
-    hands && !frozen, hands ? 'if (outcome) return aftermath(dt, t)' : 'the loop still returns nothing');
-  const body = view.slice(view.indexOf('function aftermath'), loopAt);
+    shipped.hands && !shipped.frozen,
+    shipped.hands ? 'if (outcome) return aftermath(dt, t)' : 'the loop still returns nothing');
   t('E13b · and that pass drives the camera, the overlay and the clock the caption hangs on',
-    /rig\.apply\(/.test(body) && /bx\.tick\(/.test(body) && /director\.tick\(/.test(body),
-    'rig.apply · bx.setShot · bx.tick · director.tick');
-  t('E13 control · the scanner can tell the two forms apart',
-    /if\s*\(outcome\)\s*return\s*;/.test('  if (outcome) return;')
-    && !/if\s*\(outcome\)\s*return\s+\w+\(dt,\s*t\)/.test('  if (outcome) return;'),
-    'the frozen form is detected, and it is not the shipped one');
+    shipped.drives, 'rig.apply · bx.setShot · bx.tick · director.tick');
+
+  // The mutation: the freeze, put back into the shipped file exactly where it was removed from.
+  const refrozen = view.replace('    if (outcome) return aftermath(dt, t);', '    if (outcome) return;');
+  t('E13 mutation arm · the freeze really went back into the shipped view — the control is not a no-op',
+    refrozen !== view, 'the loop returns nothing again, as it shipped');
+  t('E13 control · with the freeze back, E13 goes red and E13b does not',
+    scan(refrozen).frozen && !scan(refrozen).hands && scan(refrozen).drives,
+    'the aftermath function survives the edit; it is the loop that stopped calling it');
 }
 
 // ---------------------------------------------------------------- E12 · the bus is not the frame rate

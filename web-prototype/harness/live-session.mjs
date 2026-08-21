@@ -96,17 +96,45 @@ const engaged = (s, act) => {
 };
 
 // ---------------------------------------------------------------- L1 · time is an argument
+/**
+ * ⚠️ **THE CONTROL RAN THE BAN LIST OVER A STRING THIS FILE WROTE ON THE SAME LINE** —
+ * `['setInterval','Math.random'].every((b) => 'x = setInterval(Math.random)'.includes(b))`. It
+ * proves `String.includes` works. It could not have gone red for any edit to `session.js`, which
+ * is the only file L1 is about. The scan is a function over text now, and each control feeds it
+ * the SHIPPED source with one real edit applied — with an arm asserting the edit landed, because
+ * a splice that silently misses is a control that looks like a pass.
+ */
 {
   const src = readFileSync(new URL('../src/party/session.js', import.meta.url), 'utf8');
-  const body = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-  const banned = ['setInterval', 'setTimeout', 'Date.now', 'new Date', 'Math.random', 'require(', 'document.', 'window.'];
-  const found = banned.filter((b) => body.includes(b));
+  const strip1 = (x) => x.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const BANNED = ['setInterval', 'setTimeout', 'Date.now', 'new Date', 'Math.random', 'require(', 'document.', 'window.'];
+  const scan = (text) => {
+    const body = strip1(text);
+    return {
+      banned: BANNED.filter((b) => body.includes(b)),
+      engineImport: /from '\.\.\/game\//.test(body) || /three/.test(body),
+    };
+  };
+  const shipped = scan(src);
   t('L1 · no timer, no wall clock and no randomness in the session — time is an argument',
-    found.length === 0, found.length ? `found ${found.join(', ')}` : `${banned.length} banned forms absent`);
-  t('L1 control · the ban list would notice if one appeared',
-    ['setInterval', 'Math.random'].every((b) => `x = setInterval(Math.random)`.includes(b)));
+    BANNED.length > 0 && shipped.banned.length === 0,
+    shipped.banned.length ? `found ${shipped.banned.join(', ')}` : `${BANNED.length} banned forms absent`);
   t('L1b · and no engine import, so it runs in a worker as well as a browser',
-    !/from '\.\.\/game\//.test(body) && !/three/.test(body), 'no THREE, no DOM, no src/game');
+    !shipped.engineImport, 'no THREE, no DOM, no src/game');
+
+  // The mutations: the two edits a future author would actually make, on the real file.
+  const anchor = 'export function createSession';
+  const ticking = src.replace(anchor, 'const _t = setInterval(() => {}, 100), _r = Math.random();\n' + anchor);
+  const engined = src.replace(anchor, "import { createHunter } from '../game/hunter-ai.js';\n" + anchor);
+  t('L1 mutation arm · both edits landed on the shipped `session.js` — the controls are not no-ops',
+    ticking !== src && engined !== src, 'a timer and a random spliced in · an engine import spliced in');
+  t('L1 control · put a timer and a `Math.random` into the shipped file and L1 goes red',
+    scan(ticking).banned.includes('setInterval') && scan(ticking).banned.includes('Math.random')
+      && !scan(ticking).engineImport,
+    `the scan reports ${scan(ticking).banned.join(', ')}`);
+  t('L1b control · and an engine import in the shipped file turns L1b red on its own',
+    scan(engined).engineImport && scan(engined).banned.length === 0,
+    'L1 stays green, L1b does not — the two claims are separable');
 }
 
 // ---------------------------------------------------------------- L0 · the arm
