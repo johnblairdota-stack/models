@@ -15,7 +15,9 @@ import { MOVE } from '../game/rules.js';
 import { DETENT } from '../party/darkrun.js';
 import { createDirector } from '../party/director.js';
 import { solve } from '../party/shots.js';
-import { captionFor } from '../party/captions.js';
+import { createLowerThirds } from '../party/captions.js';
+import { rankOf } from '../party/director.js';
+import { initAudio, setHunterThreat, playDoorBang, playWallStage, playFurnBreak } from '../audio/audio.js';
 import { createRig } from '../game/director-rig.js';
 import { createBroadcast } from '../ui/broadcast.js';
 import { ROOMS } from '../party/coverage.js';
@@ -70,10 +72,15 @@ export const TERMINAL_AT = Object.freeze({
  * comparison, and SEARCH is the state where it is GIVING UP — `hunter-ai.js:711` enters it when
  * awareness has fallen below `alertAt` and it is sweeping a last known point. Captioning that
  * "SOMETHING HEARD THAT", as this did, told the room the opposite of what had happened.
+ *
+ * 🚨 AND PURSUE IS ABSENT BECAUSE THE COMMITMENT IS A LATCH, NOT A STATE TEST. `_commitStep`
+ * spends a page of comments on exactly this: PURSUE is entered and left on hysteresis, so *"a
+ * hunter losing and regaining sight through a colonnade crosses that boundary repeatedly inside
+ * one chase"* and re-announcing it *"is how a warning becomes wallpaper"*. `onCommit` fires ONCE,
+ * the frame it stops considering and starts coming, and that is what carries `hunter_commit`.
  */
 export const TELL_FOR_STATE = Object.freeze({
   ALERT: 'hunter_alert', STALK: 'hunter_alert',
-  PURSUE: 'hunter_commit', HUNT: 'hunter_commit',
   ATTACK: 'grab',
 });
 
@@ -397,6 +404,83 @@ export default async function view(args = {}) {
   };
   const feed = (kind, subjectId, t) => director.feed({ kind, subjectId, t, camerasUnlocked, world: worldNow() });
 
+  /**
+   * 📰 **THE LOWER THIRD — `captionFor` WAS CALLED FROM EXACTLY ONE PLACE, INSIDE `finish()`.**
+   *
+   * So for the whole ninety seconds the television had **no text on it at all**: the bank, its
+   * closed vocabulary, its ROOM_LABEL table and `broadcast.js`'s renderer all existed and nothing
+   * ever asked them for a word. Every bus event now offers one, through `captions.js`'s arbiter —
+   * `hud.js`'s ranked hold, one level up, so nineteen alerts do not become nineteen lower thirds.
+   *
+   * 🚨 THE ROOM RULE — a caption may only name the room the camera is in — lives in the arbiter,
+   * because it is an information rule and belongs where a gate can hold it. See `captions.js`.
+   */
+  const thirds = createLowerThirds();
+  const say = (kind, t, where) => {
+    const at = where === undefined ? lastRoom : where;
+    const cap = thirds.offer({ kind, room: at ?? wing, rank: rankOf(kind) }, t, lastRoom ?? wing);
+    if (cap) bx.say(cap, t);
+    return cap;
+  };
+  /** One call: the bus, and the words that go with it. */
+  const announce = (kind, t, where) => { feed(kind, 'runner', t); say(kind, t, where); };
+
+  /**
+   * 🔊 **THE TELEVISION WAS SILENT FOR NINETY SECONDS.** This file imported nothing from
+   * `audio/audio.js`; `game.js` imports four functions from it. Broadcast §3: *"Audio never cuts.
+   * You hear the crash you did not see — the deniability engine."* Under D9 six of eight players
+   * are getting the round entirely through this screen, and a horror sequence with no sound is not
+   * a horror sequence.
+   *
+   * ⚠️ AND THE CONTEXT MUST BE ARMED BY A GESTURE, WHICH THIS PAGE DOES NOT NECESSARILY GET.
+   * `initAudio` is called from a click handler in `game.js` because the autoplay policy requires
+   * one. Here the page may be a cross-origin frame inside the television, where the host's
+   * keypress does not reach — so the television delegates with `allow="autoplay"` and this arms
+   * on load AND on the first gesture that does arrive. A second call is free: `initAudio` resumes
+   * a suspended context and returns. Capture runs stay silent, which is `initAudio`'s own rule.
+   */
+  initAudio(engine);
+  const armAudio = () => initAudio(engine);
+  addEventListener('pointerdown', armAudio, { passive: true });
+  addEventListener('keydown', armAudio);
+
+  /**
+   * 🚨 **EVERY AUTHORED HUNTER TELL WAS WIRED IN `game.js` AND UNWIRED HERE.** `onCommit`,
+   * `onDoor`, `onBang` and `onStage` are hooks the AI builds and announces in its own header —
+   * *"(from,to) — the view hangs sound/shake off this"*, *"ONE blow. Audio hangs off this."* — and
+   * none of them had a subscriber, an event or a caption on the television. The survival mode
+   * hears the door coming apart; the party mode, whose entire audience is this screen, did not.
+   */
+  hunter.onCommit = () => announce('hunter_commit', simT);
+  hunter.onDoor = () => {
+    // Rank 2 and DELIBERATELY silent: `progress` has no template, because §6.8 refuses to leak how
+    // close a door is to giving way. The audience hears the work and watches the runner decide.
+    feed('progress', 'runner', simT);
+  };
+  hunter.onBang = ({ panel, progress, through }) => {
+    const at = panel?.root?.position;
+    const d = at ? Math.hypot(at.x - player.pos.x, at.z - player.pos.z) : 6;
+    // `game.js`'s own two lines: the far side of the door is the case the mechanic exists for,
+    // and it is the one that should sound muffled.
+    const split = at && panel.sideOf ? panel.sideOf(player.pos) !== panel.sideOf(hunter.root.position) : false;
+    playDoorBang(progress, { distance: d, throughWall: split ? 1 : 0 });
+    const where = at ? room.spaceAt(at)?.id ?? null : null;
+    if (through) { playWallStage(4); announce('channel_open', simT, where); }
+    else announce('blow', simT, where);
+  };
+  hunter.onStage = () => {
+    /**
+     * The 1.4 s convulsion `hunter-ai.js`'s header calls the moment the round changes character.
+     * It gets the bus and a sound and no words: naming it would be naming the Hunter's condition,
+     * which is the one thing §6.2 keeps off this screen.
+     *
+     * ⚠️ THE SOUND IS A REUSE AND IS SAID TO BE ONE. There is no authored growth cue in
+     * `audio.js`; `playFurnBreak('stone')` is the heaviest low crack the house already owns.
+     */
+    playFurnBreak('stone');
+    feed('progress', 'runner', simT);
+  };
+
 
   engine.onUpdate((dt, t) => {
     if (outcome) return;
@@ -414,6 +498,9 @@ export default async function view(args = {}) {
     if (player.noise > 0) noise.emit(player.pos, player.noise, 'move');
     noise.update(dt);
     hunter.update(dt, t);
+    // 🔊 `game.js:3063`'s line: presence is a mood, a committed hunter is an instruction, and the
+    // ear is the only channel that survives a wall — which is the whole of §3's deniability.
+    setHunterThreat(hunter.threat, hunter.committed);
     debris.update(dt); dust.update(dt); limbField.update?.(dt);
 
     // ---- the bus the Director reads
@@ -425,7 +512,7 @@ export default async function view(args = {}) {
       lightRig.snapTo(room.spaceAt(player.pos) ?? room.spaces[0]);
       feed('place', 'runner', t);
     }
-    if (player.noise > 0.55) feed('noise', 'runner', t);
+    if (player.noise > 0.55) announce('noise', t);
     /**
      * 🚨 **A HUNTER EVENT IS ABOUT THE RUNNER. THE SUBJECT IS WHO THE AUDIENCE IS WATCHING, NOT
      * WHAT CAUSED THE EVENT — AND GETTING THAT BACKWARDS COST THE RUNNER 74 SECONDS.**
@@ -449,7 +536,7 @@ export default async function view(args = {}) {
     if (hs !== lastState) {
       lastState = hs;
       const ev = tellFor(hs, t);
-      if (ev) feed(ev.kind, ev.subjectId, ev.t);
+      if (ev) { feed(ev.kind, ev.subjectId, ev.t); say(ev.kind, ev.t); }
     }
     director.tick(t);
 
@@ -522,9 +609,9 @@ export default async function view(args = {}) {
     outcome = kind;
     state.expedition.outcome = kind;
     feed(kind === 'taken' ? 'taken' : 'terminal', 'runner', t);
-    const cap = captionFor(kind === 'taken'
+    const cap = thirds.offer(kind === 'taken'
       ? { kind: 'taken', rank: 4 }
-      : { kind: kind === 'lit' ? 'cam_unlock' : 'task_result', room: wing, rank: 4 });
+      : { kind: kind === 'lit' ? 'cam_unlock' : 'task_result', room: wing, rank: 4 }, t);
     if (cap) bx.say(cap, t);
     send({ t: 'expedition', outcome: kind, room: wing });
     // The instruments read this rather than scraping the DOM.

@@ -98,6 +98,67 @@ export function captionFor(e = {}) {
   return { text: tpl, hold: HOLD[`rank${e.rank ?? 2}`] ?? HOLD.rank2 };
 }
 
+/**
+ * ⏱️ **THE LOWER-THIRD ARBITER — because nineteen alerts must not become nineteen lower thirds.**
+ *
+ * `captionFor` was called from exactly one place in the whole codebase, inside the expedition's
+ * `finish()`, so **no lower third was ever displayed during the ninety seconds**. Wiring it to the
+ * event bus is the fix, and it is also the trap: the bus carries 19 hunter alerts and hundreds of
+ * noise events in a segment, and a renderer that printed each one would strobe.
+ *
+ * This is `hud.js:340`'s arbitration a second level down, over words instead of shots:
+ *
+ *   · a caption holds for `HOLD[rank]`, and a caption of **equal or lower** rank offered during
+ *     that hold is dropped rather than queued — a line nobody finished reading is not information
+ *   · a higher rank pre-empts immediately
+ *   · **the same words** are refused for `REPEAT_GAP` seconds however high the rank, because
+ *     `hunter-ai.js` already learned this one: *"re-arming on 'not committed' would fire the alarm
+ *     every few seconds, which is how a warning becomes wallpaper"*
+ *   · rank 4 is never refused. §3: television does not cut away from its own climax, and it does
+ *     not decline to caption it either
+ *
+ * Pure, so `shot-solver` can hold the whole policy without a browser.
+ */
+export const MIN_GAP = 0.9;      // any two lower thirds
+export const REPEAT_GAP = 12.0;  // the same words again
+
+export function createLowerThirds() {
+  let upUntil = -Infinity, upRank = 0, lastAt = -Infinity;
+  const saidAt = new Map();
+  return {
+    /**
+     * @returns {{text:string, hold:number}|null} the caption to display, or null if this one is
+     *          refused. Refused, not queued: see the header.
+     */
+    offer(e = {}, t = 0, cameraRoom = e.room) {
+      /**
+       * 🚨 **A CAPTION MAY ONLY NAME THE ROOM THE CAMERA IS IN.** This is an information rule, not
+       * a style one. The Hunter's room has no row anywhere on the wire — `entitle.js` gives it
+       * none and `expedition-wire` E7's control asserts the absence — because the guide EARNS the
+       * Hunter's position through cameras and the table argues about whether they really saw it.
+       * A lower third reading "IMPACT — THE WEST STUDY" while the Hunter hammers a door two rooms
+       * from the runner hands the whole room what the guide is paid to know, from the one screen
+       * everybody is already looking at. An event elsewhere keeps its sound and loses its words,
+       * which is §3 exactly: *"Audio never cuts. You hear the crash you did not see."*
+       */
+      if (e.room !== undefined && cameraRoom !== undefined && e.room !== cameraRoom) return null;
+      const cap = captionFor(e);
+      if (!cap) return null;
+      const rank = e.rank ?? 2;
+      if (rank < 4) {
+        if (t - (saidAt.get(cap.text) ?? -Infinity) < REPEAT_GAP) return null;
+        if (t - lastAt < MIN_GAP) return null;
+        if (t < upUntil && rank <= upRank) return null;
+      }
+      upUntil = t + cap.hold; upRank = rank; lastAt = t;
+      saidAt.set(cap.text, t);
+      return cap;
+    },
+    /** For an instrument: what is up, and until when. */
+    state: () => ({ upUntil, upRank }),
+  };
+}
+
 /** Every string this bank can ever produce. A sweep needs a closed set, so here it is. */
 export function allCaptions() {
   const out = [];

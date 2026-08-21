@@ -27,7 +27,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { solve, isFiller, CARDS, BODYCAM_RIG, WORK_RIG, FOV, STING_MIN_RANGE, BOOM_STANDOFF, bugFor, camWall } from '../src/party/shots.js';
-import { captionFor, allCaptions, LOWER_THIRD, ROOM_LABEL, railFor, showBug, segmentClock, CAPTION_FIELDS } from '../src/party/captions.js';
+import { captionFor, allCaptions, LOWER_THIRD, ROOM_LABEL, railFor, showBug, segmentClock, CAPTION_FIELDS, createLowerThirds, REPEAT_GAP } from '../src/party/captions.js';
 import { TEN_FOOT, SIZES_VH, INK } from '../src/ui/broadcast.js';
 import { ROOMS } from '../src/party/coverage.js';
 import { SHOTS, KIND } from '../src/party/director.js';
@@ -395,6 +395,49 @@ const ROLE_NAMES = ['cameraOp', 'soundie', 'fixer', 'producer', 'continuity', 's
         res.edgeOk, res.edgeDetail);
     }
   }
+}
+
+// ---------------------------------------------------------------- H15 · the lower third has an arbiter
+/**
+ * 🚨 **`captionFor` WAS CALLED FROM EXACTLY ONE PLACE IN THE REPOSITORY — INSIDE `finish()`.** So
+ * across the ninety seconds of an expedition the television carried **no text at all**: the bank,
+ * its closed vocabulary, its room labels and `broadcast.js`'s renderer all existed and nothing
+ * ever asked them for a word. Wiring the bus to it is the fix and also the trap — the bus carries
+ * nineteen hunter alerts and hundreds of noise events in a segment.
+ */
+{
+  const bank = createLowerThirds();
+  let shown = 0;
+  // Nineteen alerts, evenly spread across a 90 s expedition — the density actually measured.
+  for (let i = 0; i < 19; i++) if (bank.offer({ kind: 'hunter_alert', rank: 3 }, i * (90 / 19))) shown++;
+  t('H15 · nineteen alerts do not become nineteen lower thirds',
+    shown > 0 && shown <= 8, `${shown} of 19 aired across 90 s · the same words are refused for ${REPEAT_GAP}s`);
+  t('H15 control · and without the arbiter every one of them produces a caption',
+    Array.from({ length: 19 }, () => captionFor({ kind: 'hunter_alert', rank: 3 })).filter(Boolean).length === 19,
+    'the bank itself never refuses — that is why the arbiter exists');
+
+  // Rank 4 is the climax. §3 does not cut away from it and does not decline to caption it either.
+  const b2 = createLowerThirds();
+  b2.offer({ kind: 'hunter_alert', rank: 3 }, 0);
+  t('H15b · a rank-4 caption is never refused, mid-hold or repeated',
+    !!b2.offer({ kind: 'taken', rank: 4 }, 0.1) && !!b2.offer({ kind: 'taken', rank: 4 }, 0.2),
+    'terminal, cam_unlock, grab, taken, task_result');
+  t('H15c · an equal-or-lower rank offered inside the hold is dropped, not queued',
+    b2.offer({ kind: 'noise', room: 'gallery', rank: 2 }, 0.3) === null,
+    'a line nobody finished reading is not information');
+
+  // The room rule, which is an information rule — see the arbiter's own note.
+  const b3 = createLowerThirds();
+  t('H15d · a caption may only name the room the camera is in',
+    b3.offer({ kind: 'blow', room: 'study_w', rank: 2 }, 0, 'ballroom') === null,
+    'an event elsewhere keeps its sound and loses its words — §3');
+  t('H15d control · the same event in the camera\'s own room IS captioned',
+    b3.offer({ kind: 'blow', room: 'ballroom', rank: 2 }, 0, 'ballroom')?.text === 'IMPACT — THE BALLROOM',
+    'so H15d is the room comparison and not a caption that never fires');
+  t('H15e · and the Hunter\'s room can therefore never reach the screen through a caption',
+    ROOMS.every((r) => ROOMS.filter((c) => c !== r)
+      .every((c) => createLowerThirds().offer({ kind: 'noise', room: r, rank: 2 }, 0, c) === null)),
+    `${ROOMS.length} × ${ROOMS.length - 1} room pairs, every mismatch refused`);
 }
 
 // ---------------------------------------------------------------- H14 · the boom is never on the Hunter

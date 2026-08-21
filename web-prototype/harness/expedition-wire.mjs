@@ -52,10 +52,13 @@ const skipped = (n, why) => { skip++; console.log(`  SKIP ${n} · ${why} — SKI
  *
  *   PATROL   nothing is happening
  *   SEARCH   it is giving up — see E8b
+ *   PURSUE · HUNT   the commitment is announced by the `onCommit` LATCH, not by a state test.
+ *                   `_commitStep` exists because PURSUE is entered and left on hysteresis inside a
+ *                   single chase, and re-announcing it is "how a warning becomes wallpaper"
  *   BANG · BREACH · GROW   authored moments with their own hooks (`onBang`, `onDoor`, `onStage`),
  *                          which carry the room and the progress a state name does not
  */
-const SILENT_STATES = ['PATROL', 'SEARCH', 'BANG', 'BREACH', 'GROW'];
+const SILENT_STATES = ['PATROL', 'SEARCH', 'BANG', 'BREACH', 'GROW', 'PURSUE', 'HUNT'];
 
 // ---------------------------------------------------------------- E1 · one house
 {
@@ -319,6 +322,43 @@ const engaged = (s) => {
   const strayKind = Object.values(TELL_FOR_STATE).filter((k) => !KIND.includes(k));
   t('E8d · and every kind it emits is one of §1.2\'s twelve, which has no room for a new one',
     strayKind.length === 0, strayKind.join(', ') || Object.values(TELL_FOR_STATE).join(' '));
+}
+
+// ---------------------------------------------------------------- E9 · the tells have subscribers
+/**
+ * 🚨 **EVERY AUTHORED HUNTER TELL WAS WIRED IN `game.js` AND UNWIRED HERE — AND THIS IS THE VIEW
+ * WHOSE ENTIRE AUDIENCE IS A TELEVISION.** `hunter-ai.js` declares five hooks for the view to hang
+ * sound and signal off — `onKill`, `onCommit`, `onDoor`, `onBang`, `onStage` — and documents them
+ * as exactly that: *"ONE blow. Audio hangs off this."* One of the five was subscribed.
+ *
+ * The hook names are read out of the AI, so a sixth arriving there is a red line here rather than
+ * a tell nobody hears.
+ */
+{
+  const ai = readFileSync(new URL('../src/game/hunter-ai.js', import.meta.url), 'utf8');
+  const hooks = [...new Set([...ai.matchAll(/this\.(on[A-Z]\w*)\s*=\s*null/g)].map((m) => m[1]))].sort();
+  const view = readFileSync(new URL('../src/views/expedition.js', import.meta.url), 'utf8');
+  const wired = (src) => hooks.filter((h) => new RegExp(`hunter\\.${h}\\s*=`).test(src));
+
+  t('E9 arm · the AI\'s hooks were read out of the AI', hooks.length >= 5, hooks.join(' '));
+  const unwired = hooks.filter((h) => !wired(view).includes(h));
+  t('E9 · every tell the Hunter authors reaches the television',
+    unwired.length === 0, unwired.length ? `no subscriber for ${unwired.join(', ')}` : hooks.join(' · '));
+
+  // The same scanner on the survival view, which subscribes to four of the five. If it reported
+  // five there, it would be matching mentions rather than subscriptions.
+  const game = readFileSync(new URL('../src/views/game.js', import.meta.url), 'utf8');
+  t('E9 control · the same scan finds an unsubscribed hook elsewhere, so it reads subscriptions',
+    wired(game).length < hooks.length,
+    `game.js subscribes ${wired(game).join('/')} — not ${hooks.filter((h) => !wired(game).includes(h)).join('/')}`);
+
+  t('E9b · and the television is not silent: it imports the ear and drives it every frame',
+    /from '\.\.\/audio\/audio\.js'/.test(view) && /setHunterThreat\(hunter\.threat/.test(view)
+    && /playDoorBang\(/.test(view) && /initAudio\(/.test(view),
+    'initAudio · setHunterThreat(threat, committed) · playDoorBang · playWallStage');
+  t('E9b control · the scan can tell an absent cue from a present one',
+    !/playGunshot\(/.test(view) && /playFurnBreak\(/.test(view),
+    'no gunshot in a house with no guns; the growth cue is there');
 }
 
 // ---------------------------------------------------------------- E7 · who may see the map
