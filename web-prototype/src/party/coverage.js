@@ -22,10 +22,14 @@
  * is what makes the guide's lie survivable, because nobody but the guide knows how much they
  * could see.
  *
- * ⚠️ FULL COVERAGE IS REACHABLE ONLY AT THE MOMENT GOOD HAS ALREADY WON, and that is fine
- * rather than a hole: at 7-8 players the third camera is the win condition, so the guide becomes
- * an oracle exactly as the game ends. At 4-6 players two cameras win and coverage caps at 4 of 6
- * rooms, so it is never full at all.
+ * ⚠️ **THIS PARAGRAPH USED TO SAY FULL COVERAGE ARRIVES ONLY AS THE GAME ENDS, AND IT WAS WRONG
+ * ON BOTH NUMBERS IT NAMED.** It read *"at 7-8 players the third camera is the win condition, so
+ * the guide becomes an oracle exactly as the game ends. At 4-6 players two cameras win and
+ * coverage caps at 4 of 6 rooms."* `WIN_TARGETS` asks for THREE lights at 4-5 players and FOUR at
+ * 6-8, and coverage is total from the SECOND light — because the establishing camera is one of
+ * only three that exist. So full coverage arrives one or two lights BEFORE the objective does,
+ * and it does not make the guide an oracle when it gets there: the blind strip holds the honest
+ * error at 16%. Both halves are measured in §BAND below and gated by `guide-coverage` C5.
  *
  * No THREE, no DOM.
  */
@@ -108,16 +112,56 @@ export function hunterVisibleToGuide({ worldSeed, unlocked, hunterRoom }) {
 /**
  * §BAND — the guide's honest error rate, and where the number comes from.
  *
- * The guide is asked *"is it safe to move"*. With coverage `c` they have a definite answer with
- * probability `c`, and must guess otherwise. A guess is right about half the time, so
+ * The guide is asked *"is it safe to move"*. They have a definite answer when they can SEE the
+ * Hunter and must guess otherwise, and a guess is right about half the time:
  *
- *     honest error ~= (1 - c) / 2
+ *     honest error ~= (1 - P(seen)) / 2
  *
- * T3 wants 15-25%, which puts coverage at **0.50-0.70** — one to two cameras of three, i.e. the
- * middle of a game. Episode one sits deliberately ABOVE the band (a nearly blind guide) and the
- * final episode below it (a guide who has earned their sight). `guide-coverage` C2 reports the
- * curve rather than asserting one number, because a band that must hold at every episode would
- * be asserting that progression does not happen.
+ * 🚨 **AND `P(seen)` IS NOT COVERAGE. IT WAS READ AS COVERAGE FOR AS LONG AS THIS COMMENT HAS
+ * EXISTED, AND THAT MADE THE WHOLE CURVE WRONG AT THE TOP END.** `darkrun.js`'s header names a
+ * second, independent source of honest error that is pure geometry: a wall of height `H` seen at
+ * elevation θ hides `H / tan θ` of floor behind it — 2.55 m at the shipped 4.80 m storey and 62°
+ * tilt, which is exactly where a stationary Hunter stands. `session.js`'s `sightForGuide()`
+ * composes the two, and it is the composition that ships:
+ *
+ *     P(seen) = coverage x (1 - P(inside the blind strip))
+ *
+ * With the wall distance drawn uniformly over [0, 8) m the strip takes 31.9% of draws, so at FULL
+ * coverage the honest error is **16.0%, not 0%** — the guide never becomes an oracle, which is the
+ * property the mode rests on and which coverage alone could not deliver.
+ *
+ * ⚠️ THE OLD NUMBERS IN THIS COMMENT WERE ALSO OFF BY ONE CAMERA. Coverage is asked about
+ * `camerasLive(lit)`, not about `lit` — the establishing camera is live from frame one — so a
+ * curve indexed by the scoreboard's count reads one column to the left of the game's.
+ *
+ * Measured through the shipped composition (`guide-coverage` C2):
+ *
+ * ```
+ *   lit 0 -> 1 live cam  · coverage  33.3% · honest error 38.6%
+ *   lit 1 -> 2 live cams · coverage  66.7% · honest error 27.2%
+ *   lit 2 -> 3 live cams · coverage 100.0% · honest error 16.0%
+ *   lit 3 -> 4 live cams · coverage 100.0% · honest error 16.0%
+ *   lit 4 -> 5 live cams · coverage 100.0% · honest error 16.0%
+ * ```
+ *
+ * 🚨 **THE TAIL IS FLAT AND THE OBJECTIVE RUNS INTO IT.** `ROOMS.length / ROOMS_PER_CAM` is 3, so
+ * three cameras exist, and the establishing camera is one of them — coverage is total from the
+ * SECOND light onward while `WIN_TARGETS` asks for three or four. The last one or two lights of
+ * the objective buy the guide nothing at all. That is a design decision about the camera table
+ * and three documents disagree about it, so nothing here has been changed to paper over it:
+ * `guide-coverage` C5 measures the gap, prints it, and pins it so it cannot widen unnoticed.
+ *
+ * T3 wants 15-25%. The band is entered at the second light and held for the rest of the show.
  */
+
+/** Coverage alone, with no blind strip. The FIRST of the two sources, and never the whole answer. */
 export const expectedHonestError = (c) => (1 - c) / 2;
+
+/**
+ * Both sources compounded — the arithmetic `session.js`'s `sightForGuide()` performs.
+ * @param {number} c      coverage fraction
+ * @param {number} blind  the share of wall distances that fall inside the blind strip
+ */
+export const expectedHonestErrorSeen = (c, blind) => (1 - c * (1 - blind)) / 2;
+
 export const T3_BAND = Object.freeze({ lo: 0.15, hi: 0.25 });
