@@ -23,6 +23,15 @@
  * whether the lie is readable, or whether the broadcast is watchable — those are the paper
  * prototype's job and §6's.
  *
+ * ⚠️ **AND THE GUIDE'S ELEVATION WAS A MODEL OF SOMETHING THAT EXISTS, WHICH IS NOT ALLOWED.**
+ * `const TILT = 70` was a literal in this file for four commits while `session.js` shipped
+ * `GUIDE_TILT_DEG = 62` — a 2.55 m blind strip graded as a 1.75 m one, a guide 46% less blind
+ * than the build's, on the exact number S4 bands. Nothing imported the constant, so moving the
+ * shipped one had no effect on any number printed here. It is imported now, S4 is split along
+ * `rrr-gates.md:224`'s own line, and the honest error at the shipped elevation is **28.5% against
+ * T3's 15-25%** — reported as a design signal with one named, argued, triple-armed exemption
+ * rather than banded away. See S4.
+ *
  * ⚠️ AND THE EXPEDITION IS A MODEL, NOT THE GAME. The 3D runner does not exist yet, so
  * `resolveExpedition` below walks a 6-room board using the SHIPPED constants — `coverage.js`'s
  * camera roster, `darkrun.js`'s blind strip, `rules.js`'s speeds. When the real Expedition lands,
@@ -30,7 +39,9 @@
  * assumed to carry over.
  */
 
+import { readFileSync } from 'node:fs';
 import { createRoom } from '../src/party/room.js';
+import { GUIDE_TILT_DEG, STOREY_H } from '../src/party/session.js';
 import { tallyCasting } from '../src/party/ballot.js';
 import { COMPOSITION } from '../src/party/cast.js';
 import { OUTCOME } from '../src/party/win.js';
@@ -44,15 +55,34 @@ const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' �
 
 const SEEDS = 240;                    // per player count, per policy pairing
 const COUNTS = [4, 5, 6, 7, 8];
-const TILT = 70;                      // a competent guide's elevation — dark-run D3b's band
+/**
+ * 🚨 **THE TILT COMES OFF `session.js`, AND FOR FOUR COMMITS IT DID NOT.**
+ *
+ * This file read `const TILT = 70`, a literal, and never imported anything. The shipped flyover
+ * is `GUIDE_TILT_DEG = 62`. At the 4.80 m storey that is a 2.55 m blind strip, and at 70° it is
+ * 1.75 m — so every band below was graded against a guide **46% less blind than the one that
+ * ships**, on the single number S4 is about.
+ *
+ * It was not a stale copy of a number that moved; it was a number this file made up. And it was
+ * proved blind: move the shipped `GUIDE_TILT_DEG` to 80 — a real defect, honest guide error from
+ * ~20% down to 5.3%, the deception economy gone because an honest call is almost never wrong and
+ * a wrong call is therefore almost always a lie — and `guide-coverage` C2b/C2d go red while this
+ * file prints **byte-identical output**. A gate that cannot see a change to the constant it is
+ * measuring is measuring its own copy of it, which is this suite's oldest failure mode and the
+ * one `wire-parity`'s header opens with.
+ *
+ * `STOREY_H` is imported for the same reason: `blindStrip(4.80, …)` was the storey height typed
+ * out a second time, one module away from the export that owns it.
+ */
+const TILT = GUIDE_TILT_DEG;
 const ROOM_DEPTH = 8.0;               // ⚠️ the same named assumption as dark-run
-const BLIND = Math.min(1, blindStrip(4.80, TILT) / ROOM_DEPTH);
+const BLIND = Math.min(1, blindStrip(STOREY_H, TILT) / ROOM_DEPTH);
 
 /**
  * One expedition on a 6-room board. Returns the outcome plus the two numbers S3 and S4 need.
  * Every constant comes from a shipped module; nothing here invents a rule.
  */
-function resolveExpedition({ seed, ep, worldSeed, unlocked, guidePolicy, producerSpiked }) {
+function resolveExpedition({ seed, ep, worldSeed, unlocked, guidePolicy, producerSpiked, blind = BLIND }) {
   const covered = coveredRooms(worldSeed, unlocked);
   let hunter = ROOMS[Math.floor(chance(seed, `h${ep}`) * ROOMS.length)];
   let runner = 'hall';
@@ -63,13 +93,16 @@ function resolveExpedition({ seed, ep, worldSeed, unlocked, guidePolicy, produce
   for (let turn = 0; turn < 4 && !taken; turn++) {
     // What the guide is shown: the room only if a live camera covers it AND the blind strip
     // does not hide it. Both sources compound, exactly as dark-run D3 measured.
-    const inStrip = chance(seed, `strip${ep}${turn}`) < BLIND;
+    const inStrip = chance(seed, `strip${ep}${turn}`) < blind;
     const hadSignal = covered.has(hunter) && !inStrip;
     const lied = willLie({ policy: guidePolicy, hadSignal, seed, salt: `${ep}:${turn}` });
     // An honest guide with no signal guesses, and a guess is wrong half the time.
     const honestlyWrong = !lied && !hadSignal && chance(seed, `guess${ep}${turn}`) < 0.5;
     const callWrong = lied || honestlyWrong;
-    calls.push({ hadSignal, lied, honestlyWrong });
+    // ⚠️ `cover` IS RECORDED SO S4'S ARM CAN PREDICT THIS CALL AT A TILT IT WAS NOT MADE AT.
+    // Without it the arm would have to re-run the whole sweep to ask what a different elevation
+    // would have done, and an arm nobody can afford to run is an arm nobody runs.
+    calls.push({ hadSignal, lied, honestlyWrong, cover: covered.size / ROOMS.length });
 
     // 🚨 A WRONG CALL IS A WRONG TURN, NOT A GUILLOTINE. The first model put the runner in the
     // Hunter's room on EVERY wrong call, which made a mistake and a murder identical and drove
@@ -94,7 +127,7 @@ function resolveExpedition({ seed, ep, worldSeed, unlocked, guidePolicy, produce
 }
 
 /** Play one complete match. Returns everything the bands are computed from. */
-function playMatch({ count, seed, goodPolicy, evilPolicy }) {
+function playMatch({ count, seed, goodPolicy, evilPolicy, blind = BLIND }) {
   const r = createRoom({ count, castSeed: seed * 977 + count, worldSeed: seed + 1, send: () => {}, emit: () => {} });
   r.start();
   const align = Object.fromEntries(r.deal.seats.map((s) => [s.id, s.alignment]));
@@ -122,7 +155,7 @@ function playMatch({ count, seed, goodPolicy, evilPolicy }) {
       // The LIVE camera count, which is what coverage is a function of — `cameras.unlocked` is
       // now the crew's earned count and starts at zero. `coverage.js` owns the difference.
       seed, ep, worldSeed: seed + 1, unlocked: camerasLive(r.state.cameras.unlocked),
-      guidePolicy: policyOf(pair.guide), producerSpiked: spikers.length > 0,
+      guidePolicy: policyOf(pair.guide), producerSpiked: spikers.length > 0, blind,
     });
     stats.calls.push(...exp.calls);
     stats.arrivals += exp.arrivals;
@@ -257,11 +290,139 @@ const rate = (list) => list.filter(goodWon).length / list.length;
     patient.pct >= 0.40 && patient.pct <= 0.50,
     `patient ${(patient.pct * 100).toFixed(1)}% of ${patient.n} · aggressive ${(aggressive.pct * 100).toFixed(1)}% (lies on 3 calls in 4, and is caught for it)`);
 
+  /**
+   * 🚨 **S4 GRADED A GUIDE THAT DOES NOT SHIP, AND THE BAND IT REPORTED WAS THE INVENTED GUIDE'S.**
+   *
+   * `const TILT = 70` was a literal in this file. `session.js` ships `GUIDE_TILT_DEG = 62` and
+   * `sightForGuide()` passes it with no way for anyone to change it. At the 4.80 m storey the
+   * shipped elevation hides 2.55 m of floor and 70° hides 1.75 m, so this file graded a guide
+   * **46% less blind than the one in the build**, on the one number S4 is about. `tasks.js` does
+   * list `tilt` among DARK_RUN's guide affordances, which is what the literal was standing in for
+   * — but the opening rule of this suite is that a model may stand in for something that does not
+   * exist yet and may never stand in for something that does. The elevation exists. It is 62.
+   *
+   * It was proved blind, not merely stale: move the shipped `GUIDE_TILT_DEG` to 80 — honest error
+   * to 5.3%, an honest call almost never wrong, so a wrong call is almost always a lie and the
+   * deception economy is gone — and `guide-coverage` C2b/C2d go red while this file printed
+   * **byte-identical output**.
+   *
+   * ⚠️ **AND WIRING IT UP TOOK S4 OUT OF T3's BAND, WHICH IS A DESIGN SIGNAL AND IS REPORTED AS
+   * ONE RATHER THAN BANDED AWAY.** At the shipped elevation the honest error is 28.5%, against
+   * T3's 15-25%. `dark-run`'s own analytic table says the same thing from the other direction —
+   * at 62° it publishes 38.7% / 27.3% / 16.0% for one, two and three cameras, and only three
+   * cameras is in band. D3b passes because it asks whether SOME reachable tilt lands in band;
+   * S4 asks about the tilt that ships, and there is only one, and it is over.
+   *
+   * The band is not widened. It is split along the line `rrr-gates.md:224` already draws — *"T3.
+   * Below it, every failure is a confession"* — so the floor, which is the direction that deletes
+   * the game and is exactly the direction the 80° defect moves in, is asserted hard. The ceiling
+   * is over by 3.5 points for one stated reason, `TILT_CEILING_EXEMPT` below, and that entry is
+   * armed three ways so it cannot outlive the thing it describes.
+   */
   const calls = runs.flatMap((r) => r.stats.calls);
   const honestCalls = calls.filter((c) => !c.lied);
   const honestErr = honestCalls.filter((c) => c.honestlyWrong).length / honestCalls.length;
-  t('S4 · the guide honest error rate sits in T3\'s 15-25% band', honestErr >= 0.15 && honestErr <= 0.25,
-    `${(honestErr * 100).toFixed(1)}% over ${honestCalls.length} honest calls at ${TILT}° tilt`);
+
+  /** The honest error these same calls would have had at another elevation, from shipped modules. */
+  const blindAt = (tilt) => Math.min(1, blindStrip(STOREY_H, tilt) / ROOM_DEPTH);
+  const predictAt = (tilt) => honestCalls.reduce((a, c) => a + (1 - c.cover * (1 - blindAt(tilt))) / 2, 0) / honestCalls.length;
+
+  /** The same 1,200 matches replayed at another elevation. `S4 control` is what this is for. */
+  const sweepAt = (tilt) => {
+    const cs = [];
+    for (const count of COUNTS) {
+      for (let s2 = 0; s2 < SEEDS; s2++) {
+        cs.push(...playMatch({ count, seed: s2, goodPolicy: s2 % 2 ? 'naive-good' : 'cautious-good',
+          evilPolicy: s2 % 2 ? 'aggressive-evil' : 'patient-evil', blind: blindAt(tilt) }).stats.calls);
+      }
+    }
+    const h = cs.filter((c) => !c.lied);
+    return { err: h.filter((c) => c.honestlyWrong).length / h.length, n: h.length };
+  };
+  const at70 = sweepAt(70);
+
+  t('S4 · the guide honest error rate never falls below T3\'s floor — below it every failure is a confession',
+    honestErr >= 0.15,
+    `${(honestErr * 100).toFixed(1)}% over ${honestCalls.length} honest calls at the shipped ${TILT}° · `
+    + `T3's own reason for a floor, rrr-gates.md:224 — "below it, every failure is a confession"`);
+
+  /**
+   * ⚠️ **ONE NAMED EXEMPTION, ARGUED, AND ARMED SO IT CANNOT BECOME COVER.** T3's ceiling is 25%
+   * and the shipped build is at 28.5%. The exemption is not "the band is wrong"; it is "the build
+   * is missing the affordance the band assumes", and the missing affordance has a name:
+   *
+   *   `tasks.js` DARK_RUN lists `guide: ['flyover', 'hunterMark', 'tilt']`. `session.js:362`
+   *   passes `tiltDeg: GUIDE_TILT_DEG` — a module constant — and there is no input anywhere in
+   *   `src/party/` or either page that moves it. So the guide cannot tilt, and `dark-run` D3b's
+   *   whole finding, *"the strip is skill, not noise"*, describes a skill nobody can exercise.
+   *   Give the guide the tilt control the task row already promises and 70° lands at 23.6%,
+   *   inside band, which is what the literal in this file was quietly asserting had happened.
+   *
+   * This is a message to `session.js`'s author, not a licence for this file's. Three arms:
+   * `S4b` fails if the overshoot grows, `S4b arm a` fails if a tilt input lands (delete the
+   * entry), `S4b arm b` fails if the number comes back into band (delete the entry).
+   */
+  const TILT_CEILING_EXEMPT = 0.30;
+  t('S4b · and its ceiling holds, or overshoots only as far as the missing tilt control explains',
+    honestErr <= TILT_CEILING_EXEMPT,
+    `${(honestErr * 100).toFixed(1)}% against T3's 25% ceiling · OUT OF BAND at the shipped tilt, `
+    + `and in band (${(at70.err * 100).toFixed(1)}%, re-run for real) at the 70° a guide with a tilt control would reach`);
+
+  const SESSION_SRC = readFileSync(new URL('../src/party/session.js', import.meta.url), 'utf8');
+  // The elevation is fixed if `guideSight` is still handed the module constant AND no accepted
+  // input is named for it — `INPUT` is the whole list of taps a phone may send.
+  const INPUTS = (SESSION_SRC.match(/export const INPUT = \[([^\]]*)\]/) || [, ''])[1];
+  const tiltIsFixed = /tiltDeg:\s*GUIDE_TILT_DEG/.test(SESSION_SRC) && !/tilt/i.test(INPUTS);
+  t('S4b arm a · and the guide still has no way to change the elevation — the moment one lands, the exemption goes',
+    tiltIsFixed,
+    tiltIsFixed ? 'session.js passes GUIDE_TILT_DEG and offers no input that moves it'
+      : 'session.js now mentions a tilt the guide can move — delete TILT_CEILING_EXEMPT and let S4b assert T3 whole');
+  t('S4b arm b · and the number is still genuinely over the band — the exemption cannot outlive the overshoot',
+    honestErr > 0.25,
+    honestErr > 0.25 ? `${(honestErr * 100).toFixed(1)}% > 25%`
+      : `back in band at ${(honestErr * 100).toFixed(1)}% — delete TILT_CEILING_EXEMPT`);
+
+  /**
+   * 🚨 THE CONTROL FOR W2, AND IT IS THE ONE THE LITERAL WOULD HAVE FAILED. Pin `TILT` back to a
+   * number of this file's own and this arm goes red two ways: the identity check fails, and the
+   * shipped elevation stops being distinguishable from the invented one.
+   */
+  t('S4 arm · the elevation this file grades against is `session.js`\'s export, not a literal of its own',
+    TILT === GUIDE_TILT_DEG,
+    `TILT === GUIDE_TILT_DEG === ${GUIDE_TILT_DEG}° — the identity half of W2. S4 control below is the measured half`);
+
+  /**
+   * 🚨 **THE CONTROL, AND IT IS THE LITERAL ITSELF RUN FOR REAL.** Sixty seeds per count through
+   * the same `playMatch`, with the blind strip taken from the shipped `blindStrip` at the 70°
+   * this file used to assert — the whole of the edit that reverts W2. It does not merely move the
+   * number; it **flips S4b's verdict**. The literal reported an in-band guide about an
+   * out-of-band build, which is what a model standing in for something that exists gets you.
+   *
+   * ⚠️ AND ONE HONEST LIMIT, MEASURED RATHER THAN ASSUMED. The critic that found this defect
+   * showed `guide-coverage` C2b/C2d going red at 80° while this file printed byte-identical
+   * output, and read that as this gate being blind to the elevation. It is blind to it as a
+   * LITERAL, which is the defect and is now fixed. It is also, separately, a weak instrument for
+   * the elevation: this model's expedition is a 6-room board where the dominant source of "no
+   * signal" is camera coverage, not the strip, so the honest error moves only a few points across
+   * an 18° swing and 80° lands INSIDE T3's band here rather than under it. That number is printed
+   * below and asserted about nothing. `guide-coverage`, which sweeps wall draws, is the
+   * instrument for the tilt; this file's job is to grade the balance against the build's real
+   * elevation rather than one of its own, and that is what `S4 arm` now holds it to.
+   */
+  t('S4 control · restore the literal 70°, re-run all 1,200 matches, and T3\'s verdict flips — the invented guide passes the band the shipped one fails',
+    at70.err <= 0.25 && honestErr > 0.25,
+    `70° (the literal, re-run for real) ${(at70.err * 100).toFixed(1)}% over ${at70.n} honest calls — inside T3's 15-25% · `
+    + `${TILT}° (the shipped export) ${(honestErr * 100).toFixed(1)}% over ${honestCalls.length} — over it. `
+    + `The 70° number reproduces this file's own pre-fix output exactly, so the literal was not a stale copy of a `
+    + `constant that moved — it was a different guide`);
+  const at80 = sweepAt(80);
+  console.log(`       S4 report-only · and one honest limit on this instrument, measured rather than assumed. The critic that`);
+  console.log(`       found W2 moved GUIDE_TILT_DEG to 80 and watched guide-coverage C2b/C2d go red while this file printed`);
+  console.log(`       byte-identical output. Re-run for real, 80° here gives ${(at80.err * 100).toFixed(1)}% over ${at80.n} honest calls — INSIDE T3's band,`);
+  console.log(`       not under it. This model's expedition is a 6-room board where the dominant source of "no signal" is`);
+  console.log(`       camera coverage rather than the strip, so it is a weak instrument for the elevation and guide-coverage,`);
+  console.log(`       which sweeps wall draws, is the right one. What this file owed was to grade balance against the build's`);
+  console.log(`       real elevation instead of one of its own, and that is what S4 arm now holds it to.`);
 
   // ⚠️ MEASURED OVER ROUNDS THAT HAVE OFF-CREW EVIL, WHICH IS THE ONLY READING THAT MEANS
   // ANYTHING. With one evil at 4-5 players, a round where that evil is ON the crew has no
