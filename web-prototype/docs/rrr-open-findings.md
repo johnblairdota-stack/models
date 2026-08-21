@@ -84,12 +84,35 @@ distance.**
 
 ## The economy
 
+- ⚠️ **EVERY NUMBER IN THIS SECTION IS MEASURED ON A GAME THAT DOES NOT SHIP.** `party-sim`
+  gives seated evil a Producer spike each episode via `policy.js`'s `spikesThisEpisode`
+  (`harness/party-sim.mjs:151`). Nothing in the tree ever fires `noise.spike` —
+  `harness/party-anon.mjs:77` says so in its own header. So the simulated evil side has a
+  per-episode lever the real one does not, and the shipped vote is probably **worse** than the
+  figure below, not better. An independent critic measured 28.4% vs 26.4% chance on a separate
+  sweep, which agrees to within a fifth of a point and inherits the same caveat. Read every
+  economy number here as an upper bound until the spike is real.
 - **The vote is worth +2.1 percentage points over guessing** (n = 14,064): 24.8% of executed
   players were Production against a 22.7% random-standing-nominee baseline, and it does not improve
   across episodes. Root cause measured: at 4 and 5 players the guide of a *failed* expedition is
   **less** likely to be Production than a random living player.
-- **Reveal `hunter.placed` at RECAP.** It is one `VIS` constant. Every call becomes checkable the
-  moment the episode ends, turning a coin into a per-guide track record.
+- ~~**Reveal `hunter.placed` at RECAP.** It is one `VIS` constant.~~ **BUILT 2026-08-21, AND THE
+  ADVICE ABOVE WAS WRONG TWICE.** It is not one `VIS` constant and following it literally would
+  have shipped a fatal. (1) `hunter.placed` is recorded on ENTRY TO EXPEDITION, so re-rowing it
+  `PUBLIC` publishes the Hunter's room *before* the ninety seconds run — the guide's job
+  evaporates and the runner walks around one room. (2) The room is
+  `pick(ROOMS.length, worldSeed, 'hunter', episode)`, so airing five of them is five
+  (episode → room) pairs to brute-force a 32-bit seed against, and with it every future
+  placement — Fatal #5's `/report` leak one field along.
+
+  What shipped instead: `onEnter[PHASE.RECAP]` airs two booleans — `guideSaw` (was the flyover
+  showing them the Hunter when they spoke) and `hunterHere` (was the Hunter in the wing). A guide
+  who was blind and called it wrong is unlucky; one who could see and called it wrong is doing
+  something else. Strictly less information than this entry asked for, and it is the information
+  that makes a call evidence rather than a verdict. `hunter.placed` stays `SEALED` and still
+  carries the room to the Reunion. Gated by `expedition-wire` E14 on real projected frames —
+  306 pre-recap frames carry the reveal zero times; moving the write one phase early turns E14a
+  red at 81 of 306.
 - **The camera objective's back half buys nothing.** Three cameras exist; `WIN_TARGETS` asks for 3
   or 4 lights. Coverage is total from the **second** earned light, so 1 light at a 4–5p table and 2
   at 6–8p move the guide's sight by exactly zero. Three documents disagree about that table —

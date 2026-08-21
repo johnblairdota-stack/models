@@ -312,6 +312,12 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
       expedition: { ...state.expedition, live: sim != null },
     };
     if (state.tally) base.tally = { counts: { ...state.tally.counts }, threshold: state.tally.threshold, executed: state.tally.executed };
+    // 🚨 CONDITIONAL FOR THE SAME REASON `tally` IS. The attributed casting ballot is aired on
+    // CLOSE — `resolveCasting` runs on EXIT from CASTING — so the field must not exist while the
+    // ballot is being filled in, or the television is a live tally and the last voter is
+    // decisive. Absence here, not a matrix row, is what enforces that: `ballots[].*` is rowed
+    // `all`, and `expedition-wire` E11 reads real frames rather than trusting either.
+    if (state.ballots && state.ballots.length) base.ballots = state.ballots.map((b) => ({ ...b }));
     if (!sock.isTV) {
       base.you = { ...viewFor(deal, sock.playerId).you, acted: pending.acted.has(sock.playerId), ...card(sock.playerId) };
     }
@@ -434,6 +440,7 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
     [PHASE.CASTING]: () => {
       state.expedition = { room: WINGS[pick(WINGS.length, worldSeed, 'target', state.episode)], outcome: null };
       state.call = { by: null, said: null };
+      state.ballots = [];               // last episode's slate is not this episode's
       record(makeEvent('expedition.announced', VIS.PUBLIC, { room: state.expedition.room, episode: state.episode }));
     },
     [PHASE.EXPEDITION]: () => {
@@ -589,10 +596,35 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
       state.history[id].expeditions++; state.history[id].lastEp = state.episode;
     }
     seatTheCrew();
+    /**
+     * 🚨 **THE BALLOT IS READ ALOUD, ATTRIBUTED, AND IT USED TO BE A HEADCOUNT.** This event
+     * carried the WINNERS and an abstention tally — the outcome of a vote with the vote removed.
+     * `rrr-paper-prototype.md` §2 writes the rule in its own words: *"Read every ballot aloud,
+     * attributed."* It was specced, and what shipped was the result.
+     *
+     * That mattered most in episode 1, which `orderFor` stops after DEBRIEF: no reckoning, no
+     * vote, no execution. Episode 1's job is to teach the loop, and it did that while producing
+     * no evidence whatsoever — eight people spent 230 seconds and learned one outcome. Who you
+     * sent, who you refused, and who put themselves forward to guide is a public record from the
+     * first minute, and it is the only record episode 1 can leave behind.
+     *
+     * ⚠️ IT IS AIRED ON CLOSE, NEVER DURING — the same rule `tally` follows a few hundred lines
+     * down. `resolveCasting` runs on EXIT from CASTING, so no phone can watch the ballot build
+     * and no last voter is decisive.
+     *
+     * ⚠️ A NULL SLOT IS AN ABSTENTION AND STAYS DISTINGUISHABLE FROM A PICK. `abstained` is kept
+     * as well as the ballots, because a room reading a list wants the count without doing
+     * arithmetic, and because a phone with a dead battery should be visibly silent rather than
+     * absent from the list.
+     */
     record(makeEvent('cast.ballot', VIS.PUBLIC, {
       episode: state.episode, runner: cast.runner, guide: cast.guide,
       tiebreaks: cast.tiebreaks, abstained: ballots.filter((b) => !b.runner && !b.guide).length,
+      ballots: ballots.map((b) => ({ voter: b.voter, runner: b.runner, guide: b.guide })),
     }));
+    // The attributed record, on the frame, for the DEBRIEF to argue from. Cleared on the next
+    // CASTING entry so the board never shows last episode's slate beside this episode's pair.
+    state.ballots = ballots.map((b) => ({ voter: b.voter, runner: b.runner, guide: b.guide }));
     record(makeEvent('cast.pair', VIS.PUBLIC, { runner: cast.runner, guide: cast.guide }));
   }
 

@@ -144,6 +144,24 @@ export const MATRIX = [
   ['call.made',                'all'],    // that the guide has spoken. The clock, not the callout
   ['call.said',                'guide'],  // and their own controller says it back to them alone
 
+  // ---- the casting ballot, attributed
+  // 🚨 `rrr-paper-prototype.md` §2, in its own words: *"Read every ballot aloud, attributed."*
+  // The event carried the winners and an abstention headcount — the outcome of a vote with the
+  // vote taken out. These three rows are the vote. They are `all` for the same reason
+  // `tally.counts.*` is: §4 airs the record attributed, and a secret ballot in a game about
+  // reading people is a mechanic that reads nobody.
+  //
+  // ⚠️ AIRED ON CLOSE, NEVER DURING. `resolveCasting` runs on EXIT from CASTING, so the field
+  // does not exist while the ballot is being filled in — the same protection `tally` relies on,
+  // and like `tally` it is a property of the writer rather than of this table.
+  //
+  // ⚠️ A null `runner` or `guide` IS AN ABSTENTION and must survive to the frame as null rather
+  // than being dropped: a phone that never tapped should be visibly silent on the board, not
+  // missing from it.
+  ['ballots[].voter',          'all'],
+  ['ballots[].runner',         'all'],
+  ['ballots[].guide',          'all'],
+
   // ---- the reckoning and the ballot
   ['nominations[].nominator',  'all'],
   ['nominations[].target',     'all'],

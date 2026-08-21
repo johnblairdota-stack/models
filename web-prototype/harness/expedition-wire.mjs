@@ -47,7 +47,7 @@ import { DETENT, noiseFor, audibleRange, SILENT_SPEED } from '../src/party/darkr
 import { MOVE, HUNTER_SENSE } from '../src/game/rules.js';
 import { createSession, CALL, MOVE_CHOICE } from '../src/party/session.js';
 import { PHASE, SECONDS } from '../src/party/phases.js';
-import { audienceFor } from '../net/party/entitle.js';
+import { audienceFor, MATRIX } from '../net/party/entitle.js';
 
 let pass = 0, fail = 0, skip = 0;
 const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' · ' + d : ''}`); } else { fail++; console.log(`  FAIL ${n}${d ? ' · ' + d : ''}`); } return c; };
@@ -692,7 +692,7 @@ const engaged = (s) => {
     audienceFor('hunterRoom') === null && audienceFor('expedition.hunterRoom') === null);
 }
 
-// ---------------------------------------------------------------- E10 · the RECAP reveal
+// ---------------------------------------------------------------- E14 · the RECAP reveal
 /**
  * The vote was measured at +2.1 percentage points over guessing (n = 14,064) and does not improve
  * across episodes, because nothing a guide does is ever checked. `session.js`'s
@@ -704,7 +704,7 @@ const engaged = (s) => {
  * walks around one room for ninety seconds. `expedition.guideSaw`/`hunterHere` are rowed `all`,
  * so the ONLY thing keeping them off an EXPEDITION frame is that the writer has not run yet —
  * a property of `session.js`, not of the matrix, and therefore not something `audienceFor` can
- * assert. E10a reads real projected frames instead.
+ * assert. E14a reads real projected frames instead.
  *
  * ⚠️ AND IT IS DELIBERATELY NOT THE HUNTER'S ROOM. `docs/rrr-open-findings.md` asked for
  * `hunter.placed` re-rowed at RECAP; the room is `pick(ROOMS.length, worldSeed, 'hunter', ep)`,
@@ -742,26 +742,26 @@ const engaged = (s) => {
   const early = [...inPhase(PHASE.CASTING), ...inPhase(PHASE.EXPEDITION)];
   const recap = inPhase(PHASE.RECAP);
 
-  const armed = t('E10 arm · a real show produced projected frames in both the expedition and the recap',
+  const armed = t('E14 arm · a real show produced projected frames in both the expedition and the recap',
     early.length > 0 && recap.length > 0,
     `${early.length} pre-recap frames, ${recap.length} recap frames, ${cap.length} total`);
 
   if (!armed) {
     skip += 3;
-    console.log('  SKIP E10a/E10b/E10c · nothing to measure — the show produced no frames');
+    console.log('  SKIP E14a/E14b/E14c · nothing to measure — the show produced no frames');
   } else {
     const leaked = early.filter((r) => has(r, 'guideSaw') || has(r, 'hunterHere'));
-    t('E10a · neither reveal is on ANY frame before the recap — the ninety seconds stay clean',
+    t('E14a · neither reveal is on ANY frame before the recap — the ninety seconds stay clean',
       leaked.length === 0,
       `${early.length} casting+expedition frames walked, ${leaked.length} carrying a reveal`);
 
-    t('E10b · and every recap frame carries both, so the room is handed the check',
+    t('E14b · and every recap frame carries both, so the room is handed the check',
       recap.every((r) => has(r, 'guideSaw') && has(r, 'hunterHere')),
       `${recap.filter((r) => has(r, 'guideSaw') && has(r, 'hunterHere')).length}/${recap.length}`);
 
     // A constant is not a fact. If either boolean never varies, the recap card is decoration.
     const vals = (k) => [...new Set(recap.map((r) => r.frame.expedition[k]))];
-    t('E10c · both booleans take both values across one season — neither is a constant',
+    t('E14c · both booleans take both values across one season — neither is a constant',
       vals('guideSaw').filter((v) => v != null).length > 1 && vals('hunterHere').length > 1,
       `guideSaw ${JSON.stringify(vals('guideSaw'))} · hunterHere ${JSON.stringify(vals('hunterHere'))}`);
   }
@@ -769,12 +769,157 @@ const engaged = (s) => {
   // 🚨 TWO CONTROLS, BECAUSE THIS WALKER CAN LIE IN TWO DIRECTIONS. One that answers yes to
   // everything makes E10a's zero meaningless; one that answers no to everything makes E10b's
   // green meaningless. Both are checked against the same captured frames, every run.
-  t('E10 control · the walker finds nothing for a field no row carries — a green E10b is not a yes-machine',
+  t('E14 control · the walker finds nothing for a field no row carries — a green E14b is not a yes-machine',
     cap.filter((r) => has(r, 'hunterRoom')).length === 0,
     '`expedition.hunterRoom` is on no projection, and the walker agrees');
-  t('E10 control · and it DOES find a field that is rowed and set by the recap — E10a\'s zero is not blindness',
+  t('E14 control · and it DOES find a field that is rowed and set by the recap — E14a\'s zero is not blindness',
     recap.length > 0 && recap.every((r) => has(r, 'outcome')),
     '`expedition.outcome` is rowed `all` and written before the recap');
+}
+
+// ---------------------------------------------------------------- E15 · the attributed ballot
+/**
+ * `rrr-paper-prototype.md` §2, in its own words: *"Read every ballot aloud, attributed."* What
+ * shipped aired the WINNERS and an abstention headcount — the outcome of a vote with the vote
+ * taken out. Episode 1 is where that cost most: `orderFor(1)` stops after DEBRIEF, so eight
+ * people spent 230 seconds and were left with one outcome and no record.
+ *
+ * 🚨 SAME FAILURE MODE AS E14, DIFFERENT FIELD: a public record that must not exist EARLY. A
+ * slate visible while CASTING is still open is a live tally, and a live tally makes the last
+ * voter decisive — which is the exact reason `session.js` holds `tally` back for the execution
+ * vote. `ballots[].*` is rowed `all`, so nothing in the matrix prevents it; what prevents it is
+ * that `resolveCasting` runs on EXIT and `fullFor` only attaches the field when it is non-empty.
+ * Two independent whitelists, and neither is assertable from the table — so this reads frames.
+ *
+ * ⚠️ E15c IS NOT DECORATION. An abstention that renders as an absent row lets a dead battery
+ * look like a player who never sat down, and a self-pick that renders as an ordinary vote hides
+ * the tell the room asks about out loud. Both have to survive projection intact.
+ */
+{
+  const cap = [];
+  let s = null;
+  s = createSession({ count: 8, castSeed: 31337, worldSeed: 1848,
+    send: (sockId, frame) => { if (s) cap.push({ phase: s.state.phase, frame }); } });
+  let now = 0; s.start(now);
+  for (let i = 0; i < 4000 && s.state.phase !== PHASE.REUNION; i++) {
+    const alive = s.state.players.filter((x) => x.alive).map((x) => x.id);
+    switch (s.state.phase) {
+      case PHASE.CASTING:
+        // Deliberately mixed: one self-pick for runner, self-picks for guide, one silent phone.
+        for (let k = 0; k < alive.length; k++) {
+          if (k === 3) continue;
+          if (k === 0) s.input(alive[k], { t: 'cast', runner: alive[0], guide: alive[1] });
+          else s.input(alive[k], { t: 'cast', runner: alive[(k + 1) % alive.length], guide: alive[k] });
+        }
+        break;
+      case PHASE.EXPEDITION:
+        s.input(s.state.pair.guide, { t: 'call', call: CALL.CLEAR });
+        s.input(s.state.pair.runner, { t: 'move', move: MOVE_CHOICE.GO });
+        break;
+      case PHASE.RECKONING:
+        if (!s.state.nominations.length) s.input(alive[0], { t: 'nominate', target: alive[1] });
+        break;
+      case PHASE.VOTE: for (const id of alive) s.input(id, { t: 'vote', choice: alive[1] }); break;
+      default: break;
+    }
+    now += 5000; s.tick(now);
+  }
+  const slate = (r) => (r.frame && Array.isArray(r.frame.ballots)) ? r.frame.ballots : null;
+  const inPhase = (p) => cap.filter((r) => r.phase === p);
+  const casting = inPhase(PHASE.CASTING);
+  const debrief = inPhase(PHASE.DEBRIEF);
+
+  const armed = t('E15 arm · a real show produced casting frames and debrief frames to compare',
+    casting.length > 0 && debrief.length > 0,
+    `${casting.length} casting frames, ${debrief.length} debrief frames`);
+
+  if (!armed) {
+    skip += 3;
+    console.log('  SKIP E15a/E15b/E15c · nothing to measure');
+  } else {
+    const live = casting.filter((r) => (slate(r) || []).length > 0);
+    t('E15a · no slate exists while CASTING is open — the television is not a live tally',
+      live.length === 0,
+      `${casting.length} casting frames walked, ${live.length} carrying a slate`);
+
+    /**
+     * ⚠️ **NOT A HARD EIGHT, AND NOT THE LIVING COUNT EITHER — BOTH DRAFTS WERE WRONG AND THE
+     * GATE SAID SO.** Asserting 8 went red at 18/36: by episode 3 the table has executed people.
+     * Asserting `=== living` went red at 9/36 for a better reason — when the runner is TAKEN
+     * during the expedition they are dead by the DEBRIEF, but they still cast a ballot that
+     * morning, and the slate is right to still show it. A board that dropped the dead would
+     * erase the vote of the one player the room most wants to talk about.
+     *
+     * So the property is neither count: it is that **no living player is missing from the
+     * slate**, every voter is a real player, and nobody votes twice. `escape` E1's hard `4` is
+     * the same lesson twice over — the number was never the invariant.
+     */
+    const livingOn = (r) => (r.frame.players || []).filter((p) => p.alive).map((p) => p.id);
+    const idsOn = (r) => (r.frame.players || []).map((p) => p.id);
+    const wellFormed = debrief.filter((r) => {
+      const bs = slate(r) || [];
+      const voters = bs.map((b) => b.voter);
+      const uniq = new Set(voters);
+      return uniq.size === voters.length
+        && voters.every((v) => idsOn(r).includes(v))
+        && livingOn(r).every((id) => uniq.has(id));
+    });
+    const spread = [...new Set(debrief.map((r) => `${(slate(r) || []).length}/${livingOn(r).length}`))];
+    t('E15b · every living player is on the slate, every voter is real, and nobody votes twice',
+      debrief.length > 0 && wellFormed.length === debrief.length,
+      `${wellFormed.length}/${debrief.length} frames · rows/living observed ${JSON.stringify(spread)}`);
+
+    const board = slate(debrief[0]) || [];
+    const abstained = board.filter((b) => !b.runner && !b.guide);
+    const selfPicks = board.filter((b) => b.runner === b.voter || b.guide === b.voter);
+    t('E15c · an abstention survives projection as a printed row with nulls, and a self-pick stays visible',
+      abstained.length === 1 && selfPicks.length > 0,
+      `${abstained.length} abstention(s) kept as rows, ${selfPicks.length} self-pick(s) legible`);
+  }
+
+  /**
+   * 🚨 **THE FIRST CONTROL HERE MUTATED `MATRIX` AND MEASURED NOTHING, AND IT SAID SO.**
+   * `entitle.js` compiles the table into `compiled` ONCE at module load; re-rowing a `MATRIX`
+   * entry afterwards changes a array the projection never reads again. The control reported
+   * "attribution survived" and was right to — it had mutated a copy of the map, not the map.
+   * Recorded because the next person writing a wire control will reach for the same handle.
+   * (No other gate does: `party-isolation` only ever reads `MATRIX`.)
+   *
+   * So the control proves the FILTER IS ON instead, on the same real frames: `call.said` is
+   * rowed `guide`, so a non-guide phone must not have it while the guide's phone must. If both
+   * sides of that come out right, the projection is demonstrably filtering, and E15b's green is
+   * the filter passing `voter` through rather than the filter being absent.
+   */
+  {
+    const guideId = () => (cap.length ? null : null);
+    const withSaid = [], withoutSaid = [];
+    let s2 = null;
+    s2 = createSession({ count: 8, castSeed: 31337, worldSeed: 1848,
+      send: (sockId, f) => {
+        if (!s2 || s2.state.phase !== PHASE.EXPEDITION || sockId === 'tv') return;
+        const isGuide = s2.state.pair && s2.sockets.find((x) => x.id === sockId)
+          && s2.sockets.find((x) => x.id === sockId).playerId === s2.state.pair.guide;
+        (isGuide ? withSaid : withoutSaid).push(f && f.call && 'said' in f.call);
+      } });
+    s2.start(0);
+    for (let i = 0; i < 400 && s2.state.phase !== PHASE.DEBRIEF; i++) {
+      const alive = s2.state.players.filter((x) => x.alive).map((x) => x.id);
+      if (s2.state.phase === PHASE.CASTING)
+        for (let k = 0; k < alive.length; k++)
+          s2.input(alive[k], { t: 'cast', runner: alive[(k + 1) % alive.length], guide: alive[k] });
+      if (s2.state.phase === PHASE.EXPEDITION) {
+        s2.input(s2.state.pair.guide, { t: 'call', call: CALL.CLEAR });
+        s2.input(s2.state.pair.runner, { t: 'move', move: MOVE_CHOICE.GO });
+      }
+      s2.tick((i + 1) * 5000);
+    }
+    const filtersOn = withSaid.length > 0 && withoutSaid.length > 0
+      && withSaid.some(Boolean) && withoutSaid.every((v) => v === false);
+    t('E15 control · the shipped projection demonstrably strips a `guide` row from other phones',
+      filtersOn,
+      `guide frames carrying call.said: ${withSaid.filter(Boolean).length}/${withSaid.length} · `
+      + `other phones: ${withoutSaid.filter(Boolean).length}/${withoutSaid.length} (must be 0)`);
+  }
 }
 
 console.log(`\nexpedition-wire: ${pass} passed, ${fail} failed${skip ? `, ${skip} skipped` : ''}`);

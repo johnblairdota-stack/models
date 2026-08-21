@@ -97,6 +97,21 @@
          padding:clamp(12px,1.6vw,26px)}
   .facts dt{color:var(--dim);font:600 clamp(10px,.95vw,15px)/1.6 ui-sans-serif;letter-spacing:.2em;text-transform:uppercase}
   .facts dd{font:600 clamp(14px,1.5vw,26px)/1.3 ui-sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* The attributed casting ballot — rrr-paper-prototype.md §2, "read every ballot aloud". Sized
+     to be read from a sofa: the whole point is eight people arguing about it across a room. */
+  .slate{margin:clamp(10px,1.6vh,22px) 0 0;width:100%}
+  .slate-h{color:var(--dim);font:600 clamp(10px,.95vw,15px)/1.6 ui-sans-serif;letter-spacing:.2em;
+    text-transform:uppercase;margin-bottom:clamp(4px,.7vh,9px)}
+  .slate table{width:100%;border-collapse:collapse;font:600 clamp(12px,1.25vw,22px)/1.35 ui-sans-serif}
+  .slate th,.slate td{padding:clamp(3px,.55vh,8px) clamp(6px,.8vw,14px);text-align:left;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .slate thead th{color:var(--dim);font:600 clamp(9px,.85vw,13px)/1.6 ui-sans-serif;
+    letter-spacing:.18em;text-transform:uppercase}
+  .slate tbody tr{border-top:1px solid var(--edge)}
+  .slate tbody th{color:var(--dim);font-weight:600}
+  .slate .self{color:var(--warn);font:700 clamp(8px,.72vw,12px)/1 ui-sans-serif;
+    letter-spacing:.14em;text-transform:uppercase;vertical-align:middle}
+  .dim{color:var(--dim)}
 
   footer{display:flex;align-items:center;justify-content:space-between;gap:20px;
          font:600 clamp(11px,1.05vw,17px)/1 ui-sans-serif;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
@@ -400,6 +415,7 @@
         + '<dt>Cameras</dt><dd>' + (cams.unlocked || 0) + ' of ' + (cams.needed || 0) + ' lit</dd>'
         + '<dt>Incidents</dt><dd>' + ((frame.incident || {}).alarms || 0) + ' this season</dd>'
         + '</dl>'
+        + slate()
         + '<div class="sub">'
         + esc(guide === '—' ? 'Out loud, to the room.'
           : guide + ' called it out loud, and what they said is not written down anywhere.')
@@ -465,6 +481,40 @@
   /** `executioner()` returns a playerId or the string SHOWRUNNER when the nominator was taken. */
   const swingerName = (id) => (id === 'SHOWRUNNER' ? 'nobody left standing — the Showrunner' : nameOf(id));
   const wing = () => ROOM_LABEL[(frame.expedition || {}).room] || '—';
+  /**
+   * 🚨 **WHO SENT THEM. `rrr-paper-prototype.md` §2: *"Read every ballot aloud, attributed."***
+   * The casting ballot aired the winners and an abstention headcount, which is the outcome of a
+   * vote with the vote taken out of it. This is the vote.
+   *
+   * It matters most in episode 1, which `orderFor` ends after the DEBRIEF — no reckoning, no
+   * vote, no execution. Before this, episode 1 produced no evidence at all: eight people spent
+   * 230 seconds and were told one outcome. Who you sent, who you refused, and who put themselves
+   * forward to guide is a record the whole season can be argued against, and it is the only one
+   * episode 1 can leave.
+   *
+   * ⚠️ SELF-PICKS ARE MARKED, because that is the tell the room asks about out loud. A player
+   * naming themselves as runner is volunteering for the dangerous job; naming themselves as
+   * guide is volunteering for the one that sees the Hunter. Those are different sentences and
+   * the board should not flatten them into one.
+   *
+   * ⚠️ AN ABSTENTION IS PRINTED, NOT OMITTED. A phone that never tapped is visibly silent —
+   * dropping the row would let a dead battery look like it never sat down.
+   */
+  function slate() {
+    const bs = frame.ballots || [];
+    if (!bs.length) return '';
+    const cell = (voter, pick) => {
+      if (!pick) return '<span class="dim">—</span>';
+      return esc(nameOf(pick)) + (pick === voter ? ' <span class="self">self</span>' : '');
+    };
+    return '<div class="slate"><div class="slate-h">Who sent them</div>'
+      + '<table><thead><tr><th></th><th>Runner</th><th>Guide</th></tr></thead><tbody>'
+      + bs.map((b) => '<tr><th>' + esc(nameOf(b.voter)) + '</th>'
+          + '<td>' + cell(b.voter, b.runner) + '</td>'
+          + '<td>' + cell(b.voter, b.guide) + '</td></tr>').join('')
+      + '</tbody></table></div>';
+  }
+
   const nameOf = (id) => { const p = ((frame && frame.players) || []).find((x) => x.id === id); return p ? p.name : '—'; };
   const status = () => {
     const c = frame.cameras || {};
