@@ -36,7 +36,7 @@ import { createLog, visibleTo } from './log.js';
 import { ROOMS, hunterVisibleToGuide } from './coverage.js';
 import { guideSight } from './darkrun.js';
 import { HOUSE } from './houseplan.js';
-import { applyTake, resolveContact, MODE, PLATE } from './taken.js';
+import { applyTake, applyEviction, resolveContact, MODE, PLATE } from './taken.js';
 import { tallyCasting, refuse as refuseChair } from './ballot.js';
 import { tallyVote, executioner, nominate as proposeNomination, reckoningClosed, NO_ONE } from './vote.js';
 import { foldWin, OUTCOME } from './win.js';
@@ -541,10 +541,16 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
     if (result.executed) {
       const victim = state.players.find((p) => p.id === result.executed);
       const swinger = executioner({ living: alive, nominations: state.nominations }, result.executed, takenThisEpisode);
-      const { player, events } = applyTake(victim);
+      // 🚨 AN EXECUTION IS NOT A TAKE. This called `applyTake` and filtered the `player.taken`
+      // EVENT back out, which was right about the log and wrong about the row — the assign
+      // copied `taken: true` onto the public frame, so every executed player rendered `✖ taken`
+      // and the `⚒ evicted` branch beside it had never once been reached. `applyEviction` is the
+      // same sealed half without the flag or the event. Round §4: the two visible causes are
+      // TAKEN and EXECUTED, and *"both were witnessed live on TV"*.
+      const { player, events } = applyEviction(victim);
       Object.assign(victim, player);
       record(makeEvent('player.executed', VIS.PUBLIC, { id: victim.id, seat: victim.seat, executioner: swinger }));
-      for (const e of events.filter((x) => x.type !== 'player.taken')) record(makeEvent(e.type, e.vis, e.data));
+      for (const e of events) record(makeEvent(e.type, e.vis, e.data));
     }
   }
 
@@ -558,6 +564,17 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
       status: state.outcome, camerasLit: w.camerasLit, alarms: state.incident.alarms,
     }));
     state.lastPair = { ...state.pair };
+    // 🚨 A NOMINATION BELONGS TO ITS EPISODE AND DIES WITH IT. `onEnter[RECKONING]` was the ONLY
+    // place this list was cleared, so from the moment one reckoning closed until the next one
+    // opened — the vote, the execution, the verdict, and then the whole of the next episode's
+    // casting, expedition, recap and debrief — the previous episode's nominations sat on the
+    // frame. `show-tv.html`'s `votedTag` renders them in every phase but CASTING and VOTE, so the
+    // television printed "◆ on the block" beside a living player, all the way through the Debrief,
+    // for an accusation the table had already voted down an episode ago. Clearing it here means
+    // the block is still on screen for the vote and the execution it belongs to, and gone before
+    // the next episode opens.
+    state.nominations = [];
+    state.tally = null;
     for (const s of sockets) s.seatRole = null;
     state.episode += 1;
   }

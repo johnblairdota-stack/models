@@ -434,6 +434,27 @@ t('X3 arm · the show played to the Reunion over real sockets',
     Array.isArray((phones[seatNoOf(sess.truth().evil[0])].frames().slice(-1)[0] || {}).you?.teammates),
     'two in Production, non-empty array, the guess holds');
 
+  /**
+   * 🚨 THE DEBRIEF IS THE PHASE THAT NEEDS THE EVIDENCE AND IT WAS THE ONE PHASE THAT THREW IT
+   * AWAY. The whole stage was `big('Talk.', …)`: the outcome, the wing and the pair are on the
+   * frame the entire time and rowed `all`, and the television showed them for the twenty seconds
+   * of RECAP and then cleared the screen for the seventy-five during which eight people argue.
+   * The picture is `progress/storyboard/12-debrief.png`; this is the half that cannot drift.
+   */
+  const tvHtmlPage = await (await fetch(`http://127.0.0.1:${PORT + 2}/`)).text();
+  const tvBody = tvHtmlPage.replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+  const debrief = (tvBody.match(/DEBRIEF:\s*\(\)\s*=>\s*\{[\s\S]*?\n    \},/) || [''])[0];
+  t('X14 · the DEBRIEF stage puts the episode\'s public facts back on the screen',
+    /expedition/.test(debrief) && /outcome/.test(debrief) && /pair/.test(debrief) && /wing\(\)/.test(debrief),
+    `${debrief.length}B of stage reading expedition.outcome, the wing and the pair`);
+  t('X14b · and the guide\'s call is still not on it — broadcast §6.9, in either direction',
+    !/\.said\b/.test(tvBody) && !/CLEAR|HOLD/.test(debrief),
+    'the frame does not carry it and no page reads a `.said` anywhere');
+  t('X14 control · the stage really is more than the line it used to be',
+    debrief.length > 400 && !/^DEBRIEF: \(\) => big\('Talk\.'/.test(debrief),
+    'a one-line `big()` would be under 100B');
+
   t('X11d · the word is spelled out on the card, never colour alone — §2.3 and §6',
     /You are PRODUCTION/.test(body) && /You are GOOD/.test(body),
     'a red glyph on a black card in a dark lounge is a hint, not a message');

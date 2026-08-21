@@ -77,6 +77,36 @@ export function applyTake(player) {
 }
 
 /**
+ * 🚨 **AN EXECUTION IS NOT A TAKE, AND THE ROW HAS TO SAY SO OR THE TELEVISION CANNOT.**
+ *
+ * Both callers used to reach for `applyTake` and filter the `player.taken` EVENT back out of the
+ * log — which is correct about the log and wrong about the row, because `Object.assign(victim,
+ * player)` copies `taken: true` straight onto the public frame. So an executed player read
+ * `{alive: false, taken: true}`, `show-tv.html:155` rendered `✖ taken` and `captions.js:131`
+ * put a `✕` on the nameplate, and the `⚒ evicted` branch beside them was unreachable and had
+ * never once rendered. Combined with the room lottery that could not put the Hunter in the wing,
+ * that made 100% of deaths executions and 100% of them labelled as Hunter kills — the two visible
+ * causes round §4 calls *"both witnessed live on TV"* collapsed into one.
+ *
+ * ⚠️ IT IS A SEPARATE FUNCTION RATHER THAN A FLAG ON `applyTake`, because the two verbs differ in
+ * what they announce as well as in what they set: a take is a PUBLIC `player.taken`, an eviction
+ * is a PUBLIC `player.executed` that only the caller can build (it carries the executioner). What
+ * they share is the sealed half, and that is what is here.
+ *
+ * ⚠️ `taken` IS SET FALSE RATHER THAN LEFT ALONE. It is `false` on every row from frame one — see
+ * `session.js`'s note on I7 — so writing it here changes nothing about the SHAPE of the frame and
+ * everything about whether a future caller can pass in a row that already had it set.
+ */
+export function applyEviction(player) {
+  return {
+    player: { ...player, alive: false, taken: false, plate: PLATE.FACE_DOWN },
+    // The public half is `player.executed`, and only the caller knows who swung. What is
+    // universal about leaving the mansion is that WHY is sealed until the Reunion.
+    events: [{ type: 'player.sealed', vis: 'SEALED', data: { id: player.id } }],
+  };
+}
+
+/**
  * A taken player's afterlife. C1: chat only, no ghost vote in v1, and **no mansion UI at all** —
  * `party-loop.md` puts *"Do not write a ghost UI for taken players"* under its Do-not list, and
  * the bible's D4 keeps the chat because the chat is the show's audience, not a ghost interface.

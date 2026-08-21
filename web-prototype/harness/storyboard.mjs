@@ -192,12 +192,20 @@ await sleep(700);
 await beat('call', 'The guide calls it', 'CLEAR or HOLD, publicly and attributed. Waiting is safe and '
   + 'costs the camera — which is what stops HOLD being strictly worse than GO, and what makes lying with it worth something.');
 
+/**
+ * 🚨 THE HOUSE REPORTS BEFORE THE RUNNER MOVES, NOT AFTER. `closedEarly()` ends EXPEDITION the
+ * moment the guide has called it and the runner has acted, so a report sent after the GO tap
+ * raced the phase close and lost — the beat below was captioned "Taken" over a television reading
+ * *Camera live*, because `resolveExpedition` had already graded the episode from the stub. The
+ * report is accepted at any point during EXPEDITION and is only APPLIED when the phase closes, so
+ * sending it first changes nothing except which of the two answers wins the race.
+ */
+report('lit');
 await ph(rSeat).locator('#gogo').click().catch(() => {});
 await sleep(700);
 await beat('go', 'The runner decides', 'GO or WAIT. In the wired build this is a throttle instead: four '
   + 'detents, with the ring under the stick showing how far the noise carries.');
 
-report('lit');
 await waitPhase(PHASE.RECAP);
 await beat('recap', 'Camera live', 'The run survived, so a camera lights. That is the good team\'s '
   + 'objective AND the information system: more cameras means the guide can be caught lying.');
@@ -261,13 +269,15 @@ const st2 = show.sessionNow().state;
 const g2 = Number(st2.pair.guide.slice(1)) - 1, r2 = Number(st2.pair.runner.slice(1)) - 1;
 await ph(g2).locator('#cl').click().catch(() => {});
 await sleep(300);
+report('taken');
 await ph(r2).locator('#gogo').click().catch(() => {});
 await sleep(500);
-report('taken');
 await waitPhase(PHASE.RECAP);
 await labelChairs();
 await beat('taken', 'Taken', 'Contact is terminal — the limb economy of the survival mode is not '
-  + 'consulted here. The terminal stays dark, so the run costs the good team a camera as well as a player.');
+  + 'consulted here. The terminal stays dark, so the run costs the good team a camera as well as a player. '
+  + 'The rail marks the runner \u2716 TAKEN and the executed player \u2692 EVICTED: the two visible causes, '
+  + 'told apart, and never a word about what either of them was.');
 
 // ---------------------------------------------------------------- 7 · the reunion
 for (let i = 0; i < 40 && show.sessionNow().state.phase !== PHASE.REUNION; i++) await skip();

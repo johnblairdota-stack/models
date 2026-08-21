@@ -62,6 +62,13 @@
   /* No `.call` rule, deliberately — see the EXPEDITION stage below and broadcast §6.9. A style
      for it is half of a reintroduction. */
   .clear{color:var(--live)} .bad{color:var(--gone)}
+  /* The Debrief's evidence board. Two columns of fact/value, couch-legible, on an opaque plate —
+     broadcast §4's ten-foot rules put nothing important straight on the feed. */
+  .facts{display:grid;grid-template-columns:auto 1fr;gap:clamp(4px,.7vh,10px) clamp(10px,1.4vw,26px);
+         text-align:left;background:var(--panel);border:1px solid var(--edge);border-radius:16px;
+         padding:clamp(12px,1.6vw,26px)}
+  .facts dt{color:var(--dim);font:600 clamp(10px,.95vw,15px)/1.6 ui-sans-serif;letter-spacing:.2em;text-transform:uppercase}
+  .facts dd{font:600 clamp(14px,1.5vw,26px)/1.3 ui-sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
   footer{display:flex;align-items:center;justify-content:space-between;gap:20px;
          font:600 clamp(11px,1.05vw,17px)/1 ui-sans-serif;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
@@ -206,7 +213,45 @@
       if (o === 'held') return big('They held.', 'Safe, and no closer to seeing the house.');
       return big('…', '');
     },
-    DEBRIEF: () => big('Talk.', 'Out loud, to the room. The phones are for voting.'),
+    /**
+     * 🚨 **THE DEBRIEF IS THE PHASE THAT NEEDS THE EVIDENCE AND IT WAS THE ONE PHASE THAT THREW IT
+     * AWAY.** This read `big('Talk.', ...)` and nothing else: the outcome, the wing and the pair
+     * were on the frame the whole time, rowed `all` in `entitle.js`, and the television showed
+     * them for the twenty seconds of RECAP and then cleared the screen for the seventy-five
+     * seconds during which eight people are supposed to argue about them. Round §1 gives DEBRIEF
+     * to *"talking in the room"*; a room arguing from memory about a card that was on screen a
+     * minute ago is arguing about who remembers better.
+     *
+     * ⚠️ AND THE ONE THING THAT STAYS OFF IT IS THE GUIDE'S CALL — broadcast §6.9, *"never show
+     * the runner's private prompts or the guide's callouts as on-screen text"*. It is not on this
+     * frame to print (`call.said` is rowed `guide`) and the line below deliberately says only
+     * that they spoke, which is the fact the clock already made public. Everything here is
+     * something the whole room watched happen.
+     */
+    DEBRIEF: () => {
+      const e = frame.expedition || {};
+      const runner = nameOf(frame.pair && frame.pair.runner);
+      const guide = nameOf(frame.pair && frame.pair.guide);
+      const happened = {
+        taken: '<span class="bad">The Hunter had them</span>',
+        lit: '<span class="clear">The camera came on</span>',
+        held: 'They held at the door',
+      }[e.outcome] || 'Nothing aired';
+      const cams = frame.cameras || {};
+      return '<div class="big">Talk.</div>'
+        + '<dl class="facts">'
+        + '<dt>Wing</dt><dd>' + esc(wing()) + '</dd>'
+        + '<dt>Ran</dt><dd>' + esc(runner) + '</dd>'
+        + '<dt>Guided</dt><dd>' + esc(guide) + '</dd>'
+        + '<dt>Outcome</dt><dd>' + happened + '</dd>'
+        + '<dt>Cameras</dt><dd>' + (cams.unlocked || 0) + ' of ' + (cams.needed || 0) + ' lit</dd>'
+        + '<dt>Incidents</dt><dd>' + ((frame.incident || {}).alarms || 0) + ' this season</dd>'
+        + '</dl>'
+        + '<div class="sub">'
+        + esc(guide === '—' ? 'Out loud, to the room.'
+          : guide + ' called it out loud, and what they said is not written down anywhere.')
+        + '</div>';
+    },
     RECKONING: () => {
       const n = frame.nominations || [];
       if (!n.length) return big('Nominate, or don\'t.', 'Once each. Three stand at most, and every one buys the table fifteen seconds.');

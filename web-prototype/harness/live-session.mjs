@@ -29,6 +29,7 @@ import { PHASE, SECONDS, orderFor, EPISODE_CAP, reckoningSeconds, RECKONING_CAP 
 import { OUTCOME } from '../src/party/win.js';
 import { ROOMS } from '../src/party/coverage.js';
 import { NO_ONE } from '../src/party/vote.js';
+import { applyTake, applyEviction } from '../src/party/taken.js';
 import { audienceFor } from '../net/party/entitle.js';
 
 let pass = 0, fail = 0;
@@ -547,6 +548,79 @@ const R = play({ taps: engaged });
     strip(a) === strip(b), `${a.s.log.all().length} entries, byte-identical`);
   t('L11 control · a different cast seed does not', strip(a) !== strip(c),
     'so L11 is determinism rather than a constant game');
+}
+
+// ---------------------------------------------------------------- L16 · how somebody left
+/**
+ * 🚨 **THE TWO VISIBLE CAUSES HAD COLLAPSED INTO ONE, AND THE TELEVISION SAID SO IN WORDS.**
+ *
+ * Round §4 airs the casualty *"by which of the two visible causes (`TAKEN` / `EXECUTED`)"* —
+ * both were watched live, so hiding the cause would be a lie while hiding the alignment is not.
+ * `resolveVote` called `applyTake` for an execution and filtered the `player.taken` EVENT back out
+ * of the log, which is right about the log and wrong about the row: `Object.assign(victim, player)`
+ * copies `taken: true` onto the public frame. So every executed player read `{alive:false,
+ * taken:true}`, `show-tv.html:155` rendered `✖ taken`, `captions.js:131` put a `✕` on the
+ * nameplate, and the `⚒ evicted` branch beside them had never once been reached.
+ */
+{
+  const probe = play({ taps: engaged });
+  const log = probe.s.log.all();
+  const executed = new Set(log.filter((e) => e.type === 'player.executed').map((e) => e.data.id));
+  const taken = new Set(log.filter((e) => e.type === 'player.taken').map((e) => e.data.id));
+  const tv = probe.tape.get('tv');
+
+  t('L16 arm · the show executed somebody, so there is a row to read',
+    executed.size > 0, `${executed.size} executed · ${taken.size} taken by the Hunter`);
+
+  const mislabelled = tv.flatMap((f) => (f.players || [])
+    .filter((p) => !p.alive && p.taken && executed.has(p.id) && !taken.has(p.id))
+    .map((p) => `${f.phase}:${p.id}`));
+  t('L16 · an executed player\'s public row does not claim the Hunter took them',
+    mislabelled.length === 0, mislabelled.slice(0, 3).join(', ') || `${tv.length} frames swept`);
+
+  t('L16b · and the flag still means what it says — the rows the matrix rows it for are untouched',
+    tv.some((f) => (f.players || []).some((p) => p.taken === true)) || taken.size === 0,
+    taken.size ? 'a Hunter take still sets it' : 'no take in this seed to check against');
+
+  // 🚨 THE CONTROL IS THE FUNCTION THE BUG CALLED, RUN ON THE VERY ROW IT WAS CALLED ON.
+  const victimId = [...executed][0];
+  const row = { id: victimId, seat: 0, alive: true, taken: false, plate: 'undeclared' };
+  t('L16 control · `applyTake` on that exact row sets the flag, which is how the label got there',
+    applyTake(row).player.taken === true && applyEviction(row).player.taken === false,
+    'applyTake → taken:true · applyEviction → taken:false');
+}
+
+// ---------------------------------------------------------------- L17 · a nomination is an episode's
+/**
+ * `onEnter[RECKONING]` was the ONLY place `state.nominations` was cleared, so from the moment one
+ * reckoning closed until the next one opened — the vote, the execution, the verdict, and then the
+ * whole of the next episode's casting, expedition, recap and debrief — the previous episode's
+ * nominations sat on every frame. `show-tv.html`'s `votedTag` renders them in every phase but
+ * CASTING and VOTE, so the television printed "◆ on the block" beside a living player, right
+ * through the Debrief, for an accusation the table had already voted down an episode ago.
+ */
+{
+  const probe = play({ taps: engaged });
+  const tv = probe.tape.get('tv');
+  const BEFORE = [PHASE.PREMIERE, PHASE.CASTING, PHASE.EXPEDITION, PHASE.RECAP, PHASE.DEBRIEF];
+  const stale = tv.filter((f) => BEFORE.includes(f.phase) && (f.nominations || []).length);
+  t('L17 · no frame before an episode\'s reckoning carries a nomination',
+    stale.length === 0,
+    stale.length ? `ep ${stale[0].episode} ${stale[0].phase}: ${JSON.stringify(stale[0].nominations)}`
+      : `${tv.filter((f) => BEFORE.includes(f.phase)).length} pre-reckoning frames swept`);
+
+  const standing = tv.filter((f) => (f.nominations || []).length);
+  t('L17b arm · and the frames that SHOULD carry one do — this is not an empty sweep',
+    standing.length > 0 && standing.every((f) => [PHASE.RECKONING, PHASE.VOTE, PHASE.EXECUTION, PHASE.VERDICT].includes(f.phase)),
+    `${standing.length} frames carry a block, in ${[...new Set(standing.map((f) => f.phase))].join('/')}`);
+
+  // The control: there was something to inherit. A show where nobody was ever nominated after
+  // episode 1 would pass L17 by having nothing to leak.
+  const noms = probe.s.log.all().filter((e) => e.type === 'nom.made');
+  const eps = new Set(tv.filter((f) => (f.nominations || []).length).map((f) => f.episode));
+  t('L17 control · more than one episode nominated somebody, so a stale list had somewhere to go',
+    noms.length > 1 && eps.size > 1,
+    `${noms.length} nominations across episodes {${[...eps].sort().join(',')}}`);
 }
 
 // ---------------------------------------------------------------- L12 · both endings occur

@@ -21,7 +21,7 @@ import { project } from '../../net/party/entitle.js';
 import { makeEvent, VIS } from './events.js';
 import { createLog, visibleTo } from './log.js';
 import { hunterVisibleToGuide, ROOMS } from './coverage.js';
-import { applyTake, resolveContact, MODE, PLATE } from './taken.js';
+import { applyTake, applyEviction, resolveContact, MODE, PLATE } from './taken.js';
 import { tallyCasting } from './ballot.js';
 import { tallyVote, executioner, NO_ONE } from './vote.js';
 import { foldWin, OUTCOME } from './win.js';
@@ -281,10 +281,13 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
         setPhase('EXECUTION');
         const victim = state.players.find((p) => p.id === result.executed);
         const swinger = executioner({ living, nominations: state.nominations }, result.executed, takenThisEpisode);
-        const { player, events } = applyTake(victim);
+        // An execution is not a take — see `taken.js`'s `applyEviction`. `applyTake` here copied
+        // `taken: true` onto the row, so the stub room produced the same mislabelled frame the
+        // live session did.
+        const { player, events } = applyEviction(victim);
         Object.assign(victim, player);
         record(makeEvent('player.executed', VIS.PUBLIC, { id: victim.id, seat: victim.seat, executioner: swinger }));
-        for (const e of events.filter((e) => e.type !== 'player.taken')) record(makeEvent(e.type, e.vis, e.data));
+        for (const e of events) record(makeEvent(e.type, e.vis, e.data));
       }
       setPhase('VERDICT');
     }
