@@ -1,22 +1,44 @@
 # Run Robot Run — the party-mode gates, on every push and pull request.
 #
-# ⚠️ IT INSTALLS NOW, AND THE REASON IS ONE ASSERTION.
-# This workflow deliberately had no `npm install` for as long as every party module was pure —
-# no THREE, no DOM, no engine — and every gate was bare node against them. That property still
-# holds for twenty-two of the twenty-three gates and must keep holding: `src/party/*` runs in a
-# worker, in bare node and on a phone, which is the whole reason `party-sim` can play a thousand
-# matches and `party-isolation` can answer a question about a filter without a deploy.
+# ⚠️ THE INSTALL IS NOT OPTIONAL ANY MORE, AND THE NUMBER IS SEVEN.
+# This workflow deliberately had no `npm install` for as long as every party module was pure — no
+# THREE, no DOM, no engine — and every gate was bare node against them. That was true of 22 of 23
+# gates when this header was written. **It is now 24 of 31: `dark-run`, `expedition-wire`,
+# `premiere-stage`, `engine-take`, `door-hop`, `wing-draw` and `drivable-frame` reach THREE on
+# disk** (measured by walking each gate's transitive relative imports for bare specifiers).
 #
-# `expedition-wire` is the exception, and it earns it. E1 holds the party mode's six room names
-# against `src/game/spaces.js` — the file that knows the real floor plan and imports THREE. It
-# was written because the mode had spent months computing coverage, camera rosters and captions
-# for a house with a `hall` and a `cellar` in it, neither of which the mansion has. Nothing could
-# catch that without the engine on disk. An install is 19 packages and about three seconds; a
-# hidden-role game grading itself against an imaginary building is forever.
+# The purity that remains is still worth defending and is still the reason `party-sim` can play a
+# thousand matches and `party-isolation` can answer a question about a filter without a deploy:
+# `src/party/*` runs in a worker, in bare node and on a phone. But the old header argued for a
+# *single* exception in a file that now has seven, and a header that describes a previous version
+# of its own file is the exact defect class this project polices in source. If an eighth gate
+# reaches for the engine, edit this paragraph in the same commit.
 #
-# That matters because a gate nobody runs is a comment. `harness/party-isolation.mjs` is the one
-# whose red should block a merge outright — a phone receiving another player's role is a
-# product-ending bug — and it can only do that if it actually runs on every push.
+# `expedition-wire` was the first and still earns it best: E1 holds the party mode's six room names
+# against `src/game/spaces.js` — the file that knows the real floor plan and imports THREE. It was
+# written because the mode had spent months computing coverage, camera rosters and captions for a
+# house with a `hall` and a `cellar` in it, neither of which the mansion has. Nothing could catch
+# that without the engine on disk.
+#
+# 🚨 **AND CI RAN WITHOUT A BROWSER, WHICH COST 29 ASSERTIONS SILENTLY.** `shot-solver` defaults
+# `RRR_CHROME` to a path that exists on the author's machine and on no runner. Without a browser it
+# goes from **95 passed** to **66 passed, 0 failed, 2 skipped** and the job still exits 0 —
+# 29 assertions gone, measured here with `RRR_CHROME=/nonexistent` — and the two lost
+# arms (H12, H13) are the only place the television is laid out in a real browser rather than
+# reasoned about from a table of sizes. **A SKIP IS NEVER A PASS** is this project's own doctrine,
+# so `require a browser` below hard-fails the job when there is no Chromium, rather than letting
+# the suite report a smaller, greener number than it earned.
+#
+# 🚨 **AND CI NEVER BUILT.** `npm run build` is `lint-glsl && vite build`; this workflow ran only
+# the lint half, so nothing checked `index.html`'s whole import graph and `dead-import`'s bundle
+# argument rested on a build nobody had proved buildable. `vite build` is six seconds.
+#
+# `npm run gates:party` is now `node harness/gates.mjs`, which spawns every gate, collects every
+# exit code and prints one suite total. Under the old `&&` chain a red gate blacked out every gate
+# behind it and the job's tail reported a number for a suite that had stopped — twice that number
+# reached a review. `harness/party-isolation.mjs` is the one whose red should block a merge outright
+# — a phone receiving another player's role is a product-ending bug — and it is fourth in the list,
+# which under `&&` was the difference between a truthful log and a confident lie.
 #
 # Node 22 is required, not preferred: `harness/party-sockets.mjs` connects nine real sockets with
 # the global `WebSocket` client, which is stable from 22.
@@ -47,11 +69,44 @@ jobs:
       - name: install
         run: npm ci --no-audit --no-fund
 
-      # The project's own build gate. A backtick inside a `/* glsl */` template literal
-      # terminates the JS string and takes the whole build down — HANDOFF.md records this
-      # happening five times in three days, so it runs first and cheaply.
-      - name: lint glsl
-        run: npm run lint:glsl
+      # Playwright is already a devDependency; only the browser binary is missing on the runner.
+      - name: install chromium
+        run: npx playwright install --with-deps chromium
+
+      # 🚨 The doctrine, enforced: no browser is a FAILURE, not a quieter suite. `shot-solver`
+      # reads `RRR_CHROME`, so resolve Playwright's own binary and refuse to continue without it.
+      - name: require a browser
+        run: |
+          BROWSER="$(node -e "import('playwright').then(p => console.log(p.chromium.executablePath()))")"
+          if [ -z "$BROWSER" ] || [ ! -x "$BROWSER" ]; then
+            echo "::error::no Chromium on this runner — shot-solver H12/H13 would SKIP and the job would still be green. A SKIP is never a PASS."
+            exit 1
+          fi
+          echo "RRR_CHROME=$BROWSER" >> "$GITHUB_ENV"
+          echo "browser: $BROWSER"
+
+      # No machine belongs in shipped code. `src/` and `net/` are clean today; 18 doc and tooling
+      # files carry `C:\Users\John` and are deliberately not in scope — this keeps the two trees
+      # that ship from joining them, which is cheaper than cleaning them up later. `\\+` because the
+      # repo holds both spellings: `C:\Users\John` in prose and `C:\\Users\\John` inside a JS string.
+      # The directory check is not decoration — a grep over a path that does not exist prints an
+      # error to stderr and still exits the step green, which is the false-green class this file
+      # was rewritten to remove.
+      - name: no absolute machine paths in src or net
+        run: |
+          test -d src && test -d net || { echo "::error::src/ or net/ is missing — this check would have passed on nothing"; exit 1; }
+          if grep -rInE 'C:\\+Users' src net; then
+            echo "::error::an absolute machine path reached src/ or net/ — those trees ship"
+            exit 1
+          fi
+          echo "src/ and net/ carry no absolute machine paths"
+
+      # The project's own build gate, both halves. A backtick inside a `/* glsl */` template
+      # literal terminates the JS string and takes the whole build down — HANDOFF.md records this
+      # happening five times in three days — and `vite build` is the only thing that walks
+      # `index.html`'s entire graph.
+      - name: build
+        run: npm run build
 
       - name: party gates
         run: npm run gates:party
