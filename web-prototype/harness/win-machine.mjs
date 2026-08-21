@@ -10,6 +10,7 @@
  * the same two events in both orders and requires the winner to swap.
  */
 
+import { readFileSync } from 'node:fs';
 import { foldWin, WIN_TARGETS, OUTCOME, TICK_ORDER, camerasNeeded } from '../src/party/win.js';
 import { dealCast, COMPOSITION } from '../src/party/cast.js';
 import { EPISODE_CAP } from '../src/party/phases.js';
@@ -126,6 +127,16 @@ const fold = (evts, count = 8, alignmentOf = align8) => foldWin(mk(evts), { coun
   t('W10 control · the number that used to reach the frame was wrong at EVERY player count',
     agree.length === 0,
     counts.map((n) => `${n}p ${SHIPPED[n]} vs ${WIN_TARGETS[n].cameraTarget}`).join(' · '));
+  // 🚨 THE FOURTH COPY, WHICH WAS IN THE 3D HALF. `views/expedition.js` painted the camera wall
+  // from a literal `3` while the television beside it read `WIN_TARGETS`. It asks now.
+  const expSrc = readFileSync(new URL('../src/views/expedition.js', import.meta.url), 'utf8');
+  const expBody = expSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  t('W10c · the expedition view asks for the target rather than keeping its own',
+    /camerasNeeded/.test(expBody) && !/needed:\s*\d/.test(expBody),
+    'no camera denominator written down in the 3D half');
+  t('W10c control · the scan would notice a literal coming back',
+    /needed:\s*\d/.test('cameras: { unlocked: camerasUnlocked, needed: 3 },'));
+
   // The display was seeded at 1, so it read `needed/needed` after `SHIPPED[n] - 1` cameras were
   // lit, while the season could not be made until `cameraTarget` of them were. The gap is how
   // many episodes the scoreboard spent claiming a win that had not happened.

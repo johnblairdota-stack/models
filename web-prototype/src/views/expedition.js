@@ -19,6 +19,7 @@ import { captionFor } from '../party/captions.js';
 import { createRig } from '../game/director-rig.js';
 import { createBroadcast } from '../ui/broadcast.js';
 import { ROOMS } from '../party/coverage.js';
+import { camerasNeeded } from '../party/win.js';
 
 /**
  * 🏚️ **PARTY.EXPEDITION — the ninety seconds in the house, on the television.**
@@ -193,7 +194,12 @@ export default async function view(args = {}) {
   const state = {
     episode: +(qs.get('ep') ?? 1),
     pair: { runner: 'runner', guide: 'guide' },
-    cameras: { unlocked: camerasUnlocked, needed: 3 },
+    // 🚨 THE DENOMINATOR IS ASKED FOR, NEVER WRITTEN DOWN. This was a literal `3` — a fourth copy
+    // of the camera objective, driving the camera wall `src/ui/broadcast.js` paints, while the
+    // television next to it read a different number. `win.js` owns the target; the count is not on
+    // the sim's brief (which is four fields on purpose), so this uses the flagship eight-player
+    // row, which is also what `?cams` defaults against. `win-machine` W10c keeps the literal out.
+    cameras: { unlocked: camerasUnlocked, needed: camerasNeeded(8) },
     players: [], expedition: { room: wing, outcome: null },
   };
 
