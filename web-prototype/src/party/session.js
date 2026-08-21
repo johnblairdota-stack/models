@@ -35,7 +35,7 @@ import { makeEvent, VIS } from './events.js';
 import { createLog, visibleTo } from './log.js';
 import { ROOMS, hunterVisibleToGuide, camerasLive } from './coverage.js';
 import { guideSight } from './darkrun.js';
-import { HOUSE } from './houseplan.js';
+import { HOUSE, WINGS } from './houseplan.js';
 import { applyTake, applyEviction, resolveContact, MODE, PLATE } from './taken.js';
 import { cardFor } from './roles.js';
 import { tallyCasting, refuse as refuseChair } from './ballot.js';
@@ -416,8 +416,19 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
      * instead — which is where it was until a browser render showed the phone asking who should
      * go "into the house" — turns every casting debate into a personality contest.
      */
+    /**
+     * 🚨 **THE WING IS DRAWN FROM `WINGS`, NOT FROM `ROOMS`, AND THE DIFFERENCE IS ONE EPISODE IN
+     * SIX.** `ROOMS` is every room in the house; the chapel is in it and has no open connector, so
+     * a sixth of all expeditions announced an objective the runner cannot walk to — measured, 40
+     * of 40 chapel runs ended `held` with the robot parked ~4 m short against the gallery wall,
+     * and `resolveExpedition` graded every one of them as a hold the guide earned.
+     *
+     * ⚠️ `WINGS` IS DERIVED FROM THE HOUSE'S CONNECTIVITY BY SEARCH, NOT A LIST WITH THE CHAPEL
+     * TAKEN OUT OF IT — see `houseplan.js`, and `wing-draw` W1/W2 for the pin to the built house.
+     * A generated plan with a different dead end is answered by the same BFS.
+     */
     [PHASE.CASTING]: () => {
-      state.expedition = { room: ROOMS[pick(ROOMS.length, worldSeed, 'target', state.episode)], outcome: null };
+      state.expedition = { room: WINGS[pick(WINGS.length, worldSeed, 'target', state.episode)], outcome: null };
       state.call = { by: null, said: null };
       record(makeEvent('expedition.announced', VIS.PUBLIC, { room: state.expedition.room, episode: state.episode }));
     },

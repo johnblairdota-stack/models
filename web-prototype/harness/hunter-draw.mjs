@@ -40,6 +40,12 @@ import { readFileSync } from 'node:fs';
 import { createSession, CALL, MOVE_CHOICE, hash, pick } from '../src/party/session.js';
 import { PHASE } from '../src/party/phases.js';
 import { ROOMS } from '../src/party/coverage.js';
+/**
+ * ⚠️ THE WING IS DRAWN FROM `WINGS`, NOT FROM `ROOMS`, AND THIS FILE HAS TO KNOW. The chapel has
+ * no open connector, so `session.js` stopped offering it — see `wing-draw`. The Hunter's room is
+ * still every room in the house: it can breach `p.chapel` and the runner cannot.
+ */
+import { WINGS } from '../src/party/houseplan.js';
 
 let pass = 0, fail = 0;
 const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' · ' + d : ''}`); } else { fail++; console.log(`  FAIL ${n}${d ? ' · ' + d : ''}`); } return c; };
@@ -145,9 +151,9 @@ const said = rows.filter((r) => r.said != null);
     `${rows.length} expeditions from createSession · ${said.length} with a call`);
   const wings = new Set(rows.map((r) => r.wing));
   const dens = new Set(rows.map((r) => r.hunterRoom));
-  t('D0b arm · and both draws reach every one of the six rooms',
-    wings.size === ROOMS.length && dens.size === ROOMS.length,
-    `wings ${wings.size}/${ROOMS.length} · hunter rooms ${dens.size}/${ROOMS.length}`);
+  t('D0b arm · and both draws reach every room they are allowed to — five wings, six dens',
+    wings.size === WINGS.length && dens.size === ROOMS.length,
+    `wings ${wings.size}/${WINGS.length} (${[...wings].sort().join(',')}) · hunter rooms ${dens.size}/${ROOMS.length}`);
 }
 
 // ---------------------------------------------------------------- D1 · the Hunter is there
@@ -336,7 +342,7 @@ const said = rows.filter((r) => r.said != null);
    * measured in metres — the unit a player could notice.
    */
   const DRAWS = [
-    ['wing        pick(6,   …,target,ep)', 6, 'target', 6, (v) => v],
+    ['wing        pick(5,   …,target,ep)', 5, 'target', 5, (v) => v],
     ['hunter room pick(6,   …,hunter,ep)', 6, 'hunter', 6, (v) => v],
     ['prowl       pick(4,   …,prowl, ep)', 4, 'prowl', 4, (v) => v],
     ['throttle GO pick(3,   …,throttle,ep)', 3, 'throttle', 3, (v) => v],
@@ -344,8 +350,8 @@ const said = rows.filter((r) => r.said != null);
     ['wall        pick(800, …,wall,  ep)', 800, 'wall', 8, (v) => Math.floor(v / 100)],
   ];
 
-  /** One table of raw draws per pick implementation — built once, read by every predicate. */
-  const tableFor = (pk) => DRAWS.map(([, n, salt]) => {
+  /** One column of raw draws: `[worldSeed][episode] -> bucket`. */
+  const column = (pk, n, salt) => {
     const col = new Array(SEEDS + 2);
     for (let w = 1; w <= SEEDS + 1; w++) {
       const row = new Array(EPS.length + 1);
@@ -353,7 +359,10 @@ const said = rows.filter((r) => r.said != null);
       col[w] = row;
     }
     return col;
-  });
+  };
+
+  /** One table of raw draws per pick implementation — built once, read by every predicate. */
+  const tableFor = (pk) => DRAWS.map(([, n, salt]) => column(pk, n, salt));
 
   const tvFromUniform = (h) => {
     const tot = h.reduce((a, b) => a + b, 0) || 1, e = 1 / h.length;
@@ -445,7 +454,7 @@ const said = rows.filter((r) => r.said != null);
   // ---- D9 arm. The imported draw IS the draw the shows played.
   {
     const mismatch = rows.filter((r) =>
-      ROOMS[pick(ROOMS.length, r.seed * 7, 'target', r.ep)] !== r.wing
+      WINGS[pick(WINGS.length, r.seed * 7, 'target', r.ep)] !== r.wing
       || ROOMS[pick(ROOMS.length, r.seed * 7, 'hunter', r.ep)] !== r.hunterRoom);
     t('D9 arm · the imported `pick` reproduces every wing and Hunter room the real sessions logged',
       rows.length > 200 && mismatch.length === 0,
@@ -516,10 +525,33 @@ const said = rows.filter((r) => r.said != null);
     t('D9b control · and the wing can never move by exactly three rooms — D9b goes red',
       zeroed.length > 0,
       `${zeroed.length} of ${sixes.length} six-room steps have an offset that occurs 0 times in ${SEEDS}`);
-    const p = sealedFromPublic(bug);
+    /**
+     * 🚨 **D10's CONTROL IS THE BUG AS IT SHIPPED, WHICH MEANS THE POOL IT SHIPPED WITH TOO — AND
+     * THE DIFFERENCE BETWEEN THE TWO POOLS IS ITSELF A FINDING.**
+     *
+     * The wing used to be drawn from all six `ROOMS`; it is drawn from the five reachable `WINGS`
+     * now (see `wing-draw`), and that narrowing turns out to close this leak on its own. Measured
+     * over the same 80,000 seeds, with the shipped `(hash >>> 8) % n` in place: with BOTH draws at
+     * modulus 6 the sealed Hunter room falls out of a three-wing public key at **25.0%**, rising to
+     * **31.6%** on a six-wing key; with the wing at modulus 5 and the Hunter still at 6 the same
+     * predictor sees **16.6%**, which is chance. The serial correlation is still there — D9 and D9b
+     * are red on it and do not depend on the pool at all — but it only becomes a leak between two
+     * sequences when the two moduli agree.
+     *
+     * So the control is built at the historical arity rather than at today's. Weakening it to
+     * whatever is still red under the new pool would be adjusting the instrument to the result,
+     * and the six-room pair is what the bug actually shipped as.
+     */
+    const asShipped = [column(shifted, ROOMS.length, 'target'), column(shifted, ROOMS.length, 'hunter')];
+    const p = sealedFromPublic(asShipped);
+    const nowPooled = sealedFromPublic(bug);
     t('D10 control · and the sealed Hunter room falls out of the public wings — D10 goes red',
       p.rate > PREDICT_MAX,
       `${(p.rate * 100).toFixed(2)}% on ${p.tot} held-out episodes against a ${pct(1, 6)} guess`);
+    t('D10b control · and narrowing the wing pool to five closes that leak on its own',
+      nowPooled.rate <= PREDICT_MAX && p.rate > nowPooled.rate + 0.05,
+      `same bug, wing over 6 rooms ${(p.rate * 100).toFixed(2)}% vs wing over ${WINGS.length} wings `
+      + `${(nowPooled.rate * 100).toFixed(2)}% — a leak between two sequences needs the moduli to agree`);
     const w = wallStickiness(bug);
     t('D11 control · and the guide\'s blindness this episode predicts it next — D11 goes red',
       Math.abs(w.same - w.indep) > STICK_MAX,
