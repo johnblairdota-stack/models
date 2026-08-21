@@ -569,7 +569,10 @@ const engaged = (s) => {
  * as exactly that: *"ONE blow. Audio hangs off this."* One of the five was subscribed.
  *
  * The hook names are read out of the AI, so a sixth arriving there is a red line here rather than
- * a tell nobody hears.
+ * a tell nobody hears — and a sixth has since arrived (`onStagger`, which was being fired at an
+ * undeclared field). It is the one hook this view is allowed not to subscribe, because the party
+ * runner has no way to cause it; E9a derives that exemption from the view's own source rather
+ * than taking it on trust.
  */
 {
   const ai = readFileSync(new URL('../src/game/hunter-ai.js', import.meta.url), 'utf8');
@@ -577,10 +580,39 @@ const engaged = (s) => {
   const view = readFileSync(new URL('../src/views/expedition.js', import.meta.url), 'utf8');
   const wired = (src) => hooks.filter((h) => new RegExp(`hunter\\.${h}\\s*=`).test(src));
 
+  /**
+   * ⚠️ **ONE HOOK IS EXCUSED, AND THE EXCUSE IS AN ASSERTION RATHER THAN A LIST ENTRY.**
+   *
+   * `onStagger` fires when the player's damage breaks the Hunter off — `stagger()` calls it, and
+   * `stagger()` is only ever reached through `weapons.hitBody` → `body.hunter?.stagger(...)`. The
+   * party runner has NO WEAPON: `wing-draw` W5 asserts there is no `player.attack`, no sledge, no
+   * `interact` and no ACTION button anywhere in this view, and the phone's control scheme (§3.1)
+   * has one stick and one contextual button that is not built. So there is nothing for the view
+   * to subscribe to, and a subscription would be a tell that can never fire.
+   *
+   * The exemption is checked, not asserted: E9a re-derives it from THIS view's source every run,
+   * so the day the runner gets a verb the hook stops being excused and E9 goes red. That is the
+   * same shape as `SILENT_STATES` at the top of this file, for the same reason — an absence has to
+   * carry its own argument or it becomes a place to hide a missing wire. `views/game.js`, whose
+   * player does shoot, subscribes it (`engine-take` K7).
+   */
+  const CAN_DAMAGE_HUNTER = /weapons\.(fire|melee)\(|\.stagger\(|player\.attack\b|player\.sledge\.(?!forget)/;
+  const armed = CAN_DAMAGE_HUNTER.test(view);
+  const EXCUSED = armed ? [] : ['onStagger'];
+
   t('E9 arm · the AI\'s hooks were read out of the AI', hooks.length >= 5, hooks.join(' '));
-  const unwired = hooks.filter((h) => !wired(view).includes(h));
-  t('E9 · every tell the Hunter authors reaches the television',
-    unwired.length === 0, unwired.length ? `no subscriber for ${unwired.join(', ')}` : hooks.join(' · '));
+  t('E9a arm · and the runner in THIS view has no way to damage the Hunter, so one hook cannot fire',
+    !armed && EXCUSED.length === 1,
+    'no weapons.fire, no melee, no direct stagger call — `onStagger` is unreachable here by construction');
+  t('E9a control · the same scan finds the verb in the mode that has one',
+    CAN_DAMAGE_HUNTER.test(readFileSync(new URL('../src/views/game.js', import.meta.url), 'utf8')),
+    'views/game.js is armed, which is why it is the file that subscribes onStagger');
+
+  const unwired = hooks.filter((h) => !wired(view).includes(h) && !EXCUSED.includes(h));
+  t('E9 · every tell the Hunter authors reaches the television, bar the one it cannot cause',
+    unwired.length === 0,
+    unwired.length ? `no subscriber for ${unwired.join(', ')}`
+      : `${hooks.filter((h) => !EXCUSED.includes(h)).join(' · ')} · excused: ${EXCUSED.join(', ') || 'none'}`);
 
   // The same scanner on the survival view, which subscribes to four of the five. If it reported
   // five there, it would be matching mentions rather than subscriptions.
