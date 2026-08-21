@@ -44,7 +44,19 @@ export const MATRIX = [
   ['phase',                    'all'],
   ['tick',                     'all'],
   ['episode',                  'all'],
-  ['worldSeed',                'all'],   // public exactly as today (run.js L43-48)
+  // 🚨 NO `worldSeed` ROW, AND NO `worldSeed` ON ANY FRAME. It was rowed `all` on run.js's
+  // precedent, where the seed is public because the house is the same for everyone and no agent
+  // hides in it. In this mode `pick(6, worldSeed, 'hunter', episode)` IS the Hunter's room, and
+  // `episode` is rowed `all` two lines up — so two public fields COMPUTED a SEALED one, and a
+  // spectator with devtools could read hunter.placed for every episode of the game in advance.
+  // Reconstructed at 267/267 against a 16.7% chance baseline before this row came off.
+  //
+  // ⚠️ THIS IS A CLASS THE LEAK WALKER CANNOT SEE. `party-isolation` walks a frame for sealed
+  // VALUES; nothing was leaking a value. The seed that GENERATES the secret was the leak, which
+  // is why `wire-parity` P4b had already flagged worldSeed as a frame field no screen renders
+  // and it read as harmless surplus. A field nobody renders is not harmless when it is an input
+  // to the draw. The mansion still gets the seed — through `briefFor`, to the sim socket, which
+  // is a different audience with a different contract.
   // 'castSeed'                          NO ROW. See src/party/cast.js's header.
 
   // ---- the shooting clock. The countdown on the television and the one on every phone are the

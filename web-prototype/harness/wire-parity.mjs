@@ -614,12 +614,19 @@ function consumesFrom(file) {
  *   tick        the phase counter. It is what makes two frames distinguishable when nothing else
  *               changed, which is what `party-isolation` I4's byte-identical comparison and every
  *               reconnect test lean on. Nothing renders it and nothing should.
- *   worldSeed   public exactly as today (`run.js` L43-48) so a game can be replayed from four
- *               printed values. `show.mjs`'s `/report` is where it is meant to be read.
+ * `worldSeed` used to sit on this list on run.js's precedent — public so a show could be replayed
+ * from four printed values, read from `/report` rather than off a screen. It is off the frame
+ * entirely now, and the entry is gone, because P4b's arm refused to let the exemption outlive it.
+ *
+ * 🚨 AND THE EXEMPTION WAS THE WRONG SHAPE, NOT JUST STALE. "On the wire, rendered nowhere" is a
+ * safe category for `tick` and was not one for a SEED. `pick(6, worldSeed, 'hunter', episode)` is
+ * the Hunter's room and `episode` is rowed `all`, so two public fields COMPUTED a sealed one —
+ * measured at 100% reconstruction against a 16.7% baseline by `party-isolation` I11's control.
+ * A field nobody renders is not harmless when it is an input to a draw. Anything added here that
+ * seeds anything belongs in the entitlement matrix's audience argument, not in this list.
  */
 const ON_THE_WIRE_UNRENDERED = new Map([
   ['tick', 'the phase counter — frame identity for the isolation and reconnect gates, never a pixel'],
-  ['worldSeed', 'public by run.js L43-48 so a show can be replayed; read from /report, not from a screen'],
 ]);
 
 /** Property names that belong to JavaScript rather than to the frame — see P4's loop. */

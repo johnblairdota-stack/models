@@ -94,7 +94,7 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
   /** The full frame for a socket, before projection. `you` is that socket's own deal view. */
   function fullFor(sock) {
     const base = {
-      phase: state.phase, tick: state.tick, episode: state.episode, worldSeed: state.worldSeed,
+      phase: state.phase, tick: state.tick, episode: state.episode,
       players: state.players.map((p) => ({ ...p })),
       pair: { ...state.pair },
       cameras: { ...state.cameras },

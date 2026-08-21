@@ -295,7 +295,7 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
 
   function fullFor(sock) {
     const base = {
-      phase: state.phase, tick: state.tick, episode: state.episode, worldSeed: state.worldSeed,
+      phase: state.phase, tick: state.tick, episode: state.episode,
       clock: { ...state.clock },
       players: state.players.map((p) => ({ ...p })),
       pair: { ...state.pair },

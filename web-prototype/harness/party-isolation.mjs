@@ -38,6 +38,7 @@
  */
 
 import { createRoom } from '../src/party/room.js';
+import { createSession, pick } from '../src/party/session.js';
 import { audienceFor, entitled, project } from '../net/party/entitle.js';
 import { ROOMS } from '../src/party/coverage.js';
 import { SCRIPT } from '../src/party/roles.js';
@@ -496,6 +497,45 @@ if (LEAK === 0) {
     t(`I9.${n} control · leak ${n} turns exactly ${want.join('+')} red`, okCtl,
       red.length ? `red: ${red.join(', ')}` : 'NOTHING WENT RED — the gate is blind');
   }
+}
+
+// ---------------------------------------------------------------- I11 · derivable secrets
+/**
+ * 🚨 A LEAK THE WALKER CANNOT SEE. I1-I10 ask whether a sealed VALUE reached a socket. This asks
+ * whether public values COMPUTE one. `worldSeed` was rowed `all` on run.js's precedent — where the
+ * seed is public because the house is the same for everyone and nothing hides in it — while in this
+ * mode `pick(6, worldSeed, 'hunter', episode)` IS the Hunter's room and `episode` is public too.
+ * Two rowed fields reconstructed a SEALED one at 267/267 against a 16.7% baseline.
+ *
+ * The control is the row itself: put `worldSeed` back on the frame and this must go red.
+ */
+{
+  const seeds = [11, 12, 13, 14, 15, 16, 17, 18];
+  let hits = 0, tries = 0, sawSeed = false;
+  for (const worldSeed of seeds) {
+    const tape = new Map();
+    const s = createSession({ count: 8, castSeed: 3, worldSeed,
+      send: (id, f) => { if (!tape.has(id)) tape.set(id, []); tape.get(id).push(f); } });
+    s.start(0);
+    const frames = [...tape.entries()].filter(([id]) => id !== 'tv').flatMap(([, fs]) => fs);
+    if (!frames.length) throw new Error('I11 saw no player frames — the assertion would be vacuous');
+    if (frames.some((f) => 'worldSeed' in f)) sawSeed = true;
+    const f = frames[frames.length - 1];
+    // What an attacker holds: the frame's own public fields, and the shipped pick().
+    const seedOnWire = f && f.worldSeed;
+    for (let ep = 1; ep <= 5; ep++) {
+      tries += 1;
+      if (seedOnWire == null) continue;               // nothing to compute from
+      const guess = ROOMS[pick(ROOMS.length, seedOnWire, 'hunter', ep)];
+      const truth = ROOMS[pick(ROOMS.length, worldSeed, 'hunter', ep)];
+      if (guess === truth) hits += 1;
+    }
+  }
+  const rate = hits / tries;
+  t('I11 · no public frame field reconstructs the Hunter\'s sealed room',
+    rate <= 1 / ROOMS.length + 0.02, `${(rate * 100).toFixed(1)}% of ${tries} · chance ${(100 / ROOMS.length).toFixed(1)}%`);
+  t('I11b · and the seed the draw is made from is on no frame at all',
+    !sawSeed, sawSeed ? 'worldSeed is on a player frame' : 'absent from every frame');
 }
 
 console.log(`\nparty-isolation: ${pass} passed, ${fail} failed, ${skip} skipped`);
