@@ -37,6 +37,7 @@ import { ROOMS, hunterVisibleToGuide } from './coverage.js';
 import { guideSight } from './darkrun.js';
 import { HOUSE } from './houseplan.js';
 import { applyTake, applyEviction, resolveContact, MODE, PLATE } from './taken.js';
+import { cardFor } from './roles.js';
 import { tallyCasting, refuse as refuseChair } from './ballot.js';
 import { tallyVote, executioner, nominate as proposeNomination, reckoningClosed, NO_ONE } from './vote.js';
 import { foldWin, OUTCOME } from './win.js';
@@ -256,7 +257,7 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
     };
     if (state.tally) base.tally = { counts: { ...state.tally.counts }, threshold: state.tally.threshold, executed: state.tally.executed };
     if (!sock.isTV) {
-      base.you = { ...viewFor(deal, sock.playerId).you, acted: pending.acted.has(sock.playerId) };
+      base.you = { ...viewFor(deal, sock.playerId).you, acted: pending.acted.has(sock.playerId), ...card(sock.playerId) };
     }
     // 🚨 S3. The Hunter is on the guide's map only where a live camera watches AND the wall does
     // not hide it. Two independent honest-error sources, compounded — `darkrun.js`'s header.
@@ -264,6 +265,35 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
       base.flyover = sightForGuide();
     }
     return base;
+  }
+
+  /**
+   * 🚨 **WHAT THE ROLE CARD SAYS, AND IT USED TO SAY `focusPuller`.**
+   *
+   * `you.role` is an object key — `focusPuller`, `theStatic`, `methodActor` — and the phone
+   * rendered it raw, so a player read a variable name off their own card. Meanwhile `roles.js`'s
+   * `SCRIPT` has carried a display name and a one-line ability for every card since it was
+   * written and was imported exactly once in the whole product tree, in `reunion.js`, where the
+   * import was unused. No matrix row carried the line, so after reading their card a first-time
+   * player knew their team and nothing else, and all seven good cards said the identical thing.
+   *
+   * ⚠️ IT IS DERIVED FROM `viewFor`'s ANSWER, NEVER FROM THE DEAL. The Glitched is dealt a COVER
+   * and is *"not told this"* — so they get the cover's name and the cover's line, in full, and
+   * nothing on their phone can tell them apart from the real thing. Reading `deal.seats` here
+   * instead would be the two-channel bug `reunion-truth` U2 caught, rebuilt one field along.
+   *
+   * ⚠️ AND IT IS `self`, WHICH IS THE WHOLE OF WHY IT IS TWO ROWS RATHER THAN ONE. A line that
+   * says *"each episode, learn whether the Hunter noticed the runner by sight or by sound"* names
+   * a role as surely as the key does; on anyone else's frame it is an alignment tell.
+   *
+   * ⚠️ A CARD WHOSE HOLDER IS NOT `selfAware` CARRIES NO LINE — `roles.js`'s `cardFor` owns that
+   * rule and says why. The Static's line is the one thing their card exists to withhold.
+   *
+   * ⚠️ THIS IS THE CARD SAYING WHAT THE ROLE ALREADY IS. Nothing here makes an ability fire.
+   */
+  function card(playerId) {
+    const { name, line } = cardFor(viewFor(deal, playerId).you.role);
+    return { roleName: name, roleLine: line };
   }
 
   /** What the guide's screen shows, and the only place the Hunter's room can escape into a frame. */

@@ -22,7 +22,6 @@
  */
 
 import { EVIL, GOOD } from './cast.js';
-import { SCRIPT } from './roles.js';
 
 const byType = (log, type) => log.filter((e) => e.type === type);
 

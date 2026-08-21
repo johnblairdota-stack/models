@@ -74,7 +74,9 @@
   .plate .say{margin-left:auto;font-style:italic;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
   /* the card */
-  .role{font:700 30px/1.1 ui-sans-serif;margin-bottom:6px}
+  .role{font:700 34px/1.1 ui-sans-serif;margin-bottom:6px}
+  /* §2.3: "one line of rule text at 24 px". The card's own words, above the team sentence. */
+  .line{font:500 24px/1.35 ui-sans-serif;color:var(--ink);margin-bottom:14px}
   .align{font:600 12px/1 ui-sans-serif;letter-spacing:.24em;text-transform:uppercase;color:var(--dim)}
   .mates{margin-top:14px;border-top:1px solid var(--edge);padding-top:12px}
   .mates .m{display:flex;gap:8px;align-items:baseline;font-size:16px;margin-top:6px}
@@ -202,14 +204,26 @@
    * ⚠️ AND THE WORD IS SPELLED OUT, NEVER COLOUR ALONE — §2.3, and §6's accessibility rule. Red
    * text on a black card in a dark lounge is not a message, it is a hint.
    */
+  /**
+   * 🚨 THE CARD SAYS WHAT THE ROLE IS. It printed `you.role` raw, so players read `focusPuller`,
+   * `theStatic` and `methodActor` off their own cards — object keys, from a `SCRIPT` that has
+   * carried a display name and a one-line ability for every card since it was written and was
+   * imported once in the whole tree, unused. §2.3 wants *"one line of rule text at 24 px, the role
+   * name at 34 px, and the word GOOD or PRODUCTION spelled out"*; that is three fields and the
+   * page had one of them. `roleName` and `roleLine` are `self` rows — a line naming what you learn
+   * each episode names a role as surely as the key does.
+   *
+   * ⚠️ AND THE LINE IS ONLY THE LINE. Nothing here makes an ability fire; the card is a card.
+   */
   function showCard() {
     const you = (frame && frame.you) || {};
     const evil = you.alignment === 'evil';
-    $('cardRole').textContent = you.role || '—';
+    $('cardRole').textContent = you.roleName || you.role || '—';
     $('cardAlign').textContent = evil ? 'You are PRODUCTION' : 'You are GOOD';
-    $('cardSay').innerHTML = evil
+    const line = you.roleLine ? '<div class="line">' + esc(you.roleLine) + '</div>' : '';
+    $('cardSay').innerHTML = line + (evil
       ? '<span class="bad">You are Production.</span> Your job is to lose the show without ever being the reason.'
-      : 'Light the cameras. Nobody will tell you if you are right.';
+      : 'Light the cameras. Nobody will tell you if you are right.');
     const mates = $('cardMates');
     // The Production Panel is the one exception in the whole matrix, and it exists only here.
     if (evil && you.teammates.length) {

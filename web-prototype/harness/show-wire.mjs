@@ -31,7 +31,7 @@ import { MAX_PHONES } from '../net/party/lobby.mjs';
 import { PHASE } from '../src/party/phases.js';
 import { CALL, MOVE_CHOICE } from '../src/party/session.js';
 import { ROOMS } from '../src/party/coverage.js';
-import { SCRIPT } from '../src/party/roles.js';
+import { SCRIPT, cardFor } from '../src/party/roles.js';
 
 const PORT = 5195;
 let pass = 0, fail = 0;
@@ -226,6 +226,76 @@ t('X3 arm · the show played to the Reunion over real sockets',
     `${evilGotPanel} evil got one · ${goodGotPanel} good did`);
   t('X5 control · there WERE evil players, so X5b is not passing on an empty set',
     truth.evil.length >= 2, `${truth.evil.length} in Production`);
+}
+
+// ---------------------------------------------------------------- X16 · the card says the role
+/**
+ * 🚨 **THE CARD PRINTED AN OBJECT KEY.** `you.role` is `focusPuller` / `theStatic` /
+ * `methodActor` and the phone rendered it raw, while `roles.js`'s `SCRIPT` — a display name and
+ * a one-line ability per card — was imported exactly once in the whole product tree, in
+ * `reunion.js`, where the import was unused. No matrix row carried the line, so after reading
+ * their card a first-time player knew their team and nothing else and all seven good cards said
+ * the identical sentence.
+ *
+ * ⚠️ THE LINE IS `self` AND THAT IS THE HALF WITH TEETH. *"Each episode, learn whether the Hunter
+ * noticed the runner by sight or by sound"* names a role as surely as the key does, so X16b
+ * sweeps every OTHER socket's whole transcript — the television included — for it.
+ */
+{
+  const truth = sess.truth();
+  // What each seat BELIEVES it is. The Glitched is dealt a cover and is never told; their card
+  // must be the cover's, in full, or the phone is the second channel `reunion-truth` U2 forbids.
+  const believes = new Map(truth.seats.map((x) => [x.id, x.cover ?? x.role]));
+  let bad = null;
+  for (let i = 0; i < phones.length; i++) {
+    const f = phones[i].frames().slice(-1)[0];
+    // `cardFor`, not `SCRIPT[...].line` — a card whose holder is not self-aware carries no line,
+    // and a gate that read the raw spec would demand the Static be told the one thing their card
+    // exists to withhold.
+    const want = cardFor(believes.get(playerIdOf(i)));
+    if (!f || !f.you) { bad = `phone ${i} has no frame`; break; }
+    if (f.you.roleName !== want.name) { bad = `phone ${i}: roleName "${f.you.roleName}" != "${want.name}"`; break; }
+    if ((f.you.roleLine ?? null) !== want.line) { bad = `phone ${i}: roleLine is "${f.you.roleLine}"`; break; }
+  }
+  t('X16 · every phone is told its card\'s display name and the card\'s own line', bad === null,
+    bad || phones.map((p, i) => (p.frames().slice(-1)[0] || {}).you?.roleName).join(' · '));
+
+  t('X16 arm · and they are not all the same line, which is what the card said before',
+    new Set(phones.map((p) => (p.frames().slice(-1)[0] || {}).you?.roleLine)).size > 1,
+    `${new Set(phones.map((p) => (p.frames().slice(-1)[0] || {}).you?.roleLine)).size} distinct lines across eight cards`);
+
+  // 🚨 THE CONTROL. Pick a card only ONE seat believes it holds — a cover can duplicate a real
+  // role, so the line has to be unique before "it appears nowhere else" means anything — and
+  // sweep every other transcript for its exact words.
+  const counts = {};
+  for (const id of believes.values()) counts[id] = (counts[id] || 0) + 1;
+  const soleSeat = [...believes.entries()].find(([, r]) => counts[r] === 1);
+  if (!soleSeat) {
+    t('X16b · a line reaches its owner and no other socket', false, 'no uniquely-held card to sweep for');
+  } else {
+    const owner = seatNoOf(soleSeat[0]);
+    const line = SCRIPT[soleSeat[1]].line;   // the SPEC's line — the leak sweep reads ground truth
+    const elsewhere = [
+      ...phones.map((p, i) => (i === owner ? null : { who: `phone ${i}`, txt: JSON.stringify(p.msgs) })),
+      { who: 'the television', txt: JSON.stringify(tv.msgs) },
+    ].filter(Boolean).filter((x) => x.txt.includes(line));
+    t('X16b · that card\'s line reached its owner and no other socket, television included',
+      elsewhere.length === 0 && JSON.stringify(phones[owner].msgs).includes(line),
+      elsewhere.length ? `${elsewhere[0].who} also has it` : `"${SCRIPT[soleSeat[1]].name}" is held by one seat and swept for on ${phones.length} others + the TV`);
+    t('X16b control · the sweep does find it on the owner, so it is looking for the right string',
+      JSON.stringify(phones[owner].msgs).includes(line), `${line.slice(0, 40)}…`);
+  }
+
+  t('X16c · the raw key is still on the frame, so X16 is not passing by the field being absent',
+    phones.every((p) => typeof (p.frames().slice(-1)[0] || {}).you?.role === 'string'),
+    'you.role survives alongside you.roleName — the Reunion and the gates read it');
+
+  const phoneHtml = await (await fetch(`http://127.0.0.1:${PORT}/p`)).text();
+  t('X16d · and the page renders the name and the line rather than the key',
+    /you\.roleName \|\| you\.role/.test(phoneHtml) && /you\.roleLine/.test(phoneHtml),
+    'cardRole reads roleName first; cardSay carries the line');
+  t('X16d control · the scan would notice the raw key coming back',
+    !/you\.roleName \|\| you\.role/.test("$('cardRole').textContent = you.role || '\u2014';"));
 }
 
 // ---------------------------------------------------------------- X6 · coming back

@@ -17,6 +17,7 @@
  */
 
 import { dealCast, viewFor, EVIL } from './cast.js';
+import { cardFor } from './roles.js';
 import { project } from '../../net/party/entitle.js';
 import { makeEvent, VIS } from './events.js';
 import { createLog, visibleTo } from './log.js';
@@ -97,7 +98,13 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     };
     if (!sock.isTV) {
       const v = viewFor(deal, sock.playerId);
-      base.you = v.you;
+      // The card's display name and its own line — `self`, and derived from `viewFor`'s answer so
+      // the Glitched gets the cover's card in full. See `session.js`'s `card()` for why. It is
+      // here as well as there because this is *"the smallest room that exercises every audience
+      // in the matrix"*, and a self row this room never emits is a row `party-isolation` never
+      // walks.
+      const c = cardFor(v.you.role);
+      base.you = { ...v.you, roleName: c.name, roleLine: c.line };
     }
     if (sock.seatRole === 'guide' && state.phase === 'EXPEDITION') {
       // 🚨 S3. The Hunter is on the map only where a live camera watches. `hunterMark.visible =

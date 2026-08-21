@@ -32,6 +32,7 @@
 import { createRoom } from '../src/party/room.js';
 import { audienceFor, entitled } from '../net/party/entitle.js';
 import { ROOMS } from '../src/party/coverage.js';
+import { SCRIPT } from '../src/party/roles.js';
 
 const SEEDS = [11, 12, 13, 14, 15];
 const COUNT = 8;
@@ -90,6 +91,14 @@ function suite(runs) {
     const roleCount = {};
     for (const s of run.truth.seats) roleCount[s.role] = (roleCount[s.role] || 0) + 1;
     const uniqueRole = (r) => roleCount[r] === 1;
+    /**
+     * 🚨 A ROLE HAS THREE NAMES ON THE WIRE AND I3 KNEW ABOUT ONE OF THEM. The object key
+     * (`focusPuller`), the display name (`Focus Puller`) and the card's own line are all the same
+     * secret; the frame carries the last two now (`you.roleName`, `you.roleLine`) so the sweep
+     * has to read them as fingerprints too. A line saying *"each episode, learn whether the
+     * Hunter noticed the runner by sight or by sound"* names a role exactly as well as the key.
+     */
+    const wordsFor = (r) => [r, SCRIPT[r] && SCRIPT[r].name, SCRIPT[r] && SCRIPT[r].line].filter(Boolean);
 
     for (const sock of run.sockets) {
       const frames = run.tape.get(sock.id) || [];
@@ -124,7 +133,7 @@ function suite(runs) {
           // a role ground truth assigns to somebody else, on purpose and by design (see
           // cast.js). Exempt it for THAT socket only — every other socket carrying it is still
           // a leak, and `p` must still be the holder's own `you.role`.
-          if (mine && mine.cover && v === mine.cover && p.startsWith('you.role')) continue;
+          if (mine && mine.cover && wordsFor(mine.cover).includes(v) && p.startsWith('you.role')) continue;
           // ⚠️ A PUBLISHED CLAIM IS A ROLE NAME ON A PUBLIC NAMEPLATE, AND THAT IS PILLAR P9
           // WORKING RATHER THAN A LEAK. The exemption is scoped to the `claim` field alone, and
           // I3b below stops it becoming a hole: every claim a socket sees must have been
@@ -133,7 +142,7 @@ function suite(runs) {
           for (const other of run.truth.seats) {
             if (mine && other.id === mine.id) continue;
             if (teammates.some((tm) => tm.id === other.id)) continue;   // I6's one exception
-            if (v === other.role && uniqueRole(other.role) && (!mine || other.role !== mine.role)) {
+            if (wordsFor(other.role).includes(v) && uniqueRole(other.role) && (!mine || other.role !== mine.role)) {
               ok.I3 = false; d.I3 = d.I3 || `${sock.id} · frame ${fi} · ${p} = "${v}" is ${other.id}'s role`;
             }
           }

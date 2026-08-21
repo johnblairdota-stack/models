@@ -57,6 +57,14 @@ export const MATRIX = [
   ['you.id',                   'self'],
   ['you.seat',                 'self'],
   ['you.role',                 'self'],
+  // 🚨 THE CARD'S OWN WORDS, AND THEY ARE `self` FOR THE SAME REASON THE KEY IS. `you.role` is an
+  // object key — `focusPuller` — and the phone printed it raw, while `roles.js`'s SCRIPT has
+  // carried a display name and a one-line ability for every card since it was written and was
+  // imported once in the whole tree, unused. These two rows are what put them on the card.
+  // A line reading *"each episode, learn whether the Hunter noticed the runner by sight or by
+  // sound"* names a role as surely as the key does, so it is nobody else's, ever.
+  ['you.roleName',             'self'],
+  ['you.roleLine',             'self'],
   ['you.alignment',            'self'],
   ['you.teammates[].id',       'evil'],
   ['you.teammates[].role',     'evil'],

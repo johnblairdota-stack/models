@@ -17,7 +17,7 @@
  *   measurement can tell the difference.
  */
 
-import { SCRIPT, SHAPE, SURFACE, resolveInformation, falsify, pairContainsProduction, spendableFromChair, outsiders, informers, STATIC_LAG_SECONDS } from '../src/party/roles.js';
+import { SCRIPT, cardFor, SHAPE, SURFACE, resolveInformation, falsify, pairContainsProduction, spendableFromChair, outsiders, informers, STATIC_LAG_SECONDS } from '../src/party/roles.js';
 import { ROLES, dealCast, viewFor, COMPOSITION, GOOD, EVIL } from '../src/party/cast.js';
 
 let pass = 0, fail = 0;
@@ -135,6 +135,47 @@ const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' �
   const bad = Object.keys(SCRIPT).find((k) => !SCRIPT[k].line || SCRIPT[k].line.includes('\n') || SCRIPT[k].line.length > 150);
   t('S7 · every card is one line, readable off a nameplate', !bad,
     bad ? `${bad} is ${SCRIPT[bad].line.length} chars` : `longest ${Math.max(...Object.values(SCRIPT).map((s) => s.line.length))} chars`);
+}
+
+// ---------------------------------------------------------------- S9 · what the card says
+/**
+ * 🚨 **THE CARD'S OWN WORDS, AND THE ONE CARD THAT MUST NOT READ ITS OWN.**
+ *
+ * `SCRIPT` has carried a display name and a one-line ability per card since it was written and
+ * was imported exactly once in the whole product tree — in `reunion.js`, where the import was
+ * unused. Nothing put either on a phone, so `you.role` rendered raw (`focusPuller`, `theStatic`)
+ * and all seven good cards said the identical sentence underneath.
+ *
+ * ⚠️ `rrr-roles.md` §2 writes two Outsider lines with *"(You are not told this.)"*. The Glitched
+ * is handled a layer down — `cast.js` deals them a cover and `viewFor` hands the phone the
+ * cover's card in full. The Static has no cover, so `cardFor` withholds the LINE and keeps the
+ * name: printing *"your flyover is a second and a half behind"* on their own phone would hand
+ * them the fact the card exists to withhold, and with it the ability to announce the lag.
+ */
+{
+  const shown = Object.keys(SCRIPT).map((r) => [r, cardFor(r)]);
+  t('S9 · every card has a display name a player can read off their own phone',
+    shown.every(([, c]) => typeof c.name === 'string' && c.name.length > 2 && /^[A-Z]/.test(c.name)),
+    shown.map(([, c]) => c.name).join(' · '));
+  t('S9b · and no display name is the object key it is filed under',
+    shown.every(([r, c]) => c.name !== r), 'nobody reads `focusPuller` off a card');
+
+  const quiet = shown.filter(([, c]) => c.line === null).map(([r]) => r);
+  t('S9c · a card whose holder is not self-aware carries no line',
+    quiet.length > 0 && quiet.every((r) => SCRIPT[r].selfAware === false)
+      && Object.keys(SCRIPT).filter((r) => SCRIPT[r].selfAware === false).every((r) => quiet.includes(r)),
+    `${quiet.join(', ')} — §2's "(You are not told this)"`);
+  t('S9d · and every other card does carry one, in the script\'s own words',
+    shown.filter(([r]) => SCRIPT[r].selfAware !== false).every(([r, c]) => c.line === SCRIPT[r].line),
+    `${shown.filter(([, c]) => c.line).length} of ${shown.length} cards speak`);
+
+  t('S9 control · the Static\'s own line exists in the script and is the thing being withheld',
+    typeof SCRIPT.theStatic.line === 'string' && cardFor('theStatic').line === null
+      && cardFor('theStatic').name === 'The Static',
+    `SCRIPT has "${SCRIPT.theStatic.line}" and the card does not`);
+  t('S9 control · the Method Actor IS self-aware, so the rule is not "every Outsider goes quiet"',
+    SCRIPT.methodActor.outsider === true && cardFor('methodActor').line === SCRIPT.methodActor.line,
+    'they are told, because §2 does not put a parenthetical on that row');
 }
 
 // ---------------------------------------------------------------- S8 · the controls

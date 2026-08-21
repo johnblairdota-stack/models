@@ -97,6 +97,34 @@ export const SCRIPT = {
   },
 };
 
+/**
+ * 🚨 **WHAT A HOLDER'S OWN CARD SAYS — AND THE ONE CASE WHERE IT IS NOT `SCRIPT[role].line`.**
+ *
+ * `rrr-roles.md` §2 writes two of the three Outsider lines with a parenthetical: *"(You are not
+ * told this.)"* — the Glitched and the Static. The Glitched is handled a layer down and better:
+ * `cast.js` deals them a COVER and `viewFor` hands the phone the cover's role, so they read
+ * somebody else's card in full and nothing on the phone can tell them apart. The Static has no
+ * cover, so their own card is what they read — and printing *"when you guide, your flyover is a
+ * second and a half behind"* on it would hand them the one fact the card exists to withhold, and
+ * with it the ability to announce the lag in the Debrief. That deletes the Outsider: the Static
+ * is the reason a guide who walks a runner into the Hunter is never *proved* to have done it on
+ * purpose.
+ *
+ * ⚠️ SO A CARD WHOSE HOLDER IS NOT `selfAware` CARRIES NO LINE, AND THAT IS NOT A TELL. It is
+ * visible only to its own holder, who is already shown the role's NAME (`viewFor` returns
+ * `cover ?? role`, and only the Glitched has a cover) — so the absence tells them nothing the
+ * name has not already told them. `role-script` S9 asserts the rule and its control.
+ *
+ * ⚠️ AND THIS IS TEXT, NOT BEHAVIOUR. Nothing here makes an ability fire.
+ *
+ * @returns {{name:string|null, line:string|null}}
+ */
+export function cardFor(roleId) {
+  const spec = SCRIPT[roleId];
+  if (!spec) return { name: null, line: null };
+  return { name: spec.name, line: spec.selfAware === false ? null : spec.line };
+}
+
 export const STATIC_LAG_SECONDS = 1.5;
 
 /**
