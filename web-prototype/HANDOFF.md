@@ -1,8 +1,19 @@
-# HANDOFF — read this first, then stop reading
+# HANDOFF — the SURVIVAL mode's running log
 
-**This is the only document a new session must read in full.** Everything else is reference, opened
-on demand — including `docs/handoff/*.md`: read the pointer table below, then **only** the one
-appendix your slice names.
+🚨 **THIS IS NO LONGER THE FIRST THING TO READ, AND IT NEVER DESCRIBED THE MODE THAT SHIPS.**
+Start at **`../CLAUDE.md`** (repo root). This file is the running log of the *survival* mode —
+robots, the mansion, the dig, the Hunter. Below this notice it carries **zero** occurrences of
+"party", "expedition" or "reunion", and it carried none at all through the 110+ commits that built
+the party mode. Its board, its round
+numbers and its gate table below are the survival mode's and are stale from **2026-08-10**;
+`../docs/design/rrr-*.md` and `npm run gates:party` are the current state of the game that ships.
+
+It stays, unrewritten, on purpose. Rewriting it to cover both modes would double a file that
+already breaks its own 30 KB budget (36,599 B) and would destroy the record the retired mode's
+remaining source still cites by line. **Read it in full only for survival-mode work** — then the
+sentence below is still true and still the reason it is worth reading. Everything else is
+reference, opened on demand, including `docs/handoff/*.md`: read the pointer table below, then
+**only** the one appendix your slice names.
 
 🎯 **THE RULE FOR ADDING TO THIS FILE, AND IT IS A MEASURED COST, NOT TIDINESS.** `critic-process-1`
 fitted `tokens ≈ 190k + 0.75k × tool_calls` (r² 0.62, n = 18): **~180k of every agent's cost is

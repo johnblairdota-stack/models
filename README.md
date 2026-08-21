@@ -2,6 +2,9 @@
 
 GLB assets plus the **Run Robot Run** browser prototype.
 
+**New here? Read [`CLAUDE.md`](CLAUDE.md) first** — the conventions this codebase is built on
+(gates, controls, arms, probes, the party/solo split) in one page.
+
 ```
 models/           existing GLBs (bed, tato)
 docs/design/      the rrr-*.md design corpus (party mode: roles, round, task deck, gates…)
