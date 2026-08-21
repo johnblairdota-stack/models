@@ -110,35 +110,33 @@ function run({ seed, stage, flee, together }) {
   return { seed, stage, strikes, firstStrike, downAt, closeAt, minC, attackSecs, seenSecs, endStage: hunter.stage };
 }
 
-const SEEDS = Array.from({ length: 20 }, (_, i) => i + 1);
+const SEEDS = Array.from({ length: 10 }, (_, i) => i + 1);
 const pct = (n, d) => `${(n / d * 100).toFixed(0)}%`;
 const q = (a, p) => { const b = [...a].sort((x, y) => x - y); return b[Math.min(b.length - 1, Math.floor(p * b.length))]; };
 const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : NaN);
 
-console.log('=== take rate over a 90 s expedition · real HunterAI, real mansion, 20 seeds x 3 stages ===\n');
-console.log(' arm                       runs  ≥1 STRIKE  all-4 DOWN  reached 1.35 m  median min-dist  median t(first strike)  median ATTACK s  median seen s');
-for (const [name, o] of Object.entries({
+console.log('=== take rate over a 90 s expedition · real HunterAI, real mansion, 10 seeds x 3 stages ===\n');
+const ARMS = {
   'apart + competent runner ': { flee: true,  together: false },
   'apart + shipped director ': { flee: false, together: false },
   'together + competent     ': { flee: true,  together: true },
   'together + shipped       ': { flee: false, together: true },
-})) {
-  const rr = [];
-  for (const stage of [1, 2, 3]) for (const seed of SEEDS) rr.push(run({ seed, stage, ...o }));
-  const hit = rr.filter((r) => r.strikes > 0);
-  const dn = rr.filter((r) => r.downAt != null);
-  const cl = rr.filter((r) => r.closeAt != null);
-  console.log(`  ${name}  ${String(rr.length).padStart(4)}   ${pct(hit.length, rr.length).padStart(7)}    ${pct(dn.length, rr.length).padStart(7)}      ${pct(cl.length, rr.length).padStart(8)}       ${q(rr.map((r) => r.minC), 0.5).toFixed(2)} m         ${(hit.length ? q(hit.map((r) => r.firstStrike), 0.5).toFixed(1) + ' s' : '—').padStart(8)}          ${q(rr.map((r) => r.attackSecs), 0.5).toFixed(1)} s          ${q(rr.map((r) => r.seenSecs), 0.5).toFixed(1)} s`);
+};
+const all = {};
+for (const [name, o] of Object.entries(ARMS)) {
+  all[name] = [];
+  for (const stage of [1, 2, 3]) for (const seed of SEEDS) all[name].push({ ...run({ seed, stage, ...o }), stage });
 }
-
-console.log('\n=== the competent-runner arm, broken out by stage (the number the lottery should be tuned to) ===');
-for (const stage of [1, 2, 3]) {
-  const rr = SEEDS.map((seed) => run({ seed, stage, flee: true, together: true }));
+console.log(' arm                       runs  >=1 STRIKE  all-4 DOWN  reached 1.35 m  median min-dist  median t(1st strike)  median ATTACK s  median seen s');
+for (const [name, rr] of Object.entries(all)) {
   const hit = rr.filter((r) => r.strikes > 0);
-  console.log(`  together, stage ${stage}: ≥1 strike ${pct(hit.length, rr.length)}  ·  mean limbs taken ${mean(rr.map((r) => r.strikes)).toFixed(2)}  ·  all-4 down ${pct(rr.filter((r) => r.downAt != null).length, rr.length)}  ·  reached 1.35 m ${pct(rr.filter((r) => r.closeAt != null).length, rr.length)}`);
+  console.log(`  ${name}  ${String(rr.length).padStart(4)}   ${pct(hit.length, rr.length).padStart(7)}    ${pct(rr.filter((r) => r.downAt != null).length, rr.length).padStart(7)}      ${pct(rr.filter((r) => r.closeAt != null).length, rr.length).padStart(8)}       ${q(rr.map((r) => r.minC), 0.5).toFixed(2)} m         ${(hit.length ? q(hit.map((r) => r.firstStrike), 0.5).toFixed(1) + ' s' : '-').padStart(8)}          ${q(rr.map((r) => r.attackSecs), 0.5).toFixed(1)} s          ${q(rr.map((r) => r.seenSecs), 0.5).toFixed(1)} s`);
 }
-for (const stage of [1, 2, 3]) {
-  const rr = SEEDS.map((seed) => run({ seed, stage, flee: true, together: false }));
-  const hit = rr.filter((r) => r.strikes > 0);
-  console.log(`  apart,    stage ${stage}: ≥1 strike ${pct(hit.length, rr.length)}  ·  mean limbs taken ${mean(rr.map((r) => r.strikes)).toFixed(2)}  ·  all-4 down ${pct(rr.filter((r) => r.downAt != null).length, rr.length)}  ·  reached 1.35 m ${pct(rr.filter((r) => r.closeAt != null).length, rr.length)}`);
+console.log('\n=== by stage (the number the room lottery should be tuned to) ===');
+for (const [name, rr] of Object.entries(all)) {
+  for (const stage of [1, 2, 3]) {
+    const v = rr.filter((r) => r.stage === stage);
+    const hit = v.filter((r) => r.strikes > 0);
+    console.log(`  ${name} stage ${stage}: >=1 strike ${pct(hit.length, v.length).padStart(4)}  mean limbs ${mean(v.map((r) => r.strikes)).toFixed(2)}  all-4 down ${pct(v.filter((r) => r.downAt != null).length, v.length).padStart(4)}  reached 1.35 m ${pct(v.filter((r) => r.closeAt != null).length, v.length).padStart(4)}  median min-dist ${q(v.map((r) => r.minC), 0.5).toFixed(2)} m`);
+  }
 }
