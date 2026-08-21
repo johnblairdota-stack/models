@@ -58,8 +58,17 @@ export const INPUT = ['cast', 'claim', 'call', 'move', 'nominate', 'refuse', 'vo
 export const CALL = { CLEAR: 'CLEAR', HOLD: 'HOLD' };
 export const MOVE_CHOICE = { GO: 'GO', WAIT: 'WAIT' };
 
-/** Deterministic, seeded, no `Math.random` — `run.js`'s discipline, restated nowhere. */
-function hash(...parts) {
+/**
+ * Deterministic, seeded, no `Math.random` — `run.js`'s discipline, restated nowhere.
+ *
+ * ⚠️ EXPORTED FOR THE GATE'S CONTROLS AND FOR NOTHING ELSE. `hunter-draw` has to rebuild the two
+ * draws this file used to ship — `hash(...) % n` and `(hash(...) >>> 8) % n` — and run the live
+ * predicates over them. Rebuilding the mixer as well would mean the control drifts the moment
+ * anybody touches this function, and a control that no longer matches the code it is standing in
+ * for is not a control. Only the part that no longer exists is rebuilt; the part that still
+ * exists is imported. Nothing in `src/party` or `net/party` calls this — see D8.
+ */
+export function hash(...parts) {
   let h = 0x811c9dc5 >>> 0;
   const s = parts.join(':');
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
@@ -67,8 +76,8 @@ function hash(...parts) {
 }
 
 /**
- * 🚨 **EVERY SEEDED DRAW IN THIS FILE GOES THROUGH HERE, AND THE `>>> 8` IS THE WHOLE REASON THE
- * FUNCTION EXISTS. `hash(...) % n` DELETED THE MODE.**
+ * 🚨 **EVERY SEEDED DRAW IN THIS FILE GOES THROUGH HERE. THE FINALIZER IS THE WHOLE REASON THE
+ * FUNCTION EXISTS, AND `>>> 8` — WHICH IS WHAT USED TO BE HERE — WAS ONLY HALF OF IT.**
  *
  * FNV-1a's low bit is XOR-linear. The prime `0x01000193` is odd, so multiplication never touches
  * bit 0, and every step is `h ^= c` — which makes the final bit 0 a plain XOR of the basis bit
@@ -85,19 +94,56 @@ function hash(...parts) {
  *
  * ⚠️ **A DIFFERENT SALT IS NOT THE FIX AND MEASURING ONE IS HOW YOU FIND THAT OUT.** A salt with
  * the SAME parity as `'target'` collides ~33% — exactly double the ideal 16.7% — because bit 0 is
- * fully determined either way, so the effective room space is 3 rather than 6. Measured:
- * `prowler` 32.7%, `it` 34.0%, `lurker` 34.4%. Both failures are the same failure.
+ * fully determined either way, so the effective room space is 3 rather than 6. Both failures are
+ * the same failure.
  *
- * So the index comes from bits 8..31, which the prime has actually mixed: 16.6% for `'hunter'`,
- * 15.8-17.0% across the same salts that were pathological before. It is the ONLY draw in this
- * file — no caller reaches `hash` directly — so no salt anybody adds later can bring the coupling
- * back, including for the even moduli below (`% 800`, `% 2`, `% 4`) which inherited the same
- * linear bit. `hunter-draw` D8 asserts that single-entry property on the source.
+ * ---------------------------------------------------------------------------------------------
+ * 🚨 **AND `>>> 8` FIXED THE SALT AXIS AND LEFT THE EPISODE AXIS WIDE OPEN.**
+ * ---------------------------------------------------------------------------------------------
+ * `episode` is the LAST component of the key, so exactly one FNV round follows it:
+ * `h = (h_prefix ^ digit) * PRIME`. Consecutive episodes therefore differ by a small multiple of
+ * `PRIME` — a span of about 8 across a match — and a plain shift-and-divide inherits that whole,
+ * because shifting off eight low bits does not destroy an additive offset in the high ones.
+ *
+ * Measured over 1,000,000 uniform seeds, the distribution of `wing(ep+1) - wing(ep) mod 6`:
+ *
+ * ```
+ *   shipped `>>> 8`     29.02%  28.46%   7.03%   0.00%   7.04%  28.46%
+ *   with the finalizer  16.65%  16.64%  16.72%  16.67%  16.68%  16.63%
+ * ```
+ *
+ * The wing could **never** move by exactly three rooms — zero in a million — and it stood still or
+ * moved by one 86% of the time. Downstream: the SEALED Hunter room was recoverable from the
+ * PUBLIC wing sequence at 32.4% against a 16.7% baseline; `wall` was a 72%-sticky two-state
+ * process rather than a per-episode coin, which is a direct attack on bible D13's premise that
+ * nobody but the guide knows how much they could see; and `prowl`'s loudness never repeated
+ * between consecutive episodes.
+ *
+ * So the hash is run through murmur3's finalizer — two multiply-xorshift rounds — before the
+ * modulus. That is an avalanche step: it makes every output bit depend on every input bit, which
+ * is exactly what turns `+k·PRIME` from a visible offset into noise. It costs four instructions
+ * and it is the difference between a seeded draw and a seeded pattern.
+ *
+ * `pick` is the ONLY draw in this file — no caller reaches `hash` directly — so no salt and no key
+ * ordering anybody adds later can bring either coupling back. `hunter-draw` D8 asserts that
+ * single-entry property on the source; D9-D12 assert the serial axis on the exported function,
+ * with the shipped `>>> 8` standing as their control.
+ *
+ * ⚠️ EXPORTED FOR THE GATE, AND FOR NOBODY ELSE. `hunter-draw` needs millions of draws to see a
+ * distribution and cannot get them by playing millions of shows — but a gate that re-implemented
+ * the draw would be measuring its own copy, which is the failure `wire-parity`'s header names.
+ * D9's arm reconciles this export against wings read out of real `createSession` logs, so the
+ * thing being measured is provably the thing that ships.
  *
  * @param {number} n     how many slots
  * @returns {number}     an index in `[0, n)`
  */
-const pick = (n, ...parts) => (hash(...parts) >>> 8) % n;
+export const pick = (n, ...parts) => {
+  let h = hash(...parts);
+  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b) >>> 0;
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35) >>> 0;
+  return ((h ^ (h >>> 16)) >>> 0) % n;
+};
 
 /**
  * ⚠️ THE GUIDE'S TILT IS THE SHIPPED ONE. 62° is `views/game.js`'s flyover elevation, and at the

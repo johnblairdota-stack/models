@@ -37,7 +37,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { createSession, CALL, MOVE_CHOICE } from '../src/party/session.js';
+import { createSession, CALL, MOVE_CHOICE, hash, pick } from '../src/party/session.js';
 import { PHASE } from '../src/party/phases.js';
 import { ROOMS } from '../src/party/coverage.js';
 
@@ -200,12 +200,9 @@ const said = rows.filter((r) => r.said != null);
  * imported because the whole point is that the shipped module no longer contains it.
  */
 {
-  const hash = (...parts) => {
-    let h = 0x811c9dc5 >>> 0;
-    const s = parts.join(':');
-    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
-    return h >>> 0;
-  };
+  // ⚠️ `hash` IS IMPORTED, NOT REBUILT. The part of the old draw that no longer exists — the bare
+  // `% n` — is the only part reconstructed here; the mixer it sat on top of is the shipped one, so
+  // this control cannot quietly stop matching the code it is standing in for.
   const oldDraw = (salt) => rows.map((r) => {
     const worldSeed = r.seed * 7;
     const wing = ROOMS[hash(worldSeed, 'target', r.ep) % ROOMS.length];
@@ -243,19 +240,287 @@ const said = rows.filter((r) => r.said != null);
  * The coupling was a property of `hash(...) % even`, not of one salt pair, so the guard is
  * structural: `pick()` is the only caller of `hash` in the file. A future draw that reaches past
  * it — for a room, a wall distance, a throttle detent — fails here rather than in a lounge.
+ *
+ * ⚠️ **THE CONTROLS MUTATE THE REAL SOURCE AND THEY USED TO MUTATE A STRING LITERAL.** Both of
+ * them read like controls and proved nothing: they ran the detector over a one-line sample this
+ * file had written itself, so they asserted that a regex matches a string next to it. The detector
+ * is a function now, and each control feeds it the SHIPPED text with one edit applied — the edit
+ * a future author would actually make. If `session.js` is refactored so the edit no longer
+ * applies, the mutation arm below goes red and says so, rather than the control quietly passing
+ * over a file it stopped describing.
  */
 {
   const src = readFileSync(new URL('../src/party/session.js', import.meta.url), 'utf8');
-  const body = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-  const calls = (body.match(/(?<!function )\bhash\(/g) || []).length;
-  t('D8 · `pick()` is the only caller of `hash` — no draw can re-introduce the coupling',
-    calls === 1, `${calls} call site${calls === 1 ? '' : 's'} outside the definition`);
-  t('D8b · and it takes the index from bits the prime has mixed, never from bit 0',
-    /\(hash\(\.\.\.parts\) >>> 8\) % n/.test(body), 'pick() shifts before it divides');
-  t('D8 control · the scan would notice a second call site',
-    (('const a = hash(1) % 6;').match(/(?<!function )\bhash\(/g) || []).length === 1);
-  t('D8b control · and it would notice the shift going away',
-    !/\(hash\(\.\.\.parts\) >>> 8\) % n/.test('const pick = (n, ...parts) => hash(...parts) % n;'));
+  const strip = (x) => x.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  /** The two structural claims, as one function over source text, so a control cannot use another. */
+  const scan = (text) => {
+    const body = strip(text);
+    // Both shapes: the shipped block-bodied arrow, and the one-liner the control reverts it to.
+    const def = body.match(/export const pick =[\s\S]*?(?=\nexport |$)/);
+    return {
+      callSites: (body.match(/(?<!function )\bhash\(/g) || []).length,
+      finalized: !!def && /0x85ebca6b/.test(def[0]) && /0xc2b2ae35/.test(def[0]),
+      bareShift: !!def && /hash\(\.\.\.parts\)\s*>>>\s*8/.test(def[0]),
+    };
+  };
+  const shipped = scan(src);
+  t('D8 · `pick()` is the only caller of `hash` — no draw can re-introduce the salt coupling',
+    shipped.callSites === 1, `${shipped.callSites} call site${shipped.callSites === 1 ? '' : 's'} outside the definition`);
+  t('D8b · and the index comes off an avalanche, not off a shift — see D9 for what the shift left open',
+    shipped.finalized && !shipped.bareShift, 'pick() finalizes before it divides');
+
+  // The mutations. Each is applied to the shipped text, and the arm asserts the edit actually bit.
+  const withSecondCaller = src.replace(
+    "      : pick(800, worldSeed, 'wall', state.episode) / 100;",
+    "      : hash(worldSeed, 'wall', state.episode) % 800 / 100;");
+  const withoutFinalizer = src.replace(
+    /export const pick = \(n, \.\.\.parts\) => \{[\s\S]*?\n\};/,
+    'export const pick = (n, ...parts) => (hash(...parts) >>> 8) % n;');
+  t('D8 mutation arm · both edits landed on the shipped file — the controls below are not no-ops',
+    withSecondCaller !== src && withoutFinalizer !== src,
+    'wall drawn through hash directly · finalizer reverted to `>>> 8`');
+  t('D8 control · give the wall its own `hash` call and the scan counts two — D8 goes red',
+    scan(withSecondCaller).callSites === 2, `${scan(withSecondCaller).callSites} call sites`);
+  t('D8b control · revert `pick` to the shipped `>>> 8` and the scan sees the shift — D8b goes red',
+    !scan(withoutFinalizer).finalized && scan(withoutFinalizer).bareShift, 'no finalizer, bare shift');
+}
+
+// ---------------------------------------------------------------- D9-D11 · the SERIAL axis
+/**
+ * 🚨 **D1 IS A MARGINAL BAND AND IT IS GREEN ON BOTH SIDES OF A FATAL BUG. THIS IS THE OTHER AXIS.**
+ *
+ * `(hash(...) >>> 8) % n` closed the cross-salt collision — two draws in the SAME episode — and
+ * measured 16.1%, comfortably inside D1's 10-25%. It could not close the cross-EPISODE structure,
+ * and D1 cannot see that at all, because D1 collapses the whole series to one marginal rate.
+ *
+ * `episode` is the LAST component of the key, so exactly one FNV round follows it:
+ * `h = (h_prefix ^ digit) * PRIME`. The draws for episodes 1..6 therefore differ by `k · PRIME` for
+ * `k` in a span of about 8, and shifting eight low bits away does not remove an additive offset
+ * from the high ones. Measured over the shipped `>>> 8`, the wing's episode-to-episode delta:
+ *
+ * ```
+ *   ep2 -> ep3   57.01%  21.41%   0.12%   0.00%   0.10%  21.35%
+ * ```
+ *
+ * The wing repeated 57% of the time and could **never** move by exactly three rooms.
+ *
+ * ⚠️ WHAT THAT COSTS, IN THE GAME'S OWN TERMS. The SEALED Hunter room becomes recoverable from
+ * the PUBLIC wing sequence — the wing is announced out loud in CASTING, every episode, to
+ * everybody — at well above the 1-in-6 a guess is worth. And `wall`, which decides how much an
+ * honest guide could see, stops being a per-episode coin and becomes a sticky two-state process,
+ * which attacks bible D13's premise that nobody but the guide knows how much they could see.
+ *
+ * ⚠️ **THE CONTROL FOR EVERY ASSERTION BELOW IS THE SHIPPED `>>> 8`, BUILT ON THE IMPORTED
+ * `hash`.** Only the part that no longer exists is rebuilt. Each control runs the identical
+ * predicate and must go red.
+ *
+ * ⚠️ AND THE PREDICATES RUN OVER THE EXPORTED `pick`, NOT OVER A COPY OF IT. A distribution needs
+ * millions of draws and a show cannot be played a million times, so the draw is imported and D9
+ * arm reconciles it against wings and Hunter rooms read out of REAL `createSession` logs — the
+ * rows D0-D4 are built from. A model may stand in for something that does not exist; it may never
+ * stand in for something that does.
+ */
+{
+  const SEEDS = 80000;
+  const EPS = [1, 2, 3, 4, 5, 6];
+  /** The draw this file shipped between the two fixes: salt axis closed, episode axis wide open. */
+  const shifted = (n, ...parts) => (hash(...parts) >>> 8) % n;
+
+  /**
+   * Every seeded draw `session.js` makes, with the bucket the game actually reads off it.
+   * `wall` is a centimetre in [0,800) that the guide's sight rounds into metres, so its delta is
+   * measured in metres — the unit a player could notice.
+   */
+  const DRAWS = [
+    ['wing        pick(6,   …,target,ep)', 6, 'target', 6, (v) => v],
+    ['hunter room pick(6,   …,hunter,ep)', 6, 'hunter', 6, (v) => v],
+    ['prowl       pick(4,   …,prowl, ep)', 4, 'prowl', 4, (v) => v],
+    ['throttle GO pick(3,   …,throttle,ep)', 3, 'throttle', 3, (v) => v],
+    ['throttle    pick(2,   …,throttle,ep)', 2, 'throttle', 2, (v) => v],
+    ['wall        pick(800, …,wall,  ep)', 800, 'wall', 8, (v) => Math.floor(v / 100)],
+  ];
+
+  /** One table of raw draws per pick implementation — built once, read by every predicate. */
+  const tableFor = (pk) => DRAWS.map(([, n, salt]) => {
+    const col = new Array(SEEDS + 2);
+    for (let w = 1; w <= SEEDS + 1; w++) {
+      const row = new Array(EPS.length + 1);
+      for (const e of EPS) row[e] = pk(n, w, salt, e);
+      col[w] = row;
+    }
+    return col;
+  });
+
+  const tvFromUniform = (h) => {
+    const tot = h.reduce((a, b) => a + b, 0) || 1, e = 1 / h.length;
+    return h.reduce((a, c) => a + Math.abs(c / tot - e), 0) / 2;
+  };
+
+  /**
+   * For every draw, every consecutive step along EVERY axis of the key, how far is the delta from
+   * uniform? One number, worst case, plus the whole table for the reader.
+   *
+   * ⚠️ BOTH AXES, BECAUSE THE BUG IS POSITIONAL RATHER THAN GENERAL. `worldSeed` is the FIRST key
+   * component and has the whole hash after it, so the shipped `>>> 8` is fine along the seed axis
+   * — 0.7% off uniform — and catastrophic along the episode axis at 50%. Asserting only the axis
+   * that broke would let the next draw put its varying component last and pass.
+   */
+  function deltaTable(tab) {
+    const out = [];
+    for (let d = 0; d < DRAWS.length; d++) {
+      const [label, , , m, bucket] = DRAWS[d];
+      for (let i = 0; i < EPS.length - 1; i++) {
+        const [a, b] = [EPS[i], EPS[i + 1]];
+        for (const axis of ['episode', 'worldSeed']) {
+          const h = new Array(m).fill(0);
+          for (let w = 1; w <= SEEDS; w++) {
+            const from = bucket(tab[d][w][a]);
+            const to = axis === 'episode' ? bucket(tab[d][w][b]) : bucket(tab[d][w + 1][a]);
+            h[(to - from + m) % m]++;
+          }
+          out.push({ label, step: `${axis === 'episode' ? `ep${a}→${b}` : `seed+1 @ep${a}`}`, axis, tv: tvFromUniform(h), min: Math.min(...h) / SEEDS, m });
+        }
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Can the room the Hunter is SEALED into be read off the wings the table was told out loud?
+   * A lookup table over the last three announced wings, trained on one set of seeds and scored on
+   * seeds it has never seen — so a table that merely memorised the training half scores 1/6.
+   */
+  function sealedFromPublic(tab) {
+    const [W, H] = [tab[0], tab[1]];
+    const TRAIN = Math.floor(SEEDS * 0.6);
+    const key = (w, e) => `${e}|${W[w][e - 2]}|${W[w][e - 1]}|${W[w][e]}`;
+    const learnt = new Map();
+    for (let w = 1; w <= TRAIN; w++) {
+      for (let e = 3; e <= EPS.length; e++) {
+        const k = key(w, e);
+        let c = learnt.get(k); if (!c) learnt.set(k, c = new Array(6).fill(0));
+        c[H[w][e]]++;
+      }
+    }
+    let hit = 0, tot = 0;
+    for (let w = TRAIN + 1; w <= SEEDS; w++) {
+      for (let e = 3; e <= EPS.length; e++) {
+        const c = learnt.get(key(w, e));
+        let best = 0; if (c) for (let i = 1; i < 6; i++) if (c[i] > c[best]) best = i;
+        if (best === H[w][e]) hit++;
+        tot++;
+      }
+    }
+    return { rate: hit / tot, tot };
+  }
+
+  /**
+   * `darkrun.js` hides `storeyH / tan(tilt)` of floor behind every wall — 2.55 m at the shipped
+   * 62° and 4.80 m storey. So "was the Hunter inside the blind strip" is a per-episode coin with
+   * p = 255/800. Two draws that are independent land in the same state `p² + (1-p)²` of the time;
+   * anything above that is a guide whose blindness this episode predicts their blindness next.
+   */
+  function wallStickiness(tab) {
+    const W = tab[5];
+    const NEAR = 255;
+    let same = 0, tot = 0, near = 0, seen = 0;
+    for (let w = 1; w <= SEEDS; w++) {
+      for (const e of EPS) { if (W[w][e] < NEAR) near++; seen++; }
+      for (let i = 0; i < EPS.length - 1; i++) {
+        if ((W[w][EPS[i]] < NEAR) === (W[w][EPS[i + 1]] < NEAR)) same++;
+        tot++;
+      }
+    }
+    const p = near / seen;
+    return { same: same / tot, indep: p * p + (1 - p) * (1 - p), p };
+  }
+
+  const live = tableFor(pick);
+  const bug = tableFor(shifted);
+
+  // ---- D9 arm. The imported draw IS the draw the shows played.
+  {
+    const mismatch = rows.filter((r) =>
+      ROOMS[pick(ROOMS.length, r.seed * 7, 'target', r.ep)] !== r.wing
+      || ROOMS[pick(ROOMS.length, r.seed * 7, 'hunter', r.ep)] !== r.hunterRoom);
+    t('D9 arm · the imported `pick` reproduces every wing and Hunter room the real sessions logged',
+      rows.length > 200 && mismatch.length === 0,
+      `${rows.length} expeditions from createSession reconciled · ${mismatch.length} disagreements`);
+  }
+
+  // ---- D9. Serial uniformity, both axes, every draw.
+  /**
+   * The band. Sampling noise at 80,000 seeds is ~0.005 total variation for the six-room draws;
+   * the shipped `>>> 8`'s WEAKEST failure is 0.071 (the two-detent throttle) and its worst is
+   * 0.62. 0.02 sits four times above the noise floor and three and a half times below the
+   * smallest thing it has to catch, which is a band that neither flickers nor flatters.
+   */
+  const TV_MAX = 0.02;
+  {
+    const tab = deltaTable(live);
+    const worst = tab.reduce((a, b) => (b.tv > a.tv ? b : a));
+    const byAxis = ['episode', 'worldSeed'].map((ax) => {
+      const w = tab.filter((r) => r.axis === ax).reduce((a, b) => (b.tv > a.tv ? b : a));
+      return `${ax} ${w.tv.toFixed(4)}`;
+    }).join(' · ');
+    t('D9 · knowing one episode\'s draw tells you nothing about the next — on every draw in the file',
+      worst.tv <= TV_MAX,
+      `worst ${worst.tv.toFixed(4)} ≤ ${TV_MAX} at ${worst.label.trim()} ${worst.step} · by axis: ${byAxis}`);
+    const sixes = tab.filter((r) => r.m === 6 && r.axis === 'episode');
+    const leanest = sixes.reduce((a, b) => (b.min < a.min ? b : a));
+    t('D9b · and the wing can move by any of the six offsets — including exactly three rooms',
+      leanest.min > 0.10,
+      `rarest offset ${(leanest.min * 100).toFixed(2)}% at ${leanest.label.trim()} ${leanest.step} · ideal 16.67%`);
+  }
+
+  // ---- D10. The sealed draw is not a function of the public one.
+  const PREDICT_MAX = 1 / 6 + 0.02;
+  {
+    const r = sealedFromPublic(live);
+    t('D10 · the SEALED Hunter room is not recoverable from the PUBLIC wing sequence',
+      r.rate <= PREDICT_MAX,
+      `${(r.rate * 100).toFixed(2)}% on ${r.tot} held-out episodes · chance ${pct(1, 6)} · band ${(PREDICT_MAX * 100).toFixed(2)}%`);
+  }
+
+  // ---- D11. The guide's blindness is redealt every episode.
+  const STICK_MAX = 0.02;
+  {
+    const w = wallStickiness(live);
+    t('D11 · the guide\'s wall distance is a fresh coin each episode, not a sticky two-state process',
+      Math.abs(w.same - w.indep) <= STICK_MAX,
+      `same side of the blind strip ${(w.same * 100).toFixed(2)}% vs independent ${(w.indep * 100).toFixed(2)}% (p=${w.p.toFixed(4)})`);
+  }
+
+  // ---- the controls. Every one of D9, D9b, D10 and D11 must go red on the shipped `>>> 8`.
+  {
+    const tab = deltaTable(bug);
+    const worst = tab.reduce((a, b) => (b.tv > a.tv ? b : a));
+    const episodeAxis = tab.filter((r) => r.axis === 'episode');
+    const seedAxis = tab.filter((r) => r.axis === 'worldSeed');
+    const worstSeed = seedAxis.reduce((a, b) => (b.tv > a.tv ? b : a));
+    t('D9 control · restore `(hash(...) >>> 8) % n` and EVERY draw in the file goes serial — D9 goes red',
+      episodeAxis.every((r) => r.tv > TV_MAX),
+      `${episodeAxis.length}/${episodeAxis.length} episode steps above the band · worst ${worst.tv.toFixed(4)} at ${worst.label.trim()} ${worst.step}`);
+    const worstEp = episodeAxis.reduce((a, b) => (b.tv > a.tv ? b : a));
+    t('D9 control · and adjacent SEEDS leak too, an order of magnitude more quietly — the second axis earns its place',
+      worstSeed.tv > TV_MAX,
+      `worst episode step ${worstEp.tv.toFixed(4)} vs worst seed step ${worstSeed.tv.toFixed(4)}`
+      + ` · ${seedAxis.filter((r) => r.tv <= TV_MAX).length}/${seedAxis.length} seed steps stay inside the band`
+      + ' — worldSeed is FIRST in the key and has the whole hash after it, which is why the episode axis is the loud one');
+    const sixes = episodeAxis.filter((r) => r.m === 6);
+    const zeroed = sixes.filter((r) => r.min === 0);
+    t('D9b control · and the wing can never move by exactly three rooms — D9b goes red',
+      zeroed.length > 0,
+      `${zeroed.length} of ${sixes.length} six-room steps have an offset that occurs 0 times in ${SEEDS}`);
+    const p = sealedFromPublic(bug);
+    t('D10 control · and the sealed Hunter room falls out of the public wings — D10 goes red',
+      p.rate > PREDICT_MAX,
+      `${(p.rate * 100).toFixed(2)}% on ${p.tot} held-out episodes against a ${pct(1, 6)} guess`);
+    const w = wallStickiness(bug);
+    t('D11 control · and the guide\'s blindness this episode predicts it next — D11 goes red',
+      Math.abs(w.same - w.indep) > STICK_MAX,
+      `same side ${(w.same * 100).toFixed(2)}% vs independent ${(w.indep * 100).toFixed(2)}%`);
+  }
 }
 
 console.log(`\nhunter-draw: ${pass} passed, ${fail} failed`);
