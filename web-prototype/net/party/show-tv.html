@@ -27,7 +27,10 @@
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--bg);color:var(--ink);height:100vh;overflow:hidden;
        font:400 16px/1.4 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;
-       display:grid;grid-template-rows:auto 1fr auto;gap:clamp(8px,1.4vh,20px);padding:clamp(14px,2vw,32px)}
+       display:grid;grid-template-rows:auto 1fr auto;gap:clamp(8px,1.4vh,20px);
+       /* §4: "nothing important within 4% of an edge" — a television overscans, and a 32px cap
+          put this at 1.7% of a 1920 panel. Floored in pixels for small windows, 4% above that. */
+       padding:max(14px,4vw)}
 
   header{display:flex;align-items:center;justify-content:space-between;gap:20px}
   .ep{font:600 clamp(13px,1.3vw,20px)/1 ui-sans-serif;letter-spacing:.26em;color:var(--dim);text-transform:uppercase}
@@ -57,13 +60,23 @@
   .seat{position:absolute;transform:translate(-50%,-50%);text-align:center;width:clamp(110px,13vw,210px)}
   .seat .dot{width:clamp(26px,3vw,54px);height:clamp(26px,3vw,54px);border-radius:50%;margin:0 auto clamp(4px,.6vh,10px);
              display:grid;place-items:center;font:700 clamp(12px,1.2vw,20px)/1 ui-sans-serif;color:#0b0d12}
-  .seat .nm{font:600 clamp(14px,1.5vw,26px)/1.1 ui-sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .seat .tag{font:600 clamp(9px,.85vw,14px)/1.3 ui-sans-serif;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);min-height:1.3em}
-  .seat .claim{font:400 clamp(10px,1vw,16px)/1.3 ui-sans-serif;color:var(--dim);font-style:italic;
+  /* 🚨 §4's FLOORS, AS FLOORS. These were `clamp(14px, 1.5vw, 26px)` and `clamp(10px, 1vw, 16px)`
+     — the CAP was below the minimum, so on a 1920 panel Chromium laid the nameplate out at 26px
+     against a 30px floor and the public claim at 16px against 24. `max(<floor>, <vw>)` is
+     `broadcast.js`'s own idiom for the same rule: true on any viewport, and still rewarded by a
+     bigger screen. */
+  .seat .nm{font:600 max(30px,1.7vw)/1.1 ui-sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .seat .tag{font:600 max(20px,1.05vw)/1.3 ui-sans-serif;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);min-height:1.3em}
+  .seat .claim{font:400 max(24px,1.3vw)/1.3 ui-sans-serif;color:var(--dim);font-style:italic;
                white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .seat.crew .tag{color:var(--crew)}
-  .seat.out{opacity:.34}
-  .seat.out .nm{text-decoration:line-through}
+  /* 🚨 OUT IS A STRIKE-THROUGH AND A MARK, NEVER A FADE. `opacity:.34` on the seat composited the
+     struck-through name down to **2.90:1** against §4's 4.5 — the one state the rules single out
+     as needing a non-colour channel was the one rendered as less colour. The glyph (✕ taken, ⚒
+     evicted) and the strike carry it; the dot desaturates, because a swatch is not text. */
+  .seat.out .nm{text-decoration:line-through;color:var(--dim)}
+  .seat.out .claim,.seat.out .tag{color:var(--dim)}
+  .seat.out .dot{filter:grayscale(1) brightness(.72)}
   .seat .voted{color:var(--live)}
 
   /* the middle of the circle: whatever the phase needs said */
@@ -150,7 +163,7 @@
   <span>Cameras <b id="cams">0/0</b><span class="pips" id="campips"></span></span>
   <span>Incidents <b id="alarms">0</b></span>
   <span id="crewline">—</span>
-  <span id="net">connecting…</span>
+  <span id="net"></span>
 </footer>
 
 <script>
@@ -385,6 +398,13 @@
     REUNION: () => reunionStage(),
   };
 
+  /** §6.5: the show's own name for each segment. Never "Round 3 of 5", never an enum. */
+  const SEGMENT = {
+    PREMIERE: 'The Premiere', CASTING: 'Casting', EXPEDITION: 'The Expedition', RECAP: 'The Recap',
+    DEBRIEF: 'The Debrief', RECKONING: 'The Reckoning', VOTE: 'The Vote',
+    EXECUTION: 'The Sledgehammer', VERDICT: 'The Verdict', REUNION: 'The Reunion',
+  };
+
   const big = (a, b) => '<div class="big">' + a + '</div><div class="sub">' + esc(b) + '</div>';
 
   /**
@@ -502,7 +522,10 @@
     if (!frame) return;
     $('lobby').classList.toggle('hide', started);
     $('ep').textContent = frame.phase === 'REUNION' ? 'The Reunion' : 'Episode ' + frame.episode;
-    $('phase').textContent = frame.phase;
+    // 🚨 §6.5, "never break the frame … no debug text". This printed the raw phase enum —
+    // EXPEDITION, RECKONING — at 56 pixels across the top of the television. A show has segments
+    // with names; an enum is the identifier the code passes around.
+    $('phase').textContent = SEGMENT[frame.phase] || frame.phase;
 
     /**
      * 🚨 THE FEED AIRS DURING EXPEDITION AND IN NO OTHER PHASE. It is the only phase with anything
@@ -546,7 +569,11 @@
   let ws;
   function connect() {
     ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/?role=tv');
-    ws.onopen = () => { $('net').textContent = 'live'; };
+    // 🚨 §6.5 AGAIN, AND §3's "name it as production, never [LOADING]". The footer carried a
+    // permanent `connecting…` / `reconnecting…` — a spinner in words, on the one screen the whole
+    // room is looking at. A healthy socket says nothing at all; a dropped one says what an outage
+    // says on television.
+    ws.onopen = () => { $('net').textContent = ''; };
     ws.onmessage = (e) => {
       const m = JSON.parse(e.data);
       if (m.t === 'hello') { code = m.code; joinUrl = m.url; renderLobby(); }
@@ -562,7 +589,7 @@
       if (m.t === 'reunion') { special = { ...m.special, outcome: m.outcome }; render(); }
       if (m.t === 'notice' && !m.ok) { $('startHint').textContent = m.why; }
     };
-    ws.onclose = () => { $('net').textContent = 'reconnecting…'; setTimeout(connect, 1000); };
+    ws.onclose = () => { $('net').textContent = 'WE\'LL BE RIGHT BACK'; setTimeout(connect, 1000); };
   }
 
   // The machine driving the television has a keyboard; the television does not. Space rolls, S

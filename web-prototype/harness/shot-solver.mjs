@@ -31,6 +31,7 @@ import { captionFor, allCaptions, LOWER_THIRD, ROOM_LABEL, railFor, showBug, seg
 import { TEN_FOOT, SIZES_VH, INK } from '../src/ui/broadcast.js';
 import { ROOMS } from '../src/party/coverage.js';
 import { SHOTS, KIND } from '../src/party/director.js';
+import { camerasNeeded } from '../src/party/win.js';
 
 let pass = 0, fail = 0, skip = 0;
 const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' · ' + d : ''}`); } else { fail++; console.log(`  FAIL ${n}${d ? ' · ' + d : ''}`); } return c; };
@@ -76,6 +77,34 @@ const ROSTER = ['Vic', 'Sam', 'Jo', 'Kit', 'Roo', 'Ali', 'Mo', 'Ben'];
 function namesIn(text, needles) {
   return needles.filter((n) => new RegExp(`(^|[^\\p{L}])${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^\\p{L}]|$)`, 'iu').test(text));
 }
+
+/**
+ * WCAG relative luminance and contrast, so §4's *"all text ≥ 4.5:1 on an opaque plate"* is a
+ * number rather than a hope. Takes hex or a browser `rgb()` string, so the same arithmetic serves
+ * the palette check and what Chromium actually laid out.
+ */
+const rgbOf = (c) => {
+  if (typeof c !== 'string') return [0, 0, 0];
+  if (c[0] === '#') return [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+  const m = c.match(/[\d.]+/g) || [];
+  return [+m[0] || 0, +m[1] || 0, +m[2] || 0];
+};
+const lum = (c) => {
+  const v = rgbOf(c).map((x) => x / 255).map((x) => (x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+};
+const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+/**
+ * 🚨 **`opacity` APPLIES TO THE WHOLE ELEMENT, PLATE INCLUDED — WHICH IS HOW A PLATE THAT EXISTS
+ * TO GUARANTEE A RATIO ENDS UP FADING WITH THE TEXT ON IT.** Two shipped rules did exactly that,
+ * and a checker that reads `color` alone cannot see either. This composites the ink over its own
+ * background at the inherited alpha first, the way the compositor does.
+ */
+const composited = (color, bg, alpha) => {
+  const [r, g, b] = rgbOf(color), [R, G, B] = rgbOf(bg), a = Math.max(0, Math.min(1, alpha));
+  return `rgb(${r * a + R * (1 - a)}, ${g * a + G * (1 - a)}, ${b * a + B * (1 - a)})`;
+};
+
 const PLAYER_IDS = ROSTER.map((_, i) => `p${i + 1}`);
 const ROLE_NAMES = ['cameraOp', 'soundie', 'fixer', 'producer', 'continuity', 'stuntDouble', 'glitched', 'contestant'];
 
@@ -339,13 +368,6 @@ const ROLE_NAMES = ['cameraOp', 'soundie', 'fixer', 'producer', 'continuity', 's
   t('H11 control · the check would catch a shrink — 2.0vh name is 21.6px, under the 30px floor',
     px(2.0) < TEN_FOOT.nameMinPx);
 
-  // WCAG relative luminance, so "4.5:1 on an opaque plate" is a number rather than a hope.
-  const lum = (hex) => {
-    const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
-      .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
-    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
-  };
-  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
   const pairs = [['fg', INK.fg], ['dim', INK.dim], ['live', INK.live], ['out', INK.out], ['badge', INK.badge]]
     .map(([n, c]) => [n, ratio(c, INK.plate)]);
   const dim = pairs.filter(([, r]) => r < TEN_FOOT.contrastMin);
@@ -362,15 +384,45 @@ const ROLE_NAMES = ['cameraOp', 'soundie', 'fixer', 'producer', 'continuity', 's
   // run the arm. CI has no browser and takes the SKIP — which is why every rule this arm measures
   // is ALSO asserted from `SIZES_VH` by H11. A SKIP is never a PASS, so nothing rests on it alone.
   const CHROME = process.env.RRR_CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+  const frame = await realFrame();
+  /**
+   * The frame this sweep used to invent, kept only to say what was wrong with it. It is never
+   * asserted against — it is the control that shows the difference a real frame makes.
+   */
+  const OLD_FIXTURE = {
+    episode: 3, pair: { runner: 'p2', guide: 'p5' },
+    cameras: { unlocked: 3, needed: 5 },
+    players: ROSTER.map((name, i) => ({ id: `p${i + 1}`, seat: i, name, alive: i !== 5, taken: i === 5, claim: i % 2 ? 'fixer' : null })),
+  };
+  t('H12e arm · the sweep is fed a frame off a real television socket, not a hand-written one',
+    !!frame && Array.isArray(frame.players) && frame.players.length === 8,
+    frame ? `episode ${frame.episode} · ${frame.players.length} players · phase ${frame.phase}` : 'no frame captured');
+  if (frame) {
+    const real = new Set(paths(frame)), old = new Set(paths(OLD_FIXTURE));
+    const missing = [...real].filter((x) => !old.has(x));
+    t('H12e · and the real frame carries the fields a leak sweep exists to look at',
+      ['nominations[]', 'expedition.room', 'call.made'].every((k) => [...real].some((x) => x.startsWith(k)))
+      && [...real].some((x) => x.startsWith('tally')),
+      `${real.size} paths`);
+    t('H12e control · the fixture it replaced was missing most of them',
+      missing.length >= 15,
+      `${missing.length} paths the hand-written frame never had — including ${missing.filter((x) => /nomin|tally|expedition|call/.test(x)).slice(0, 4).join(', ')}`);
+    t('H12f · and its camera denominator is one the win machine can actually produce',
+      frame.cameras.needed === camerasNeeded(frame.players.length),
+      `needed ${frame.cameras.needed} at ${frame.players.length} players · the fixture said ${OLD_FIXTURE.cameras.needed}, which WIN_TARGETS produces at no count`);
+  }
+
   if (!existsSync(CHROME)) {
     skipped('H12 browser arm', `no Chromium at ${CHROME}; the ten-foot rules are still checked from SIZES_VH by H11, but nothing has laid this overlay out`);
+  } else if (!frame) {
+    skipped('H12 browser arm', 'no real frame could be captured from a live show, so there is nothing honest to render');
   } else {
-    const res = await renderSweep(CHROME);
+    const res = await renderSweep(CHROME, frame);
     if (res.error) {
       skipped('H12 browser arm', `Chromium present but the render failed: ${res.error}`);
     } else {
       t('H12 arm · the overlay mounted and drew the rail, the bug and a lower third',
-        res.texts.length > 10 && res.seats === 8, `${res.texts.length} text runs · ${res.seats} nameplates`);
+        res.texts.length > 10 && res.seats === frame.players.length, `${res.texts.length} text runs · ${res.seats} nameplates`);
       // 🚨 THE REAL A5 SWEEP: what the television is ACTUALLY showing, not what the bank says.
       // ⚠️ PUBLISHED CLAIMS ARE EXEMPT, AND THE EXEMPTION IS NAMED RATHER THAN QUIET. §4 puts the
       // current public claim on the rail on purpose, and a player claiming to be the fixer has
@@ -393,6 +445,22 @@ const ROLE_NAMES = ['cameraOp', 'soundie', 'fixer', 'producer', 'continuity', 's
           : res.sizes.map(([n, g, m]) => `${n} ${g}px≥${m}`).join(' · '));
       t('H12d · and nothing important sits inside the 4% edge margin',
         res.edgeOk, res.edgeDetail);
+
+      /**
+       * 🚨 TWO SHIPPED RULES IN THIS FILE FADED THE PLATE ALONG WITH THE TEXT ON IT. `.rrr-seg`
+       * carried `opacity:.72` on the same element as `.rrr-plate` and composited to 4.03-4.38:1;
+       * `.rrr-seat.out` at .45 collapsed the struck-through name to 1.82:1. H11b checks the
+       * PALETTE, which cannot see either — it is the compositor that does the fading.
+       */
+      const ratioOf = (x) => ratio(composited(x.color, x.bg, x.alpha), x.bg);
+      const faded = (res.runs || []).filter((x) => ratioOf(x) < TEN_FOOT.contrastMin);
+      t('H12g · every run in the overlay clears 4.5:1 with its own opacity composited in',
+        faded.length === 0 && (res.runs || []).length >= 5,
+        faded.length ? faded.map((x) => `${x.sel} ${ratioOf(x).toFixed(2)}:1 at alpha ${x.alpha}`).join(', ')
+          : (res.runs || []).map((x) => `${x.sel} ${ratioOf(x).toFixed(1)}`).join(' · '));
+      t('H12g control · and the same arithmetic fails the ratio the shipped .45 produced',
+        ratio(composited(INK.out, INK.plate, 0.45), INK.plate) < TEN_FOOT.contrastMin,
+        `${ratio(composited(INK.out, INK.plate, 0.45), INK.plate).toFixed(2)}:1 — what OUT looked like`);
     }
   }
 }
@@ -506,7 +574,7 @@ const ROLE_NAMES = ['cameraOp', 'soundie', 'fixer', 'producer', 'continuity', 's
     } else {
       const { house, silent, off, later } = res;
       t('H13 arm · the shipped television reached a real expedition with a house attached',
-        house.phase === 'EXPEDITION' && !!house.feed,
+        house.serverPhase === 'EXPEDITION' && !!house.feed,
         `phase ${house.phase} · ${house.railSeats} nameplates · viewport ${house.vw}×${house.vh}`);
 
       t('H13 · the expedition is ON THE TELEVISION — the feed is mounted, aired and full bleed',
@@ -523,7 +591,7 @@ const ROLE_NAMES = ['cameraOp', 'soundie', 'fixer', 'producer', 'continuity', 's
         `rail ${house.railSeats} seats · circle ${house.circleVisible ? 'still drawn' : 'yielded'} · stage "${house.stage}"`);
 
       t('H13d · and in the next phase the feed leaves the screen and the circle comes back',
-        later.phase !== 'EXPEDITION' && !(later.feed && later.feed.visible) && later.circleVisible && !later.railVisible,
+        later.serverPhase !== 'EXPEDITION' && !(later.feed && later.feed.visible) && later.circleVisible && !later.railVisible,
         `${later.phase}: feed ${later.feed && later.feed.visible ? 'STILL ON AIR' : 'off'} · circle ${later.circleVisible ? 'back' : 'MISSING'}`);
 
       // ---- the controls, and they are measurements rather than assertions about a literal
@@ -539,6 +607,49 @@ const ROLE_NAMES = ['cameraOp', 'soundie', 'fixer', 'producer', 'continuity', 's
         (house.feed && house.feed.visible) === true && (silent.feed && silent.feed.visible) === false && off.feed === null,
         'aired / mounted-but-dark / absent — three states, one detector');
 
+      // ---------------------------------------------------------- H17 · §4 on the page the room watches
+      /**
+       * 🚨 **`broadcast.js` PASSES ITS OWN TEN-FOOT FLOORS. THE PAGE THE ROOM ACTUALLY WATCHES DID
+       * NOT.** At 1920×1080 the shipped television laid the nameplate name out at **26px against a
+       * 30 floor** and the public claim at **16 against 24** — both `clamp()`s whose CAP sat below
+       * their own minimum — put its edge padding at **1.7% against §4's 4%**, inside the overscan
+       * of a real television, and rendered OUT as `opacity:.34`, compositing the struck-through
+       * name to **2.90:1**. H11/H12 measured the overlay and never looked at this file.
+       */
+      const tf = house.tenfoot;
+      t('H17 arm · the television was measured as Chromium laid it out',
+        !!tf && tf.runs.length >= 4 && tf.vw === 1920,
+        tf ? `${tf.runs.length} runs at ${tf.vw}×${tf.vh}` : 'no measurement');
+      if (tf) {
+        const FLOOR = { '#rail .seat .nm': TEN_FOOT.nameMinPx, '#rail .seat .claim': TEN_FOOT.claimMinPx };
+        const small = tf.runs.filter((x) => FLOOR[x.sel] && x.px < FLOOR[x.sel]);
+        t('H17 · every nameplate run clears its ten-foot minimum on the television itself',
+          small.length === 0,
+          small.length ? small.map((x) => `${x.sel} ${x.px}px < ${FLOOR[x.sel]}`).join(', ')
+            : tf.runs.filter((x) => FLOOR[x.sel]).map((x) => `${x.sel.split(' ').pop()} ${x.px}px≥${FLOOR[x.sel]}`).join(' · '));
+
+        const ratioOf = (x) => ratio(composited(x.color, x.bg, x.alpha), x.bg);
+        const dim = tf.runs.concat(tf.out ? [tf.out] : []).filter((x) => ratioOf(x) < TEN_FOOT.contrastMin);
+        t('H17b · and every one of them clears 4.5:1 with its inherited opacity composited in',
+          dim.length === 0,
+          dim.length ? dim.map((x) => `${x.sel} ${ratioOf(x).toFixed(2)}:1 at alpha ${x.alpha}`).join(', ')
+            : `${tf.runs.length + 1} runs, worst ${Math.min(...tf.runs.concat([tf.out]).map(ratioOf)).toFixed(1)}:1`);
+        t('H17b control · the same arithmetic on a deliberately faded run reports it failing',
+          !!tf.faded && ratioOf(tf.faded) < TEN_FOOT.contrastMin,
+          tf.faded ? `opacity .34 gives ${ratioOf(tf.faded).toFixed(2)}:1 — which is what OUT used to be`
+            : 'no faded sample');
+
+        const need = tf.vw * TEN_FOOT.edgePct / 100;
+        const close = tf.runs.filter((x) => Math.min(x.l, x.r) < need - 1);
+        t('H17c · nothing important sits inside §4\'s 4% edge margin',
+          tf.pad >= need - 1 && close.length === 0,
+          `padding ${tf.pad.toFixed(0)}px against a ${need.toFixed(0)}px floor (${TEN_FOOT.edgePct}% of ${tf.vw})`);
+
+        t('H17d · and the frame is not broken by a phase enum or a spinner in words',
+          !/^[A-Z_]+$/.test(tf.phase) && tf.phase.length > 0 && !/connect|reconnect/i.test(tf.net),
+          `header reads "${tf.phase}" · footer reads "${tf.net || '(nothing)'}" while the socket is up`);
+      }
+
       // ---------------------------------------------------------- H16 · the Reunion is rendered
       /**
        * 🚨 **THE REUNION WAS COMPUTED, TRANSMITTED, AND RENDERED BY NOTHING.** `show.mjs` builds
@@ -549,7 +660,7 @@ const ROLE_NAMES = ['cameraOp', 'soundie', 'fixer', 'producer', 'continuity', 's
        */
       const r = res.reunion, truth = res.truth;
       t('H16 arm · a real season was played to its Reunion in the browser',
-        !!r && r.phase === 'REUNION' && r.rows > 0, r ? `${r.phase} · ${r.rows} roll-call rows` : 'never reached REUNION');
+        !!r && r.rows > 0 && /Reunion/i.test(r.phase), r ? `${r.phase} · ${r.rows} roll-call rows` : 'never reached REUNION');
       if (r && truth) {
         t('H16 · every seat in the sealed deal has a row, with the role it actually held',
           r.rows >= truth.seats.length && truth.seats.every((s) => r.text.includes(s.role)),
@@ -667,6 +778,42 @@ async function tvSweep(chromePath) {
       };
     })()`;
 
+    /**
+     * §4's ten-foot rules, measured off the shipped television rather than off its stylesheet.
+     * Font sizes as Chromium resolved them, ink composited over its own background at whatever
+     * opacity it INHERITS, and the distance of every important run from an edge.
+     */
+    const TENFOOT = `(() => {
+      const alphaOf = (el) => { let a = 1, n = el;
+        while (n && n.nodeType === 1) { const o = parseFloat(getComputedStyle(n).opacity); if (Number.isFinite(o)) a *= o; n = n.parentElement; }
+        return a; };
+      const bgOf = (el) => { let n = el;
+        while (n && n.nodeType === 1) { const c = getComputedStyle(n).backgroundColor;
+          if (c && !/rgba\(0, 0, 0, 0\)|transparent/.test(c)) return c; n = n.parentElement; }
+        return getComputedStyle(document.body).backgroundColor; };
+      const read = (sel, el) => { const e = el || document.querySelector(sel); if (!e) return null;
+        const cs = getComputedStyle(e), r = e.getBoundingClientRect();
+        return { sel, px: Math.round(parseFloat(cs.fontSize)), color: cs.color, bg: bgOf(e), alpha: alphaOf(e),
+                 l: r.left, r: innerWidth - r.right, t: r.top, b: innerHeight - r.bottom, w: r.width }; };
+      const runs = ['#rail .seat .nm', '#rail .seat .claim', '#rail .seat .tag', '#ep', '#cams', '#crewline']
+        .map((x) => read(x)).filter(Boolean);
+      // The OUT rule, measured on a real seat: it is the shipped stylesheet that is in question.
+      const seat = document.querySelector('#rail .seat');
+      let out = null, faded = null;
+      if (seat) {
+        seat.classList.add('out');
+        out = read('#rail .seat.out .nm', seat.querySelector('.nm'));
+        // ...and a deliberately faded one, so the compositing arithmetic is shown to have teeth.
+        seat.style.opacity = '.34';
+        faded = read('#rail .seat.out .nm (faded)', seat.querySelector('.nm'));
+        seat.style.opacity = '';
+        seat.classList.remove('out');
+      }
+      return { runs, out, faded, phase: (document.getElementById('phase').textContent || '').trim(),
+               net: (document.getElementById('net').textContent || '').trim(),
+               pad: parseFloat(getComputedStyle(document.body).paddingLeft), vw: innerWidth, vh: innerHeight };
+    })()`;
+
     /** One arm: a fresh show, five phones, cast through to a real EXPEDITION, then look. */
     const arm = async (houseArg, alsoAfter = false, toReunion = false) => {
       show = startShow({ port: SHOW, code: 'shot', stamp: 1700000000000 });
@@ -686,12 +833,15 @@ async function tvSweep(chromePath) {
       for (let i = 0; i < 8 && sess.state.phase !== PHASE.EXPEDITION; i++) { sess.skip(Date.now()); await new Promise((r) => setTimeout(r, 120)); }
       await new Promise((r) => setTimeout(r, 700));
       const at = await js(READ);
+      at.serverPhase = sess.state.phase;
+      at.tenfoot = at.railVisible ? await js(TENFOOT) : null;
       const truth = sess.truth();
       let after = null;
       if (alsoAfter) {
         sess.skip(Date.now());
         await new Promise((r) => setTimeout(r, 600));
         after = await js(READ);
+        after.serverPhase = sess.state.phase;
       }
       let reunion = null;
       if (toReunion) {
@@ -752,8 +902,77 @@ async function tvSweep(chromePath) {
   }
 }
 
+/**
+ * 🚨 **A HAND-WRITTEN FIXTURE FRAME IS A GATE MEASURING ITS OWN IMAGINATION.** The frame this
+ * sweep used to inline was missing **nineteen paths the real one carries** — `nominations[]`,
+ * `tally.*`, `expedition.room`, `call.made`: precisely the fields a leak sweep exists to look at —
+ * and it declared `cameras: {needed: 5}`, a number `WIN_TARGETS` cannot produce at any player
+ * count. So the overlay was being checked against a frame the server could never send.
+ *
+ * This plays a real show through `show.mjs`, with a published claim, a nomination and a vote, and
+ * takes the frame off the TELEVISION'S OWN SOCKET — after `project()` has filtered it, which is
+ * the only version of that object the overlay will ever be handed.
+ */
+async function realFrame() {
+  const PORT = 5244;
+  const { startShow, playerIdOf } = await import('../net/party/show.mjs');
+  const { PHASE } = await import('../src/party/phases.js');
+  const show = startShow({ port: PORT, code: 'sweep', stamp: 1700000000000 });
+  const socks = [];
+  const open = (q = '') => new Promise((res) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${PORT}/${q}`);
+    const msgs = [];
+    ws.onmessage = (e) => { const m = JSON.parse(e.data); msgs.push(m); if (m.t === 'ping') ws.send(JSON.stringify({ t: 'pong', at: m.at })); };
+    ws.onopen = () => res({ ws, msgs, send: (o) => ws.send(JSON.stringify(o)) });
+    ws.onerror = () => res({ ws, msgs, send: () => {} });
+  });
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  try {
+    await wait(120);
+    const tv = await open('?role=tv');
+    socks.push(tv);
+    for (let i = 0; i < 8; i++) {
+      const p = await open();
+      p.send({ t: 'join', name: ROSTER[i], token: null, boot: 500 });
+      socks.push(p);
+    }
+    await wait(250);
+    show.begin(Date.now());
+    const sess = show.sessionNow();
+    const phones = socks.slice(1);
+    // A published claim, so the rail has the one thing §4 puts on it that a player chose.
+    phones[0].send({ t: 'act', msg: { t: 'claim', claim: 'fixer' } });
+    await wait(120);
+    for (let i = 0; i < 20 && sess.state.phase !== PHASE.RECKONING; i++) { sess.skip(Date.now()); await wait(60); }
+    const living = sess.state.players.filter((p) => p.alive);
+    phones[1].send({ t: 'act', msg: { t: 'nominate', target: living[3].id } });
+    await wait(120);
+    for (let i = 0; i < 4 && sess.state.phase !== PHASE.VOTE; i++) { sess.skip(Date.now()); await wait(60); }
+    for (const p of phones) p.send({ t: 'act', msg: { t: 'vote', choice: living[3].id } });
+    await wait(150);
+    for (let i = 0; i < 4 && sess.state.phase !== PHASE.EXECUTION; i++) { sess.skip(Date.now()); await wait(60); }
+    await wait(200);
+    const frame = [...tv.msgs].reverse().find((m) => m.t === 'state')?.frame ?? null;
+    for (const x of socks) { try { x.ws.close(); } catch { /* gone */ } }
+    await wait(150);
+    await show.close();
+    return frame;
+  } catch (e) {
+    for (const x of socks) { try { x.ws.close(); } catch { /* gone */ } }
+    try { await show.close(); } catch { /* gone */ }
+    return null;
+  }
+}
+
+/** Every leaf path in an object, so two frames can be compared as shapes rather than by eye. */
+function paths(o, at = '') {
+  if (o === null || typeof o !== 'object') return [at];
+  if (Array.isArray(o)) return o.length ? paths(o[0], `${at}[]`) : [`${at}[]`];
+  return Object.keys(o).flatMap((k) => paths(o[k], at ? `${at}.${k}` : k));
+}
+
 /** Render the real overlay in real Chromium and measure it. No dependencies — CDP over a socket. */
-async function renderSweep(chromePath) {
+async function renderSweep(chromePath, frame) {
   const CDP = 9377;
   let proc = null;
   try {
@@ -764,11 +983,7 @@ async function renderSweep(chromePath) {
         import { captionFor } from '/src/party/captions.js';
         import { solve } from '/src/party/shots.js';
         const bx = createBroadcast({ mount: document.getElementById('m') });
-        const frame = ${JSON.stringify({
-          episode: 3, pair: { runner: 'p2', guide: 'p5' },
-          cameras: { unlocked: 3, needed: 5 },
-          players: ROSTER.map((name, i) => ({ id: `p${i + 1}`, seat: i, name, alive: i !== 5, taken: i === 5, claim: i % 2 ? 'fixer' : null })),
-        })};
+        const frame = ${JSON.stringify(frame)};
         bx.setFrame(frame, 64);
         bx.setShot(solve('STATIC', { subjectId: 'p1', probe: {
           pose: () => ({ x: 5, y: 0, z: 5, yaw: 0 }),
@@ -849,24 +1064,43 @@ async function renderSweep(chromePath) {
         const r = e.getBoundingClientRect();
         return { l: r.left, r: window.innerWidth - r.right, t: r.top, b: window.innerHeight - r.bottom };
       });
+      // The composited ink: opacity fades the plate along with the text on it, and two shipped
+      // rules did exactly that — the segment clock at .72, and an OUT seat at .45.
+      const alphaOf = (el) => { let a = 1, n = el;
+        while (n && n.nodeType === 1) { const o = parseFloat(getComputedStyle(n).opacity); if (Number.isFinite(o)) a *= o; n = n.parentElement; }
+        return a; };
+      const bgOf = (el) => { let n = el;
+        while (n && n.nodeType === 1) { const c = getComputedStyle(n).backgroundColor;
+          if (c && !/rgba\(0, 0, 0, 0\)|transparent/.test(c)) return c; n = n.parentElement; }
+        return 'rgb(0, 0, 0)'; };
+      const seat = document.querySelector('.rrr-seat');
+      if (seat) seat.classList.add('out');
+      const runs = ['.rrr-seg', '.rrr-bug', '.rrr-cams', '.rrr-show', '.rrr-third', '.rrr-seat.out .rrr-nm', '.rrr-seat.out .rrr-cl']
+        .map((sel) => { const e = document.querySelector(sel); if (!e) return null; const cs = getComputedStyle(e);
+          return { sel, color: cs.color, bg: bgOf(e), alpha: alphaOf(e) }; })
+        .filter(Boolean);
+      if (seat) seat.classList.remove('out');
       return { texts, seats: document.querySelectorAll('.rrr-seat').length,
         name: px('.rrr-nm'), claim: px('.rrr-cl'), lower: px('.rrr-third'),
-        pad, w: window.innerWidth, h: window.innerHeight, inner };
+        pad, w: window.innerWidth, h: window.innerHeight, inner, runs };
     })()`);
     proc.kill(); await new Promise((r) => srv.close(r));
 
     const margin = Math.min(...out.inner.flatMap((r) => [r.l, r.r]));
     const need = out.w * TEN_FOOT.edgePct / 100;
-    const known = new Set([...allCaptions(), showBug(3), segmentClock(64), camWall(3, 5),
-      'CAM 03 · EAST GALLERY · LIVE', '—']);
+    const names = (frame.players || []).map((p) => p.name);
+    const claims = [...new Set((frame.players || []).map((p) => p.claim).filter(Boolean))];
+    const cam = frame.cameras || {};
+    const known = new Set([...allCaptions(), showBug(frame.episode), segmentClock(64),
+      camWall(cam.unlocked || 0, cam.needed || 0), 'CAM 03 · EAST GALLERY · LIVE', '—']);
     const unknown = out.texts.filter((x) => {
       if (known.has(x)) return false;
-      if (ROSTER.some((n) => x === `⬤ ${n}` || x === `✕ ${n}` || x === `⚒ ${n}`)) return false;  // the rail
-      if (x === '“fixer”' || x === 'RUNNER' || x === 'GUIDE') return false;                       // §4's rail fields
+      if (names.some((n) => x === `⬤ ${n}` || x === `✕ ${n}` || x === `⚒ ${n}`)) return false;   // the rail
+      if (claims.some((c) => x === `“${c}”`) || x === 'RUNNER' || x === 'GUIDE') return false;   // §4's rail fields
       return true;
     });
     return {
-      texts: out.texts, seats: out.seats, unknown, claims: ['fixer'],
+      texts: out.texts, seats: out.seats, unknown, claims, frame, runs: out.runs,
       sizes: [['name', out.name, TEN_FOOT.nameMinPx], ['claim', out.claim, TEN_FOOT.claimMinPx], ['lower', out.lower, TEN_FOOT.lowerMinPx]],
       edgeOk: margin >= need - 1,
       edgeDetail: `closest run is ${margin.toFixed(0)}px from an edge, floor ${need.toFixed(0)}px (${TEN_FOOT.edgePct}% of ${out.w})`,

@@ -87,16 +87,24 @@ const CSS = `
 .rrr-third.up{opacity:1}
 
 .rrr-bug{position:absolute;left:0;bottom:0;font-size:${size(SIZES_VH.bug, 20)};letter-spacing:.2em;font-weight:600;color:${INK.dim}}
-.rrr-seg{position:absolute;right:0;bottom:0;font-size:${size(SIZES_VH.bug, 20)};letter-spacing:.2em;color:${INK.dim};opacity:.72}
+/* 🚨 NO OPACITY ON A PLATE. It applies to the WHOLE element, plate included, so .rrr-seg carrying
+   .rrr-plate at .72 composited its ink to 4.03-4.38:1 against §4's 4.5 — the plate that exists to
+   guarantee the ratio was fading along with the text on it. INK.dim is already the dimmest thing
+   §4 allows and it clears 4.5 on its own; H11b measures it at 7.4. */
+.rrr-seg{position:absolute;right:0;bottom:0;font-size:${size(SIZES_VH.bug, 20)};letter-spacing:.2em;color:${INK.dim}}
 
 .rrr-rail{display:flex;gap:1.2vh}
 .rrr-seat{flex:1 1 0;min-width:0;text-align:center}
 .rrr-nm{font-size:${size(SIZES_VH.name, TEN_FOOT.nameMinPx)};font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rrr-cl{font-size:${size(SIZES_VH.claim, TEN_FOOT.claimMinPx)};color:${INK.dim};font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rrr-bd{font-size:${size(SIZES_VH.claim, TEN_FOOT.claimMinPx)};color:${INK.badge};font-weight:700;letter-spacing:.16em;min-height:1.2em}
-/* §4: "every state change carries a non-colour channel … half a party room is looking sideways." */
+/* §4: "every state change carries a non-colour channel … half a party room is looking sideways."
+   🚨 AND THE NON-COLOUR CHANNEL IS THE STRIKE, NOT A FADE. A .45 opacity on the seat collapsed
+   the struck-through name to 1.82:1 — the one state §4 singles out as needing to survive a
+   sideways glance was the one rendered nearly invisible. The mark and the strike carry it; the
+   claim and the badge go to INK.dim, which clears the ratio on its own. */
 .rrr-seat.out .rrr-nm{text-decoration:line-through;color:${INK.out}}
-.rrr-seat.out{opacity:.45}
+.rrr-seat.out .rrr-cl,.rrr-seat.out .rrr-bd{color:${INK.dim}}
 .rrr-card{position:absolute;inset:12% 18%;display:grid;place-items:center;font-size:4vh;font-weight:700;
   letter-spacing:.2em;background:${INK.plate};border:1px solid ${INK.edge};border-radius:1vh}
 .rrr-hide{display:none}
