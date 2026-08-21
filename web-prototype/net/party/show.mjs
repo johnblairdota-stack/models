@@ -27,6 +27,13 @@
  * read the address off the television and add five characters. Until the show ends it serves
  * connection health only; the sealed stream is served once there is nothing left to spoil.
  *
+ * ⚠️ **`?role=sim` AND `?role=tv` ARE A LEASE, NOT A QUERY STRING.** `rrr-netplay.md` §3 is
+ * explicit — *"`hostKey` is generated on the TV and burned into the QR; a phone cannot claim the
+ * lease"* — and §8, *"Exactly one lease holder. A second `hello{hostKey}` supersedes."* The same
+ * document condemns `net/server.mjs` L298-306's unauthenticated `debug` command as something that
+ * *"must not survive contact with a phone"*; a privileged role granted on five characters of URL
+ * is that command with a different name. See `grant()` for what a claim now has to carry.
+ *
  * ⚠️ ZERO DEPENDENCIES, NO BUILD STEP. Same reason as `spike.mjs`: this repo ships no
  * `node_modules` and a party server you cannot start at a party does not get started.
  */
@@ -107,10 +114,57 @@ export function seedFrom(...parts) {
  * out of this file has to compile against the same signature to reproduce the old arithmetic.
  * Nothing below reads it.
  */
-export function startShow({ port = 5183, code = makeCode(), stamp = Date.now() } = {}) {
+export function startShow({ port = 5183, code = makeCode(), stamp = Date.now(), hostKey = null } = {}) {
   const lobby = createLobby(code);
   let show = null;                       // { session, castSeed, worldSeed, startedAt }
   let simSock = null;                    // the mansion, when one is attached
+
+  /**
+   * 🚨 **THE LEASE. TWO PRIVILEGED ROLES, ONE KEY, AND A PHONE CANNOT CLAIM EITHER.**
+   *
+   * `?role=sim` and `?role=tv` used to be granted on the query string alone, with no key anywhere
+   * in the process. Measured, from an unauthenticated socket: `role=sim` was sent the brief
+   * carrying `worldSeed`, **was** the mansion — one `{t:'expedition', outcome:'taken'}` and the
+   * runner died — and could set `sim.hunter.room`, which `sightForGuide()` and `hunterHere` read,
+   * so it could lie to the guide's flyover and grade the episode. `role=tv` took `lobby.tv` from
+   * the real television, which then went silent with **nothing on screen to explain it** (§6.5
+   * forbids a spinner or an error card there, and a healthy socket says nothing), and unlocked
+   * `start` and `skip`: the whole clock. Both could also send `{t:'join'}` on the same socket, so
+   * one connection was a seated player *and* the house.
+   *
+   * The rule, from `rrr-netplay.md` §3/§8:
+   *
+   *   · a claim carrying `?key=<hostKey>` is granted, always — that is the lease holder returning,
+   *     or the television's own 3D frame, which is handed the key by the page that mounts it;
+   *   · a claim carrying no key, or the wrong one, is granted **only while the lease is still
+   *     open** — and taking it closes the lease and hands that socket the key;
+   *   · every later claim without the key is refused with a reason and the socket is closed.
+   *
+   * ⚠️ THE TRUST ANCHOR IS THE ROOM, AND IT IS WORTH NAMING RATHER THAN PRETENDING OTHERWISE.
+   * The lease opens to whoever claims first because the address a phone would have to type is
+   * *printed by the television* — nobody has it until the TV is already up. That is the same
+   * anchor the doc's QR has, expressed in this transport. A host who wants no trust-on-first-use
+   * at all passes `hostKey` (`--key` on the command line, printed in the banner): the lease starts
+   * closed and every claim, including the first, has to carry it.
+   *
+   * ⚠️ THE KEY IS NEVER IN AN HTTP BODY. `/` serves the television page to anyone who asks — a
+   * phone that types the address gets it — so a key baked into that page would be no key at all.
+   * It reaches exactly one socket, the one whose claim was granted.
+   */
+  const lease = { key: hostKey || crypto.randomBytes(16).toString('hex'), open: !hostKey };
+  const grant = (role, key) => {
+    if (key === lease.key) return role;
+    if (!lease.open) return null;
+    lease.open = false;
+    return role;
+  };
+  /** §8: *"the old TV goes to a 'this game moved' screen"*. It is told; it does not just stop. */
+  const displace = (old, sock, what) => {
+    if (!old || old === sock) return;
+    send(old, { t: 'moved', why: 'this show moved to another screen' });
+    note(lobby, `${what}.superseded`);
+    old.end();
+  };
 
 /**
  * 🚨 THE SIMULATOR'S BRIEF IS FOUR FIELDS, AND THE SHORTNESS IS THE POINT. A wing, a camera
@@ -262,23 +316,38 @@ export function startShow({ port = 5183, code = makeCode(), stamp = Date.now() }
     if (!key) return sock.destroy();
     wsAccept(sock, key);
 
-    const role = new URL(req.url, 'http://x').searchParams.get('role');
+    const q = new URL(req.url, 'http://x').searchParams;
+    const wants = q.get('role') === 'tv' ? 'tv' : q.get('role') === 'sim' ? 'sim' : null;
+    const role = wants ? grant(wants, q.get('key')) : null;
+    if (wants && !role) {
+      // A refusal a phone can read, and a line in the report so the host can see it happened.
+      note(lobby, 'lease.refused', { role: wants });
+      send(sock, { t: 'denied', why: 'this show already has a television' });
+      return sock.end();
+    }
     const isTV = role === 'tv';
     const isSim = role === 'sim';
+    const privileged = isTV || isSim;
     let seat = null;
 
     if (isSim) {
+      displace(simSock, sock, 'sim');
       simSock = sock;
       lastCams = null;
       note(lobby, 'sim.connected');
       // The simulator is told the wing and the camera count and NOTHING about who anyone is.
+      send(sock, { t: 'lease', granted: true, hostKey: lease.key });
       if (show) { send(sock, briefFor(show.session)); pushCams(show.session, { force: true }); }
     }
 
     if (isTV) {
+      displace(lobby.tv, sock, 'tv');
       lobby.tv = sock;
       note(lobby, 'tv.connected');
-      send(sock, { t: 'hello', code: lobby.code, url: `http://${lanAddress()}:${port}/p`, capacity: MAX_PHONES });
+      // 🚨 THE KEY RIDES THE FIRST FRAME OF THE GRANTED SOCKET AND GOES NOWHERE ELSE. The page
+      // keeps it, presents it on every reconnect, and hands it to the mansion frame it mounts —
+      // which is how the 3D half claims the sim role without anybody typing anything.
+      send(sock, { t: 'hello', code: lobby.code, url: `http://${lanAddress()}:${port}/p`, capacity: MAX_PHONES, hostKey: lease.key });
       pushRoster();
       if (show) catchUp('tv', sock);
     }
@@ -300,7 +369,7 @@ export function startShow({ port = 5183, code = makeCode(), stamp = Date.now() }
     readFrames(sock, (m) => {
       const now = Date.now();
 
-      if (m.t === 'join' && !isTV) {
+      if (m.t === 'join' && !privileged) {
         /**
          * 🚨 A LATECOMER IS REFUSED WITH A REASON, NOT SEATED INTO A SHOW THAT HAS NO CARD FOR
          * THEM. Seating them is what used to happen and it is the worse of the two answers: the
@@ -357,7 +426,13 @@ export function startShow({ port = 5183, code = makeCode(), stamp = Date.now() }
        * `you` block, and `session.simReport` takes positions and an outcome from it and nothing
        * else. Roles never travel this way, in either direction.
        */
-      if ((m.t === 'sim' || m.t === 'expedition') && (isSim || isTV) && show) {
+      /**
+       * ⚠️ `sock === simSock`, NOT `isSim || isTV`. The old guard asked what class of socket this
+       * was rather than whether it is the house that is *currently* attached, so a superseded or
+       * orphaned mansion could still end an expedition — and the television, which holds no
+       * positions at all, could report them.
+       */
+      if ((m.t === 'sim' || m.t === 'expedition') && sock === simSock && show) {
         show.session.simReport(m);
         return;
       }
@@ -387,6 +462,9 @@ export function startShow({ port = 5183, code = makeCode(), stamp = Date.now() }
       }
     });
 
+    /** The `=== sock` guards are what stop a socket that was SUPERSEDED from clearing its
+     *  replacement on the way out — `displace` closes the old one, and its `close` fires after the
+     *  new one is already installed. */
     const bye = () => {
       if (isTV && lobby.tv === sock) { lobby.tv = null; note(lobby, 'tv.dropped'); }
       if (isSim && simSock === sock) { simSock = null; note(lobby, 'sim.dropped'); }
@@ -426,6 +504,8 @@ export function startShow({ port = 5183, code = makeCode(), stamp = Date.now() }
   server.listen(port, '0.0.0.0');
   return {
     server, lobby, port,
+    // In-process callers — the harness, and `storyboard.mjs` — hold the lease by holding the key.
+    hostKey: lease.key,
     sessionNow: () => show && show.session,
     begin,
     close: () => { clearInterval(beat); return new Promise((r) => server.close(r)); },
@@ -435,13 +515,20 @@ export function startShow({ port = 5183, code = makeCode(), stamp = Date.now() }
 if (import.meta.url === `file://${process.argv[1]}`) {
   const argv = process.argv.slice(2);
   const port = +(argv[argv.indexOf('--port') + 1] || 5183);
-  const s = startShow({ port });
+  // `--key` closes the lease before anybody connects: every claim, the television's included, has
+  // to carry it. Without it the lease opens to the first claimant, which on this transport is the
+  // screen that prints the address in the first place.
+  const s = startShow({ port, hostKey: argv.includes('--key') ? argv[argv.indexOf('--key') + 1] : null });
   const line = (l, v) => console.log(`  │  ${l.padEnd(8)}${v}`.padEnd(46) + '│');
   console.log(`\n  ┌─────────────────────────────────────────────┐`);
   line('TV', `http://${lanAddress()}:${port}`);
   line('PHONES', `http://${lanAddress()}:${port}/p`);
   line('CODE', s.lobby.code.toUpperCase());
   console.log(`  └─────────────────────────────────────────────┘\n`);
+  // The television claims the lease by being the first thing open — it is the screen that prints
+  // the address, so nothing else can be. This is for the other case: a second screen taking over,
+  // or a host who started with `--key`. It is the host's own terminal and it goes nowhere else.
+  console.log(`  Television key  ${s.hostKey}`);
   console.log(`  ${MIN_PLAYERS}-${MAX_PHONES} phones. Everyone joins, then press START on the TV.`);
   console.log(`  Talk out loud. Tap only to cast, call, nominate and vote.\n`);
 }

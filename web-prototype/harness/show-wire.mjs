@@ -398,7 +398,10 @@ t('X3 arm · the show played to the Reunion over real sockets',
     ph3.push(p);
   }
   await sleep(200);
-  const sim = await open2(PORT + 2, '?role=sim');
+  // 🚨 THE MANSION PRESENTS THE LEASE KEY, exactly as `show-tv.html` does when it mounts the 3D
+  // frame. `?role=sim` on its own is refused now — it was privilege on a query string, and a
+  // socket that opened it was the house: one `{t:'expedition'}` and the runner died.
+  const sim = await open2(PORT + 2, `?role=sim&key=${s3.hostKey}`);
   await sleep(100);
   tv3.send({ t: 'start' });
   await sleep(200);

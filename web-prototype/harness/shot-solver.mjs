@@ -942,7 +942,9 @@ async function tvSweep(chromePath) {
          * way the mansion reports one — `role=sim`, `{t:'expedition', outcome:'taken'}`, the same
          * message `harness/storyboard.mjs` uses — rather than by writing into the session.
          */
-        const sim = new WebSocket(`ws://127.0.0.1:${SHOW}/?role=sim`);
+        // The lease key, because the TV page above already claimed the lease when it loaded —
+        // `?role=sim` bare is refused, which is the point of it.
+        const sim = new WebSocket(`ws://127.0.0.1:${SHOW}/?role=sim&key=${show.hostKey}`);
         await new Promise((r) => { sim.onopen = r; });
         sim.send(JSON.stringify({ t: 'expedition', outcome: 'taken' }));
         await new Promise((r) => setTimeout(r, 200));

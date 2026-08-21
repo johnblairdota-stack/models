@@ -79,7 +79,7 @@ const sleep = (ms) => page.waitForTimeout(ms);
  * runner cannot wait for the seed to oblige. This is the same `role=sim` connection the mansion
  * uses, sending the same message — so the taken frame below is the real code path, not a poke.
  */
-const sim = new WebSocket(`ws://127.0.0.1:${SHOW_PORT}/?role=sim`);
+const sim = new WebSocket(`ws://127.0.0.1:${SHOW_PORT}/?role=sim&key=${show.hostKey}`);
 await new Promise((r) => { sim.onopen = r; });
 const report = (outcome) => sim.send(JSON.stringify({ t: 'expedition', outcome }));
 

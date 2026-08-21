@@ -170,16 +170,35 @@ const wingsFrom = (phone) => [...new Map(phone.of('event').map((m) => m.ev)
   .map((ev) => [ev.data.episode, { episode: ev.data.episode, room: ev.data.room }])).values()];
 const wingsSeen = wingsFrom(live.phones[0]);
 
+/**
+ * 🚨 **EVERY SOCKET A QUERY STRING CAN OPEN, NOT JUST THE ONES THE CLIENT CODE OPENS.** This is the
+ * other half of "the observable surface": a person on this wifi types the address off the
+ * television and can append anything they like to it. `role=sim` was the mansion and `role=tv`
+ * was the clock; both were granted on the string alone. These are opened AFTER the real
+ * television has claimed the lease, which is the only ordering a party has.
+ */
+const CLAIMS = ['?role=sim', '?role=tv', '?role=sim&key=deadbeef', '?role=tv&key=deadbeef',
+  '?role=SIM', '?role=sim&role=tv'];
+const claims = [];
+for (const c of CLAIMS) claims.push(await open(PORT, c));
+await sleep(200);
+for (const c of claims) { c.send({ t: 'join', name: 'CHEAT', boot: 400 }); c.send({ t: 'start' }); }
+await sleep(200);
+
 const surface = [
   ...bodies.map((b) => ({ name: `GET ${b.path}`, text: b.text })),
   { name: 'socket ?role=tv', text: live.tv.text() },
   ...live.phones.map((p, i) => ({ name: `socket phone ${i + 1}`, text: p.text() })),
+  ...claims.map((c) => ({ name: `socket ${c.query}`, text: c.text() })),
 ];
 const surfaceText = surface.map((s) => s.text).join('\n');
 
 // ---------------------------------------------------------------- W0 · the arm
 {
   const frames = live.tv.msgs.length + live.phones.reduce((a, p) => a + p.msgs.length, 0);
+  t('W0 arm · every privileged query string an attacker can type was actually opened',
+    claims.length === CLAIMS.length && claims.every((c) => c.msgs.length > 0),
+    claims.map((c) => `${c.query}→${c.msgs.length}`).join(' '));
   t('W0 arm · the show is on the air, mid-flight, with a full house',
     !!sess && sess.state.phase !== PHASE.REUNION && sess.state.phase !== 'LOBBY'
     && show.lobby.seats.size === MAX_PHONES,
@@ -426,6 +445,186 @@ const ctl = controlOf('seeds', [
   await bad.close();
   ctl.rm();
 }
+
+// ---------------------------------------------------------------- W5 · the lease
+/**
+ * 🚨 **`?role=sim` AND `?role=tv` WERE QUERY STRINGS, NOT CREDENTIALS, AND THERE WAS NO KEY
+ * ANYWHERE IN THE PROCESS.** `rrr-netplay.md` §2 condemns `net/server.mjs` L298-306's
+ * unauthenticated `debug` command — *"that must not survive contact with a phone"* — and this was
+ * that command with a different name. §3 says what it should be: *"`hostKey` is generated on the
+ * TV and burned into the QR; a phone cannot claim the lease."*
+ *
+ * Everything below is opened AFTER the real television is already up, which is the only ordering
+ * a party has: the address a phone would type is printed by the television.
+ */
+async function leaseProbe(mod, port, code) {
+  const h = mod.startShow({ port, code });
+  await sleep(120);
+  const tv = await open(port, '?role=tv');
+  const phones = [];
+  for (let i = 0; i < 5; i++) {
+    const p = await open(port);
+    p.send({ t: 'join', name: `R${i + 1}`, token: null, boot: 500 + i });
+    phones.push(p);
+  }
+  await sleep(240);
+  const tvRosterBefore = tv.of('roster').length;
+
+  /**
+   * The cheat arrives in the LOBBY, because that is when a chair can still be had: the version
+   * that needs no devtools is one connection that takes a seat before the bell and is the mansion
+   * after it. Both claims are opened AFTER the real television, which is the only ordering a
+   * party has — the address is printed by the television.
+   */
+  const cheatSim = await open(port, '?role=sim');
+  const cheatTV = await open(port, '?role=tv');
+  await sleep(120);
+  cheatSim.send({ t: 'join', name: 'CHEAT', token: null, boot: 400 });
+  await sleep(150);
+  const seatsAtBell = h.lobby.seats.size;
+
+  tv.send({ t: 'start' });
+  await sleep(240);
+  const sess = h.sessionNow();
+  for (let i = 0; i < 12 && sess.state.phase !== PHASE.EXPEDITION; i++) { sess.skip(Date.now()); await sleep(30); }
+  await sleep(80);
+
+  // The three things the critic did from an unauthenticated socket, in one go.
+  cheatSim.send({ t: 'sim', runner: { x: 1, z: 1, room: 'chapel', noise: 0 },
+    hunter: { x: 2, z: 2, room: 'chapel', wallDist: 1 } });
+  cheatSim.send({ t: 'expedition', outcome: 'taken' });
+  cheatTV.send({ t: 'skip' });
+  await sleep(220);
+  return { h, tv, phones, sess, cheatSim, cheatTV, tvRosterBefore, seatsAtBell,
+    phase: sess.state.phase, wired: sess.wired() };
+}
+
+const LEASE_PORT = 5254;
+const LEASE_CTL_PORT = 5255;
+const lease = await leaseProbe({ startShow }, LEASE_PORT, 'lese');
+{
+  t('W5 arm · the probe reached a running EXPEDITION with a house and a live television',
+    lease.phase === PHASE.EXPEDITION && lease.h.lobby.seats.size >= 5 && lease.tvRosterBefore > 0,
+    `${lease.phase} · ${lease.h.lobby.seats.size} seats · ${lease.tvRosterBefore} roster frames on the real TV`);
+
+  t('W5a · the unauthenticated `?role=sim` claim is refused with a reason, and told nothing else',
+    lease.cheatSim.of('denied').length === 1 && lease.cheatSim.of('brief').length === 0
+    && lease.cheatSim.of('lease').length === 0 && lease.cheatSim.msgs.length === 1,
+    JSON.stringify(lease.cheatSim.msgs));
+  t('W5b · so `worldSeed` — every episode\'s Hunter room through `pick` — never reaches it',
+    seedsIn(lease.cheatSim.text()).length === 0 && !lease.cheatSim.text().includes('worldSeed'),
+    `worldSeed ${lease.sess.state.worldSeed} absent from the whole transcript`);
+  t('W5c · and that socket is not the mansion: its positions and its outcome are not the house\'s',
+    lease.wired === false,
+    'session.wired() — a house reporting positions would have set it');
+  t('W5d · the unauthenticated `?role=tv` claim takes neither the rail nor the clock',
+    lease.cheatTV.of('roster').length === 0 && lease.cheatTV.of('hello').length === 0
+    && lease.phase === PHASE.EXPEDITION,
+    `${lease.cheatTV.of('roster').length} roster frames to the cheat · phase still ${lease.phase}`);
+  t('W5e · the real television keeps the lease, is never displaced, and its rail keeps arriving',
+    lease.tv.of('moved').length === 0 && lease.tv.of('roster').length > lease.tvRosterBefore
+    && lease.h.lobby.tv !== null,
+    `${lease.tv.of('roster').length} roster frames, up from ${lease.tvRosterBefore} · no "moved" frame`);
+  t('W5f · and neither claim is also a chair — one connection cannot be a player and the house',
+    lease.seatsAtBell === 5 && lease.cheatSim.of('seated').length === 0
+    && lease.cheatTV.of('seated').length === 0,
+    `${lease.seatsAtBell} seats at the bell, from five phones and one cheat asking for a sixth`);
+}
+
+// ---------------------------------------------------------------- W6 · the key still works
+/**
+ * The other half, and it is not optional: a lease nobody can claim is a party that never starts.
+ * §8 — *"Exactly one lease holder. A second `hello{hostKey}` supersedes … the old TV goes to a
+ * 'this game moved' screen."* Told, not silently frozen: §6.5 forbids this page an error card, so
+ * a television that simply stops is eight people arguing about the wifi.
+ */
+{
+  const realSim = await open(LEASE_PORT, `?role=sim&key=${lease.h.hostKey}`);
+  await sleep(120);
+  realSim.send({ t: 'sim', runner: { x: 1, z: 1, room: 'chapel', noise: 0 },
+    hunter: { x: 2, z: 2, room: 'chapel', wallDist: 1 } });
+  await sleep(150);
+  t('W6 · a claim carrying the key is granted, is briefed, and IS the mansion',
+    realSim.of('lease').length === 1 && realSim.of('brief').length === 1
+    && realSim.of('brief')[0].worldSeed === lease.sess.state.worldSeed && lease.sess.wired() === true,
+    `lease granted · brief wing ${realSim.of('brief')[0]?.wing} · session.wired() ${lease.sess.wired()}`);
+
+  const secondTV = await open(LEASE_PORT, `?role=tv&key=${lease.h.hostKey}`);
+  await sleep(180);
+  t('W6b · a second keyed television supersedes the first, and the first is TOLD it moved',
+    secondTV.of('hello').length === 1 && lease.tv.of('moved').length === 1
+    && lease.tv.of('moved')[0].why.includes('moved'),
+    JSON.stringify(lease.tv.of('moved')[0] || 'the displaced screen was told nothing'));
+  /**
+   * ⚠️ THE ARM MATTERS MORE THAN THE ASSERTION HERE. `/` serves the television page to anyone who
+   * asks for it, so a key baked into that page would be no key at all — but a scan that found the
+   * key nowhere because it was looking for the wrong string would read exactly the same. So: the
+   * key IS found on the socket that was granted it, and is found on nothing else.
+   */
+  const unprivileged = surface.filter((x) => x.name !== 'socket ?role=tv');
+  t('W6c arm · the scan can see the key — it is on the granted television socket, in `hello`',
+    live.tv.of('hello')[0]?.hostKey === show.hostKey && show.hostKey.length >= 32,
+    `${show.hostKey.length} hex characters, delivered in the granted socket's first frame`);
+  t('W6c · and on nothing else — no HTTP body, no phone, no refused claim carries it',
+    unprivileged.every((x) => !x.text.includes(show.hostKey)),
+    `absent from ${unprivileged.length} unprivileged surfaces including GET / and GET /p`);
+  realSim.close(); secondTV.close();
+}
+
+// ---------------------------------------------------------------- W5/W6 control
+{
+  const ctl3 = controlOf('lease', [
+    [[
+      "    const role = wants ? grant(wants, q.get('key')) : null;",
+      '    if (wants && !role) {',
+      '      // A refusal a phone can read, and a line in the report so the host can see it happened.',
+      "      note(lobby, 'lease.refused', { role: wants });",
+      "      send(sock, { t: 'denied', why: 'this show already has a television' });",
+      '      return sock.end();',
+      '    }',
+    ].join('\n'), '    const role = wants;'],
+    ['      displace(simSock, sock, \'sim\');\n', ''],
+    ['      displace(lobby.tv, sock, \'tv\');\n', ''],
+    ["if ((m.t === 'sim' || m.t === 'expedition') && sock === simSock && show) {",
+      "if ((m.t === 'sim' || m.t === 'expedition') && (isSim || isTV) && show) {"],
+    ["if (m.t === 'join' && !privileged) {", "if (m.t === 'join' && !isTV) {"],
+  ]);
+  t('W5/W6 control arm · the five edits that put the query-string grant back all applied',
+    ctl3.applied, ctl3.missed.length ? `did not apply: ${ctl3.missed.join(' | ')}` : 'lease, supersede, sim guard and join guard all reverted');
+
+  const mod = await ctl3.load();
+  const bad = await leaseProbe(mod, LEASE_CTL_PORT, 'lctl');
+  t('W5 control arm · the control ran the same probe, and the cheat socket was answered',
+    bad.sess && bad.cheatSim.msgs.length > 1,
+    `${bad.h.lobby.seats.size} seats · ${bad.cheatSim.msgs.length} frames to the cheat socket`);
+
+  const brief = bad.cheatSim.of('brief')[0];
+  t('W5a control · the same unauthenticated claim is briefed, and the brief carries `worldSeed`',
+    !!brief && brief.worldSeed === bad.sess.state.worldSeed,
+    brief ? JSON.stringify(brief) : 'no brief');
+  t('W5c control · and that socket IS the mansion — its positions became the house\'s',
+    bad.wired === true, 'session.wired() after one frame from an unauthenticated socket');
+  t('W5d control · the same `?role=tv` claim takes the rail and drives the clock',
+    bad.cheatTV.of('roster').length > 0 && bad.phase !== PHASE.EXPEDITION,
+    `${bad.cheatTV.of('roster').length} roster frames to the cheat · one {t:'skip'} moved the show to ${bad.phase}`);
+  t('W5e control · and the real television is replaced in silence, with nothing on screen to say so',
+    bad.tv.of('moved').length === 0 && bad.tv.of('roster').length === bad.tvRosterBefore,
+    `the real TV's rail stopped at ${bad.tvRosterBefore} frames and it was told nothing — §6.5 leaves the screen frozen on its last one`);
+  t('W5f control · the same connection is a seated player AND the house',
+    bad.seatsAtBell === 6 && bad.cheatSim.of('seated').length >= 1,
+    `${bad.seatsAtBell} seats at the bell · the mansion holds seat ${bad.cheatSim.of('seated')[0]?.seat}`);
+
+  bad.cheatSim.close(); bad.cheatTV.close();
+  for (const p of bad.phones) p.close();
+  bad.tv.close();
+  await bad.h.close();
+  ctl3.rm();
+}
+
+lease.cheatSim.close(); lease.cheatTV.close();
+for (const p of lease.phones) p.close();
+lease.tv.close();
+await lease.h.close();
 
 // ---------------------------------------------------------------- W4 · and it still comes home
 /**

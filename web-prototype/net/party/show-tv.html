@@ -211,7 +211,9 @@
 
   function mountFeed() {
     if (feedEl || !HOUSE) return;
-    const join = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/?role=sim';
+    // The mansion claims the sim half of the lease with THIS page's key — which is why the 3D
+    // frame is the house and a phone appending five characters to the address is not.
+    const join = keyed((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/?role=sim');
     feedEl = document.createElement('iframe');
     feedEl.id = 'feed';
     feedEl.className = 'hide';
@@ -573,9 +575,28 @@
   }
 
   // ---------------------------------------------------------------- the wire
+  /**
+   * 🚨 **THE LEASE KEY. THIS PAGE IS THE TELEVISION, AND THE KEY IS THE ONLY THING THAT SAYS SO.**
+   *
+   * `?role=tv` was privilege on five characters of URL: any phone that typed the address served
+   * itself this page, took `lobby.tv` from the real screen, and got `start` and `skip` with it.
+   * The big screen then froze on its last frame with nothing to explain why, because §6.5 forbids
+   * a spinner or an error card here and a healthy socket says nothing.
+   *
+   * So `show.mjs` hands the granted socket a `hostKey` in `hello`, and this page presents it on
+   * every later claim — its own reconnects, and the mansion frame it mounts. It is kept in
+   * `localStorage` so a reload of this tab comes back as the same television; that store is per
+   * browser, so a phone has nothing in it and cannot get anything into it.
+   */
+  const KEY_STORE = 'rrr.hostKey';
+  let hostKey = null;
+  try { hostKey = localStorage.getItem(KEY_STORE); } catch (e) { hostKey = null; }
+  const keyed = (base) => base + (hostKey ? '&key=' + encodeURIComponent(hostKey) : '');
+
   let ws;
+  let moved = false;
   function connect() {
-    ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/?role=tv');
+    ws = new WebSocket(keyed((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/?role=tv'));
     // 🚨 §6.5 AGAIN, AND §3's "name it as production, never [LOADING]". The footer carried a
     // permanent `connecting…` / `reconnecting…` — a spinner in words, on the one screen the whole
     // room is looking at. A healthy socket says nothing at all; a dropped one says what an outage
@@ -583,7 +604,13 @@
     ws.onopen = () => { $('net').textContent = ''; };
     ws.onmessage = (e) => {
       const m = JSON.parse(e.data);
-      if (m.t === 'hello') { code = m.code; joinUrl = m.url; renderLobby(); }
+      if (m.t === 'hello') {
+        code = m.code; joinUrl = m.url;
+        // The key can change under us: a new server on the same address mints a new one, and the
+        // stored one is then a stale string the lease politely ignored while it was still open.
+        if (m.hostKey) { hostKey = m.hostKey; try { localStorage.setItem(KEY_STORE, m.hostKey); } catch (e) { /* private window */ } }
+        renderLobby();
+      }
       if (m.t === 'roster') { seats = m.players; started = m.started; renderLobby(); if (started) render(); }
       /**
        * 🚨 THE HOUSE IS LOADED WHEN THE SHOW ROLLS, NOT WHEN THE EXPEDITION OPENS. A mansion is
@@ -595,8 +622,22 @@
       if (m.t === 'event') onEvent(m.ev);
       if (m.t === 'reunion') { special = { ...m.special, outcome: m.outcome }; render(); }
       if (m.t === 'notice' && !m.ok) { $('startHint').textContent = m.why; }
+      /**
+       * 🚨 §8's *"the old TV goes to a 'this game moved' screen"* — and the reason it is a screen
+       * rather than silence. Two Directors is two truths; a screen that simply stops is eight
+       * people arguing about the wifi. It reuses the outage slot, in the outage's voice, and it
+       * does NOT reconnect — coming back would take the lease straight back off the new screen.
+       */
+      if (m.t === 'moved' || m.t === 'denied') {
+        moved = true;
+        $('net').textContent = m.t === 'moved' ? 'THIS SHOW MOVED TO ANOTHER SCREEN' : 'THIS SHOW IS ALREADY ON THE AIR';
+      }
     };
-    ws.onclose = () => { $('net').textContent = 'WE\'LL BE RIGHT BACK'; setTimeout(connect, 1000); };
+    ws.onclose = () => {
+      if (moved) return;
+      $('net').textContent = 'WE\'LL BE RIGHT BACK';
+      setTimeout(connect, 1000);
+    };
   }
 
   // The machine driving the television has a keyboard; the television does not. Space rolls, S
