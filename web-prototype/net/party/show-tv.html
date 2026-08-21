@@ -83,6 +83,9 @@
   .stage{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;
          width:min(46%,640px);display:flex;flex-direction:column;gap:clamp(6px,1vh,14px)}
   .stage .big{font:700 clamp(20px,2.6vw,44px)/1.1 ui-sans-serif;letter-spacing:.02em}
+  /* The Reunion is a board, not a line in the middle of a circle: eight roll-call rows and five
+     awards do not fit in 46% of the screen, and at 46% they were clipped mid-word over the seats. */
+  .stage.wide{width:min(94%,1600px)}
   .stage .sub{font:400 clamp(12px,1.2vw,20px)/1.4 ui-sans-serif;color:var(--dim)}
   /* No `.call` rule, deliberately — see the EXPEDITION stage below and broadcast §6.9. A style
      for it is half of a reintroduction. */
@@ -122,8 +125,8 @@
   /* the reunion */
   .roll{display:grid;grid-template-columns:repeat(2,1fr);gap:clamp(8px,1vh,16px);text-align:left;
         max-height:70vh;overflow:auto}
-  .row{display:flex;align-items:baseline;gap:.6em;background:var(--panel);border:1px solid var(--edge);
-       border-radius:10px;padding:clamp(8px,1vh,14px) clamp(10px,1vw,18px);font-size:clamp(12px,1.2vw,20px)}
+  .row{display:flex;align-items:baseline;flex-wrap:wrap;gap:.6em;background:var(--panel);border:1px solid var(--edge);
+       border-radius:10px;padding:clamp(8px,1vh,14px) clamp(10px,1vw,18px);font-size:clamp(14px,1.15vw,22px)}
   .row .who{font-weight:700;min-width:6em}
   .row .was{color:var(--warn)}
   .row .al{margin-left:auto;font-size:.8em;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
@@ -534,10 +537,14 @@
      * the stage line are what EXPEDITION has always been, which is a party that still plays.
      */
     const onAir = !!feedEl && feedReady && frame.phase === 'EXPEDITION';
+    // The Reunion takes the whole screen for the same reason the feed does: what is on it is the
+    // payoff, and the circle of names is what it is a payoff ABOUT.
+    const finale = frame.phase === 'REUNION';
     if (feedEl) feedEl.classList.toggle('hide', !onAir);
     $('rail').classList.toggle('hide', !onAir);
-    $('circle').classList.toggle('hide', onAir);
+    $('circle').classList.toggle('hide', onAir || finale);
     $('stage').classList.toggle('hide', onAir);
+    $('stage').classList.toggle('wide', finale);
     $('stage').innerHTML = onAir ? '' : (STAGE[frame.phase] || (() => ''))();
     const c = frame.cameras || {};
     $('cams').textContent = (c.unlocked || 0) + '/' + (c.needed || 0);
@@ -546,7 +553,7 @@
     $('alarms').textContent = (frame.incident || {}).alarms || 0;
     $('crewline').textContent = frame.pair && frame.pair.runner
       ? nameOf(frame.pair.runner) + ' runs · ' + nameOf(frame.pair.guide) + ' guides' : '—';
-    if (onAir) drawRail(); else drawCircle();
+    if (onAir) drawRail(); else if (!finale) drawCircle();
     paintClock();
   }
 
