@@ -330,6 +330,21 @@ export function startShow({ port = 5183, code = makeCode(), stamp = Date.now(), 
     const privileged = isTV || isSim;
     let seat = null;
 
+    /**
+     * 🚨 **THE CHAIR'S AUTHORITY IS ITS CURRENT SOCKET, NOT THE ONE THIS CLOSURE STARTED WITH.**
+     *
+     * `seatJoin` hands a chair back by token, and it does that by rebinding `existing.sock` — so
+     * the connection that used to hold it is still here, still holding `seat` in this closure, and
+     * `act` read `playerIdOf(seat.seat)` out of it and never asked whether the chair was still
+     * this socket's. A phone that lost its seat to a token kept casting ballots, publishing claims
+     * and driving, and the server recorded them under the seat's player id.
+     *
+     * `seatDrop`'s own `seat.sock !== sock` guard already stops the mirror image of this — an old
+     * socket closing and taking the new holder's chair down with it — and is left alone. This is
+     * the same question asked on the way in.
+     */
+    const holds = () => !!seat && seat.sock === sock;
+
     if (isSim) {
       displace(simSock, sock, 'sim');
       simSock = sock;
@@ -422,13 +437,13 @@ export function startShow({ port = 5183, code = makeCode(), stamp = Date.now(), 
         return;
       }
 
-      if (m.t === 'pong' && seat && typeof m.at === 'number') {
+      if (m.t === 'pong' && holds() && typeof m.at === 'number') {
         seat.rtt.push(now - m.at);
         if (seat.rtt.length > 200) seat.rtt.shift();
         return;
       }
 
-      if (m.t === 'rename' && seat && !show) { seat.name = (m.name || seat.name).slice(0, 14); pushRoster(); return; }
+      if (m.t === 'rename' && holds() && !show) { seat.name = (m.name || seat.name).slice(0, 14); pushRoster(); return; }
 
       // ---- the host's two buttons, and they are the TV's alone.
       if (m.t === 'start' && isTV) {
@@ -460,11 +475,22 @@ export function startShow({ port = 5183, code = makeCode(), stamp = Date.now(), 
 
       // ---- a tap from a phone
       /**
+       * ⚠️ AND IT IS TOLD, ONCE, RATHER THAN TAPPING INTO A VOID. Same reason the refusal below
+       * goes back to the phone that sent it: a controller that silently ignores you is a
+       * controller people stop trusting halfway through the evening. A phone that has been
+       * superseded needs to know that is what happened.
+       */
+      if ((m.t === 'act' || m.t === 'drive') && seat && !holds()) {
+        send(sock, { t: 'refused', why: 'this chair is on another phone', was: m.t });
+        return;
+      }
+
+      /**
        * 🎮 THE RUNNER'S STICK. Relayed to the simulator, never applied here — the server has no
        * physics and must not pretend to. It checks one thing, which is the thing that matters:
        * that the phone sending it is THIS episode's runner.
        */
-      if (m.t === 'drive' && seat && show) {
+      if (m.t === 'drive' && holds() && show) {
         const st = show.session.state;
         if (st.phase !== PHASE.EXPEDITION) return;
         if (playerIdOf(seat.seat) !== st.pair.runner) {
@@ -475,7 +501,7 @@ export function startShow({ port = 5183, code = makeCode(), stamp = Date.now(), 
         return;
       }
 
-      if (m.t === 'act' && seat && show) {
+      if (m.t === 'act' && holds() && show) {
         const r = show.session.input(playerIdOf(seat.seat), m.msg || {});
         // ⚠️ A REFUSAL GOES BACK TO THE PHONE THAT SENT IT. A controller that silently ignores you
         // is a controller people stop trusting halfway through the evening.

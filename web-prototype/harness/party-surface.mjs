@@ -722,6 +722,112 @@ for (const p of chairs.honest) p.close();
 chairs.tv.close();
 await chairs.h.close();
 
+// ---------------------------------------------------------------- W8 · the displaced socket
+/**
+ * 🚨 **`act` READ `playerIdOf(seat.seat)` OUT OF ITS CLOSURE AND NEVER ASKED WHETHER THE CHAIR WAS
+ * STILL THIS SOCKET'S.** `seatJoin` gives a chair back by token by rebinding `existing.sock`, so
+ * the connection that lost it is still connected and still holding the seat record — and it kept
+ * casting ballots, publishing claims and driving the robot, all recorded under the seat's player.
+ *
+ * The probe steals the chair of the phone that is currently the RUNNER, so both authorised paths —
+ * `act` into the session and `drive` relayed to the mansion — are exercised by the same theft.
+ */
+async function displacedProbe(mod, port, code) {
+  const h = mod.startShow({ port, code });
+  await sleep(120);
+  const tv = await open(port, '?role=tv');
+  const sim = await open(port, `?role=sim&key=${h.hostKey}`);
+  const phones = [];
+  for (let i = 0; i < 5; i++) {
+    const p = await open(port);
+    p.send({ t: 'join', name: `R${i + 1}`, token: null, boot: 500 });
+    phones.push(p);
+  }
+  await sleep(240);
+  tv.send({ t: 'start' });
+  await sleep(240);
+  const sess = h.sessionNow();
+  for (let i = 0; i < 12 && sess.state.phase !== PHASE.EXPEDITION; i++) { sess.skip(Date.now()); await sleep(30); }
+  await sleep(80);
+
+  const seatNo = Number(sess.state.pair.runner.slice(1)) - 1;
+  const victim = phones.find((p) => p.of('seated').slice(-1)[0]?.seat === seatNo);
+  const token = victim.of('seated').slice(-1)[0].token;
+
+  const thief = await open(port);
+  thief.send({ t: 'join', name: 'THIEF', token, boot: 400 });
+  await sleep(220);
+  const drivesBefore = sim.of('drive').length;
+  const stolen = h.lobby.seats.get(`phone-${seatNo}`);
+
+  // The displaced socket, still connected, still holding the seat record it started with.
+  victim.send({ t: 'drive', heading: 1.2, detent: 2 });
+  victim.send({ t: 'act', msg: { t: 'claim', claim: 'GHOST' } });
+  await sleep(220);
+
+  return { h, tv, sim, phones, thief, victim, seatNo, sess,
+    rebound: stolen && stolen.sock !== null,
+    drives: sim.of('drive').length - drivesBefore,
+    claim: sess.state.players[seatNo].claim,
+    refused: victim.of('refused').map((r) => r.was) };
+}
+
+const DISP_PORT = 5258;
+const DISP_CTL_PORT = 5259;
+const disp = await displacedProbe({ startShow }, DISP_PORT, 'disp');
+{
+  t('W8 arm · the chair really was taken by token, off the phone that was the runner',
+    disp.thief.of('seated').length === 1 && disp.thief.of('seated')[0].seat === disp.seatNo
+    && disp.sess.state.pair.runner === `p${disp.seatNo + 1}` && disp.rebound,
+    `seat ${disp.seatNo} is the runner and now answers on the thief's socket`);
+  t('W8 · the displaced socket\'s ballot is not recorded — the claim never reaches the table',
+    disp.claim === null,
+    `players[${disp.seatNo}].claim is ${JSON.stringify(disp.claim)} after a displaced socket published one`);
+  t('W8b · and its stick does not reach the mansion either',
+    disp.drives === 0, `${disp.drives} drive frames relayed from a socket that no longer holds the chair`);
+  t('W8c · it is told so, once, rather than tapping into a void',
+    disp.refused.includes('act') && disp.refused.includes('drive'),
+    `refusals for: ${disp.refused.join(', ') || 'nothing — the phone was ignored in silence'}`);
+}
+
+// ---------------------------------------------------------------- W8 control
+{
+  const ctl5 = controlOf('displaced', [
+    ["      if (m.t === 'drive' && holds() && show) {", "      if (m.t === 'drive' && seat && show) {"],
+    ["      if (m.t === 'act' && holds() && show) {", "      if (m.t === 'act' && seat && show) {"],
+    [[
+      "      if ((m.t === 'act' || m.t === 'drive') && seat && !holds()) {",
+      "        send(sock, { t: 'refused', why: 'this chair is on another phone', was: m.t });",
+      '        return;',
+      '      }',
+      '',
+    ].join('\n'), ''],
+  ]);
+  t('W8 control arm · the edits that take the chair check back off `act` and `drive` applied',
+    ctl5.applied, ctl5.missed.length ? `did not apply: ${ctl5.missed.join(' | ')}` : 'both handlers read `seat` out of the closure again');
+
+  const mod = await ctl5.load();
+  const bad = await displacedProbe(mod, DISP_CTL_PORT, 'dctl');
+  t('W8 control arm · the control staged the same theft against the same runner',
+    bad.thief.of('seated').length === 1 && bad.sess.state.pair.runner === `p${bad.seatNo + 1}`,
+    `seat ${bad.seatNo}`);
+  t('W8 control · the displaced socket publishes a claim under the seat it no longer holds',
+    bad.claim === 'GHOST', `players[${bad.seatNo}].claim is ${JSON.stringify(bad.claim)}`);
+  t('W8b control · and drives the robot with it',
+    bad.drives === 1, `${bad.drives} drive frame relayed to the mansion from a phone with no chair`);
+
+  bad.thief.close(); bad.victim.close(); bad.sim.close();
+  for (const p of bad.phones) p.close();
+  bad.tv.close();
+  await bad.h.close();
+  ctl5.rm();
+}
+
+disp.thief.close(); disp.sim.close();
+for (const p of disp.phones) p.close();
+disp.tv.close();
+await disp.h.close();
+
 // ---------------------------------------------------------------- W4 · and it still comes home
 /**
  * 🚨 REPLAYABILITY IS THE REASON THE SEEDS ARE REPORTED AT ALL, AND IT SURVIVES. They come home in
