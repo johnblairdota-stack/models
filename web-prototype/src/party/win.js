@@ -28,6 +28,29 @@ export const WIN_TARGETS = {
   8: { cameraTarget: 4, feedTarget: 3 },
 };
 
+/**
+ * 🚨 **THE ONE PLACE THE CAMERA OBJECTIVE IS WRITTEN DOWN, BECAUSE IT WAS WRITTEN DOWN TWICE.**
+ *
+ * `cast.js`'s `COMPOSITION` carried its own `cameras` number — 2/2/2/3/3 — and `session.js` put it
+ * on the frame as `cameras.needed` while THIS table decided the match. Every count disagreed, and
+ * the display was seeded at 1 besides, so the television read `3/3` with every pip lit at episode
+ * two and the show ran on to a displayed `5/3`. The number belongs to the win machine, so it is
+ * only here; `dealCast` asks for it rather than keeping a copy, and `win-machine` W10 asserts
+ * there is no second copy left to drift.
+ *
+ * ⚠️ THE DOCS DISAGREE AND THIS FOLLOWS THE ONE THAT OWNS THE MACHINE. `rrr-social-round.md` §6 is
+ * unambiguous — *"`cameraTarget` = 3 at 4–5 players, 4 at 6–8"* — and its own scope contract gives
+ * it *"the win machine"*. `rrr-roles.md` §3's player-count table says 2/2/2/3/3 and argues for the
+ * six-player row on purpose; the bible §8 says 2/2/3/3/3. Three tables, three answers. Reported,
+ * not silently reconciled — and W8b pins this one to §6's words so a future edit has to argue
+ * with the doc rather than with a number.
+ */
+export const camerasNeeded = (count) => {
+  const w = WIN_TARGETS[count];
+  if (!w) throw new Error(`no win targets for ${count} players`);
+  return w.cameraTarget;
+};
+
 export const OUTCOME = {
   FINALE: 'SEASON FINALE',   // good
   CANCELLED: 'CANCELLED',    // evil

@@ -275,7 +275,13 @@
         by ? 'Nominated by ' + esc(swingerName(by)) + ' — who swings. Nobody says what they were.'
           : 'The sledgehammer. Nobody says what they were.');
     },
-    VERDICT: () => big(status(), (frame.cameras || {}).unlocked + ' cameras live · ' + (frame.incident || {}).alarms + ' incidents'),
+    // Round §4 airs the cameras as *"n of N lit"*. It read `unlocked + ' cameras live'`, which was
+    // a different quantity under a third name — see `coverage.js` on the establishing camera.
+    VERDICT: () => {
+      const c = frame.cameras || {};
+      return big(status(), (c.unlocked || 0) + ' of ' + (c.needed || 0) + ' cameras lit · '
+        + ((frame.incident || {}).alarms || 0) + ' incidents');
+    },
     REUNION: () => reunionStage(),
   };
 

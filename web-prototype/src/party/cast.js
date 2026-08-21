@@ -25,6 +25,8 @@
  * No THREE, no DOM, no engine — like `rules.js`, so bare node and the browser load one copy.
  */
 
+import { camerasNeeded } from './win.js';
+
 /** Alignment is binary. Outsiders are GOOD; that is the point of them. */
 export const GOOD = 'good';
 export const EVIL = 'evil';
@@ -55,15 +57,20 @@ export const ROLES = {
 /**
  * `docs/design/rrr-roles.md` §8. Every row sums to its count, and `minion + producer` is
  * 1 at 4-5 and 2 at 6-8 — bible D14, settled, and above the genre's 25-30% band at six on
- * purpose. `cameras` is how many must be unlocked to win, and it is the valve that takes the
- * pressure off six rather than changing the evil count.
+ * purpose.
+ *
+ * 🚨 THERE IS NO `cameras` COLUMN HERE ANY MORE AND THAT IS THE POINT. It carried 2/2/2/3/3 while
+ * `win.js`'s `WIN_TARGETS` decided matches on 3/3/4/4/4 — every count disagreed, and the number
+ * this table produced was the one the television printed. The objective belongs to the win
+ * machine; `dealCast` asks `camerasNeeded()` for it so there is one copy. See `win.js` for which
+ * of the three design tables that number follows, and why.
  */
 export const COMPOSITION = {
-  4: { informed: 2, contestant: 1, outsider: 0, minion: 0, producer: 1, cameras: 2 },
-  5: { informed: 3, contestant: 0, outsider: 1, minion: 0, producer: 1, cameras: 2 },
-  6: { informed: 3, contestant: 0, outsider: 1, minion: 1, producer: 1, cameras: 2 },
-  7: { informed: 3, contestant: 1, outsider: 1, minion: 1, producer: 1, cameras: 3 },
-  8: { informed: 4, contestant: 0, outsider: 2, minion: 1, producer: 1, cameras: 3 },
+  4: { informed: 2, contestant: 1, outsider: 0, minion: 0, producer: 1 },
+  5: { informed: 3, contestant: 0, outsider: 1, minion: 0, producer: 1 },
+  6: { informed: 3, contestant: 0, outsider: 1, minion: 1, producer: 1 },
+  7: { informed: 3, contestant: 1, outsider: 1, minion: 1, producer: 1 },
+  8: { informed: 4, contestant: 0, outsider: 2, minion: 1, producer: 1 },
 };
 
 /** Roles the table guarantees at a count, so a script's spine is stable game to game. */
@@ -177,7 +184,7 @@ export function dealCast({ count, castSeed, playerIds }) {
   return {
     seats,
     evil: seats.filter((s) => s.alignment === EVIL).map((s) => s.id),
-    cameras: comp.cameras,
+    cameras: camerasNeeded(count),
   };
 }
 

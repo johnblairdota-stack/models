@@ -33,7 +33,7 @@ import { dealCast, viewFor, EVIL } from './cast.js';
 import { project } from '../../net/party/entitle.js';
 import { makeEvent, VIS } from './events.js';
 import { createLog, visibleTo } from './log.js';
-import { ROOMS, hunterVisibleToGuide } from './coverage.js';
+import { ROOMS, hunterVisibleToGuide, camerasLive } from './coverage.js';
 import { guideSight } from './darkrun.js';
 import { HOUSE } from './houseplan.js';
 import { applyTake, applyEviction, resolveContact, MODE, PLATE } from './taken.js';
@@ -184,7 +184,13 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
     call: { by: null, said: null },
     expedition: { room: null, outcome: null },
     outcome: null,
-    cameras: { unlocked: 1, needed: deal.cameras },
+    // 🚨 `unlocked` COUNTS WHAT THE CREW HAS LIT, FROM ZERO — the same thing `win.js` folds, so
+    // the scoreboard and the win machine are reading one number. It was seeded at 1 (the
+    // establishing camera) and compared against a target counted from 0, which is why the
+    // television read 3/3 with every pip lit at episode two of a game that ran on to 5/3. The
+    // establishing camera has not gone anywhere: it lives in `coverage.js`'s `camerasLive`,
+    // where it belongs, because it is a coverage fact and not an objective one.
+    cameras: { unlocked: 0, needed: deal.cameras },
     incident: { alarms: 0 },
     clock: { seconds: 0, endsAt: 0 },
   };
@@ -302,7 +308,7 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
     // DOES. `guideSight` is `darkrun.js`'s and stays the single authority on what a guide can
     // see; all the mansion supplies is geometry it is the only thing in a position to know.
     const room = sim ? sim.hunter.room : hunterRoom;
-    const covered = hunterVisibleToGuide({ worldSeed, unlocked: state.cameras.unlocked, hunterRoom: room });
+    const covered = hunterVisibleToGuide({ worldSeed, unlocked: camerasLive(state.cameras.unlocked), hunterRoom: room });
     const wallDistance = sim
       ? sim.hunter.wallDist
       // No mansion: the same distribution over the same blind strip, seeded per episode.

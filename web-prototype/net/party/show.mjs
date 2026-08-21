@@ -42,6 +42,7 @@ import {
 import { createSession, LOBBY } from '../../src/party/session.js';
 import { PHASE } from '../../src/party/phases.js';
 import { COMPOSITION } from '../../src/party/cast.js';
+import { camerasLive } from '../../src/party/coverage.js';
 import { reunion } from '../../src/party/reunion.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -78,7 +79,9 @@ export function startShow({ port = 5183, code = makeCode(), stamp = Date.now() }
   const briefFor = (session) => ({
     t: 'brief',
     wing: session.state.expedition.room,
-    cameras: session.state.cameras.unlocked,
+    // The number of cameras actually watching rooms, which is what a renderer needs — not the
+    // scoreboard's count of what the crew has earned. `coverage.js` owns the difference.
+    cameras: camerasLive(session.state.cameras.unlocked),
     worldSeed: session.state.worldSeed,
     episode: session.state.episode,
   });

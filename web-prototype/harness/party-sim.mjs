@@ -35,7 +35,7 @@ import { tallyCasting } from '../src/party/ballot.js';
 import { COMPOSITION } from '../src/party/cast.js';
 import { OUTCOME } from '../src/party/win.js';
 import { EPISODE_CAP } from '../src/party/phases.js';
-import { ROOMS, coveredRooms } from '../src/party/coverage.js';
+import { ROOMS, coveredRooms, camerasLive } from '../src/party/coverage.js';
 import { blindStrip } from '../src/party/darkrun.js';
 import { castBallot, nominate, vote, willLie, spikesThisEpisode, chance, POLICY } from '../src/party/policy.js';
 
@@ -119,7 +119,9 @@ function playMatch({ count, seed, goodPolicy, evilPolicy }) {
     stats.offCrewEvilEvents += spikers.length;
 
     const exp = resolveExpedition({
-      seed, ep, worldSeed: seed + 1, unlocked: r.state.cameras.unlocked,
+      // The LIVE camera count, which is what coverage is a function of — `cameras.unlocked` is
+      // now the crew's earned count and starts at zero. `coverage.js` owns the difference.
+      seed, ep, worldSeed: seed + 1, unlocked: camerasLive(r.state.cameras.unlocked),
       guidePolicy: policyOf(pair.guide), producerSpiked: spikers.length > 0,
     });
     stats.calls.push(...exp.calls);

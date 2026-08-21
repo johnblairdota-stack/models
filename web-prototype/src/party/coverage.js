@@ -47,6 +47,26 @@
  */
 export const ROOMS = ['ballroom', 'gallery', 'study_w', 'study_e', 'service', 'chapel'];
 
+/**
+ * 🚨 **THE ESTABLISHING CAMERA — LIVE FROM FRAME ONE, AND IT IS NOT PART OF THE OBJECTIVE.**
+ *
+ * Two different numbers were being kept in one field and it made the scoreboard lie. `build-brief`
+ * §S3: *"The show starts with one camera live, because at zero coverage the guide is a coin and
+ * can never be caught lying"* — that is a COVERAGE fact, and it is why episode one sits at 33%
+ * rather than 50% honest error. It is not something the crew lit, so it is not something the win
+ * machine counts: `win.js` folds `run.camera_lit` entries, of which there are zero at the start.
+ *
+ * So `cameras.unlocked` counts what the crew has earned, from zero, and is the number the
+ * scoreboard prints against `cameras.needed`; coverage asks `camerasLive()` for the number of
+ * cameras actually watching rooms. One field was doing both jobs, seeded at 1 and compared
+ * against a target counted from 0, and the television read `3/3` with every pip lit at episode
+ * two of a game that ran on to a displayed `5/3`.
+ */
+export const ESTABLISHING_CAMS = 1;
+
+/** How many cameras are watching rooms, given how many the crew has lit. */
+export const camerasLive = (lit) => lit + ESTABLISHING_CAMS;
+
 /** Each camera covers two rooms. Two is the number that puts the mid-game in T3's band — see §BAND. */
 export const ROOMS_PER_CAM = 2;
 

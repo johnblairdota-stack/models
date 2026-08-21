@@ -21,7 +21,7 @@ import { cardFor } from './roles.js';
 import { project } from '../../net/party/entitle.js';
 import { makeEvent, VIS } from './events.js';
 import { createLog, visibleTo } from './log.js';
-import { hunterVisibleToGuide, ROOMS } from './coverage.js';
+import { hunterVisibleToGuide, ROOMS, camerasLive } from './coverage.js';
 import { applyTake, applyEviction, resolveContact, MODE, PLATE } from './taken.js';
 import { tallyCasting } from './ballot.js';
 import { tallyVote, executioner, NO_ONE } from './vote.js';
@@ -72,7 +72,11 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     // guide nobody can ever catch lying. One establishing camera puts episode one at 33%
     // coverage (deliberately above T3's band) and the broadcast has something to cut to on
     // frame one, which the Director needs anyway.
-    cameras: { unlocked: 1, needed: deal.cameras },
+    //
+    // 🚨 IT IS NOT PART OF THE OBJECTIVE, THOUGH, AND KEEPING IT IN THIS FIELD MADE THE
+    // SCOREBOARD LIE. `unlocked` counts what the crew has LIT — the `run.camera_lit` entries
+    // `win.js` folds — and the establishing camera lives in `coverage.js`'s `camerasLive`.
+    cameras: { unlocked: 0, needed: deal.cameras },
     incident: { alarms: 0 },
   };
 
@@ -110,7 +114,7 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       // 🚨 S3. The Hunter is on the map only where a live camera watches. `hunterMark.visible =
       // hs.inScene && !!hp` (views/game.js L2559) is the debug view this replaces.
       const seen = hunterVisibleToGuide({
-        worldSeed: state.worldSeed, unlocked: state.cameras.unlocked, hunterRoom: state.hunterRoom,
+        worldSeed: state.worldSeed, unlocked: camerasLive(state.cameras.unlocked), hunterRoom: state.hunterRoom,
       });
       const marks = [{ x: 1.5, z: -2.0, kind: 'you' }];
       if (seen) marks.push({ x: 7.0, z: 3.0, kind: 'hunter' });

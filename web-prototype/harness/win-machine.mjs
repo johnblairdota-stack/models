@@ -10,7 +10,8 @@
  * the same two events in both orders and requires the winner to swap.
  */
 
-import { foldWin, WIN_TARGETS, OUTCOME, TICK_ORDER } from '../src/party/win.js';
+import { foldWin, WIN_TARGETS, OUTCOME, TICK_ORDER, camerasNeeded } from '../src/party/win.js';
+import { dealCast, COMPOSITION } from '../src/party/cast.js';
 import { EPISODE_CAP } from '../src/party/phases.js';
 
 let pass = 0, fail = 0;
@@ -95,6 +96,43 @@ const fold = (evts, count = 8, alignmentOf = align8) => foldWin(mk(evts), { coun
   }), [4, 5, 6, 7, 8].map((n) => `${n}p:${WIN_TARGETS[n].cameraTarget}cam/${WIN_TARGETS[n].feedTarget}fed`).join(' '));
 
   t('W8c · same-tick order is written in exactly one place', TICK_ORDER.join(',') === 'W1,W3,W2,W4,W5');
+}
+
+// ---------------------------------------------------------------- W10 · one camera number
+/**
+ * 🚨 **THE OBJECTIVE WAS WRITTEN DOWN TWICE AND THE TWO COPIES NEVER AGREED.** `cast.js`'s
+ * `COMPOSITION` carried its own `cameras` column — 2/2/2/3/3 — and `session.js` put it on the
+ * frame as `cameras.needed`, while `WIN_TARGETS` above decided the match on 3/3/4/4/4. Every
+ * player count disagreed, and the displayed count was seeded at 1 besides, so the television read
+ * `3/3` with every pip lit at episode two of a game that ran on to a displayed `5/3`.
+ *
+ * The number belongs here, because this is what tests it. W10 asserts there is no second copy
+ * left anywhere for a future edit to drift.
+ */
+{
+  const counts = [4, 5, 6, 7, 8];
+  t('W10 · the number the deal hands the scoreboard is the number this machine tests',
+    counts.every((n) => dealCast({ count: n, castSeed: 7 }).cameras === WIN_TARGETS[n].cameraTarget),
+    counts.map((n) => `${n}p:${dealCast({ count: n, castSeed: 7 }).cameras}`).join(' '));
+  t('W10b · and `camerasNeeded` is the only way to ask — COMPOSITION keeps no copy of its own',
+    counts.every((n) => camerasNeeded(n) === WIN_TARGETS[n].cameraTarget)
+      && counts.every((n) => !('cameras' in COMPOSITION[n])),
+    'no `cameras` column in the composition table');
+
+  // 🚨 THE CONTROL IS THE TABLE THAT SHIPPED, RUN THROUGH THE SAME PREDICATE. It is restated here
+  // rather than imported precisely because it no longer exists anywhere in the source.
+  const SHIPPED = { 4: 2, 5: 2, 6: 2, 7: 3, 8: 3 };
+  const agree = counts.filter((n) => SHIPPED[n] === WIN_TARGETS[n].cameraTarget);
+  t('W10 control · the number that used to reach the frame was wrong at EVERY player count',
+    agree.length === 0,
+    counts.map((n) => `${n}p ${SHIPPED[n]} vs ${WIN_TARGETS[n].cameraTarget}`).join(' · '));
+  // The display was seeded at 1, so it read `needed/needed` after `SHIPPED[n] - 1` cameras were
+  // lit, while the season could not be made until `cameraTarget` of them were. The gap is how
+  // many episodes the scoreboard spent claiming a win that had not happened.
+  const early = counts.map((n) => [n, WIN_TARGETS[n].cameraTarget - (SHIPPED[n] - 1)]);
+  t('W10 control · and seeded at one besides, so every pip lit at least two episodes early',
+    early.every(([, gap]) => gap >= 2),
+    early.map(([n, gap]) => `${n}p full ${gap} lights early`).join(' · '));
 }
 
 // ---------------------------------------------------------------- W9 · the controls

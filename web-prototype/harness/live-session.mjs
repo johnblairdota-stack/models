@@ -729,6 +729,58 @@ const R = play({ taps: engaged });
     `${noms.length} nominations across episodes {${[...eps].sort().join(',')}}`);
 }
 
+// ---------------------------------------------------------------- L20 · the scoreboard is the score
+/**
+ * 🚨 **THE FOOTER SAID THE SEASON WAS MADE THREE EPISODES BEFORE IT WAS.** `cameras.unlocked`
+ * was seeded at 1 — the establishing camera, which is a COVERAGE fact — and `cameras.needed` came
+ * from `COMPOSITION`'s own camera column, which disagreed with `WIN_TARGETS` at every player
+ * count. So the television read `3/3` with every pip lit at episode two and the show ran on to a
+ * displayed `5/3`. Two different numbers in one field, compared against a third.
+ *
+ * The frame's `unlocked` counts what `win.js` counts — `run.camera_lit` entries, from zero — and
+ * `needed` comes from `camerasNeeded`, which is the same table W2 tests. This asserts they agree
+ * on a played show rather than on a table.
+ */
+{
+  // Find a show good actually wins on cameras. If none exists the assertion below is unarmed and
+  // says so rather than passing on a game that never got near the target.
+  let onCameras = null;
+  for (let seed = 1; seed <= 60 && !onCameras; seed++) {
+    const p = play({ castSeed: seed, worldSeed: seed * 5, taps: engaged });
+    const w = p.s.log.all().filter((e) => e.type === 'win.checked').slice(-1)[0];
+    if (w && w.data.rule === 'W2') onCameras = { p, w };
+  }
+  t('L20 arm · a seeded sweep found a season made on the camera rule',
+    onCameras !== null, onCameras ? `W2 at ${onCameras.w.data.camerasLit} lit` : 'no W2 win in 60 seeds');
+
+  if (onCameras) {
+    const tv = onCameras.p.tape.get('tv');
+    const lit = onCameras.p.s.log.all().filter((e) => e.type === 'run.camera_lit').length;
+    const last = tv[tv.length - 1];
+    t('L20 · the number on the scoreboard is the number the win machine folded',
+      last.cameras.unlocked === lit && lit === onCameras.w.data.camerasLit,
+      `frame ${last.cameras.unlocked} · log ${lit} · fold ${onCameras.w.data.camerasLit}`);
+    t('L20b · and it reaches the target exactly as the season is made, never before or past it',
+      last.cameras.unlocked === last.cameras.needed
+        && tv.every((f) => f.cameras.unlocked <= f.cameras.needed),
+      `${last.cameras.unlocked}/${last.cameras.needed} at the final frame · ${tv.length} frames, none over`);
+
+    // 🚨 THE CONTROL IS THE PAIR THAT SHIPPED, COMPUTED OVER THIS EXACT TAPE. `unlocked` seeded at
+    // 1, `needed` from COMPOSITION's own column. Restated here because neither exists any more.
+    const SHIPPED_NEEDED = { 4: 2, 5: 2, 6: 2, 7: 3, 8: 3 }[8];
+    const shippedDisplay = tv.map((f) => 1 + f.cameras.unlocked);
+    const firstFull = shippedDisplay.findIndex((u) => u >= SHIPPED_NEEDED);
+    t('L20 control · the shipped pair read "the season is made" while the show kept shooting',
+      firstFull >= 0 && firstFull < shippedDisplay.length - 1
+        && shippedDisplay[shippedDisplay.length - 1] > SHIPPED_NEEDED,
+      `${shippedDisplay[firstFull]}/${SHIPPED_NEEDED} at episode ${tv[firstFull].episode}, `
+      + `running on to ${shippedDisplay[shippedDisplay.length - 1]}/${SHIPPED_NEEDED}`);
+    t('L20 control · and the pips were all lit for the rest of it',
+      shippedDisplay.slice(firstFull).every((u) => u >= SHIPPED_NEEDED),
+      `${shippedDisplay.length - firstFull} of ${shippedDisplay.length} frames showed a full wall`);
+  }
+}
+
 // ---------------------------------------------------------------- L12 · both endings occur
 /**
  * ⚠️ THIS IS NOT A BALANCE ASSERTION AND MUST NOT BE READ AS ONE. The table below always calls
