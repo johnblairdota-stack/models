@@ -31,6 +31,7 @@ import { MAX_PHONES } from '../net/party/lobby.mjs';
 import { PHASE } from '../src/party/phases.js';
 import { CALL, MOVE_CHOICE } from '../src/party/session.js';
 import { ROOMS } from '../src/party/coverage.js';
+import { SCRIPT } from '../src/party/roles.js';
 
 const PORT = 5195;
 let pass = 0, fail = 0;
@@ -454,6 +455,37 @@ t('X3 arm · the show played to the Reunion over real sockets',
   t('X14 control · the stage really is more than the line it used to be',
     debrief.length > 400 && !/^DEBRIEF: \(\) => big\('Talk\.'/.test(debrief),
     'a one-line `big()` would be under 100B');
+
+  /**
+   * 🚨 A KEYBOARD ON EIGHT PHONES FOR THE WHOLE ARGUMENT. `DARK` covers RECAP, EXECUTION and
+   * VERDICT — 20 s, 20 s and 15 s — and DEBRIEF fell through the bottom of `controls()` to the
+   * claim plate, which was a text input and a Publish button, for seventy-five seconds. The
+   * comment directly above `DARK` condemns exactly that: it hands a guide idle seconds holding a
+   * PRODUCIBLE alibi, composed rather than said. Round §1's phase table gives DEBRIEF
+   * *"claims/nameplates only"* and §2.5's cheap v1 is *"presets only, publish on tap, no drafts"*.
+   */
+  const phoneSrc = await (await fetch(`http://127.0.0.1:${PORT + 2}/p`)).text();
+  const phoneBody = phoneSrc.replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+  const inputs = (phoneSrc.match(/<input\b/g) || []).length;
+  t('X15 · the claim plate is taps, not typing — one text field on the page and it is the name box',
+    inputs === 1 && /id="name"/.test(phoneSrc) && !/id="claim"/.test(phoneSrc),
+    `${inputs} <input> in the whole page`);
+
+  const presets = (phoneBody.match(/const CLAIMS = \[([^\]]*)\]/) || [, ''])[1]
+    .split(',').map((x) => x.trim().replace(/^'|'$/g, '')).filter(Boolean);
+  const goodNames = Object.values(SCRIPT).filter((r) => r.alignment === 'good').map((r) => r.name);
+  t('X15b · and every preset is a card the script actually deals, by its shipped display name',
+    presets.length > 0 && presets.every((c) => goodNames.includes(c)),
+    `${presets.length} presets · ${presets.filter((c) => !goodNames.includes(c)).join(', ') || 'all in SCRIPT'}`);
+  t('X15b control · the drift check would notice a preset the script has no card for',
+    !['Sound Guy'].every((c) => goodNames.includes(c)), 'a claim the room cannot check is not a claim');
+
+  t('X15c · PREMIERE is the role card, not a text box above the button that shows you who you are',
+    /if \(p === 'PREMIERE'\) \{ box\.innerHTML = premiereCard\(\)/.test(phoneBody),
+    'the fallthrough that put an irreversible Publish on a first-timer\'s first screen is gone');
+  t('X15 control · the scan would notice a claim text field coming back',
+    (('<input id="claim" maxlength="24">').match(/<input\b/g) || []).length === 1);
 
   t('X11d · the word is spelled out on the card, never colour alone — §2.3 and §6',
     /You are PRODUCTION/.test(body) && /You are GOOD/.test(body),

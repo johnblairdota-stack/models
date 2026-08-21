@@ -67,6 +67,11 @@
         color:var(--dim);padding:26px 8px 8px}
   .down + .say{text-align:center;padding-bottom:22px}
   .warn{color:var(--warn)} .bad{color:var(--gone)} .good{color:var(--live)}
+  /* the nameplate rail — round §1's phase table gives DEBRIEF "claims/nameplates only" */
+  .plate{display:flex;align-items:baseline;gap:8px;padding:7px 0;border-bottom:1px solid var(--edge)}
+  .plate:last-of-type{border-bottom:0}
+  .plate .sw{width:14px;height:14px;border-radius:50%;flex:none;align-self:center}
+  .plate .say{margin-left:auto;font-style:italic;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
   /* the card */
   .role{font:700 30px/1.1 ui-sans-serif;margin-bottom:6px}
@@ -229,7 +234,7 @@
       : amRunner() ? 'Your guide is looking. Then it is your call.'
       : 'Watch the television.',
     RECAP: 'Phones down. Watch the television.',
-    DEBRIEF: 'Talk. Out loud, to the room.',
+    DEBRIEF: 'Talk. Out loud, to the room. A nameplate is the only thing you can put in writing.',
     RECKONING: 'Nominate once, or keep it. Three stand at most.',
     VOTE: 'More than half the living, or nobody swings. Abstaining protects them.',
     EXECUTION: 'Nobody says what they were.',
@@ -387,6 +392,11 @@
       return;
     }
 
+    // 🚨 PREMIERE IS THE CARD AND NOTHING ELSE. It fell through to the claim plate, so a
+    // first-time player's first sight of the game was a text box and a permanent public Publish
+    // button, above the button that shows them who they are.
+    if (p === 'PREMIERE') { box.innerHTML = premiereCard(); return; }
+
     box.innerHTML = claimCard();
     wireClaim();
   }
@@ -502,22 +512,68 @@
     if ($('refuse')) $('refuse').onclick = () => act({ t: 'refuse' });
   }
 
-  /** The claim plate — published once, publicly, permanently. Available whenever nothing else is. */
+  /**
+   * 🚨 **THE CLAIM PRESETS, AND THE FREE-TEXT BOX THEY REPLACE.** `rrr-phone-ux.md` §2.5's own
+   * *cheap v1* is *"presets only, publish on tap, no drafts"*, and that is what this is — the
+   * server has never carried a draft (`players[].claim` is PUBLISHED claims and nothing else), so
+   * the text field was cheap v1 with the cheap part taken out and a keyboard put in.
+   *
+   * ⚠️ THESE ARE THE SEVEN GOOD CARDS BY THEIR SHIPPED DISPLAY NAMES — `roles.js`'s `SCRIPT`, in
+   * the same words `rrr-roles.md` §2 uses. `show-wire` X15 compares this list against `SCRIPT` so
+   * the two cannot drift; a claim the room cannot check against the script is not a claim.
+   * Production is not offered, because a preset that nobody would ever tap is a wasted row.
+   */
+  const CLAIMS = ['Contestant', 'Camera Op', 'Focus Puller', 'Continuity', 'The Editor', 'Fan Favourite', 'Stunt Double'];
+
+  /**
+   * The claim plate and the nameplate rail — round §1's phase table, `Phones` column, which reads
+   * **claims/nameplates only** for DEBRIEF.
+   *
+   * 🚨 NO KEYBOARD. What shipped here was a text input and a Publish button, and the comment
+   * above `DARK` condemns exactly that: it hands a guide idle seconds holding a PRODUCIBLE alibi,
+   * composed rather than said. A6 took it off the three phases the table calls dark — worth 20 s,
+   * 20 s and 15 s — and left it on the seventy-five-second one, which is the phase it does the
+   * most damage to, because DEBRIEF is the argument. A tap is a claim; a typed sentence is an
+   * exhibit.
+   */
   function claimCard() {
     const mine = ((frame && frame.players) || []).find((p) => p.id === iAm());
+    const rail = '<div class="card" style="margin-top:10px"><h3>The table</h3>'
+      + living().filter((p) => p.id !== iAm()).map((p) =>
+        '<div class="plate">' + swatch(p.id) + '<b>' + esc(p.name) + '</b>'
+        + '<span class="say">' + (p.claim ? '\u201c' + esc(p.claim) + '\u201d' : 'undeclared') + '</span></div>').join('')
+      + '<div class="note">A nameplate is what somebody is willing to have checked. '
+      + 'Everything else is said out loud.</div></div>';
+
     if (mine && mine.claim) {
       return '<div class="card"><h3>Your claim</h3><div class="say">You are telling the room you are '
-        + '<b>' + esc(mine.claim) + '</b>. A published claim stands — there is no taking it back.</div></div>';
+        + '<b>' + esc(mine.claim) + '</b>. A published claim stands — there is no taking it back.</div></div>'
+        + rail;
     }
-    return '<div class="card"><h3>Claim a role</h3>'
-      + '<input id="claim" maxlength="24" placeholder="camera op" autocomplete="off">'
-      + '<button class="big" id="pub">Publish</button>'
-      + '<div class="note">Once published it is on the table for the rest of the game. '
-      + 'Saying it out loud costs nothing; this is the version everyone can check.</div></div>';
+    return '<div class="card"><h3>Claim a role, or don\'t</h3>'
+      + CLAIMS.map((c) => '<button data-claim="' + esc(c) + '">' + esc(c) + '</button>').join('')
+      + '<div class="note">One tap publishes it to your nameplate on the television, for the rest '
+      + 'of the game. Blank is a statement too, and it is the default.</div></div>'
+      + rail;
   }
   function wireClaim() {
-    if (!$('pub')) return;
-    $('pub').onclick = () => { const v = $('claim').value.trim(); if (v) act({ t: 'claim', claim: v }); };
+    for (const b of document.querySelectorAll('[data-claim]')) {
+      b.onclick = () => act({ t: 'claim', claim: b.dataset.claim });
+    }
+  }
+
+  /**
+   * PREMIERE. This used to fall through to the claim plate, so the first thing a first-time player
+   * ever saw was a free-text box and an irreversible public Publish button sitting ABOVE the
+   * button that shows them their own card. `rrr-phone-ux.md` §1 has the role card arriving *"on
+   * deal"*; there is nothing else the phone should be during the premiere.
+   */
+  function premiereCard() {
+    return '<div class="card"><h3>Your card</h3>'
+      + '<div class="say">It is on this phone and on no screen in the room. Hold the button below '
+      + 'to read it — it stays blurred until a finger is on it, so nobody beside you can read it '
+      + 'over your shoulder and nobody has to remember to put it away.</div>'
+      + '<div class="note">Then put the phone down. Everything after this happens out loud.</div></div>';
   }
 
   const colourOf = (id) => {
