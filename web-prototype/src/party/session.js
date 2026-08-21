@@ -256,6 +256,10 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
    */
   let sim = null;
   let reported = null;              // the outcome the house produced, if it has produced one
+  // Whether the guide's flyover was actually showing them the Hunter at the instant they called
+  // it. Snapshotted at the call, aired at RECAP, and null when no call was made. See
+  // `onEnter[PHASE.RECAP]` for why this is a boolean and not the Hunter's room.
+  let callSight = null;
   let takenThisEpisode = [];
   /**
    * This episode's ballots, kept so `refuse()` can re-tally the slot from the SAME votes rather
@@ -437,6 +441,7 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
       // only now — the wing is public from CASTING, but where the Hunter stands never is.
       hunterRoom = ROOMS[pick(ROOMS.length, worldSeed, 'hunter', state.episode)];
       sim = null; reported = null;      // last episode's house is not this episode's
+      callSight = null;                 // no call has been made yet this episode
       const target = state.expedition.room;
       state.call = { by: state.pair.guide, said: null };
       record(makeEvent('expedition.begun', VIS.PUBLIC, {
@@ -444,6 +449,57 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
       }));
       // Attribution exists from the first episode and is sealed until the Reunion.
       record(makeEvent('hunter.placed', VIS.SEALED, { room: hunterRoom, episode: state.episode }));
+    },
+    /**
+     * 🚨 **THE RECAP MAKES THE GUIDE ACCOUNTABLE WITHOUT MAKING THEM CONVICTABLE.** The vote was
+     * measured at +2.1 percentage points over guessing (n = 14,064) and it does not improve
+     * across episodes, because nothing a guide does is ever checked. A guide calls CLEAR, the
+     * runner is taken, and the room has no way to tell an unlucky guide from a lying one — so it
+     * votes on personality, which is a coin.
+     *
+     * Two booleans fix that, and they are chosen to be the two that make the guide's call
+     * EVIDENCE rather than a verdict:
+     *
+     *   `guideSaw`    — was the flyover actually showing them the Hunter when they spoke?
+     *   `hunterHere`  — was the Hunter in the wing the expedition entered?
+     *
+     * A guide who was blind and called it wrong is unlucky. A guide who could SEE and called it
+     * wrong is doing something else. That distinction is the whole honest-error mechanic —
+     * `GUIDE_TILT_DEG` 62° and its 2.55 m blind strip, `ghost()`'s decaying last-known — finally
+     * made legible to the eight people who are supposed to argue about it.
+     *
+     * 🚨 **AND IT IS DELIBERATELY NOT `hunter.placed`.** `docs/rrr-open-findings.md` proposed
+     * revealing that event at RECAP and called it "one `VIS` constant". It is not, twice over:
+     *
+     *   1. `hunter.placed` is recorded on ENTRY TO EXPEDITION. Re-rowing it `PUBLIC` publishes
+     *      the Hunter's room BEFORE the ninety seconds run — the guide's entire job evaporates
+     *      and the runner walks around one room. The reveal has to be a second event, which is
+     *      the same shape `call.made`/`call.said` already uses a few lines down.
+     *   2. The room is `pick(ROOMS.length, worldSeed, 'hunter', episode)`. Airing it for five
+     *      episodes hands anyone with devtools five (episode → room) pairs to brute-force a
+     *      32-bit `worldSeed` against, and with it every FUTURE placement. That is Fatal #5 —
+     *      the `/report` castSeed leak — rebuilt one field along, and `party-isolation` I11
+     *      exists precisely to catch this class. Two booleans leak 2 bits an episode instead of
+     *      log2(6); the reveal is strictly less information than the finding asked for and
+     *      strictly more than the room currently has.
+     *
+     * ⚠️ THE SEALED EVENT IS UNTOUCHED. `hunter.placed` still carries the room to the Reunion,
+     * where `log.reunion()` is `log.all()` and everything comes out. This is a delayed partial
+     * reveal, not a deletion — and not a second channel for the same fact, because a boolean
+     * about sight is not the room.
+     *
+     * ⚠️ `guideSaw` IS null WHEN NO CALL WAS MADE, and that is not the same as `false`. A guide
+     * who never spoke has nothing to be accountable for; printing "could not see" for them would
+     * invent an alibi the game never gave them.
+     */
+    [PHASE.RECAP]: () => {
+      state.expedition.guideSaw = callSight;
+      state.expedition.hunterHere = hunterRoom != null && hunterRoom === state.expedition.room;
+      record(makeEvent('recap.aired', VIS.PUBLIC, {
+        episode: state.episode,
+        guideSaw: state.expedition.guideSaw,
+        hunterHere: state.expedition.hunterHere,
+      }));
     },
     /**
      * 🚨 THE RECKONING SIZES ITSELF, AND IT USED TO BE SIZED BY THE PREVIOUS EPISODE. `advance`
@@ -735,6 +791,12 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
         if (msg.call !== CALL.CLEAR && msg.call !== CALL.HOLD) return { ok: false, why: 'CLEAR or HOLD' };
         state.call.said = msg.call;
         pending.acted.add(playerId);
+        // 🚨 SNAPSHOT, NOT A LATER READ. `sightForGuide()` is computed from the sim's CURRENT
+        // state, so asking it at RECAP would answer "could the guide see the Hunter twenty
+        // seconds after they committed" — which is a different question and the wrong one. The
+        // fact the DEBRIEF needs is what the guide had in front of them at the instant they
+        // spoke. `recap.aired` is the only reader.
+        callSight = sightForGuide().hunter;
         /**
          * 🚨 **THE FACT IS PUBLIC AND THE WORD IS SEALED, AND IT USED TO BE ONE EVENT CARRYING
          * BOTH.** `entitle.js` took `call.said` off the FRAME on broadcast §6.9's authority —

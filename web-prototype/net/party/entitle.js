@@ -116,6 +116,18 @@ export const MATRIX = [
   // Is a mansion attached? The runner's phone shows a throttle when there is one and GO/WAIT
   // when there is not, so it has to be told — and the whole table may know which it is playing.
   ['expedition.live',          'all'],
+  // 🚨 THE TWO FACTS THAT MAKE A GUIDE'S CALL CHECKABLE, AND THEY ARE `all` ON PURPOSE. The vote
+  // is worth +2.1pp over guessing because nothing a guide does is ever checked; these are the
+  // check. `session.js`'s `onEnter[PHASE.RECAP]` argues the design and says why this is two
+  // booleans rather than `hunter.placed`'s room — airing the room for five episodes is enough to
+  // brute-force `worldSeed` and read every future placement, which is Fatal #5 one field along.
+  //
+  // ⚠️ NEITHER CAN EXIST ON A FRAME BEFORE THE EXPEDITION HAS RUN. Both are assigned in
+  // `onEnter[PHASE.RECAP]` and the field is absent until then, so an `all` row here cannot leak
+  // during the ninety seconds it would ruin. That is a property of the writer, not of this table,
+  // which is exactly why `wire-parity` asserts it against the observed frame rather than here.
+  ['expedition.guideSaw',      'all'],   // null when the guide never called — not the same as false
+  ['expedition.hunterHere',    'all'],
   // 🚨 THE GUIDE'S CALL IS SPOKEN, NEVER PRINTED — broadcast §6.9, in its own words: *"Never show
   // the runner's private prompts or the guide's callouts as on-screen text. The guide talks out
   // loud, in the room. That is the game."* Both rows here were `all`, and the television printed

@@ -89,7 +89,7 @@
   .stage .sub{font:400 clamp(12px,1.2vw,20px)/1.4 ui-sans-serif;color:var(--dim)}
   /* No `.call` rule, deliberately — see the EXPEDITION stage below and broadcast §6.9. A style
      for it is half of a reintroduction. */
-  .clear{color:var(--live)} .bad{color:var(--gone)}
+  .clear{color:var(--live)} .bad{color:var(--gone)} .warn{color:var(--warn)}
   /* The Debrief's evidence board. Two columns of fact/value, couch-legible, on an opaque plate —
      broadcast §4's ten-foot rules put nothing important straight on the feed. */
   .facts{display:grid;grid-template-columns:auto 1fr;gap:clamp(4px,.7vh,10px) clamp(10px,1.4vw,26px);
@@ -324,12 +324,47 @@
       return big(esc(guide) + ' has called it.',
         'Out loud, in the room. ' + nameOf(frame.pair && frame.pair.runner) + ' decides.');
     },
+    /**
+     * 🚨 **THE RECAP IS THE CARD THE ROOM ARGUES FROM, AND IT USED TO BE ONE WORD.** It printed
+     * the outcome and nothing else for twenty seconds. An independent critic played a session and
+     * filed it as *"the 90 seconds I played were not a show"* — six of eight watched a shot they
+     * had no stake in, and then were told one word about it.
+     *
+     * The DEBRIEF already carries the full fact list for its seventy-five seconds (see its header,
+     * which is where that was fixed). What RECAP adds is the two facts that are ABOUT THE GUIDE,
+     * on the card that lands the instant the expedition ends and before anyone has started
+     * talking — so the argument opens on evidence rather than on personality.
+     *
+     * ⚠️ `guideSaw` null MEANS NO CALL WAS MADE and is rendered as nothing at all. Printing
+     * "could not see" for a guide who never spoke invents an alibi. `session.js`'s
+     * `onEnter[PHASE.RECAP]` owns that distinction and says why.
+     *
+     * ⚠️ AND THE WORD THEY SAID IS STILL NOT HERE — broadcast §6.9. `call.said` is rowed `guide`
+     * and this card deliberately reports only whether they COULD SEE, never what they called.
+     * Whether the call matched what they could see is the room's job to work out, out loud, which
+     * is the entire point of putting these two facts on a screen instead of the answer.
+     */
     RECAP: () => {
-      const o = (frame.expedition || {}).outcome;
-      if (o === 'taken') return big('<span class="bad">Taken.</span>', 'The terminal stays dark.');
-      if (o === 'lit') return big('<span class="clear">Camera live.</span>', 'One more room on the map.');
-      if (o === 'held') return big('They held.', 'Safe, and no closer to seeing the house.');
-      return big('…', '');
+      const e = frame.expedition || {};
+      const head = {
+        taken: ['<span class="bad">Taken.</span>', 'The terminal stays dark.'],
+        lit: ['<span class="clear">Camera live.</span>', 'One more room on the map.'],
+        held: ['They held.', 'Safe, and no closer to seeing the house.'],
+      }[e.outcome] || ['…', ''];
+      const cams = frame.cameras || {};
+      const saw = e.guideSaw == null ? null
+        : (e.guideSaw ? '<span class="clear">had them on camera</span>'
+                      : '<span class="warn">was flying blind</span>');
+      return '<div class="big">' + head[0] + '</div>'
+        + '<div class="sub">' + esc(head[1]) + '</div>'
+        + '<dl class="facts">'
+        + '<dt>Cameras</dt><dd>' + (cams.unlocked || 0) + ' of ' + (cams.needed || 0) + ' lit</dd>'
+        + '<dt>Incidents</dt><dd>' + ((frame.incident || {}).alarms || 0) + ' this season</dd>'
+        + (saw ? '<dt>The guide</dt><dd>' + saw + '</dd>' : '')
+        + '<dt>The Hunter</dt><dd>' + (e.hunterHere
+            ? '<span class="bad">was in ' + esc(wing()) + '</span>'
+            : 'was somewhere else') + '</dd>'
+        + '</dl>';
     },
     /**
      * 🚨 **THE DEBRIEF IS THE PHASE THAT NEEDS THE EVIDENCE AND IT WAS THE ONE PHASE THAT THREW IT

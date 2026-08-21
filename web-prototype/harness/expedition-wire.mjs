@@ -692,5 +692,90 @@ const engaged = (s) => {
     audienceFor('hunterRoom') === null && audienceFor('expedition.hunterRoom') === null);
 }
 
+// ---------------------------------------------------------------- E10 · the RECAP reveal
+/**
+ * The vote was measured at +2.1 percentage points over guessing (n = 14,064) and does not improve
+ * across episodes, because nothing a guide does is ever checked. `session.js`'s
+ * `onEnter[PHASE.RECAP]` airs two booleans that make the call checkable — whether the guide's
+ * flyover was showing them the Hunter when they spoke, and whether the Hunter was in the wing.
+ *
+ * 🚨 THE ONE WAY THIS CHANGE COULD BE FATAL IS TIMING, SO THAT IS WHAT IS MEASURED. A field that
+ * says where the Hunter is, projected one phase early, ends the expedition as a game: the runner
+ * walks around one room for ninety seconds. `expedition.guideSaw`/`hunterHere` are rowed `all`,
+ * so the ONLY thing keeping them off an EXPEDITION frame is that the writer has not run yet —
+ * a property of `session.js`, not of the matrix, and therefore not something `audienceFor` can
+ * assert. E10a reads real projected frames instead.
+ *
+ * ⚠️ AND IT IS DELIBERATELY NOT THE HUNTER'S ROOM. `docs/rrr-open-findings.md` asked for
+ * `hunter.placed` re-rowed at RECAP; the room is `pick(ROOMS.length, worldSeed, 'hunter', ep)`,
+ * so five episodes of it is five (episode -> room) pairs to brute-force a 32-bit seed against,
+ * and with it every future placement. E7's control still pins that no row carries the room.
+ */
+{
+  const cap = [];
+  let s = null;
+  s = createSession({ count: 8, castSeed: 4242, worldSeed: 90210,
+    // `pushTo` has already run the shipped `project()`; this frame IS the observed wire.
+    send: (sockId, frame) => { if (s) cap.push({ phase: s.state.phase, frame }); } });
+  let now = 0; s.start(now);
+  for (let i = 0; i < 4000 && s.state.phase !== PHASE.REUNION; i++) {
+    const alive = s.state.players.filter((x) => x.alive).map((x) => x.id);
+    switch (s.state.phase) {
+      case PHASE.CASTING:
+        for (let k = 0; k < alive.length; k++)
+          s.input(alive[k], { t: 'cast', runner: alive[(k + 1) % alive.length], guide: alive[(k + 2) % alive.length] });
+        break;
+      case PHASE.EXPEDITION:
+        s.input(s.state.pair.guide, { t: 'call', call: i % 2 ? CALL.CLEAR : CALL.HOLD });
+        s.input(s.state.pair.runner, { t: 'move', move: MOVE_CHOICE.GO });
+        break;
+      case PHASE.RECKONING:
+        if (!s.state.nominations.length) s.input(alive[0], { t: 'nominate', target: alive[1] });
+        break;
+      case PHASE.VOTE: for (const id of alive) s.input(id, { t: 'vote', choice: alive[1] }); break;
+      default: break;
+    }
+    now += 5000; s.tick(now);
+  }
+  const has = (r, k) => k in ((r.frame && r.frame.expedition) || {});
+  const inPhase = (p) => cap.filter((r) => r.phase === p);
+  const early = [...inPhase(PHASE.CASTING), ...inPhase(PHASE.EXPEDITION)];
+  const recap = inPhase(PHASE.RECAP);
+
+  const armed = t('E10 arm · a real show produced projected frames in both the expedition and the recap',
+    early.length > 0 && recap.length > 0,
+    `${early.length} pre-recap frames, ${recap.length} recap frames, ${cap.length} total`);
+
+  if (!armed) {
+    skip += 3;
+    console.log('  SKIP E10a/E10b/E10c · nothing to measure — the show produced no frames');
+  } else {
+    const leaked = early.filter((r) => has(r, 'guideSaw') || has(r, 'hunterHere'));
+    t('E10a · neither reveal is on ANY frame before the recap — the ninety seconds stay clean',
+      leaked.length === 0,
+      `${early.length} casting+expedition frames walked, ${leaked.length} carrying a reveal`);
+
+    t('E10b · and every recap frame carries both, so the room is handed the check',
+      recap.every((r) => has(r, 'guideSaw') && has(r, 'hunterHere')),
+      `${recap.filter((r) => has(r, 'guideSaw') && has(r, 'hunterHere')).length}/${recap.length}`);
+
+    // A constant is not a fact. If either boolean never varies, the recap card is decoration.
+    const vals = (k) => [...new Set(recap.map((r) => r.frame.expedition[k]))];
+    t('E10c · both booleans take both values across one season — neither is a constant',
+      vals('guideSaw').filter((v) => v != null).length > 1 && vals('hunterHere').length > 1,
+      `guideSaw ${JSON.stringify(vals('guideSaw'))} · hunterHere ${JSON.stringify(vals('hunterHere'))}`);
+  }
+
+  // 🚨 TWO CONTROLS, BECAUSE THIS WALKER CAN LIE IN TWO DIRECTIONS. One that answers yes to
+  // everything makes E10a's zero meaningless; one that answers no to everything makes E10b's
+  // green meaningless. Both are checked against the same captured frames, every run.
+  t('E10 control · the walker finds nothing for a field no row carries — a green E10b is not a yes-machine',
+    cap.filter((r) => has(r, 'hunterRoom')).length === 0,
+    '`expedition.hunterRoom` is on no projection, and the walker agrees');
+  t('E10 control · and it DOES find a field that is rowed and set by the recap — E10a\'s zero is not blindness',
+    recap.length > 0 && recap.every((r) => has(r, 'outcome')),
+    '`expedition.outcome` is rowed `all` and written before the recap');
+}
+
 console.log(`\nexpedition-wire: ${pass} passed, ${fail} failed${skip ? `, ${skip} skipped` : ''}`);
 process.exit(fail ? 1 : 0);
