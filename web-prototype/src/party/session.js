@@ -66,6 +66,39 @@ function hash(...parts) {
 }
 
 /**
+ * 🚨 **EVERY SEEDED DRAW IN THIS FILE GOES THROUGH HERE, AND THE `>>> 8` IS THE WHOLE REASON THE
+ * FUNCTION EXISTS. `hash(...) % n` DELETED THE MODE.**
+ *
+ * FNV-1a's low bit is XOR-linear. The prime `0x01000193` is odd, so multiplication never touches
+ * bit 0, and every step is `h ^= c` — which makes the final bit 0 a plain XOR of the basis bit
+ * and the low bit of every character of the key. Two keys that share everything but the salt
+ * therefore differ in bit 0 **iff** their salts differ in character parity, deterministically,
+ * for every seed and every episode.
+ *
+ * The expedition drew its wing from `hash(worldSeed,'target',ep) % 6` and the Hunter's room from
+ * `hash(worldSeed,'hunter',ep) % 6`. `'target'` and `'hunter'` have opposite character parity and
+ * 6 is even, so index parity followed hash parity and **the two rooms could never be equal**:
+ * measured, 0 collisions in 30,000 draws. `hunterHere` was a constant false, the take was dead
+ * code, and `misled` collapsed to `said === HOLD` — a CLEAR call right 100% of the time in every
+ * game ever played.
+ *
+ * ⚠️ **A DIFFERENT SALT IS NOT THE FIX AND MEASURING ONE IS HOW YOU FIND THAT OUT.** A salt with
+ * the SAME parity as `'target'` collides ~33% — exactly double the ideal 16.7% — because bit 0 is
+ * fully determined either way, so the effective room space is 3 rather than 6. Measured:
+ * `prowler` 32.7%, `it` 34.0%, `lurker` 34.4%. Both failures are the same failure.
+ *
+ * So the index comes from bits 8..31, which the prime has actually mixed: 16.6% for `'hunter'`,
+ * 15.8-17.0% across the same salts that were pathological before. It is the ONLY draw in this
+ * file — no caller reaches `hash` directly — so no salt anybody adds later can bring the coupling
+ * back, including for the even moduli below (`% 800`, `% 2`, `% 4`) which inherited the same
+ * linear bit. `hunter-draw` D8 asserts that single-entry property on the source.
+ *
+ * @param {number} n     how many slots
+ * @returns {number}     an index in `[0, n)`
+ */
+const pick = (n, ...parts) => (hash(...parts) >>> 8) % n;
+
+/**
  * ⚠️ THE GUIDE'S TILT IS THE SHIPPED ONE. 62° is `views/game.js`'s flyover elevation, and at the
  * 4.80m storey it hides 2.55m of floor behind every wall — which is exactly where a stationary
  * Hunter stands. It is not a difficulty knob; changing it changes how often an HONEST guide is
@@ -243,7 +276,7 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
     const wallDistance = sim
       ? sim.hunter.wallDist
       // No mansion: the same distribution over the same blind strip, seeded per episode.
-      : (hash(worldSeed, 'wall', state.episode) % 800) / 100;
+      : pick(800, worldSeed, 'wall', state.episode) / 100;
     const sight = guideSight({ covered, wallDistance, tiltDeg: GUIDE_TILT_DEG, storeyH: STOREY_H });
     const marks = sim
       ? [{ x: sim.runner.x, z: sim.runner.z, kind: 'you' }]
@@ -296,14 +329,14 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
      * go "into the house" — turns every casting debate into a personality contest.
      */
     [PHASE.CASTING]: () => {
-      state.expedition = { room: ROOMS[hash(worldSeed, 'target', state.episode) % ROOMS.length], outcome: null };
+      state.expedition = { room: ROOMS[pick(ROOMS.length, worldSeed, 'target', state.episode)], outcome: null };
       state.call = { by: null, said: null };
       record(makeEvent('expedition.announced', VIS.PUBLIC, { room: state.expedition.room, episode: state.episode }));
     },
     [PHASE.EXPEDITION]: () => {
       // Seeded per episode so a replay of the same match is the same match. The Hunter is placed
       // only now — the wing is public from CASTING, but where the Hunter stands never is.
-      hunterRoom = ROOMS[hash(worldSeed, 'hunter', state.episode) % ROOMS.length];
+      hunterRoom = ROOMS[pick(ROOMS.length, worldSeed, 'hunter', state.episode)];
       sim = null; reported = null;      // last episode's house is not this episode's
       const target = state.expedition.room;
       state.call = { by: state.pair.guide, said: null };
@@ -445,8 +478,8 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
     // measured; without one the throttle was never on screen, so it is drawn from the same four
     // detents, seeded per episode.
     const runnerLoud = sim ? sim.runner.noise
-      : move === MOVE_CHOICE.GO ? THROTTLE[1 + hash(worldSeed, 'throttle', state.episode) % 3]
-        : THROTTLE[hash(worldSeed, 'throttle', state.episode) % 2];
+      : move === MOVE_CHOICE.GO ? THROTTLE[1 + pick(3, worldSeed, 'throttle', state.episode)]
+        : THROTTLE[pick(2, worldSeed, 'throttle', state.episode)];
     emitNoise({ loud: runnerLoud, room: state.expedition.room, causedBy: state.pair.runner, sourceType: 'SPRINT' });
 
     // 🚨 THE SECOND SOURCE IS NOBODY'S, AND THAT ROW IS MANDATORY. Bible §6.1 marks *idle
@@ -454,7 +487,7 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
     // traced to a player, we'd have no game."* The Hunter wanders and investigates empty rooms on
     // its own schedule, and it is heard doing it.
     emitNoise({
-      loud: PROWL[hash(worldSeed, 'prowl', state.episode) % PROWL.length],
+      loud: PROWL[pick(PROWL.length, worldSeed, 'prowl', state.episode)],
       room: sim ? sim.hunter.room : hunterRoom, causedBy: null, sourceType: 'PROWL',
     });
 
