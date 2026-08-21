@@ -68,8 +68,49 @@ const CREW = 2;
   const kinds = [...new Set(failures.map((f) => f.type))];
   if (!failures.length) skipped('A0 arm', 'no failure events in any game — T5 unprovable');
   else t('A0 arm · failure events exist to inspect', true, `${failures.length} events, kinds: ${kinds.join(', ')}`);
-  const missing = FAILURE_KINDS.filter((k) => !kinds.includes(k));
-  if (missing.length) skipped('A0b coverage', `not exercised by the stub room: ${missing.join(', ')} — SKIP is not a PASS`);
+}
+
+// ---------------------------------------------------------------- A0b · the declared kinds
+/**
+ * 🚨 **THIS WAS A SKIP AND ITS WORDING WAS UNTRUE.** It read *"not exercised by the stub room"*,
+ * which says the kinds are exercised somewhere else. `task.timeout`, `rig.collapse` and
+ * `noise.spike` are emitted by nothing, anywhere in the tree — not by `room.js`, not by
+ * `session.js`, not by the mansion. The line was a SKIP standing in for a PASS, which is the one
+ * thing a SKIP may never do.
+ *
+ * ⚠️ **THE KINDS STAY, AND DELETING THEM WOULD HAVE BEEN THE WORSE ANSWER.** `FAILURE_KINDS` is
+ * not a claim that a type is emitted. It is the list `makeEvent` consults to decide whose payload
+ * is closed, and pre-registering a type is what stops the author who eventually writes the
+ * emitter from inventing `culprit`, `by` or `timings` beside it — T5's whole failure mode, since
+ * the next helpful debug line is always one PR away. A kind removed for being unemitted is a kind
+ * that arrives later with an open schema and no gate watching.
+ *
+ * So the coverage claim is made about the thing that CAN be true of an unemitted kind: the closed
+ * schema refuses attribution on every declared kind, emitted or not, through the shipped
+ * constructor. The split is reported rather than hidden, and A0b control proves the refusal comes
+ * from the list rather than from `makeEvent` refusing everything.
+ */
+{
+  const kinds = [...new Set(failures.map((f) => f.type))];
+  const unemitted = FAILURE_KINDS.filter((k) => !kinds.includes(k));
+  const clean = { kind: 'call', room: 'gallery', phaseTick: 7, loudness: 0.62 };
+  const attributed = { ...clean, culprit: 'p3' };
+  const throws = (fn) => { try { fn(); return false; } catch { return true; } };
+
+  const leaky = FAILURE_KINDS.filter((k) => !throws(() => makeEvent(k, VIS.PUBLIC, attributed)));
+  t('A0b · every declared failure kind refuses an attributed payload, emitted or not — T5 at construction',
+    leaky.length === 0,
+    leaky.length ? `accepted a culprit: ${leaky.join(', ')}`
+      : `${FAILURE_KINDS.length} kinds · observed in play: ${kinds.join(', ')} · declared ahead of any emitter: ${unemitted.join(', ')}`);
+
+  const rejected = FAILURE_KINDS.filter((k) => throws(() => makeEvent(k, VIS.PUBLIC, clean)));
+  t('A0b arm · and accepts the schema\'s own four fields, so A0b is not passing on a constructor that throws at everything',
+    rejected.length === 0,
+    rejected.length ? `refused a legal payload: ${rejected.join(', ')}` : `[${FAILURE_FIELDS.join(', ')}] accepted on all ${FAILURE_KINDS.length}`);
+
+  t('A0b control · a type that is NOT on the list takes the culprit without complaint — the list is the guard',
+    !throws(() => makeEvent('task.almost', VIS.PUBLIC, attributed)) && !isFailure('task.almost'),
+    'so a kind deleted for being unemitted is a kind that comes back later with an open schema');
 }
 
 // ---------------------------------------------------------------- the scanners
