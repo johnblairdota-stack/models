@@ -31,7 +31,7 @@
  * handler nothing feeds is dead code that reads as coverage.
  *
  * ---------------------------------------------------------------------------------------------
- * THE FOUR SEAMS
+ * THE FIVE SEAMS
  * ---------------------------------------------------------------------------------------------
  *   show -> sim        `show.mjs`'s `briefFor` and `{t:'drive'}`   ->  `views/expedition.js`'s
  *                                                                     `sock.onmessage`
@@ -40,6 +40,26 @@
  *                                                                     `reunion.js`
  *   session -> frame   `session.js` `fullFor` + `project()`        ->  `show-tv.html`,
  *                                                                     `show-phone.html`
+ *   show -> the room   `show.mjs`'s eleven envelope types          ->  `show-tv.html` and
+ *                                                                     `show-phone.html`'s
+ *                                                                     `ws.onmessage`
+ *
+ * The fifth was not one of the four for four commits, and it is the seam every player is looking
+ * at: `{t:'state'|'roster'|'seated'|'reunion'|'event'|'hello'|'refused'|'notice'|'full'|'late'
+ * |'ping'}`. `P4` walks `frame`, which is the payload of exactly ONE of those eleven; the
+ * envelope around all of them and the other ten were unasserted anywhere in this suite. Adding it
+ * named six fields this process sends that neither page has ever opened. See P5.
+ *
+ * ---------------------------------------------------------------------------------------------
+ * 🚨 **AND THE EXTRACTORS THEMSELVES HAD THE BUG CLASS THEY WERE BUILT TO STOP. SEE `P0 arm b`.**
+ * ---------------------------------------------------------------------------------------------
+ * `readsOf` matched `<name>.<field>` and followed `fn(name)`. A DESTRUCTURING pattern yields
+ * neither, so `const { unlocked } = m` produced an empty read set — and every field-parity
+ * assertion below is a loop over that set. Empty set, empty loop, green gate, nothing compared.
+ * That is verbatim what this file's own header calls *"a field-parity assertion green because it
+ * had nothing to check"*, sitting in the file that names it. Two real product defects were
+ * demonstrated through the hole with all twenty-eight gates green. The fix is `P0 arm b` and
+ * `P0 arm c`, which are assertions about the SCAN rather than patches for two syntaxes.
  *
  * ⚠️ **`src/views/expedition.js`, `net/party/show-tv.html` AND `net/party/show-phone.html` ARE
  * READ HERE AND NEVER WRITTEN.** They belong to the television build. If this gate goes red
@@ -67,6 +87,35 @@ import { ROOMS } from '../src/party/coverage.js';
 
 let pass = 0, fail = 0;
 const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' · ' + d : ''}`); } else { fail++; console.log(`  FAIL ${n}${d ? ' · ' + d : ''}`); } return c; };
+
+/**
+ * 🚨 **EVERY BINDING FORM NO EXTRACTOR BELOW COULD RESOLVE, COLLECTED RATHER THAN DROPPED.**
+ * `P0 arm c` requires this list to be empty, and that is the half of the W1 fix that generalises:
+ * a scanner that cannot read a construct must say so, because the alternative — an empty read set
+ * flowing into a field-parity loop — is a green assertion with nothing behind it.
+ */
+const PARSE_TROUBLE = [];
+
+/**
+ * 🚨 **EVERY WATCHED BRANCH THAT YIELDED NO FIELD AT ALL.** A `{t:'x'}` handler that this file
+ * can find but cannot see a single read inside is not a handler that reads nothing — it is a
+ * scan that failed, and every field-parity loop downstream of it iterates over an empty set and
+ * prints `ok`. `P0 arm b` requires this list to hold only the branches named in `READS_NOTHING`.
+ */
+const BLIND = [];
+
+/**
+ * ⚠️ **THE BRANCHES THAT GENUINELY TOUCH NOTHING BUT THE TYPE, NAMED RATHER THAN TOLERATED.**
+ * A message can legitimately be a bare signal — its arrival is the whole content — and that is
+ * not the same fact as a scanner that could not read it. Each entry is keyed
+ * `<consumer> {t:'<type>'}` exactly as `BLIND` records it, argued, and armed by `P0 arm b arm`:
+ * an entry that starts reading a field goes red, so this cannot become somewhere to hide a
+ * fourth parse failure.
+ */
+const READS_NOTHING = new Map([
+  ["show-phone.html's {t:'full'} branch reads no field off `m` at all",
+    'the door is shut and the button says so — `capacity` rides along and the phone asks it nothing'],
+]);
 
 const src = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
 /** Comments are prose about the wire, not the wire. Every scan below runs on stripped source. */
@@ -106,17 +155,31 @@ function literalMessages(text, callRe) {
 }
 
 /**
- * Every `<name>.<field>` read off a value, following it through the local calls it is handed to.
+ * Every `<name>.<field>` read off a value, following it through the local calls it is handed to
+ * AND through the bindings it is destructured into.
  *
  * 🚨 A HANDLER THAT SAYS `if (m.t === 'brief') arm(m)` READS EVERY FIELD `arm` READS, AND A SCAN
  * THAT STOPPED AT THE BRANCH WOULD REPORT THAT IT READS NONE — which is a field-parity assertion
  * passing because it found nothing to check. `views/expedition.js` hands the brief to `arm(b)`,
  * which hands it to `readBrief(b)`, which is where `b.wing`, `b.cameras`, `b.episode` and
  * `b.worldSeed` actually are. Two hops, so the follow goes three deep and stops.
+ *
+ * 🚨 **AND THE SAME HOLE WAS STILL OPEN ONE SYNTAX OVER.** `const { unlocked } = m` matches
+ * neither `m.<field>` nor `fn(m)`, so a branch written that way produced an EMPTY read set and
+ * every field-parity loop below iterated over nothing and reported `ok`. That is not a variant of
+ * the bug this file exists to stop; it IS the bug, in the file built to stop it — the gate's own
+ * header names *"a field-parity assertion green because it had nothing to check"* as the shape.
+ * Two halves of the fix, and the second one is the one that generalises:
+ *
+ *   · `patternReads` resolves the destructuring forms this tree uses, so the reads are COUNTED.
+ *   · `PARSE_TROUBLE` and the zero-yield rule at P0 make a set this scanner could not fill a
+ *     FAILURE rather than a pass — which holds for `m['unlocked']`, `{...m}`, `Object.entries(m)`
+ *     and every other form nobody has written yet, because it does not depend on recognising one.
  */
-function readsOf(text, name, scope, depth = 3, seen = new Set()) {
+function readsOf(text, name, scope, depth = 3, seen = new Set(), where = '?') {
   const out = new Set();
   for (const m of scope.matchAll(new RegExp(`\\b${name}\\.([A-Za-z_$][\\w$]*)`, 'g'))) out.add(m[1]);
+  for (const p of patternReads(scope, name, scope, where)) out.add(p);
   if (depth <= 0) return out;
   for (const call of scope.matchAll(new RegExp(`\\b([A-Za-z_$][\\w$]*)\\(\\s*${name}\\s*[,)]`, 'g'))) {
     const fn = call[1];
@@ -127,12 +190,174 @@ function readsOf(text, name, scope, depth = 3, seen = new Set()) {
     const open = text.indexOf('(', def.index + def[0].length - 1);
     const params = balancedParen(text, open);
     if (params == null) continue;
-    const first = (params.split(',')[0] || '').trim().replace(/\s*=.*$/, '');
-    if (!/^[A-Za-z_$][\w$]*$/.test(first)) continue;
+    const first = (topLevelParts(params)[0] || '').replace(/\s*=[\s\S]*$/, '').trim();
     const bodyAt = text.indexOf('{', open + params.length);
     const body = balanced(text, bodyAt);
     if (body == null) continue;
-    for (const f of readsOf(text, first, body, depth - 1, seen)) out.add(f);
+    // ⚠️ A DESTRUCTURED PARAMETER IS A READ LIST, NOT AN UNPARSEABLE NAME. `readBrief({ wing,
+    // cameras })` names four fields in its own signature; the old scanner required the first
+    // parameter to be a bare identifier and returned silently when it was not.
+    if (first.startsWith('{')) {
+      const inner = balanced(first, 0);
+      if (inner == null) { PARSE_TROUBLE.push(`${where}: \`${fn}\`'s destructured parameter did not brace-match`); continue; }
+      for (const p of patternPaths(inner, '', (local) => subReads(body, local), `${where} -> ${fn}()`)) out.add(p);
+      continue;
+    }
+    if (!/^[A-Za-z_$][\w$]*$/.test(first)) {
+      PARSE_TROUBLE.push(`${where}: \`${fn}\` is handed \`${name}\` and its first parameter \`${first}\` is a form this scanner cannot follow`);
+      continue;
+    }
+    for (const f of readsOf(text, first, body, depth - 1, seen, `${where} -> ${fn}()`)) out.add(f);
+  }
+  return out;
+}
+
+/** `body` split on its top-level commas, string- and bracket-aware. */
+function topLevelParts(body) {
+  const out = [];
+  let depth = 0, start = 0;
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if (c === "'" || c === '"' || c === '`') { i = skipString(body, i); continue; }
+    if (c === '{' || c === '[' || c === '(') { depth++; continue; }
+    if (c === '}' || c === ']' || c === ')') { depth--; continue; }
+    if (c === ',' && depth === 0) { out.push(body.slice(start, i)); start = i + 1; }
+  }
+  out.push(body.slice(start));
+  return out.map((x) => x.trim()).filter(Boolean);
+}
+
+/** The index of the first `ch` at bracket depth 0 in `s`, or -1. */
+function topLevelIndex(s, ch) {
+  let depth = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === "'" || c === '"' || c === '`') { i = skipString(s, i); continue; }
+    if (c === '{' || c === '[' || c === '(') { depth++; continue; }
+    if (c === '}' || c === ']' || c === ')') { depth--; continue; }
+    if (depth === 0 && c === ch) return i;
+  }
+  return -1;
+}
+
+/** The index of the bracket closing the one at `at`, or -1. */
+function matchEnd(text, at) {
+  const open = text[at];
+  const close = { '{': '}', '[': ']', '(': ')' }[open];
+  if (!close) return -1;
+  let depth = 0;
+  for (let i = at; i < text.length; i++) {
+    const c = text[i];
+    if (c === "'" || c === '"' || c === '`') { i = skipString(text, i); continue; }
+    if (c === open) depth++;
+    else if (c === close) { depth--; if (!depth) return i; }
+  }
+  return -1;
+}
+
+/**
+ * One object-destructuring pattern body, resolved into the paths it reads under `prefix`.
+ * `{ a, b: c, d = 1, e: { f } }` reads `a`, `b`, `d` and `e.f`; the local name `c` is handed to
+ * `sub(c)` so what `c` is then read FOR lands as `b.<that>`.
+ *
+ * ⚠️ ANYTHING THIS CANNOT NAME GOES INTO `PARSE_TROUBLE` AND NOWHERE ELSE. A computed key
+ * (`{ [k]: v }`) genuinely cannot be resolved from the text, and the honest answer to that is a
+ * red gate and a human, not an empty set that reads as agreement.
+ */
+function patternPaths(body, prefix, sub, where) {
+  const out = new Set();
+  for (const p of topLevelParts(body)) {
+    if (p.startsWith('...')) {
+      // A rest element reads whatever is left, so it claims no field — but it IS a read, and the
+      // zero-yield rule must not mistake it for a parse failure.
+      out.add(prefix ? `${prefix}.*` : '*');
+      continue;
+    }
+    const eq = topLevelIndex(p, '=');
+    const colon = topLevelIndex(p, ':');
+    let key = null, val = null;
+    if (colon < 0 || (eq >= 0 && eq < colon)) {
+      const m = /^([A-Za-z_$][\w$]*)\s*(?:=|$)/.exec(p);
+      if (!m) { PARSE_TROUBLE.push(`${where}: cannot name the binding \`${p}\``); continue; }
+      key = m[1]; val = m[1];
+    } else {
+      key = p.slice(0, colon).trim();
+      val = p.slice(colon + 1).trim();
+      if (!/^[A-Za-z_$][\w$]*$/.test(key)) { PARSE_TROUBLE.push(`${where}: cannot name the key of \`${p}\``); continue; }
+    }
+    const path = prefix ? `${prefix}.${key}` : key;
+    out.add(path);
+    if (val.startsWith('{')) {
+      const inner = balanced(val, 0);
+      if (inner == null) { PARSE_TROUBLE.push(`${where}: nested pattern \`${p}\` did not brace-match`); continue; }
+      for (const q of patternPaths(inner, path, sub, where)) out.add(q);
+      continue;
+    }
+    const m = /^([A-Za-z_$][\w$]*)\s*(?:=|$)/.exec(val);
+    if (!m) { PARSE_TROUBLE.push(`${where}: cannot name the local of \`${p}\``); continue; }
+    if (sub) for (const suffix of sub(m[1])) out.add(path + suffix);
+  }
+  return out;
+}
+
+/**
+ * Every `.a.b` chain read off `local` in `block`, as suffixes.
+ *
+ * ⚠️ THREE FORMS, BECAUSE THE PAGES USE THREE. A bare `inc.alarms`, an optional `inc?.alarms`,
+ * and — the one that cost a control a red — a defaulted `(inc || {}).alarms`, which is how both
+ * HTML pages read every nullable branch of the frame. A scanner that only knew the first would
+ * have resolved the pattern, found the alias used nowhere, and gone quietly back to an empty set.
+ */
+function subReads(block, local) {
+  const out = new Set();
+  const chain = '((?:\\??\\.[A-Za-z_$][\\w$]*)+)';
+  const norm = (c) => c.replace(/\?/g, '');
+  for (const u of block.matchAll(new RegExp(`\\b${local}${chain}`, 'g'))) out.add(norm(u[1]));
+  for (const u of block.matchAll(new RegExp(`\\(\\s*${local}\\s*(?:\\|\\||\\?\\?)[^()]*\\)${chain}`, 'g'))) out.add(norm(u[1]));
+  return out;
+}
+
+/**
+ * 🚨 **EVERY DESTRUCTURING PATTERN IN `scope` INITIALISED FROM `root`, RESOLVED — AND EVERY ONE
+ * THAT COULD NOT BE, REPORTED.** This is the whole of the W1 fix's first half. `const { unlocked
+ * } = m` is a read of `m.unlocked`; `const { incident: inc } = frame` followed by `inc.alarms` is
+ * a read of `frame.incident.alarms`; `const { you } = frame.seat` is a read of `frame.seat.you`.
+ *
+ * The last loop is the half that cannot be evaded: every `<pattern> = root` in the scope whose
+ * bracket this function did not itself resolve — an assignment with no declarator, an array
+ * pattern, anything — is pushed to `PARSE_TROUBLE`. A pattern bound off a watched value is either
+ * understood or it is a red gate. It is never a silence.
+ */
+function patternReads(text, root, scope, where) {
+  const out = new Set();
+  const resolvedEnd = new Set();
+  for (const d of scope.matchAll(/\b(?:const|let|var)\s*(?=[{[])/g)) {
+    const at = d.index + d[0].length;
+    const end = matchEnd(scope, at);
+    if (end < 0) continue;
+    const after = scope.slice(end + 1);
+    const eq = /^\s*=\s*/.exec(after);
+    if (!eq) continue;
+    const init = after.slice(eq[0].length).replace(/^[(\s]+/, '');
+    const rm = /^([A-Za-z_$][\w$]*)((?:\.[A-Za-z_$][\w$]*)*)/.exec(init);
+    if (!rm || rm[1] !== root) continue;
+    resolvedEnd.add(end);
+    if (scope[at] === '[') {
+      PARSE_TROUBLE.push(`${where}: \`${root}\` is destructured by position — an array pattern names no fields`);
+      continue;
+    }
+    const body = balanced(scope, at);
+    if (body == null) { PARSE_TROUBLE.push(`${where}: a pattern bound from \`${root}\` did not brace-match`); continue; }
+    // The locals are live from the declaration to the end of the block that holds it.
+    const [start, block] = enclosingBlock(scope, at);
+    const from = Math.max(0, at - start);
+    const live = block.slice(from);
+    const prefix = rm[2] ? rm[2].slice(1) : '';
+    for (const p of patternPaths(body, prefix, (local) => subReads(live, local), where)) out.add(p);
+  }
+  for (const u of scope.matchAll(new RegExp(`[}\\]]\\s*=\\s*\\(?\\s*${root}\\b`, 'g'))) {
+    if (resolvedEnd.has(u.index)) continue;
+    PARSE_TROUBLE.push(`${where}: \`${scope.slice(Math.max(0, u.index - 60), u.index + 20).split('\\n').pop().trim()}\` binds a pattern off \`${root}\` and this scanner did not resolve it`);
   }
   return out;
 }
@@ -344,7 +569,8 @@ const simHandles = (() => {
     const at = body.indexOf(`m.t === '${ty}'`);
     const next = types.map((o) => body.indexOf(`m.t === '${o}'`)).filter((i) => i > at);
     const chunk = body.slice(at, next.length ? Math.min(...next) : body.length);
-    for (const f of readsOf(EXPED, 'm', chunk)) if (f !== 't') out.get(ty).add(f);
+    for (const f of readsOf(EXPED, 'm', chunk, 3, new Set(), `expedition.js {t:'${ty}'}`)) if (f !== 't') out.get(ty).add(f);
+    if (!out.get(ty).size) BLIND.push(`views/expedition.js's {t:'${ty}'} branch reads no field off \`m\` at all`);
   }
   return out;
 })();
@@ -364,15 +590,44 @@ const showHandles = (() => {
       if (f[1] === 't') continue;
       out.get(ty).add(f[2] ? `${f[1]}.${f[2]}` : f[1]);
     }
+    // ⚠️ AND THE SAME VALUE TAKEN APART RATHER THAN INDEXED. `const { runner } = msg` reads
+    // `msg.runner`; the chain regex above sees nothing at all in it.
+    for (const f of patternReads(chunk, 'msg', chunk, `session.js simReport {t:'${ty}'}`)) if (f !== 't') out.get(ty).add(f);
+    if (!out.get(ty).size) BLIND.push(`session.js's simReport {t:'${ty}'} branch reads no field off \`msg\` at all`);
   }
   return out;
 })();
 
+/**
+ * 🚨 **THE ARM THAT WAS ONLY HALF AN ARM, AND THE HALF THAT WAS MISSING IS THE ONE THAT MATTERED.**
+ *
+ * `P0 arm` asserted that every seam's BRANCHES were found. It never asserted that a branch
+ * yielded a FIELD — and every field-parity assertion below is a loop over the read set, so a
+ * branch with an empty set is an assertion with an empty body. Two real product defects were
+ * demonstrated against the shipped tree, each fully green across all twenty-eight gates:
+ *
+ *   · `show.mjs` sending `{t:'cams', lit}` while `expedition.js` reads `const { unlocked } = m`.
+ *     That is the exact bug `pushCams` was landed to fix, restored by hand: the live camera count
+ *     never reaches the running house again, and the guide's coverage, the Director's cutaway
+ *     budget and the feed's camera roster all freeze at the query-string default.
+ *   · `show-tv.html` reading `const { incident: inc } = frame` and then `inc.<wrong name>`, which
+ *     pins the Incidents counter at 0 for the whole season.
+ *
+ * Both were invisible for one reason: the read set was empty, so P1c and P4 compared nothing
+ * against nothing. The three arms below are the fix, and they are ordered from most specific to
+ * most general on purpose — the last one does not depend on recognising any syntax at all, so it
+ * still holds for the form nobody has written yet.
+ */
 {
   t('P0 arm · every seam was actually parsed — a green below is not an empty set meeting an empty set',
     showToSim.size >= 2 && simToShow.size >= 2 && simHandles && simHandles.size >= 1 && showHandles && showHandles.size >= 2,
     `show->sim ${[...showToSim.keys()].join(',')} · sim->show ${[...simToShow.keys()].join(',')}`
     + ` · expedition handles ${[...simHandles.keys()].join(',')} · simReport handles ${[...showHandles.keys()].join(',')}`);
+
+  // ⚠️ THE OTHER TWO HALVES OF THIS ARM ARE ASSERTED AT `P0 arm b`/`P0 arm c`, BELOW P5. They are
+  // properties of the WHOLE scan — every branch on every seam, every pattern in every file — and
+  // an arm placed here would only have covered the two seams parsed above it, which is the same
+  // partial-coverage mistake in a smaller size.
 }
 
 // =============================================================================================
@@ -656,6 +911,15 @@ function framePathsRead(file) {
       out.add(base + u[1]);
     }
   }
+  /**
+   * 🚨 AND THE FRAME TAKEN APART RATHER THAN INDEXED. `const { incident: inc } = frame` matched
+   * neither loop above — not `frame.<chain>`, not `const alias = …frame.<chain>` — so a page
+   * written that way read the frame for NOTHING as far as P4 was concerned, and P4 walked an
+   * empty set and printed `ok`. A television reading `inc.<a name no projection carries>` pins
+   * the Incidents counter at 0 for the whole season, fully green. `patternReads` resolves the
+   * pattern; `P0 arm c` catches the one it cannot.
+   */
+  for (const q of patternReads(b, 'frame', b, file)) out.add(q);
   return out;
 }
 
@@ -711,6 +975,195 @@ function framePathsRead(file) {
   const stale = [...ON_THE_WIRE_UNRENDERED.keys()].filter((k) => !unrendered.includes(k));
   t('P4b arm · and every entry on that list is still genuinely unrendered',
     stale.length === 0, stale.length ? `now rendered, delete the entry: ${stale.join(', ')}` : `${ON_THE_WIRE_UNRENDERED.size} entries, all live`);
+}
+
+// =============================================================================================
+// P5 · show -> the phones and the television
+// =============================================================================================
+/**
+ * 🚨 **THE FIFTH SEAM, AND IT WAS NOT ONE OF THE FOUR.** Everything above watches the mansion and
+ * the log. The envelope this process speaks to the two HTML pages —
+ * `{t:'state'|'roster'|'seated'|'reunion'|'event'|'hello'|'refused'|'notice'|'full'|'late'|'ping'}`
+ * — had no parity assertion anywhere in this suite, and it is the seam every player is looking at.
+ * `P4` walks `frame`, which is the payload of exactly one of those eleven; the other ten and the
+ * envelope around all of them were unchecked. Adding it named three dead fields on the first run.
+ *
+ * ⚠️ **THE TWO PAGES ARE TAKEN AS ONE CONSUMER, AND THAT IS A DELIBERATE WEAKENING.** `roster` is
+ * sent to the television with `capacity` and to a phone with `you`; deciding statically which
+ * socket a given `send(sock, …)` reaches would need the flow analysis this file has argued twice
+ * it is not going to hand-roll. The union is sound in the direction that matters — a field READ
+ * by either page and sent by nobody is still a bug, and that is the M4 shape — and it is weaker
+ * in the other, where a field only the television is sent counts as read if the phone reads it.
+ * That weakness is recorded here rather than papered over.
+ *
+ * ⚠️ **A BRANCH THAT KEEPS THE WHOLE ENVELOPE READS ALL OF IT.** `show-phone.html`'s `seated`
+ * branch does `seat = m` and reads `seat.seat` from module scope for the rest of the show. Those
+ * reads are real and are not inside the branch, so the branch is marked opaque and excluded from
+ * P5d rather than being allowed to report four live fields as dead.
+ */
+const TV_PAGE = strip(src('net/party/show-tv.html'));
+const PHONE_PAGE = strip(src('net/party/show-phone.html'));
+
+/** Every literal envelope this process hands a phone or the television — never the mansion's. */
+const showToRoom = (() => {
+  const out = new Map();
+  const merge = (m) => { for (const [ty, fs] of m) { if (!out.has(ty)) out.set(ty, new Set()); for (const f of fs) out.get(ty).add(f); } };
+  merge(literalMessages(SHOW, /\bsend\((?!simSock\b)[^,{]*,\s*\{/g));
+  merge(literalMessages(SHOW, /\bdeliver\([^,{]*,\s*\{/g));
+  return out;
+})();
+
+/** What one page's `ws.onmessage` branches on and reads off the envelope. */
+function pageHandles(text, label) {
+  const m = text.match(/ws\.onmessage\s*=\s*\([^)]*\)\s*=>\s*\{/);
+  const body = m ? balanced(text, m.index + m[0].length - 1) : null;
+  if (!body) return null;
+  const types = [...body.matchAll(/\bm\.t === '([^']+)'/g)].map((x) => x[1]);
+  const out = new Map();
+  for (const ty of types) {
+    const at = body.indexOf(`m.t === '${ty}'`);
+    const next = types.map((o) => body.indexOf(`m.t === '${o}'`)).filter((i) => i > at);
+    const chunk = body.slice(at, next.length ? Math.min(...next) : body.length);
+    const fields = new Set();
+    for (const f of readsOf(text, 'm', chunk, 3, new Set(), `${label} {t:'${ty}'}`)) if (f !== 't') fields.add(f);
+    // `seat = m` / `const x = m` — the envelope is kept whole and read from somewhere else.
+    const opaque = /(?:^|[^.\w$])(?:const\s+|let\s+|var\s+)?[A-Za-z_$][\w$]*\s*=\s*m\s*[;,)]/.test(chunk);
+    if (!fields.size && !opaque) BLIND.push(`${label}'s {t:'${ty}'} branch reads no field off \`m\` at all`);
+    out.set(ty, { fields, opaque });
+  }
+  return out;
+}
+const tvHandles = pageHandles(TV_PAGE, 'show-tv.html');
+const phoneHandles = pageHandles(PHONE_PAGE, 'show-phone.html');
+
+/**
+ * ⚠️ **THE FIELDS THIS PROCESS PUTS IN AN ENVELOPE AND NEITHER PAGE EVER OPENS, NAMED.** Every one
+ * of these was found by adding this seam; none of them was known before. Three were named by the
+ * critic that asked for the seam, three more fell out of the same scan. `show-phone.html` is not
+ * this author's file, so two of them are a message to its author rather than a fix — which is
+ * exactly what a parity gate is for.
+ */
+const ENVELOPE_UNREAD = new Map([
+  ['hello.capacity', 'the television is told the room size and renders the code, the URL and the seats it has — never the ceiling'],
+  ['roster.capacity', 'same number, same screen, same silence — a lobby that said `3/8` would read it'],
+  ['roster.you', 'a phone learns its seat from `{t:\'seated\'}` and keeps it; the copy on every roster is never looked at'],
+  ['full.capacity', 'the button says `Room is full` and never says how full — `show-phone.html`, another author'],
+  ['refused.was', 'the phone prints `why` and drops WHAT was refused, so a stale tap and a wrong-phase tap read identically — `show-phone.html`, another author'],
+  ['event.replay', '`catchUp` marks a replayed event so a page could avoid re-animating history; neither page distinguishes one'],
+]);
+
+{
+  const sent = setOf(showToRoom.keys());
+  const handled = setOf([...(tvHandles ? tvHandles.keys() : []), ...(phoneHandles ? phoneHandles.keys() : [])]);
+
+  t('P5 arm · both pages were parsed and the envelope was extracted from the shipped `show.mjs`',
+    showToRoom.size >= 8 && tvHandles && tvHandles.size >= 4 && phoneHandles && phoneHandles.size >= 5,
+    `show.mjs sends ${showToRoom.size} envelope types · television handles ${tvHandles && tvHandles.size} · phone handles ${phoneHandles && phoneHandles.size}`);
+
+  const deadTraffic = only(sent, handled);
+  t('P5 · every envelope `show.mjs` sends the room is one a page handles',
+    deadTraffic.length === 0,
+    deadTraffic.length ? `sent and never handled: ${deadTraffic.map((x) => `{t:'${x}'}`).join(', ')}` : `${[...sent].join(', ')}`);
+  const deadHandler = only(handled, sent);
+  t('P5b · and every envelope a page handles is one this process sends',
+    deadHandler.length === 0,
+    deadHandler.length ? `handled and never sent: ${deadHandler.map((x) => `{t:'${x}'}`).join(', ')}` : `${[...handled].join(', ')}`);
+
+  /**
+   * 🚨 THIS IS THE ASSERTION M4 AND M5 WOULD HAVE FAILED IF THIS SEAM HAD EXISTED. A page reading
+   * a field under a name the envelope does not carry — by chain or by pattern, it is the same
+   * read now — is the whole bug class, one seam over.
+   */
+  const gaps = [];
+  for (const [page, hs] of [['show-tv.html', tvHandles], ['show-phone.html', phoneHandles]]) {
+    for (const [ty, { fields }] of hs) {
+      const got = showToRoom.get(ty);
+      if (!got) continue;                        // P5b's business
+      for (const f of fields) {
+        if (f === '*' || got.has(f)) continue;
+        const head = f.split('.')[0];
+        if (got.has(head) && !f.includes('.')) continue;
+        if (got.has(head) && ![...got].some((g) => g.startsWith(head + '.'))) continue;
+        gaps.push(`${page} reads \`${ty}.${f}\` and this process sends {t:'${ty}'} with [${[...got].join(', ')}]`);
+      }
+    }
+  }
+  t('P5c · and every field a page reads off an envelope is a field that envelope carries',
+    gaps.length === 0, gaps[0] || 'no field is read under a name it is not sent under');
+
+  const unread = [];
+  for (const [ty, got] of showToRoom) {
+    const readers = [tvHandles.get(ty), phoneHandles.get(ty)].filter(Boolean);
+    if (readers.some((r) => r.opaque)) continue;             // the envelope is kept whole
+    const want = new Set(readers.flatMap((r) => [...r.fields]));
+    for (const f of got) {
+      if (want.has(f) || want.has('*')) continue;
+      if ([...want].some((w) => w.startsWith(f + '.'))) continue;
+      unread.push(`${ty}.${f}`);
+    }
+  }
+  const surprises = unread.filter((x) => !ENVELOPE_UNREAD.has(x));
+  t('P5d · and nothing new is put in an envelope neither page opens',
+    surprises.length === 0,
+    surprises.length ? `sent and dropped: ${surprises.join(', ')}`
+      : `${unread.length} known-unread fields, each named with a reason: ${unread.join(', ')}`);
+  const stale = [...ENVELOPE_UNREAD.keys()].filter((x) => !unread.includes(x));
+  t('P5d arm · and every entry on that list is still genuinely unread — the list cannot become cover',
+    stale.length === 0, stale.length ? `now read, delete the entry: ${stale.join(', ')}` : `${ENVELOPE_UNREAD.size} entries, all live`);
+}
+// =============================================================================================
+// P0 arm, closed · the two invariants that hold across every seam above
+// =============================================================================================
+/**
+ * 🚨 **THIS IS THE W1 FIX, AND IT IS TWO ASSERTIONS RATHER THAN TWO PATTERNS.**
+ *
+ * `readsOf` matched `<name>.<field>` and followed `fn(name)` three deep. A DESTRUCTURING pattern
+ * yields neither, so a branch written `const { unlocked } = m` produced an empty read set, and
+ * every field-parity loop in this file iterates over the read set — an empty one is a loop body
+ * that never runs and an assertion that prints `ok` having compared nothing. Two real product
+ * defects were demonstrated on the shipped tree that way, both fully green across all gates:
+ * `{t:'cams', lit}` against `const { unlocked } = m` (the live camera count stops reaching the
+ * running house — `pushCams`'s bug, restored), and `const { incident: inc } = frame` on the
+ * television (the Incidents counter pinned at 0 for the season).
+ *
+ * `patternReads` now resolves those patterns, and P9.5/P9.6 prove it on mutated source. But
+ * resolving two patterns is fixing two patterns. **These two arms are the class**, and neither
+ * of them depends on recognising any syntax:
+ *
+ *   `P0 arm b`  a branch that yields NO field is a parse failure, not a pass. It holds for
+ *               `m['unlocked']`, `{...m}`, `Object.entries(m)`, `structuredClone(m)` and every
+ *               form nobody has written yet, because it tests the OUTPUT of the scan.
+ *   `P0 arm c`  a binding off a watched value that this file could not turn into names is
+ *               reported and goes red. It holds for the forms that DO yield something and yield
+ *               the wrong thing.
+ *
+ * The alternative considered and rejected was a real parse. Node bundles no AST parser; `new
+ * Function` validates syntax and returns no tree, and `Function.prototype.toString` returns the
+ * source it was given. Vendoring a parser puts a dependency in a gate whose whole argument is
+ * that it reads shipped source with no build step, and hand-rolling one is thousands of lines to
+ * make an extractor complete — when completeness is not what was missing. What was missing was
+ * the admission of incompleteness. A scanner that says "I read nothing here" and is believed is
+ * the bug; a scanner that says "I read nothing here" and goes red is a gate. The structural
+ * helpers below (`balanced`, `matchEnd`, `topLevelParts`, `topLevelIndex`) are already a
+ * bracket-matching tokeniser over the grammar these seams actually use, which is the right size.
+ */
+{
+  const blind = BLIND.filter((b) => !READS_NOTHING.has(b));
+  const branches = simHandles.size + showHandles.size + tvHandles.size + phoneHandles.size;
+  t('P0 arm b · every watched branch on every seam yielded at least one field — an empty read set is a parse failure, not a pass',
+    blind.length === 0,
+    blind.length ? blind.join(' · ')
+      : `${branches} branches across five seams, ${BLIND.length} of them named as reading nothing`);
+  const talkative = [...READS_NOTHING.keys()].filter((k) => !BLIND.includes(k));
+  t('P0 arm b arm · and every branch named as reading nothing still reads nothing',
+    talkative.length === 0,
+    talkative.length ? `now reads a field — delete the entry and let the parity loops have it: ${talkative.join(' · ')}`
+      : `${READS_NOTHING.size} entries, all live`);
+
+  t('P0 arm c · and no binding off a watched value went unresolved — a pattern this file cannot read is a red gate, never a silence',
+    PARSE_TROUBLE.length === 0,
+    PARSE_TROUBLE.length ? PARSE_TROUBLE.join(' · ')
+      : 'every destructure, alias and handed-off parameter on all five seams resolved to names');
 }
 
 // =============================================================================================
@@ -792,6 +1245,54 @@ function framePathsRead(file) {
   t('P9.4 control · point a page at `frame.camerasLive` and P4 goes red — no projection carries it',
     bentReads.has('camerasLive'),
     'the detector reads the page\'s own text, so a renamed field is a renamed read');
+
+  // ---- P1c / P0 arm b: M4 — the shipped `{t:'cams'}` seam, renamed on one side and
+  //      destructured on the other. Fully green across all twenty-eight gates before W1.
+  const M4_SHOW = SHOW.replace("send(simSock, { t: 'cams', unlocked: live });", "send(simSock, { t: 'cams', lit: live });");
+  const M4_EXPED = EXPED.replace(
+    "if (m.t === 'cams' && Number.isInteger(m.unlocked)) camerasUnlocked = Math.max(1, m.unlocked);",
+    "if (m.t === 'cams') { const { unlocked } = m; if (Number.isInteger(unlocked)) camerasUnlocked = Math.max(1, unlocked); }");
+  t('P9 arm e · the M4 edit landed on both halves of the shipped text',
+    M4_SHOW !== SHOW && M4_EXPED !== EXPED, "`unlocked: live` -> `lit: live`, and `m.unlocked` -> `const { unlocked } = m`");
+  const m4Sent = (literalMessages(M4_SHOW, /send\(simSock,\s*\{/g).get('cams') || new Set());
+  const m4Chunk = (() => {
+    const mm = M4_EXPED.match(/sock\.onmessage\s*=\s*\([^)]*\)\s*=>\s*\{/);
+    const body = balanced(M4_EXPED, mm.index + mm[0].length - 1);
+    const at = body.indexOf("m.t === 'cams'");
+    return body.slice(at);
+  })();
+  const m4Read = readsOf(M4_EXPED, 'm', m4Chunk, 3, new Set(), 'control M4');
+  t('P9.5 control · destructure the `cams` branch and rename the field, and P1c goes red — the live camera count stops reaching the house',
+    m4Read.has('unlocked') && !m4Sent.has('unlocked'),
+    `the house reads [${[...m4Read].filter((f) => f !== 't').join(', ')}] out of a destructuring pattern; the renamed message sends [${[...m4Sent].join(', ')}]`);
+  // The half that matters more than the rename: the OLD extractor saw nothing in that branch.
+  const m4Blind = new Set([...m4Chunk.matchAll(/\bm\.([A-Za-z_$][\w$]*)/g)].map((x) => x[1]).filter((f) => f !== 't'));
+  t('P9.5b control · and the pre-W1 extractor — `m.<field>` plus `fn(m)` — read ZERO fields out of that same branch',
+    m4Blind.size === 0 && m4Read.size > 0,
+    `chain-and-call scan: {${[...m4Blind].join(', ')}} · binding-aware scan: {${[...m4Read].filter((f) => f !== 't').join(', ')}}`
+    + ' — an empty set is what made P1c green over a restored Fatal');
+
+  // ---- P4 / P0 arm b: M5 — the same hole on the frame side of the wire.
+  const TV_RAW = strip(src('net/party/show-tv.html'));
+  const M5_TV = TV_RAW.replace("$('alarms').textContent = (frame.incident || {}).alarms || 0;",
+    "const { incident: inc } = frame;\n    $('alarms').textContent = (inc || {}).alarmsThisSeason || 0;");
+  t('P9 arm f · the M5 edit landed on the shipped television', M5_TV !== TV_RAW,
+    "`(frame.incident || {}).alarms` -> `const { incident: inc } = frame` then `inc.alarmsThisSeason`");
+  const m5Old = new Set([...M5_TV.matchAll(/\bframe((?:\.[A-Za-z_$][\w$]*)+)/g)].map((x) => x[1].slice(1)));
+  const m5New = new Set([...m5Old, ...patternReads(M5_TV, 'frame', M5_TV, 'control M5')]);
+  t('P9.6 control · destructure the frame on the television and P4 goes red — `incident.alarmsThisSeason` is on no projection',
+    m5New.has('incident.alarmsThisSeason') && !m5Old.has('incident.alarmsThisSeason'),
+    'the chain scan saw the alias and nothing under it; the binding-aware scan resolves `inc.alarmsThisSeason` to `frame.incident.alarmsThisSeason`');
+
+  // ---- P0 arm c: a pattern the resolver cannot name must be REPORTED, never dropped.
+  const before = PARSE_TROUBLE.length;
+  const M7 = EXPED.replace("if (m.t === 'brief') arm(m);", "if (m.t === 'brief') { const { [pickField()]: v } = m; arm(v); }");
+  t('P9 arm g · the computed-key edit landed on the shipped text', M7 !== EXPED, '`arm(m)` -> `const { [pickField()]: v } = m`');
+  readsOf(M7, 'm', M7.slice(M7.indexOf("m.t === 'brief'")), 1, new Set(), 'control M7');
+  const raised = PARSE_TROUBLE.slice(before);
+  t('P9.7 control · bind a computed key off the envelope and P0 arm c goes red — an unreadable pattern is reported, not dropped',
+    raised.length > 0, raised[0] || 'nothing was raised, which is the whole failure mode');
+  PARSE_TROUBLE.length = before;   // the control's own noise is not the shipped tree's
 }
 
 console.log(`\nwire-parity: ${pass} passed, ${fail} failed`);
