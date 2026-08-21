@@ -41,7 +41,8 @@ export function drive(W, orders, { hunterOn = true, seconds = 600, onFrame = nul
   let t = 0, i = 0, frames = 0;
   const ev = { kills: 0, stage: [], bang: 0, commit: 0, wallHits: 0, panelTouched: new Set(),
     swings: 0, brokeThrough: 0, escapes: [], phases: [], denies: 0, fleeFrames: 0 };
-  hunter.onKill = () => { ev.kills++; };
+  ev.killT = [];
+  hunter.onKill = () => { ev.kills++; ev.killT.push(+t.toFixed(1)); };
   hunter.onStage = (a, b) => ev.stage.push(`${a}->${b}@${t.toFixed(1)}`);
   hunter.onBang = () => ev.bang++;
   hunter.onCommit = () => ev.commit++;
@@ -111,7 +112,7 @@ export function drive(W, orders, { hunterOn = true, seconds = 600, onFrame = nul
       else if (fleeing && (sep > flee.until || !hunter.committed)) fleeing = false;
       if (fleeing) {
         yaw = Math.atan2(player.pos.x - hunter.root.position.x, player.pos.z - hunter.root.position.z);
-        move = { x: 0, y: 1 }; runFlag = true; advance = false; orderT -= DT;
+        move = { x: 0, y: 1 }; runFlag = true; advance = false;
         ev.fleeFrames++;
       }
     }
