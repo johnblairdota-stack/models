@@ -201,22 +201,55 @@ const fx = (n) => (n == null ? 'never' : n.toFixed(2));
  * the half that says the party expedition is what listens — `taken.js:27` asserted this in prose
  * for as long as it has existed and `grep -rn onKill src/views/ src/party/` returned that comment
  * and nothing else.
+ *
+ * ⚠️ **THE CONTROLS USED TO RUN THE PREDICATES OVER STRINGS THIS FILE WROTE ON THE SAME LINE.**
+ * `/finish\('taken'…/.test("if (contact < 1.35) finish('taken', t);")` proves a regex compiles. It
+ * cannot go red for any edit anyone makes to `expedition.js`, which is the file it claims to be
+ * guarding — and K4 is the assertion that the party mode listens to `onKill` **at all**, the exact
+ * seam a Fatal went through this session. The labels were crossed on top of that: the control for
+ * the distance test was filed under K4, which is the subscription.
+ *
+ * So the two claims are one function over source text, each control feeds it the SHIPPED file with
+ * one real edit applied, and a mutation arm asserts the edit landed — `hunter-draw` D8's idiom. If
+ * `expedition.js` is refactored past these anchors the arm goes red and says so, rather than a
+ * control quietly passing over a file it has stopped describing.
  */
 {
   const src = readFileSync(new URL('../src/views/expedition.js', import.meta.url), 'utf8');
-  const body = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const strip4 = (x) => x.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  /** Both structural claims, over any text, so no control can quietly reach for a weaker one. */
+  const scan = (text) => {
+    const body = strip4(text);
+    return {
+      subscribes: /hunter\.onKill\s*=/.test(body) && /onKill\s*=\s*\(\)\s*=>\s*finish\('taken'/.test(body),
+      byDistance: /finish\('taken'[^)]*\)/.test(body.replace(/hunter\.onKill[^\n]*\n/, '')),
+      otherEndings: /finish\('lit', t\)/.test(body) && /finish\('held', t\)/.test(body),
+    };
+  };
+  const shipped = scan(src);
   t('K4 · `views/expedition.js` subscribes to the Hunter\'s own kill',
-    /hunter\.onKill\s*=/.test(body) && /onKill\s*=\s*\(\)\s*=>\s*finish\('taken'/.test(body),
-    'onKill → finish(\'taken\')');
+    shipped.subscribes, 'onKill → finish(\'taken\')');
   t('K4b · and nothing in the file decides a take by distance any more',
-    !/finish\('taken'[^)]*\)/.test(body.replace(/hunter\.onKill[^\n]*\n/, '')),
-    'the only `finish(\'taken\')` in the file is the subscription');
+    !shipped.byDistance, 'the only `finish(\'taken\')` in the file is the subscription');
   t('K4c · the other three endings are untouched — terminal, clock, and the report',
-    /finish\('lit', t\)/.test(body) && /finish\('held', t\)/.test(body));
-  t('K4 control · the scan would notice the distance test coming back',
-    /finish\('taken'[^)]*\)/.test("if (contact < 1.35) finish('taken', t);"));
-  t('K4b control · and would notice the subscription going away',
-    !/hunter\.onKill\s*=/.test('hunter.setTargets([playerBody]);'));
+    shipped.otherEndings);
+
+  // The mutations. Each is the edit a future author would actually make, on the real file.
+  const unsubscribed = src.replace(
+    "  hunter.onKill = () => finish('taken', simT);",
+    '  hunter.setTargets([playerBody]);');
+  const byDistance = src.replace(
+    "    if (reach < TERMINAL_REACH) finish('lit', t);",
+    "    if (contact < 1.35) finish('taken', t);\n    if (reach < TERMINAL_REACH) finish('lit', t);");
+  t('K4 mutation arm · both edits landed on the shipped file — the controls below are not no-ops',
+    unsubscribed !== src && byDistance !== src,
+    'subscription replaced by `setTargets` · a distance test spliced back into the tick');
+  t('K4 control · delete the subscription from the shipped file and K4 goes red',
+    !scan(unsubscribed).subscribes && scan(unsubscribed).otherEndings,
+    'nothing listens to the Hunter, and the scan says so');
+  t('K4b control · splice the distance test back into the shipped file and K4b goes red',
+    scan(byDistance).byDistance && scan(byDistance).subscribes,
+    'a second `finish(\'taken\')` outside the subscription, and the scan finds it');
 }
 
 
