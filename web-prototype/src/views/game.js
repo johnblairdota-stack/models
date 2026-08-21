@@ -526,10 +526,48 @@ export default async function view(args = {}) {
     return 'auto';
   })();
 
+  /*
+   * 🤖 `?meshhunter=1` PUTS THE GENERATED HUNTER IN, and it is OPT-IN — the opposite default to
+   * `?mesh=`, deliberately.
+   *
+   * The player's generated body went on by default the day John said "I love the rigging. Good
+   * work. lets ship that". Nobody has said that about this one yet, and there is a second
+   * reason to wait: every hunter verdict on the board — `hunter.2` r19 WEAK 70, `hunter.3` r21
+   * WEAK 64, and sixteen rounds of stage-3 critique — describes the PROCEDURAL body. Flipping
+   * this default would silently re-point all of it at a character no critic has seen.
+   *
+   * Look at it in `hunter.mesh` first; that view stands it beside the generated player, which is
+   * the comparison that matters, and says in the frame which bodies are real and which are the
+   * player's standing in.
+   *
+   * The load is awaited before the AI is constructed because `HunterAI` builds all three stages
+   * in its constructor and a constructor cannot await. A failure falls back to the procedural
+   * hunter WITH THE REASON ON THE CONSOLE — the game must still start — and `hunter.meshBodies`
+   * below is what a probe reads to find out which of the two actually happened.
+   */
+  let meshHunterRigs = null;
+  if (new URLSearchParams(location.search).get('meshhunter') === '1') {
+    try {
+      const { createMeshHunter } = await import('../characters/mesh-hunter.js');
+      meshHunterRigs = await createMeshHunter({});
+      const files = [1, 2, 3].map((s) => meshHunterRigs[s].sourceFile);
+      console.log(`[game] hunter: GENERATED mesh bodies — ${files.join(', ')}`);
+      if (meshHunterRigs[1].standIn) {
+        console.warn('[game] the hunter stage bodies have not been generated yet, so the ' +
+          "PLAYER'S body is standing in for all three. Run tools/meshy-hunter-batch.mjs.");
+      }
+    } catch (e) {
+      console.error('[game] the generated hunter failed to load, falling back to the procedural ' +
+        'hunter:', e);
+      meshHunterRigs = null;
+    }
+  }
+
   const hunter = new HunterAI({
     room, scene, rng, debris, dust, weapons,
     position: room.spawn.hunter.clone(),
     noise, bangPolicy: BANG_POLICY,
+    rigs: meshHunterRigs,
   });
   // seeded one part short of stage 2, so the first limb it takes in the demo is the one
   // that grows it — the escalation has to be visible inside a 26 second loop

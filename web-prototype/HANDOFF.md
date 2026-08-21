@@ -259,6 +259,7 @@ and you should never need the archive.
 | hunter AI/detection or its board | **`hunter.md`** — scoring history (stale-scores warning), sense tuning |
 | `src/gadgets/**` | **`gadgets.md`** — the glow bug, five attachments, `heatWash` |
 | locomotion or character materials | **`robot-char.md`** — grime/gravity, `char.locomotion` r4, r36's two failed claims |
+| the GENERATED characters — `mesh-avatar.js`, `mesh-hunter.js`, anything Meshy | **`mesh-hunter.md` — NEW** (the hunter, `?meshhunter=1`, and five traps that each printed a plausible number) · `player-pipeline.md` (the player's body) · `mesh-pipeline.md` (how the pipeline was built) |
 
 **Archive** (history, not fact): `docs/archive/handoff-pre-prune-*.md`. **Design docs:**
 `dig-campaign.md` is the live ordering · `dig-what-it-could-be.md` is `critic-dig-8`'s verdict and

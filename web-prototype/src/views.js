@@ -96,6 +96,9 @@ export const VIEWS = [
   { id: 'hunter.absorb', group: 'hunter', title: 'Absorb + grow transition',
     bar: 'must read as the hunter taking the part onto itself',
     module: () => import('./views/hunter-absorb.js') },
+  { id: 'hunter.mesh', group: 'hunter', title: 'Generated hunter ramp, beside the generated player',
+    bar: 'must read as the SAME CHASSIS as the player in game.play, corrupted',
+    module: () => import('./views/hunter-mesh.js') },
 
   // ---------------- limbs and gadgets ----------------
   { id: 'limb.detach',  group: 'limb', title: 'Limb detach / reattach',

@@ -209,15 +209,31 @@ export class HunterAI {
     this.root.add(this.model);
     o.scene?.add(this.root);
 
-    // one rig per stage, built now, swapped by visibility
+    /*
+     * ONE RIG PER STAGE, BUILT NOW AND SWAPPED BY VISIBILITY — a growth has to be a cut, not a
+     * load, because it happens with the player in the room watching it.
+     *
+     * 🤖 `o.rigs` IS THE GENERATED HUNTER (`src/characters/mesh-hunter.js`, `?meshhunter=1`).
+     * It arrives already built because loading a GLB is async and this constructor is not; the
+     * view awaits it and hands it over. Everything below this line is the same either way: the
+     * grow transition, the absorb pull and the eye drive all work on `rigs[s].root` and on a
+     * material called `hunter.faceplate`, and the generated stages present both.
+     *
+     * The one real difference is WHO POSES THE BODY. The procedural rig is posed joint by joint
+     * by `Gait` plus the authored hunch; the generated one is driven by baked clips and owns its
+     * own pose. So a generated stage gets no `Gait` at all — see `_animate`, which branches on
+     * exactly that — and `mesh-hunter.js` publishes a `setPose()` that does nothing, so a stray
+     * call from anywhere else cannot half-pose a clip-driven body.
+     */
+    this.meshRigs = !!o.rigs;
     this.rigs = {};
     this.gaits = {};
     for (const s of [1, 2, 3]) {
-      const h = buildHunter({ stage: s });
+      const h = o.rigs?.[s] ?? buildHunter({ stage: s });
       h.root.visible = s === this.stage;
       this.model.add(h.root);
       this.rigs[s] = h;
-      this.gaits[s] = new Gait(h.unit);
+      this.gaits[s] = h.unit ? new Gait(h.unit) : null;
     }
 
     // the eye flare: one small light, so a transition is an event you see from across the
@@ -1440,6 +1456,42 @@ export class HunterAI {
     const rig = this.rig;
     const g = this.gaits[this.stage];
     const def = HUNTER_STAGES[this.stage];
+
+    /*
+     * 🤖 THE GENERATED BODY DRIVES ITSELF, AND EVERYTHING BELOW IS SKIPPED.
+     *
+     * This is the same ruling `mesh-avatar.js` records for the player, where a split — clips for
+     * the legs, procedural arms retargeted on top — was built, played and rejected by John ("the
+     * arms are not right ... I think we need to abandon the old skellington"). Two solutions
+     * writing one skeleton disagree about where the shoulder is, and the seam does not sand out.
+     *
+     * So the AI hands over STATE and nothing else: how fast it is moving, and whether it is
+     * mid-strike or mid-growth. The hunch, the scan, the rear-and-swing telegraph and the ALERT
+     * posture below are all authored joint angles for a rig this body does not have; their
+     * equivalents live in the clip set (`Alert` is the listening pose, `Attack` is the strike,
+     * `Arise` is the growth) and in the generated geometry, which is where the stoop belongs.
+     *
+     * ⚠️ WHAT IS LOST HERE IS REAL AND IS NAMED IN THE HANDOFF: the scan. On the procedural body
+     * the player can WATCH IT LOOK, because `_scanStep`'s sense-cone offset is put through the
+     * neck and head. A baked clip cannot know where the hunter is looking. That is the first
+     * thing to fix on this path and it needs a clip, not code.
+     */
+    if (this.meshRigs) {
+      const striking = this.state === 'ATTACK' || this.state === 'BREACH' || this.state === 'BANG';
+      if (striking && !this._meshSwing) {
+        this._meshSwing = true;
+        rig.playAttack?.(0.45);
+      } else if (!striking) {
+        this._meshSwing = false;
+      }
+      rig.update?.(dt, {
+        speed: this.speed,
+        runAt: 2.4,                    // the same threshold the procedural path calls a run
+        growing: this.state === 'GROW',
+      });
+      if (this._pull) this._pullStep(dt);
+      return;
+    }
     g.update(dt, { speed: this.speed / (def.scale), gait: 'walk', run: this.speed > 2.4 });
     // The gait is a DELTA on the hunter's authored hunch, not a replacement for it — the
     // hunch is the silhouette the whole design rests on and a walk cycle must not iron it

@@ -31,7 +31,8 @@
     "gate:role-script": "node harness/role-script.mjs",
     "gate:reunion-truth": "node harness/reunion-truth.mjs",
     "gate:party-noise": "node harness/party-noise.mjs",
-    "gate:party-sim": "node harness/party-sim.mjs"
+    "gate:party-sim": "node harness/party-sim.mjs",
+    "gate:mesh-hunter": "node harness/meshhunter-probe.mjs"
   },
   "dependencies": {
     "three": "^0.180.0",
