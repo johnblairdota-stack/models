@@ -17,6 +17,8 @@
  */
 
 import { createRoom } from '../src/party/room.js';
+import { createSession, CALL, MOVE_CHOICE } from '../src/party/session.js';
+import { foldWin } from '../src/party/win.js';
 import { sessionSeconds, episodeSeconds, orderFor, PHASE, EPISODE_CAP, reckoningSeconds, RECKONING_CAP } from '../src/party/phases.js';
 import { OUTCOME } from '../src/party/win.js';
 import { ROOMS } from '../src/party/coverage.js';
@@ -121,6 +123,87 @@ const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' �
   t('R5 control · exactly half the living is not enough to execute',
     !r.log.all().some((e) => e.type === 'player.executed'),
     `${half.length} of ${living.length} voted — abstaining protects the accused`);
+}
+
+// ---------------------------------------------------------------- R6 · the show stops shooting
+/**
+ * 🚨 **THE SHOW KEPT SHOOTING AFTER IT WAS OVER, AND VOTED SOMEBODY OUT WHILE IT DID.** `foldWin`
+ * decides on the winning camera, an EXPEDITION event; `closeEpisode` runs only when the phase
+ * queue empties, four phases later. The reckoning, the vote and the execution in between were
+ * held in a game that already had a result — and cost a living player their seat for it.
+ *
+ * Measured before the fix, 600 games at 5, 6 and 8 players: **52.0% of games killed somebody
+ * after the result was locked**, 312 of 1791 deaths. After: 0 of 1479, and the 312 are the whole
+ * of the difference. (`docs/rrr-open-findings.md` recorded 71.3% from `party-sim`'s policies.
+ * This driver is cruder and the two numbers are not the same measurement; both are large.)
+ *
+ * 🚨 **THIS GATE DRIVES `createSession`, NOT `createRoom`.** Everything above it in this file
+ * drives the room, which `room.js`'s own header calls "deliberately the smallest room that
+ * exercises every audience in the matrix… not the game loop" — it has no `PHASE.EXPEDITION` and
+ * no `PHASE.RECAP` at all. The property below is about phases the room does not have, so it is
+ * asserted against the module that has them. That the loop gate and the loop live in different
+ * modules is worth somebody's attention; it is not this assertion's to fix.
+ */
+{
+  const drive = (seed, count) => {
+    let s = null, locked = null, lateDeaths = 0, earlyDeaths = 0, dropped = 0;
+    s = createSession({ count, castSeed: seed, worldSeed: seed * 7, send: () => {} });
+    s.start(0);
+    const align = Object.fromEntries(s.deal.seats.map((x) => [x.id, x.alignment]));
+    let now = 0;
+    for (let i = 0; i < 3000 && s.state.phase !== PHASE.REUNION; i++) {
+      const alive = s.state.players.filter((p) => p.alive).map((p) => p.id);
+      switch (s.state.phase) {
+        case PHASE.CASTING:
+          for (let k = 0; k < alive.length; k++)
+            s.input(alive[k], { t: 'cast', runner: alive[(k + 1) % alive.length], guide: alive[(k + 2) % alive.length] });
+          break;
+        case PHASE.EXPEDITION:
+          s.input(s.state.pair.guide, { t: 'call', call: i % 2 ? CALL.CLEAR : CALL.HOLD });
+          s.input(s.state.pair.runner, { t: 'move', move: MOVE_CHOICE.GO });
+          break;
+        case PHASE.RECKONING:
+          if (!s.state.nominations.length) s.input(alive[0], { t: 'nominate', target: alive[1] });
+          break;
+        case PHASE.VOTE:
+          for (const id of alive) s.input(id, { t: 'vote', choice: alive[1] }); break;
+        default: break;
+      }
+      const before = s.state.players.filter((p) => !p.alive).length;
+      now += 5000; s.tick(now);
+      const after = s.state.players.filter((p) => !p.alive).length;
+      if (after > before) { if (locked !== null) lateDeaths++; else earlyDeaths++; }
+      if (locked === null) {
+        const w = foldWin(s.log.all(), { count, alignmentOf: (id) => align[id] });
+        if (w.outcome && w.outcome !== OUTCOME.RENEWED) locked = i;
+      }
+    }
+    dropped = s.log.all().filter((e) => e.type === 'show.settled')
+      .reduce((a, e) => a + (e.data ? e.data.dropped || 0 : 0), 0);
+    return { locked: locked !== null, lateDeaths, earlyDeaths, dropped };
+  };
+
+  const runs = [];
+  for (const count of [5, 6, 8]) for (let seed = 1; seed <= 40; seed++) runs.push(drive(seed, count));
+  const lockedRuns = runs.filter((r) => r.locked);
+  const late = runs.reduce((a, r) => a + r.lateDeaths, 0);
+  const early = runs.reduce((a, r) => a + r.earlyDeaths, 0);
+  const droppedTotal = runs.reduce((a, r) => a + r.dropped, 0);
+
+  t('R6 arm · a seeded sweep of real shows ran, and games actually reached a locked result',
+    runs.length >= 100 && lockedRuns.length > 0,
+    `${runs.length} shows at 5/6/8 players · ${lockedRuns.length} reached a settled result`);
+
+  t('R6 · nobody is executed after the result is locked',
+    late === 0, `${late} deaths after the lock, ${early} before it`);
+
+  // 🚨 TWO CONTROLS, BECAUSE A ZERO CAN MEAN TWO THINGS. One that counts nothing and one that
+  // fires on nothing look identical from up here.
+  t('R6 control · the same counter DOES count deaths before the lock — R6\'s zero is not blindness',
+    early > 100, `${early} pre-lock deaths counted by the identical comparison`);
+  t('R6 control · and the truncation is doing work rather than being a no-op R6 satisfies for free',
+    droppedTotal > 0 && lockedRuns.length > 0,
+    `${droppedTotal} decision phases dropped across ${lockedRuns.length} settled shows`);
 }
 
 console.log(`\nround-loop: ${pass} passed, ${fail} failed`);

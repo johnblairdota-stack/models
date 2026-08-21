@@ -562,8 +562,50 @@ export function createSession({ count, castSeed, worldSeed, names = [], send, em
     }
   }
 
+  /**
+   * 🚨 **THE SHOW KEPT SHOOTING AFTER IT WAS OVER, AND VOTED SOMEBODY OUT WHILE IT DID.**
+   * `foldWin` decides on the winning camera, which is an EXPEDITION event; `closeEpisode` only
+   * runs when the phase queue empties, four phases later. Everything between was a reckoning, a
+   * vote and an execution held in a game that already had a result. Measured over 600 games at
+   * 5, 6 and 8 players: **52.0% of games killed somebody after the result was locked**, and
+   * 17.4% of all deaths were post-lock. (`docs/rrr-open-findings.md` recorded 71.3% from
+   * `party-sim`'s policies; this number is from the harness's cruder driver and is not the same
+   * measurement — the phenomenon is large under both and neither figure is the other's.)
+   *
+   * ⚠️ THE CHECK IS NOT A NEW CLOSE, AND THAT IS THE WHOLE CARE HERE. `closeEpisode` stays a
+   * property of the QUEUE EMPTYING — see the note on `VERDICT` below, where putting the win check
+   * on a phase made the show shoot episode one forever, because `orderFor(1)` has no VERDICT.
+   * This truncates the queue and lets the existing mechanism do the closing.
+   *
+   * ⚠️ RECAP AND VERDICT SURVIVE THE TRUNCATION. Cutting to the Reunion the instant a camera
+   * lands would take the result off the screen the room was watching: they would see the
+   * expedition stop and the show end, with no card saying what happened. What is dropped is the
+   * three phases that DECIDE something — the reckoning, the vote and the execution — because in
+   * a settled game they decide nothing and cost a player their seat for it. Episode 1 has no
+   * VERDICT in `orderFor`, so there it keeps RECAP alone, which is the whole of what it has.
+   */
+  const AFTER_THE_RESULT = [PHASE.RECAP, PHASE.VERDICT];
+
   function advance(now) {
     onExit[state.phase]?.(now);
+    // Read the log as it stands now — `onExit` has just written this phase's events into it.
+    // ⚠️ `RENEWED` IS TRUTHY, AND THE FIRST DRAFT OF THIS GUARD READ `!state.outcome`. From the
+    // moment episode 1 closed renewed, `state.outcome` was a non-empty string and the check below
+    // never ran again for the rest of the show — `show.settled` fired zero times in 60 games
+    // while all 60 locked. A renewed show is precisely one that has NOT settled.
+    if (queue.length && (!state.outcome || state.outcome === OUTCOME.RENEWED)) {
+      const align = Object.fromEntries(deal.seats.map((x) => [x.id, x.alignment]));
+      const w = foldWin(log.all(), { count, alignmentOf: (id) => align[id] });
+      if (w.outcome && w.outcome !== OUTCOME.RENEWED) {
+        const dropped = queue.filter((ph) => !AFTER_THE_RESULT.includes(ph));
+        if (dropped.length) {
+          queue = queue.filter((ph) => AFTER_THE_RESULT.includes(ph));
+          record(makeEvent('show.settled', VIS.PUBLIC, {
+            episode: state.episode, dropped: dropped.length,
+          }));
+        }
+      }
+    }
     if (!queue.length) {
       if (episodeOpen) { closeEpisode(); episodeOpen = false; }
       // The episode is over. Either the show is renewed and we shoot another, or it ends.
