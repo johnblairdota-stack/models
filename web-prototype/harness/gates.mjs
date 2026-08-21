@@ -62,9 +62,9 @@
  * `hunter-draw` 23.4 s, `shot-solver` 17.2 s — so a four-wide pool takes the suite from ~146 s to
  * ~44 s measured. Every server-spawning gate already binds a distinct hardcoded port
  * (`show-wire` 5195 · `join-spike` 5196 · `party-sockets` 5197 · `expedition-wire` 5243 ·
- * `shot-solver` 5188/5241/5242/5244 · `party-surface` 5251/5253) and **`shot-solver` is the only
- * member that launches
- * Chromium** (CDP 9377 and 9378, sequentially, under a pid-scoped profile), so no two pool slots
+ * `shot-solver` 5188/5241/5242/5244 · `party-surface` 5251-5261, one pair per section because
+ * every assertion it makes has a control server standing beside it) and **`shot-solver` is the
+ * only member that launches Chromium** (CDP 9377 and 9378, sequentially, under a pid-scoped profile), so no two pool slots
  * can ever want the same port. Check that before adding a gate that binds anything.
  *
  * ⚠️ The ports are fixed, so **two people running the suite on the same box collide.** Seen once:
