@@ -155,7 +155,19 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
   function setPhase(p) {
     state.phase = p;
     state.tick += 1;
-    record(makeEvent(`phase.${p}`, VIS.PUBLIC, {}));
+    /**
+     * 🚨 **`episode` IS ON THIS EVENT BECAUSE `win.js` READS IT, AND IT WAS NOT.** `foldWin` runs
+     * `if (e.type === 'phase.CASTING') episode = e.data?.episode ?? episode` — with an empty
+     * payload the `??` fell through to the initial 1, for ever, so W5 (*"the cap is reached with
+     * the objective unmet"*) could never fire over a log this room wrote. `session.js` has always
+     * carried the field; this file emitted `{}` and the two producers of the same event type
+     * disagreed about its shape. `wire-parity` P3b is the gate that will not let that recur.
+     *
+     * ⚠️ `seconds` IS DELIBERATELY ABSENT AND THAT IS NOT THE SAME DEFECT. Nothing consumes it,
+     * and this room has no clock to put in it — inventing a number so two payloads match would be
+     * making the log say something untrue to satisfy a gate.
+     */
+    record(makeEvent(`phase.${p}`, VIS.PUBLIC, { episode: state.episode }));
     broadcast();
   }
 

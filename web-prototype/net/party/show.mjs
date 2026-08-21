@@ -90,6 +90,31 @@ export function startShow({ port = 5183, code = makeCode(), stamp = Date.now() }
   const sockFor = (socketId) => (socketId === 'tv' ? lobby.tv : lobby.seats.get(socketId)?.sock);
   const deliver = (socketId, msg) => send(sockFor(socketId), msg);
 
+  /**
+   * 🚨 **THE CAMERA COUNT, WHILE THE HOUSE IS RUNNING, AND NOTHING WAS SENDING IT.**
+   *
+   * `src/views/expedition.js` has a handler for `{t:'cams', unlocked}` — it is what moves
+   * `camerasUnlocked`, which drives the guide's coverage, the Director's cutaway budget and the
+   * feed's own camera roster mid-expedition. Nothing in this process, or anywhere else, ever sent
+   * that message: the view took its camera count from the query string at load and it never
+   * changed again for the rest of the show. A handler nothing feeds reads as coverage and is dead
+   * code, which is the second half of what `wire-parity` P1b exists to catch.
+   *
+   * ⚠️ IT SENDS `camerasLive`, NOT `cameras.unlocked`, AND THE DIFFERENCE IS A WHOLE CAMERA.
+   * `coverage.js` keeps the two apart on purpose: the scoreboard counts what the crew has EARNED,
+   * from zero, and the house needs the number actually watching rooms — which includes the
+   * establishing camera. `briefFor` already sends the live number under `cameras`; this sends the
+   * same number under the name the view reads it by.
+   */
+  let lastCams = null;
+  const pushCams = (session, { force = false } = {}) => {
+    if (!simSock || !session) return;
+    const live = camerasLive(session.state.cameras.unlocked);
+    if (!force && live === lastCams) return;
+    lastCams = live;
+    send(simSock, { t: 'cams', unlocked: live });
+  };
+
   const pushRoster = () => {
     const r = roster(lobby);
     send(lobby.tv, { t: 'roster', players: r, capacity: MAX_PHONES, started: !!show });
@@ -176,9 +201,10 @@ export function startShow({ port = 5183, code = makeCode(), stamp = Date.now() }
 
     if (isSim) {
       simSock = sock;
+      lastCams = null;
       note(lobby, 'sim.connected');
       // The simulator is told the wing and the camera count and NOTHING about who anyone is.
-      if (show) send(sock, briefFor(show.session));
+      if (show) { send(sock, briefFor(show.session)); pushCams(show.session, { force: true }); }
     }
 
     if (isTV) {
@@ -309,12 +335,14 @@ export function startShow({ port = 5183, code = makeCode(), stamp = Date.now() }
     for (const s of lobby.seats.values()) if (s.live) send(s.sock, { t: 'ping', at: now });
     if (!show) return;
     show.session.tick(now);
+    // A camera lit mid-show has to reach the house that is drawing it — see `pushCams`.
+    pushCams(show.session);
     // The countdown is rendered from `clock.endsAt`, which every frame already carries, so no
     // extra traffic is needed to make it move. This only pushes when the phase itself changes.
     const st = show.session.state;
     if (st.phase !== lastPhase) {
       lastPhase = st.phase;
-      if (st.phase === PHASE.EXPEDITION) send(simSock, briefFor(show.session));
+      if (st.phase === PHASE.EXPEDITION) { send(simSock, briefFor(show.session)); pushCams(show.session, { force: true }); }
       if (st.phase === PHASE.REUNION) {
         // 🚨 THE REUNION IS THE SAME REPLAY WITH THE FILTER OFF. `log.reunion()` IS `log.all()`,
         // and this is the first moment anything unfiltered has left this process.
