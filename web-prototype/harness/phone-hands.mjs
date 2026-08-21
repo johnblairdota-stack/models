@@ -4,6 +4,35 @@
  * THUMB COMES BACK UP?**
  *
  *   node harness/phone-hands.mjs
+ *
+ * ---------------------------------------------------------------------------------------------
+ * 🚨 NOT IN `GATES`, AND HERE IS THE HONEST REASON
+ * ---------------------------------------------------------------------------------------------
+ * F0 and its control pass in about a second. **The six browser arms below have never been
+ * observed to complete.** Left for fifteen minutes on an unloaded box they produce no further
+ * output, no summary line and no error — the process is simply still there. So this file is
+ * committed, and it is deliberately NOT in `harness/gates.mjs`'s `GATES`, because a gate joins
+ * the runner when it has been watched to pass and not when it exists. Two gates sat unrun in
+ * this repo for exactly the opposite reason and the manifest audit now fails a committed
+ * gate-shaped file with no entry — so if you finish this, add it in the same commit.
+ *
+ * Two traps already ruled out, so nobody pays for them twice:
+ *   · It is NOT the stale-Chromium bind. Twenty-three browsers had leaked from runs killed with
+ *     their parent agents and one held the fixed CDP port, so `/json/list` answered for a dead
+ *     run; the per-run nonce correctly refused it, which is `shot-solver`'s documented trap
+ *     working. Clearing the strays got past it.
+ *   · It is NOT the launch wait. That was a flat `await sleep(2600)` — a bet that Chromium opens
+ *     its debug port in 2.6 s, which on a loaded box it does not, and the failure it produced
+ *     (`no page target`) is indistinguishable from the page being broken. It polls now.
+ *
+ * What remains unexamined is the arms themselves: six of them, each driving a real casting
+ * ballot into a real expedition. The first suspect is `arm()`'s waits — a CDP call that never
+ * settles has no deadline around it the way `call()` does.
+ *
+ * ⚠️ AND THE DEFECT IT EXISTS FOR IS THEREFORE UNGATED. `show-phone.html`'s `mount()` — build
+ * once, update after — is what stopped CLEAR and HOLD being destroyed and rebuilt 450 times an
+ * expedition and swallowing about half of the most consequential tap in the game. That fix is
+ * shipped and unmeasured. `show-wire` X15c pins the routing; nothing dispatches a pointer.
  *   RRR_PHONE_CONTROL=p1 node harness/phone-hands.mjs      # any control, run as if it shipped
  *
  * ---------------------------------------------------------------------------------------------
