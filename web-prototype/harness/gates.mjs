@@ -31,11 +31,17 @@
  * `harness/` and fails the run if a gate-shaped file is missing from it, because that defect is
  * exactly the one no human is reliably going to catch by reading.
  *
- * **Gate-shaped** is narrow on purpose: a top-level `.mjs` in `harness/`, not `_`-prefixed, whose
- * source emits its own basename in the summary line every gate prints. `harness/` also holds ~450
- * `_`-prefixed probes and a `scenarios/` tree, and tools like `test-net.mjs` and `phone-hands.mjs`
- * print `N passed, M failed` *without* a name in front — they are instruments, not suite members.
- * Naming yourself in your summary line is the opt-in.
+ * **Gate-shaped** is narrow on purpose: a **tracked**, top-level `.mjs` in `harness/`, not `_`- or
+ * `.`-prefixed, whose source emits its own basename in the summary line every gate prints.
+ * `harness/` also holds ~450 `_`-prefixed probes and a `scenarios/` tree, and tools like
+ * `test-net.mjs` and `phone-hands.mjs` print `N passed, M failed` *without* a name in front — they
+ * are instruments, not suite members. Naming yourself in your summary line is the opt-in.
+ *
+ * **Tracked** matters, and it is not a loophole. Several agents build in this tree at once, and an
+ * uncommitted gate is somebody's open file — the other builders' own rule is that a gate joins the
+ * runner when it has been watched to pass, not when it exists. The defect this audit exists for
+ * was gates that *landed*, as commits, with no runner entry, and those are caught the moment they
+ * are staged. If `git` cannot answer, every file counts, because failing loud beats failing open.
  *
  * ⚠️ **DO NOT REORDER `GATES` BY SPEED.** The order is dependency-of-understanding order: the
  * gates whose red should block a merge outright come first (`party-isolation` — a phone receiving
@@ -72,7 +78,7 @@
  * transcripts is how the useful one gets missed. `--slow` prints the timing table.
  */
 
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -112,9 +118,19 @@ const looksLikeGate = (name) => {
   return src.includes(`${name}: $`) && /\$\{\w+\} passed, \$\{\w+\} failed/.test(src);
 };
 
+/** Files git knows about, or `null` when git cannot answer — in which case nothing is excused. */
+function tracked() {
+  try {
+    const out = execFileSync('git', ['ls-files', '-z', '--', 'harness'], { cwd: ROOT, encoding: 'utf8' });
+    return new Set(out.split('\0').filter(Boolean).map((f) => f.replace(/^harness\//, '')));
+  } catch { return null; }
+}
+
 function auditManifest() {
+  const known = tracked();
   const found = readdirSync(HERE, { withFileTypes: true })
     .filter((e) => e.isFile() && e.name.endsWith('.mjs') && !e.name.startsWith('_') && !e.name.startsWith('.'))
+    .filter((e) => !known || known.has(e.name))
     .map((e) => e.name.slice(0, -4))
     .filter((n) => n !== 'gates' && looksLikeGate(n));
   return {
@@ -225,7 +241,7 @@ if (slow) {
 }
 
 for (const n of audit.unlisted) {
-  console.log(`\n🚨 gates: harness/${n}.mjs prints a gate summary line and is NOT in GATES — it has been running nowhere. Add it to harness/gates.mjs.`);
+  console.log(`\n🚨 gates: harness/${n}.mjs is committed, prints a gate summary line, and is NOT in GATES — it has been running nowhere. Add it to harness/gates.mjs.`);
 }
 for (const n of audit.missing) {
   console.log(`\n🚨 gates: GATES lists "${n}" and harness/${n}.mjs is not a gate on disk.`);
