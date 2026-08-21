@@ -369,7 +369,33 @@ export default async function view(args = {}) {
   // ---------------------------------------------------------------- the loop
   let lastRoom = null, lastState = null, sinceReport = 0;
   const _camDir = new THREE.Vector3();
-  const feed = (kind, subjectId, t) => director.feed({ kind, subjectId, t, camerasUnlocked, world: {} });
+  /**
+   * 🚨 **THE DIRECTOR WAS BEING ASKED TO CHOOSE BETWEEN EIGHT SHOTS AND TOLD NOTHING ABOUT ANY OF
+   * THEM.** `world: {}` meant `subjectInStaticFrustum`, `hunterInStaticFrustum`, `subjectWorking`,
+   * `cutawayBudget` and `concurrentRank2Rooms` were all `undefined`, so every `needs()` in
+   * `director.js`'s library except BODYCAM's and REACTION's answered false: measured over six
+   * seeds, **BODYCAM 85% of airtime, REACTION the rest, and STATIC, STING, SPLIT and CONFESSIONAL
+   * zero seconds each**. The camera roster was live, the solvers worked, and nothing could reach
+   * them because the availability questions were never answered.
+   *
+   * `rig.probe` answers all five from the scene it is already holding — the same five questions
+   * `shots.js` documents as its entire surface — so the pool the arbiter scores is the pool that
+   * actually exists. Cost: two `sees()` sweeps per event, not per frame.
+   */
+  const worldNow = () => {
+    const sites = rig.probe.sites();
+    const rp = rig.probe.pose('runner'), hp = rig.probe.pose('hunter');
+    const at = (p) => ({ x: p.x, y: p.y + 1.0, z: p.z });
+    return {
+      subjectInStaticFrustum: !!rp && sites.some((s) => rig.probe.sees(s, at(rp))),
+      hunterInStaticFrustum: !!hp && sites.some((s) => rig.probe.sees(s, at(hp))),
+      subjectWorking: false,
+      // §3's budget, stated there as `min(3, ceil(cameras / 2))` per expedition.
+      cutawayBudget: Math.min(3, Math.ceil(camerasUnlocked / 2)),
+      concurrentRank2Rooms: 1,
+    };
+  };
+  const feed = (kind, subjectId, t) => director.feed({ kind, subjectId, t, camerasUnlocked, world: worldNow() });
 
 
   engine.onUpdate((dt, t) => {
@@ -428,8 +454,23 @@ export default async function view(args = {}) {
     director.tick(t);
 
     // ---- what airs
-    const cur = director.current();
-    const shot = cur ? solve(cur.shotId, { subjectId: cur.subjectId, probe: rig.probe }) : null;
+    /**
+     * 🚨 A REFUSED SOLVE IS NOT A FRAME TO KEEP. `shots.js` returns `null` for *"this shot cannot
+     * be solved right now — the arbiter must pick another"*, and this loop used to shrug and leave
+     * the camera exactly where it was: measured at 8.6-20.0% of frames holding a dead pose,
+     * because a STING is chosen the instant the Hunter is in an unlocked frustum and the Hunter
+     * keeps walking. Ask for another angle, and fall back to the one shot §1.1 promises is never
+     * lost. `bx.setShot` follows whatever actually got framed, so the bug never names a camera
+     * that is not on.
+     */
+    let cur = director.current();
+    let shot = cur ? solve(cur.shotId, { subjectId: cur.subjectId, probe: rig.probe }) : null;
+    if (cur && !shot) {
+      director.refuse(t);
+      cur = director.current();
+      shot = cur ? solve(cur.shotId, { subjectId: cur.subjectId, probe: rig.probe }) : null;
+      if (!shot) shot = solve('BODYCAM', { subjectId: 'runner', probe: rig.probe });
+    }
     if (shot) { rig.apply(shot); bx.setShot(shot); }
 
     /**
