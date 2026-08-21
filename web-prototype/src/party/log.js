@@ -57,6 +57,11 @@ export function hash32(str, seed = 0x811c9dc5) {
  */
 export function visibleTo(e, ctx) {
   if (e.for != null && e.for !== ctx.playerId) return false;
+  // 🚨 THE STUB PUBLISHES COVERS AS `player.claim_set`. That event is PUBLIC so Reunion and
+  // I3b still see a published nameplate, but the TV browser is not a nameplate — DevTools on
+  // the host tab would read every cover (cover==role except Glitched). The Reunion still
+  // reads the log. Phones still receive the public event.
+  if (e.type === 'player.claim_set' && ctx.isTV) return false;
   switch (e.vis) {
     case VIS.PUBLIC:   return true;
     case VIS.DIRECTOR: return !!ctx.isTV;

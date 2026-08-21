@@ -63,7 +63,7 @@ export function injectNightSkin() {
       min-height:86px; background:rgba(12,16,22,.7); }
     .seat.on { border-color:#7dd3fc; box-shadow:0 0 0 1px rgba(125,211,252,.35); }
     .seat.away { opacity:.55; }
-    .seat .who { font-size:20px; font-weight:700; letter-spacing:.02em; }
+    .seat .who { font-size:clamp(22px, 3vw, 36px); font-weight:700; letter-spacing:.02em; }
     .seat .meta { margin-top:6px; color:#7d8fa3; font-size:12px; letter-spacing:.1em; text-transform:uppercase; }
     .btn { appearance:none; border:0; cursor:pointer; font:inherit; letter-spacing:.12em;
       text-transform:uppercase; font-weight:700; padding:16px 22px; border-radius:6px;
@@ -73,13 +73,15 @@ export function injectNightSkin() {
     .btn.wide { width:100%; }
     .actions { display:flex; gap:12px; flex-wrap:wrap; margin-top:22px; }
     .err { color:#ff8a7a; white-space:pre-wrap; font-family:ui-monospace,Menlo,monospace; font-size:13px; }
-    .ballot { display:flex; flex-direction:column; gap:10px; }
-    .ballot .row { display:grid; grid-template-columns: 1fr auto 1fr; gap:16px; align-items:center;
-      padding:18px 20px; background:rgba(12,16,22,.8); border:1px solid rgba(125,211,252,.16); border-radius:8px; }
-    .ballot .who { font-size:clamp(22px, 4vw, 40px); font-weight:800; }
-    .ballot .pick { font-size:clamp(18px, 3vw, 32px); font-weight:700; text-align:right; }
-    .ballot .arrow { color:#7dd3fc; letter-spacing:.2em; font-size:12px; text-transform:uppercase; }
-    .pair-hero { margin:18px 0 8px; font-size:clamp(28px, 5vw, 56px); font-weight:800; line-height:1.15; }
+    .ballot { display:flex; flex-direction:column; gap:14px; }
+    .ballot .row { display:grid; grid-template-columns: 1fr auto 1fr; gap:20px; align-items:center;
+      padding:22px 26px; background:rgba(12,16,22,.8); border:1px solid rgba(125,211,252,.16); border-radius:8px; }
+    .ballot .who { font-size:clamp(40px, 7vw, 84px); font-weight:800; line-height:1; }
+    .ballot .pick { font-size:clamp(36px, 6vw, 72px); font-weight:800; text-align:right; line-height:1.1; }
+    .ballot.huge .who { font-size:clamp(52px, 9vw, 96px); }
+    .ballot.huge .pick { font-size:clamp(44px, 8vw, 84px); }
+    .ballot .arrow { color:#7dd3fc; letter-spacing:.2em; font-size:18px; text-transform:uppercase; }
+    .pair-hero { margin:18px 0 8px; font-size:clamp(40px, 8vw, 96px); font-weight:800; line-height:1.15; }
     .recap { display:grid; grid-template-columns:1fr; gap:16px; max-width:900px; }
     .recap .fact { padding:28px 30px; border-radius:10px; background:rgba(12,16,22,.85);
       border:1px solid rgba(125,211,252,.2); }

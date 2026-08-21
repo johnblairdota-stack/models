@@ -44,13 +44,13 @@ export default async function partyPhone({ params }) {
     u.searchParams.set('room', code);
     history.replaceState({}, '', u);
 
-    const token = sessionStorage.getItem(tokenKey(code));
+    const token = sessionStorage.getItem(tokenKey(code, 'phone'));
     const wsPort = +(params.get('wsPort') || 5181);
     const url = `${defaultWsUrl(wsPort)}/?room=${encodeURIComponent(code)}${token ? `&token=${token}` : ''}`;
     const client = new PartyNightClient({
       url,
       onMessage: (m) => {
-        if (m.t === 'welcome') sessionStorage.setItem(tokenKey(code), m.token);
+        if (m.t === 'welcome') sessionStorage.setItem(tokenKey(code, 'phone'), m.token);
         if (m.t === 'full') state.err = 'Room is full (8 phones + TV).';
         paint();
       },

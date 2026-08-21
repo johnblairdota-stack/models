@@ -18,9 +18,17 @@ export function defaultWsUrl(port = 5181) {
   return `${proto}//${host}:${port}`;
 }
 
-export function tokenKey(code) {
-  return `rrr.party.${String(code || '').toLowerCase()}.token`;
+/** Per-seat storage. Host and phone must not share a token for the same room. */
+export function tokenKey(code, kind = 'phone') {
+  const seat = (kind === 'tv' || kind === 'host') ? 'tv' : 'phone';
+  return `rrr.party.${String(code || '').toLowerCase()}.${seat}.token`;
 }
+
+/** After Send them in: reveal stays up, then the stub run, then recap. No extra host click. */
+export const STUB_SHOW_PLAN = [
+  { beat: 'expedition', ms: 1800 },
+  { beat: 'recap', ms: 4800 },
+];
 
 export class PartyNightClient {
   constructor({ url, onMessage, onClose } = {}) {

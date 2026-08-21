@@ -96,6 +96,14 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     if (!sock.isTV) {
       const v = viewFor(deal, sock.playerId);
       base.you = v.you;
+    } else {
+      // Host/TV is a spectator. `playEpisode` writes covers into `players[].claim` so the
+      // Reunion has a finalClaim; that field is phones-only. Strip it here too so a later
+      // matrix-row mistake cannot put covers on the TV frame.
+      base.players = base.players.map((p) => {
+        const { claim, ...row } = p;
+        return row;
+      });
     }
     if (sock.seatRole === 'guide' && state.phase === 'EXPEDITION') {
       // 🚨 S3. The Hunter is on the map only where a live camera watches. `hunterMark.visible =

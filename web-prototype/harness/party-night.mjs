@@ -8,9 +8,10 @@
  * This one proves a reviewer can open a host, two phones, see the lobby, and advance.
  */
 
-import { startServer } from '../net/party/local.mjs';
+import { startServer, fanoutViolations, lobbySnapshot } from '../net/party/local.mjs';
 import { recapFromEvents } from '../src/party/recap.js';
 import { qrMatrix } from '../src/party/qr.js';
+import { tokenKey, STUB_SHOW_PLAN } from '../src/party/night-client.js';
 
 const PORT = 5198;
 let pass = 0, fail = 0;
@@ -63,8 +64,15 @@ const srv = startServer({ port: PORT, count: 8, castSeed: 21, worldSeed: 3, code
 await sleep(120);
 const base = `ws://localhost:${PORT}/?room=night`;
 
-const host = await open(`${base}&seat=tv`);
-t('N2 · host with seat=tv is the TV spectator, not a robot',
+t('N1b · host and phone tokens are namespaced apart',
+  tokenKey('test', 'tv') !== tokenKey('test', 'phone')
+    && tokenKey('test', 'tv').endsWith('.tv.token')
+    && tokenKey('test', 'phone').endsWith('.phone.token'));
+t('N1c · stub show plan ends on recap without a host click',
+  STUB_SHOW_PLAN.at(-1)?.beat === 'recap' && STUB_SHOW_PLAN.some((s) => s.beat === 'expedition'));
+
+const host = await open(`${base}&host=1`);
+t('N2 · host=1 is the TV spectator, not a robot',
   host.welcome?.t === 'welcome' && host.welcome.id === 'tv' && host.welcome.isTV === true,
   JSON.stringify({ id: host.welcome?.id, isTV: host.welcome?.isTV }));
 
@@ -85,6 +93,16 @@ t('N4 · TV lobby lists both phones as live',
 
 t('N4b · lobby rows do not carry a role or alignment',
   (lobby?.seats || []).every((s) => s.role == null && s.alignment == null));
+
+{
+  const side = host.msgs.filter((m) => m.t === 'lobby' || m.t === 'ballots' || m.t === 'show');
+  const dirty = side.flatMap((m) => fanoutViolations(m));
+  t('N4c · every lobby/ballots/show payload stays inside the closed fanout schema',
+    dirty.length === 0, dirty.join(',') || `${side.length} side-channel messages`);
+  const leaked = { ...lobbySnapshot(srv.rooms.get('night')), seats: lobbySnapshot(srv.rooms.get('night')).seats.map((s) => ({ ...s, role: 'producer' })) };
+  t('N4d control · a role field on a lobby seat is a fanout violation',
+    fanoutViolations(leaked).some((v) => v.includes('role')));
+}
 
 a.send({ t: 'name', name: 'Ada' });
 b.send({ t: 'name', name: 'Bea' });
@@ -131,6 +149,18 @@ t('N10 · TV never received a role card or a flyover',
   !hostEvs.some((e) => e.type === 'role.card')
     && host.msgs.filter((m) => m.t === 'state').every((m) => m.frame?.flyover == null));
 
+{
+  const tvStates = host.msgs.filter((m) => m.t === 'state').map((m) => m.frame);
+  const claimOnTv = tvStates.some((f) => (f.players || []).some((p) => p.claim != null));
+  const claimEv = hostEvs.some((e) => e.type === 'player.claim_set');
+  t('N10b · TV never received covers as claims (frame or claim_set)',
+    !claimOnTv && !claimEv,
+    `frames-with-claim=${claimOnTv} claim_set=${claimEv}`);
+}
+
+t('N10c · episode does not pin the show beat back to casting',
+  host.msgs.filter((m) => m.t === 'show' && m.beat === 'casting').length <= 1);
+
 const aCards = aEvs.filter((e) => e.type === 'role.card');
 const bCards = bEvs.filter((e) => e.type === 'role.card');
 t('N11 · each phone got only its own role card',
@@ -161,6 +191,22 @@ host.send({ t: 'show', beat: 'recap' });
 await sleep(40);
 t('N14 · host can pace the room onto the recap beat',
   last(b, 'show')?.beat === 'recap' && last(back, 'show')?.beat === 'recap');
+
+{
+  const steal = await open(`${base}&host=1&token=${tok}`);
+  t('N15 · a phone token cannot become the TV',
+    steal.welcome?.t === 'full' && steal.welcome?.reason === 'phone-token-as-tv',
+    JSON.stringify(steal.welcome));
+  steal.close();
+}
+
+{
+  const alias = await open(`${base}&role=tv`);
+  t('N16 · ?role=tv is not a spectator flag and sits as a phone',
+    alias.welcome?.t === 'welcome' && alias.welcome?.isTV === false,
+    JSON.stringify({ t: alias.welcome?.t, id: alias.welcome?.id, isTV: alias.welcome?.isTV }));
+  alias.close();
+}
 
 for (const c of [host, a, b, back]) c.close();
 srv.close();
