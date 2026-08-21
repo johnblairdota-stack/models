@@ -50,16 +50,34 @@ export const BOOM_RADIUS = 0.35;
  *
  * ⚠️ THE GENERATED HOUSE DOES NOT PROMISE THESE NAMES. `spaces.js` builds from `HOUSE_PLAN` or
  * from a generated plan behind `PLAN_URL`, and a generated plan names its slots whatever the
- * generator felt like. So the match is by name where a name matches and by **stable index**
+ * generator felt like. So the match is by id where an id matches and by **stable index**
  * otherwise — deterministic, seed-free, and the same on every client, which is what matters. A
  * `Math.random` fallback here would put two players' cameras in different rooms.
+ *
+ * ---------------------------------------------------------------------------------------------
+ * 🚨 **IT KEYED ON `s.name`, AND `name` IS THE DISPLAY NAME. FOUR OF SIX ROOMS WERE WRONG.**
+ * ---------------------------------------------------------------------------------------------
+ * `spaces.js` gives every space an `id` — `gallery` — and a `name` for the audience — `THE LONG
+ * GALLERY`. `String(s.name || s.id)` therefore built a table keyed `the long gallery`, every
+ * lookup for `gallery` missed, and **every room fell through to the index-ordered spare list**:
+ *
+ *     party ballroom → engine gallery      party gallery → engine study_w
+ *     party study_w  → engine service      party service → engine ballroom
+ *
+ * Nothing threw and nothing looked wrong, because the fallback is deterministic and produces a
+ * complete map — it just produces the wrong one. The cost is not cosmetic: `siteFor` bolts the
+ * camera into the mapped space's corner and `sees()` refuses any point outside `site.bounds`, so
+ * the camera watching the room the runner is in was in a different room and could never see them.
+ * And the moment a STATIC does air, `bugFor` prints the room it was ASKED for over a picture of
+ * somewhere else — a caption naming the wrong room, on television, to a room about to argue about
+ * rooms. `expedition-wire` E1b already pins `ROOM_LABEL` to `s.name`; this is the other half.
  */
 export function mapRooms(spaces = SPACES) {
-  const byName = new Map(spaces.map((s) => [String(s.name || s.id).toLowerCase(), s]));
+  const byId = new Map(spaces.map((s) => [String(s.id).toLowerCase(), s]));
   const used = new Set();
   const out = {};
   for (const r of PARTY_ROOMS) {
-    const hit = byName.get(r);
+    const hit = byId.get(String(r).toLowerCase());
     if (hit && !used.has(hit)) { out[r] = hit; used.add(hit); }
   }
   const spare = spaces.filter((s) => !used.has(s));

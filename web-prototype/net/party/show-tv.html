@@ -284,7 +284,7 @@
   const STAGE = {
     PREMIERE: () => big('Check your phone.', 'Your card is private. Read it, then put the phone face down.'),
     CASTING: () => big('Who runs, and who guides?',
-      'The ' + wing() + ' wing. Two taps each — argue about the job, not the person.'),
+      wing() + ' this episode. Two taps each — argue about the job, not the person.'),
     /**
      * 🚨 THE CALL IS NEVER PRINTED HERE — broadcast §6.9. *"Never show the runner's private
      * prompts or the guide's callouts as on-screen text. The guide talks out loud, in the room.
@@ -297,7 +297,7 @@
     EXPEDITION: () => {
       const c = frame.call || {};
       const guide = nameOf(frame.pair && frame.pair.guide);
-      if (!c.made) return big('Into the ' + wing() + '.', guide + ' is watching the cameras.');
+      if (!c.made) return big('Into ' + esc(wing()) + '.', guide + ' is watching the cameras.');
       return big(esc(guide) + ' has called it.',
         'Out loud, in the room. ' + nameOf(frame.pair && frame.pair.runner) + ' decides.');
     },
@@ -381,9 +381,25 @@
   };
 
   const big = (a, b) => '<div class="big">' + a + '</div><div class="sub">' + esc(b) + '</div>';
+
+  /**
+   * 🚨 **THE MIDDLE OF THE TELEVISION READ "Into the study_w." AT 44 PIXELS.** `wing()` returned
+   * the raw room id — the identifier the code passes around — to eight people sitting three metres
+   * away, in the one phase where the whole room is looking at this screen.
+   *
+   * `src/party/captions.js` exports `ROOM_LABEL` for exactly this and the labels are the level
+   * designer's own names, pinned to the engine by `expedition-wire` E1b. This page cannot import
+   * it — it is served as text by a node server with no bundler — so the table is copied here and
+   * `show-wire` X17 holds the copy against the original character for character. A copy nobody
+   * checks is how the television ends up calling a room something nobody else does.
+   */
+  const ROOM_LABEL = {
+    ballroom: 'THE BALLROOM', gallery: 'THE LONG GALLERY', study_w: 'THE WEST STUDY',
+    study_e: 'THE EAST STUDY', service: 'THE SERVICE PASSAGE', chapel: 'THE CHAPEL',
+  };
   /** `executioner()` returns a playerId or the string SHOWRUNNER when the nominator was taken. */
   const swingerName = (id) => (id === 'SHOWRUNNER' ? 'nobody left standing — the Showrunner' : nameOf(id));
-  const wing = () => ((frame.expedition || {}).room || '—');
+  const wing = () => ROOM_LABEL[(frame.expedition || {}).room] || '—';
   const nameOf = (id) => { const p = ((frame && frame.players) || []).find((x) => x.id === id); return p ? p.name : '—'; };
   const status = () => {
     const c = frame.cameras || {};

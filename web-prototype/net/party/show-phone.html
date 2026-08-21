@@ -243,7 +243,7 @@
   // ---------------------------------------------------------------- the controls
   const SAY = {
     PREMIERE: 'Read your card, then put the phone down. Everything after this happens out loud.',
-    CASTING: () => 'Who goes into the ' + wing() + '? Two taps: your runner first, then your guide.',
+    CASTING: () => 'Who goes into ' + wing() + '? Two taps: your runner first, then your guide.',
     EXPEDITION: () => amGuide() ? 'You can see what the cameras can see. Tell them.'
       : amRunner() ? 'Your guide is looking. Then it is your call.'
       : 'Watch the television.',
@@ -318,7 +318,7 @@
           : '<div class="big" style="font:700 26px/1 ui-sans-serif;color:var(--dim)">NO SIGNAL</div>';
         box.innerHTML = '<div class="card"><h3>Your cameras</h3>' + map + read
           + '<div class="note">' + (f.hunter ? 'A live camera has it.'
-            : 'Nothing on the ' + wing() + '. That is not the same as empty.') + '</div></div>'
+            : 'Nothing in ' + wing() + '. That is not the same as empty.') + '</div></div>'
           + (frame.call && frame.call.said
             ? '<div class="card" style="margin-top:10px"><div class="say">You called <b>' + esc(frame.call.said) + '</b>.</div></div>'
             : '<div class="two" style="margin-top:10px">'
@@ -598,7 +598,15 @@
     return (r && r.colour) || (seat && p.seat === seat.seat ? seat.colour : '#8b93a3');
   };
   const swatch = (id) => '<span class="sw" style="background:' + colourOf(id) + '"></span>';
-  const wing = () => ((frame && frame.expedition) || {}).room || 'house';
+  /**
+   * 🚨 THE PHONE NAMED THE ROOM `study_w` TOO. Same fix as the television's, same reason, same
+   * copy: `src/party/captions.js`'s ROOM_LABEL, held against the original by `show-wire` X17.
+   */
+  const ROOM_LABEL = {
+    ballroom: 'THE BALLROOM', gallery: 'THE LONG GALLERY', study_w: 'THE WEST STUDY',
+    study_e: 'THE EAST STUDY', service: 'THE SERVICE PASSAGE', chapel: 'THE CHAPEL',
+  };
+  const wing = () => ROOM_LABEL[((frame && frame.expedition) || {}).room] || 'the house';
 
   /**
    * The casting ballot's one list. A name already taken shows the chair it holds and stays live so

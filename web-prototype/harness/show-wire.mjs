@@ -31,6 +31,7 @@ import { MAX_PHONES } from '../net/party/lobby.mjs';
 import { PHASE } from '../src/party/phases.js';
 import { CALL, MOVE_CHOICE } from '../src/party/session.js';
 import { ROOMS } from '../src/party/coverage.js';
+import { ROOM_LABEL } from '../src/party/captions.js';
 import { SCRIPT, cardFor } from '../src/party/roles.js';
 
 const PORT = 5195;
@@ -96,6 +97,35 @@ await sleep(120);
       : `tv: ${tvJs.why || 'ok'} · phone: ${phJs.why || 'ok'}`);
   t('X0d control · the same check rejects a script that does not parse',
     parses('<script>function (</script>').ok === false, parses('<script>function (</script>').why);
+
+  /**
+   * 🚨 **THE MIDDLE OF THE TELEVISION READ "Into the study_w." AT 44 PIXELS.** Both pages name
+   * rooms out loud and neither can import `captions.js` — they are served as text by a server with
+   * no bundler — so each carries a copy of ROOM_LABEL, and a copy nobody checks is how a
+   * television ends up calling a room something nobody else does. This holds both copies against
+   * the bank character for character, and `expedition-wire` E1b holds the bank against the names
+   * the level designer gave the spaces. Three files, one set of room names.
+   */
+  const inlined = (html) => {
+    const m = html.match(/const ROOM_LABEL = \{([\s\S]*?)\};/);
+    if (!m) return null;
+    const out = {};
+    for (const [, k, v] of m[1].matchAll(/(\w+)\s*:\s*'([^']*)'/g)) out[k] = v;
+    return out;
+  };
+  const tvLabels = inlined(tvHtml), phLabels = inlined(phoneHtml);
+  const same = (a) => a && JSON.stringify(Object.keys(ROOM_LABEL).sort().map((k) => [k, a[k]]))
+    === JSON.stringify(Object.keys(ROOM_LABEL).sort().map((k) => [k, ROOM_LABEL[k]]));
+  t('X17 · the television and the phone name rooms exactly as the caption bank does',
+    same(tvLabels) && same(phLabels),
+    tvLabels ? `${Object.values(tvLabels).join(' · ')}` : 'no ROOM_LABEL found in the television page');
+  t('X17 control · the comparison would catch a drifted copy',
+    !same({ ...ROOM_LABEL, study_w: 'THE STUDY' }) && !same({}),
+    'one changed value fails it, and so does an empty table');
+  t('X17b · and neither page prints a raw room id where a name belongs',
+    !/wing\(\)[^;]*room \|\|/.test(tvHtml) && !/'Into the ' \+ wing/.test(tvHtml)
+    && [tvHtml, phoneHtml].every((h) => /ROOM_LABEL\[/.test(h)),
+    'wing() resolves through the table on both surfaces');
 
   t('X0c · the television page has no token and no alignment anywhere in it',
     !/token/i.test(tvHtml) && !/\bevil\b/i.test(tvHtml.replace(/--evil:[^;]*;/g, '')),

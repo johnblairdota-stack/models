@@ -36,6 +36,8 @@ import { HOUSE, EXTENT, roomAt } from '../src/party/houseplan.js';
 import { ROOM_LABEL } from '../src/party/captions.js';
 import { TERMINAL_AT, TERMINAL_REACH, EXPEDITION_SECONDS, TELL_FOR_STATE, tellFor } from '../src/views/expedition.js';
 import { KIND } from '../src/party/director.js';
+import { mapRooms, createRig } from '../src/game/director-rig.js';
+import { bugFor } from '../src/party/shots.js';
 import { DETENT, noiseFor, audibleRange, SILENT_SPEED } from '../src/party/darkrun.js';
 import { MOVE, HUNTER_SENSE } from '../src/game/rules.js';
 import { createSession, CALL, MOVE_CHOICE } from '../src/party/session.js';
@@ -322,6 +324,55 @@ const engaged = (s) => {
   const strayKind = Object.values(TELL_FOR_STATE).filter((k) => !KIND.includes(k));
   t('E8d · and every kind it emits is one of §1.2\'s twelve, which has no room for a new one',
     strayKind.length === 0, strayKind.join(', ') || Object.values(TELL_FOR_STATE).join(' '));
+}
+
+// ---------------------------------------------------------------- E10 · the cameras are in the rooms
+/**
+ * 🚨 **`mapRooms` KEYED ON `s.name`, AND `name` IS THE DISPLAY NAME. FOUR OF SIX ROOMS WERE WRONG.**
+ *
+ * `spaces.js` gives a space an `id` — `gallery` — and a `name` for the audience — `THE LONG
+ * GALLERY`. So `byName.get('gallery')` missed every time and every party room fell through to the
+ * index-ordered spare list: **ballroom → gallery, gallery → study_w, study_w → service, service →
+ * ballroom**. Nothing threw, because the fallback is deterministic and produces a complete map.
+ *
+ * The cost is not cosmetic. `siteFor` bolts each camera into the mapped space's corner and `sees()`
+ * refuses any point outside `site.bounds`, so the camera watching the room the runner is in was
+ * physically in a different room and could never see them — and the moment a STATIC does air,
+ * `bugFor` prints the room the roster asked for over a picture of somewhere else, on television,
+ * to a room that is about to argue about rooms.
+ */
+{
+  const mapped = mapRooms(SPACES);
+  const wrong = ROOMS.filter((r) => mapped[r]?.id !== r);
+  t('E10 · every party room maps to the engine space of the same name',
+    wrong.length === 0,
+    wrong.length ? wrong.map((r) => `${r} → ${mapped[r]?.id}`).join(', ')
+      : ROOMS.map((r) => `${r}→${mapped[r].id}`).join(' '));
+
+  t('E10 control · the display name really is not the id, which is what the old key read',
+    SPACES.every((s) => String(s.name).toLowerCase() !== String(s.id).toLowerCase()),
+    SPACES.slice(0, 2).map((s) => `${s.id} != "${s.name}"`).join(' · '));
+
+  // The half that shows on television: a camera in the wrong room prints the wrong room name.
+  const bugs = ROOMS.map((r) => bugFor('STATIC', { index: 0, room: r }, { label: (x) => ROOM_LABEL[x] }));
+  t('E10b · and the shot bug names the room the camera is actually standing in',
+    bugs.every((b, i) => b.includes(ROOM_LABEL[ROOMS[i]])),
+    bugs[0]);
+
+  // Every camera site must sit inside the bounds of the room it claims — the property `sees()`
+  // relies on and the one the old mapping silently broke.
+  const rig = createRig({
+    camera: { position: { set() {} }, lookAt() {}, fov: 0, updateProjectionMatrix() {} },
+    room: null, worldSeed: 7, subjects: () => ({}), unlocked: () => 99,
+  });
+  const stray = rig.sites().filter((s) => {
+    const sp = SPACES.find((x) => x.id === s.room);
+    return !sp || s.x < sp.x0 || s.x > sp.x1 || s.z < sp.z0 || s.z > sp.z1;
+  });
+  t('E10c · every camera on the roster is bracketed inside the room it watches',
+    stray.length === 0 && rig.sites().length > 0,
+    stray.length ? stray.map((s) => `cam ${s.index} claims ${s.room} at (${s.x.toFixed(1)}, ${s.z.toFixed(1)})`).join(', ')
+      : `${rig.sites().length} sites, each inside its own room`);
 }
 
 // ---------------------------------------------------------------- E9 · the tells have subscribers
