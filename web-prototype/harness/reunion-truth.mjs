@@ -634,11 +634,30 @@ function missesByEpisode(log) {
         /\bp\d+\b/.test(old) && ids.has(cold.whyRefs[0]) === false ? true : /\bp\d+\b/.test(old),
         `"${old}"`);
     } else {
-      // No bussing in these seeds; make the control on a live award that does carry a ref.
-      const any = allRuns.flatMap(({ log, ctx }) => awards(log, ctx)).find((a) => a.whyRefs.length);
-      t('U7 control · a sentence with its refs substituted fails the same scanner',
+      /**
+       * 🚨 **THIS CONTROL USED TO DEPEND ON LUCK, AND THE LUCK RAN OUT.** It searched the eight
+       * fixed seeds for any award carrying a ref, and reported "control not armed" — a FAIL, and
+       * correctly so — the moment a change to `cast.js`'s GUARANTEED table altered which roles
+       * those seeds deal. The assertion it guards was still green; only the proof that the
+       * scanner works had evaporated, which is the exact shape of a gate quietly becoming
+       * decorative.
+       *
+       * ⚠️ IT SEARCHES FOR A REAL AWARD RATHER THAN BUILDING A STRING, because a control that
+       * writes its own input on the same line is measuring the line. So it widens the seed search
+       * until the shipped `awards()` produces a genuine ref-carrying sentence, and reports how far
+       * it had to go. If the whole range yields nothing, that is a finding about `awards()` and it
+       * fails loudly rather than skipping.
+       */
+      let any = null, searched = 0;
+      for (let seed = 11; seed <= 90 && !any; seed++) {
+        searched++;
+        const r = play({ castSeed: seed * 41, worldSeed: seed });
+        any = awards(r.log, r.ctx).find((a) => a.whyRefs.length) || null;
+      }
+      t('U7 control · a real award\'s sentence, with its refs substituted, fails the same scanner',
         any ? /\bp\d+\b/.test(any.why.replace(/\{(\d+)\}/g, (_, i) => any.whyRefs[Number(i)])) : false,
-        any ? any.why : 'no award in these seeds carries a ref — control not armed');
+        any ? `found after ${searched} seed(s): "${any.why}"`
+            : `no award carries a ref in 80 seeds — that is a finding about awards(), not a skip`);
     }
   }
 }
