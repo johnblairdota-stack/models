@@ -156,6 +156,57 @@ export const tellFor = (state, t, runnerId = 'runner') => {
 };
 
 /**
+ * 🚪 **HOW FAR BEYOND A DOORWAY THE WAYPOINT SITS.** Far enough that the runner is never standing
+ * on its own target — `atan2(~0, ~0)` is what put the first draft in a jitter in the opening.
+ */
+export const HOP_BEYOND = 1.5;
+
+/**
+ * 🧭 **THE WAYPOINT THE SOLO DIRECTOR STEERS AT — AND ITS SIDE COMES FROM THE DOORWAY, NEVER FROM
+ * THE RUNNER.**
+ *
+ * That one word is the whole of the bug the solo director's header used to blame on collision at
+ * D4. `side = sign((pos − c) · n)` inverts the instant the body crosses the portal plane, so the
+ * waypoint jumps 3 m back the way it came; `spaceAt`'s padded rects overlap by 0.9 m either side
+ * of a doorway and the first-declared rect wins, so the hop keeps being re-offered and the robot
+ * oscillates in the opening for the whole segment. Deriving the far side from the ROOMS THE
+ * DOORWAY JOINS makes the sign a property of the house rather than of the body, so there is
+ * nothing left to invert.
+ *
+ * The `cur` walk is what lets a hop that cannot be oriented from where the runner is standing fall
+ * through to one that can, rather than poisoning the stick: each hop's far room becomes the near
+ * room of the next, which is the sequence `pathPortals` returned in the first place.
+ *
+ * Pure, and takes the room rather than closing over one, so `door-hop` can drive it against the
+ * built house. Returns `null` when there is no doorway left between here and the target — steer at
+ * the terminal.
+ *
+ * @param {object} room   the built room: `spaceAt`, `spaces`
+ * @param {Array}  hops   `room.pathPortals(...)`
+ * @param {{x:number,z:number}} pos
+ * @returns {{x:number, z:number, via:string}|null}
+ */
+export function hopWaypoint(room, hops, pos) {
+  let cur = room.spaceAt(pos)?.id ?? null;
+  for (const h of hops ?? []) {
+    const other = h?.a === cur ? h.b : h?.b === cur ? h.a : null;
+    const sp = other ? room.spaces.find((s) => s.id === other) : null;
+    /**
+     * 🚨 THE PORTAL'S POSITION IS `centre`, A Vector3 — NOT `x`/`z`. `room.js:399-404` rebuilds
+     * every connector into `{id, a, b, axis, w, h, kind, state, centre, normal}`; the raw
+     * `PORTALS` spec in `spaces.js` has bare `x`/`z` and the built graph does not. Reading `h.x`
+     * gets `undefined`, which becomes a NaN heading, a NaN velocity and a robot at NaN,NaN within
+     * one frame — silently, with nothing thrown and nothing red.
+     */
+    const c = h?.centre, n = h?.normal;
+    if (!sp || !c || !n || !Number.isFinite(c.x) || !Number.isFinite(c.z)) { cur = other ?? cur; continue; }
+    const far = Math.sign(((sp.x0 + sp.x1) / 2 - c.x) * n.x + ((sp.z0 + sp.z1) / 2 - c.z) * n.z) || 1;
+    return { x: c.x + n.x * far * HOP_BEYOND, z: c.z + n.z * far * HOP_BEYOND, via: h.id };
+  }
+  return null;
+}
+
+/**
  * 🦾 **THE FOUR SOCKETS A SHOW HAS TO PUT BACK, AND THE PAIR OF FUNCTIONS THAT DO IT.**
  *
  * Exported and taking the player as an argument rather than closing over one, for two reasons.
@@ -432,67 +483,51 @@ export default async function view(args = {}) {
      * what the guide is for.
      *
      * ---------------------------------------------------------------------------------------
-     * 🚨 KNOWN LIMIT, MEASURED RATHER THAN SUSPECTED: **IT DOES NOT GET THROUGH D4.**
+     * 🚨 **THIS HEADER USED TO BLAME COLLISION AT D4, AND IT WAS WRONG. THE BUG WAS IN THE
+     * WAYPOINT RULE THREE LINES BELOW IT.**
      * ---------------------------------------------------------------------------------------
-     * `?wing=gallery` runs study_w → D1 → gallery cleanly, 10.9 m in 2.7 s at RUN.
-     * `?wing=ballroom` reaches D4 at z=-8.45, sits in the aperture and never crosses; the noise
-     * trace oscillates 0.01–0.53, which is a body being stopped and re-accelerated rather than a
-     * steering wobble. Three separate steering fixes did not move it, which is what says the
-     * problem is collision at that doorway and not this waypoint logic.
+     * What it said: *"`?wing=ballroom` reaches D4 at z=-8.45, sits in the aperture and never
+     * crosses … three separate steering fixes did not move it, which is what says the problem is
+     * collision at that doorway and not this waypoint logic."* It is not collision. A body driven
+     * straight through D1, D4, D5 and D6 at RUN, on-axis and at ±1.2 m, crosses every one of them
+     * cleanly — measured, and the same four doors are what the Hunter's own BFS routes on all day.
      *
-     * It is left as it is, deliberately. A human runner steers around it in a second, so it
-     * blocks nothing the wired mode does — and a demo pathfinder that quietly grew special cases
-     * for one doorway would be a worse thing to own than a stated limit. `?wing=gallery` is the
-     * wing to shoot. Whatever is at D4 wants finding on its own terms, in `game.play`, where the
-     * survival mode walks the same door.
+     * The real cause was the waypoint's SIGN. The rule was `side = sign((pos − c) · n)` — the side
+     * the RUNNER is on — and the waypoint was placed on the opposite side of it. So the instant
+     * the body crossed the portal plane the sign flipped, the waypoint teleported 3 m back the way
+     * it came, and the robot turned round. It should then have escaped on the next frame, because
+     * `pathPortals` drops a hop once the room changes — except that `spaceAt`'s padded rects
+     * overlap by 0.9 m either side of a doorway and the FIRST matching rect wins, so `study_w`
+     * keeps answering for 0.9 m past D4 and the hop keeps coming back. Stable oscillation at
+     * z=-8.45, which is exactly the trace the old header read as a body being stopped by geometry.
+     *
+     * `?wing=gallery` worked only by accident of `SPACES` ORDERING: `gallery` is declared first,
+     * so it wins its overlap with `study_w` and claims the runner 0.9 m BEFORE D1's plane — the
+     * sign never gets the chance to flip. Four of the six wings had therefore never been driven
+     * end to end, and the one that had was the one whose room happened to be listed first.
+     *
+     * ⚠️ **AND THE FIX THE OLD HEADER PROPOSED — "take the first hop that is actually somewhere
+     * else" — IS NEITHER NECESSARY NOR SUFFICIENT, WHICH IS WHY IT IS NOT WHAT IS BELOW.** It was
+     * built and measured, and it TRADES ONE WING FOR ANOTHER: it recovers the ballroom and loses
+     * the gallery. Dropping the doorway underfoot leaves the runner steering at the TERMINAL while
+     * still standing in the opening — which for the gallery is the wall beside D1, and for a
+     * two-hop route (study_e, service) is back through the wall it just came through. Measured:
+     * arrived at study_w and ballroom, stuck 19.4 m / 19.8 m / 10.0 m short in the other three.
+     *
+     * Orienting the waypoint from the DOORWAY rather than from the runner fixes all five drawable
+     * wings, on-axis and at ±1.2 m, and it subsumes the skip — a point 1.5 m beyond an opening is
+     * never a point you are standing on, which was the only reason to want one. `door-hop` H1-H4
+     * drives all three rules through the same house.
      */
     engine.onUpdate(() => {
       {
+        /**
+         * ⚠️ RE-SOLVE EVERY FRAME RATHER THAN ON ARRIVAL. The earlier version only recomputed
+         * within 1.4 m of its target, which is what let a stale waypoint stick. The BFS is cached
+         * by (from, to, minW, minH) in `room.js`, so asking every frame costs a map lookup.
+         */
         const hops = room.pathPortals(player.pos, terminal, 0.6, 1.9);
-        /**
-         * 🚨 SKIP THE DOORWAY YOU ARE ALREADY STANDING IN. `pathPortals` answers from the space
-         * the runner is in, and while it is IN the doorway that space is still the room behind —
-         * so the first hop keeps coming back as the door under its feet. Steering at a point you
-         * are standing on gives `atan2(~0, ~0)`, and the probe showed the robot parked at
-         * z=-8.45 for two and a half seconds, heading flickering, noise oscillating 0.01–0.53,
-         * never getting through. Take the first hop that is actually somewhere else.
-         *
-         * ⚠️ AND RE-SOLVE EVERY FRAME RATHER THAN ON ARRIVAL. The earlier version only recomputed
-         * within 1.4m of its target, which is what let the stale waypoint stick. The BFS is
-         * cached by (from, to, minW, minH) in `room.js`, so asking every frame costs a map lookup.
-         */
-        const h = hops[0];
-        /**
-         * 🚨 THE PORTAL'S POSITION IS `centre`, A Vector3 — NOT `x`/`z`. `room.js:399-404` rebuilds
-         * every connector into `{id, a, b, axis, w, h, kind, state, centre, normal}`; the raw
-         * `PORTALS` spec in `spaces.js` has bare `x`/`z` and the built graph does not. Reading
-         * `h.x` gets `undefined`, which becomes a NaN heading, a NaN velocity and a robot at
-         * NaN,NaN within one frame — silently, with nothing thrown and nothing red.
-         *
-         * The finite check stays even though the field is right now: a hop that cannot be steered
-         * at must fall back to the terminal, never poison the stick.
-         */
-        const c = h && h.centre;
-        if (c && Number.isFinite(c.x) && Number.isFinite(c.z)) {
-          /**
-           * 🚨 AIM THROUGH THE DOORWAY, NOT AT IT. Two versions failed here and both failed the
-           * same way — a robot pinned beside an open door with the throttle at RUN.
-           *
-           *   · aiming AT the centre: once inside the aperture the runner is standing on its own
-           *     waypoint, `atan2(~0, ~0)` is unstable, and it jitters in the opening.
-           *   · skipping the hop once within 1.6m: it then steers at the terminal while still on
-           *     the near side, which points it at the wall BESIDE the door.
-           *
-           * The fix is the standard one: put the waypoint a metre and a half beyond the opening,
-           * on the far side from wherever the runner currently is. `pathPortals` drops the hop as
-           * soon as the room changes, so the target never has to be "arrived at".
-           */
-          const n = h.normal || { x: 0, z: 1 };
-          const side = Math.sign((player.pos.x - c.x) * n.x + (player.pos.z - c.z) * n.z) || 1;
-          leg = { x: c.x - n.x * side * 1.5, z: c.z - n.z * side * 1.5, via: h.id };
-        } else {
-          leg = { x: terminal.x, z: terminal.z, via: 'direct' };
-        }
+        leg = hopWaypoint(room, hops, player.pos) ?? { x: terminal.x, z: terminal.z, via: 'direct' };
       }
       const dx = leg.x - player.pos.x, dz = leg.z - player.pos.z;
       heading = Math.atan2(dx, dz);
