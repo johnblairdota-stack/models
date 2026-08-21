@@ -1,0 +1,14 @@
+import { play } from './_rc_inv.mjs';
+import { reunion, revealSet } from '../src/party/reunion.js';
+const r = play({castSeed:100, worldSeed:7});
+const R = reunion(r.log, r.ctx);
+console.log('keys:', Object.keys(R));
+console.log('bytes:', JSON.stringify(R).length);
+console.log('\nBEAT 2 — the ledger:');
+const names=Object.fromEntries(r.s.state.players.map(p=>[p.id,p.name]));
+for(const x of R.ledger) console.log(' ', JSON.stringify(x));
+console.log('\nAWARDS:');
+for(const a of R.awards) console.log(' ', JSON.stringify(a));
+console.log('\nREVEAL:', JSON.stringify(R.reveal));
+console.log('\nrevealSet:', JSON.stringify([...revealSet(r.log,r.ctx)]));
+console.log('\nroll[0]:', JSON.stringify(R.rollCall[0]));
