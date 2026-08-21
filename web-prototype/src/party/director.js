@@ -64,15 +64,16 @@ export const TAU = 2.5;           // recency decay
  */
 export const SHOTS = [
   // `live: true` — this shot can show the mansion, so it can serve an event about the mansion.
-  { id: 'BODYCAM',      live: true,  needs: () => true },
-  { id: 'WORK',         live: true,  needs: (w) => !!w.subjectWorking },
-  { id: 'STATIC',       live: true,  needs: (w) => w.camerasUnlocked > 0 && !!w.subjectInStaticFrustum },
-  { id: 'STING',        live: true,  needs: (w) => w.camerasUnlocked > 0 && !!w.hunterInStaticFrustum },
-  { id: 'SPLIT',        live: true,  needs: (w) => w.camerasUnlocked >= 4 && w.concurrentRank2Rooms >= 2 },
+  // `drivable: true` — §3.3's *"behind-and-above the runner, or the runner's visor feed"*.
+  { id: 'BODYCAM',      live: true,  drivable: true,  needs: () => true },
+  { id: 'WORK',         live: true,  drivable: true,  needs: (w) => !!w.subjectWorking },
+  { id: 'STATIC',       live: true,  drivable: false, needs: (w) => w.camerasUnlocked > 0 && !!w.subjectInStaticFrustum },
+  { id: 'STING',        live: true,  drivable: false, needs: (w) => w.camerasUnlocked > 0 && !!w.hunterInStaticFrustum },
+  { id: 'SPLIT',        live: true,  drivable: false, needs: (w) => w.camerasUnlocked >= 4 && w.concurrentRank2Rooms >= 2 },
   // Seam fillers. They show the circle or a card, never the halls.
-  { id: 'REACTION',     live: false, needs: () => true },
-  { id: 'CONFESSIONAL', live: false, needs: (w) => w.cutawayBudget > 0 },
-  { id: 'SPONSOR',      live: false, needs: (w) => w.deadAir >= 5 },
+  { id: 'REACTION',     live: false, drivable: false, needs: () => true },
+  { id: 'CONFESSIONAL', live: false, drivable: false, needs: (w) => w.cutawayBudget > 0 },
+  { id: 'SPONSOR',      live: false, drivable: false, needs: (w) => w.deadAir >= 5 },
 ];
 
 /**
@@ -87,7 +88,44 @@ export const SHOTS = [
 export const LIVE_RANK = 3;
 /** The shots that can show the mansion, by id. Derived from the library, never restated. */
 export const LIVE_IDS = new Set(SHOTS.filter((s) => s.live).map((s) => s.id));
-export const poolFor = (rank, w) => SHOTS.filter((s) => s.needs(w) && (rank < LIVE_RANK || s.live));
+
+/**
+ * 🚨 **THE DRIVABLE-FRAME CONTRACT, WHICH IS THE ONE THING IN THIS FILE THE RUNNER CANNOT PLAY
+ * WITHOUT.**
+ *
+ * `rrr-phone-ux.md` §3.3, in full: *"During EXPEDITION the Broadcast Director **must hold a
+ * drivable frame** — behind-and-above the runner, or the runner's visor feed — and must never cut
+ * away while the runner has input. Cutaways to reaction shots, the seated circle or another camera
+ * are permitted **only** in windows where the host has frozen or auto-driven the runner. Without
+ * this, D-P1 is unplayable."*
+ *
+ * D-P1 is the decision that the runner's phone is a controller and the first-person view lives on
+ * the TELEVISION. So a frame that is not drivable is not a stylistic choice during those seconds —
+ * it is the runner's screen going dark while they are holding the stick.
+ *
+ * **Nothing implemented it.** No `needs()` predicate asked whether the runner had input, and four
+ * of the eight shots in the library are not a drivable view of the runner: `STING` is framed on
+ * the HUNTER, `REACTION` and `CONFESSIONAL` are cards `broadcast.js` draws as an opaque plate over
+ * the feed, and `STATIC` is a fixed security camera at FOV 46 — which §3.3 names in its own words
+ * as *"another camera"*. And `director-rig.js`'s `apply()` returns `false` for a card, so the
+ * camera FREEZES at its last pose while the runner walks out of frame behind a text plate.
+ *
+ * Measured over a 90 s expedition before this: gallery at one camera **21%** non-drivable, gallery
+ * at three **69%**, ballroom at three **38%**, study_e at three **40%**. Note the direction —
+ * **more cameras made it worse**, because every unlock widens the pool the arbiter scores. Earning
+ * a camera made the game less playable for the person in the house.
+ *
+ * ⚠️ THE FILTER IS ON THE POOL, NOT ON THE SCORE. A penalty would be a preference that a big
+ * enough rank could outbid, and §3.3 is not a preference. Rank 4 is unaffected in the way that
+ * matters: `taken`, `terminal` and `grab` are all events ABOUT the runner and BODYCAM serves every
+ * one of them, so the guarantee that a rank-4 event is never off-screen and the guarantee that the
+ * runner can see where it is going do not compete.
+ */
+export const DRIVABLE_IDS = new Set(SHOTS.filter((s) => s.drivable).map((s) => s.id));
+
+export const poolFor = (rank, w) => SHOTS.filter((s) => s.needs(w)
+  && (rank < LIVE_RANK || s.live)
+  && (!w.runnerDriving || s.drivable));
 
 /** `rrr-broadcast.md` §1.3, exactly. */
 export function score(shot, ctx) {
@@ -112,6 +150,14 @@ export function createDirector({ world = {} } = {}) {
   const lastAiredShot = new Map();
   let lastEventAt = -Infinity;
   let lastWorld = {};
+  /**
+   * §3.3's window. `false` means the runner has no input right now — the throttle is at STILL, or
+   * the segment is over — and the pool opens back up to the whole library. Folded into every world
+   * this closure builds rather than passed per call, because `tick()` and `refuse()` run at frame
+   * rate off `lastWorld` and the expensive half of that world (`shots.js`'s two `sees()` sweeps) is
+   * deliberately computed per EVENT, not per frame. See `drive()`.
+   */
+  let runnerDriving = false;
 
   /**
    * 🚨 **A CUT IS A CHANGE OF IMAGE. `cuts()` COUNTS TAKES, AND THE TWO NUMBERS WERE OUT BY FOUR.**
@@ -170,6 +216,9 @@ export function createDirector({ world = {} } = {}) {
   const nextInQueue = () => {
     while (queue.length) {
       const q = queue.shift();
+      // ...and §3.3 is checked on the way out too, for the same reason the budget is: a shot
+      // queued while the runner was parked must not air the frame after they push the stick.
+      if (runnerDriving && !DRIVABLE_IDS.has(q.shotId)) continue;
       if (LIVE_IDS.has(q.shotId) || budgetLeft(lastWorld) > 0) return q;
     }
     return null;
@@ -180,7 +229,7 @@ export function createDirector({ world = {} } = {}) {
     const next = nextInQueue();
     if (next) { close(t); current = { ...next, startedAt: t }; lastAiredShot.set(next.shotId, t); air(current, t); return; }
 
-    const world = { ...w, deadAir: Math.max(0, t - lastEventAt), cutawayBudget: budgetLeft(w) };
+    const world = { ...w, deadAir: Math.max(0, t - lastEventAt), cutawayBudget: budgetLeft(w), runnerDriving };
     const rank = Math.max(1, held.rank);
     const rank5 = (s) => score({ rank }, {
       since: t - (lastEventBySubject.get(held.subjectId) ?? t),
@@ -266,7 +315,12 @@ export function createDirector({ world = {} } = {}) {
        */
       const deadAir = Number.isFinite(lastEventAt) ? Math.max(0, e.t - lastEventAt) : 0;
       lastEventAt = e.t;
-      const w = { ...world, ...e.world, camerasUnlocked: e.camerasUnlocked ?? world.camerasUnlocked ?? 0, deadAir };
+      const w = {
+        ...world, ...e.world, camerasUnlocked: e.camerasUnlocked ?? world.camerasUnlocked ?? 0, deadAir,
+        // The view may state it on the event; the latch is authoritative, because it is the one
+        // thing here that is updated at frame rate rather than at event rate.
+        runnerDriving,
+      };
       lastWorld = w;
       // §3's budget is spent, not merely quoted — see `budgetLeft`.
       const pool = poolFor(rank, { ...w, cutawayBudget: budgetLeft(w) })
@@ -325,6 +379,29 @@ export function createDirector({ world = {} } = {}) {
      * unsolvable shot is not a short shot, it is not a picture at all.
      */
     refuse(t, w = lastWorld) { if (current) away(t, w); },
+
+    /**
+     * 🎮 **TELL THE DIRECTOR WHETHER THE RUNNER HAS INPUT.** Cheap, called every frame, and the
+     * only channel by which §3.3 reaches the arbiter.
+     *
+     * 🚨 IT CUTS BACK IMMEDIATELY RATHER THAN WAITING FOR `MAX_HOLD`. *"Must never cut away while
+     * the runner has input"* also means "must not still be away when the input arrives": a runner
+     * who stops for two seconds, gets a card, and then pushes the stick would otherwise be driving
+     * blind behind `[FEED INTERRUPTED]` for up to six more seconds. `away()` picks from the pool,
+     * which is already drivable-only by the time this returns, and BODYCAM's `needs()` is `true`
+     * — so there is always something to cut to.
+     *
+     * @param {boolean} on   does the runner have input this frame?
+     * @param {number}  t    the simulation clock, for the cut
+     */
+    drive(on, t) {
+      const was = runnerDriving;
+      runnerDriving = !!on;
+      if (!runnerDriving || was) return;
+      if (current && !DRIVABLE_IDS.has(current.shotId)) away(t, lastWorld);
+    },
+    /** Whether the Director currently believes the runner has input. For instruments. */
+    driving: () => runnerDriving,
 
     end(t) { close(t); air(null, t); },
     current: () => current,

@@ -174,6 +174,30 @@ export function detentInputFor(detent) {
 }
 
 /**
+ * 🎮 **DOES THE RUNNER HAVE INPUT? — the honest answer this process can give, and its limit.**
+ *
+ * `rrr-phone-ux.md` §3.3 makes it a contract that the Director *"must never cut away while the
+ * runner has input"*, and something has to decide when that is. The runner's stick has two axes
+ * (§3.1: throttle up/down, yaw rate left/right) and this process is told about exactly one of them
+ * in a form it can read as PRESENCE: the detent. A throttle off STILL is the runner commanding
+ * motion — they are driving, and the frame is what they are driving by.
+ *
+ * ⚠️ **THE STEERING AXIS IS NOT SEPARABLE TODAY, AND THAT IS A WIRE LIMITATION, NOT A DESIGN.**
+ * §3.1 specifies yaw RATE at 20 Hz with a turn-rate cap; the phone sends an absolute world compass
+ * bearing at 4 Hz. An absolute bearing has no idle value — it is always "an input" and it always
+ * jitters — so "the thumb is on the steering half of the stick" cannot be recovered from it. When
+ * the wire carries a rate, this becomes `detent > 0 || |yawRate| > deadzone` and nothing else here
+ * changes.
+ *
+ * The ambiguity is resolved in the safe direction. STILL is the only window in which a cutaway can
+ * air, and `director.drive()` cuts BACK on the first frame the throttle leaves it, so the worst
+ * case is a runner who turns on the spot behind a card and sees a drivable frame the instant they
+ * move. The unsafe reading — treating a 4 Hz bearing as continuous input — would make the cutaway
+ * budget unspendable for the whole segment, which is a different show rather than a safer one.
+ */
+export const runnerHasInput = (detent) => detent > 0;
+
+/**
  * 🚪 **HOW FAR BEYOND A DOORWAY THE WAYPOINT SITS.** Far enough that the runner is never standing
  * on its own target — `atan2(~0, ~0)` is what put the first draft in a jitter in the opening.
  */
@@ -815,6 +839,10 @@ export default async function view(args = {}) {
      */
     if (hunter.state === 'GROW') hunter.update(dt, t);
     debris.update(dt); dust.update(dt); limbField.update?.(dt);
+    // §3.3's window, and the only unambiguous one there is: the runner has finished. Nobody is
+    // steering, so the whole shot library is the gallery's again — which is what §3's *"return to
+    // the aftermath, not a new scene"* wants a cutaway budget for.
+    director.drive(false, t);
     director.tick(t);
     let cur = director.current();
     let shot = cur ? solve(cur.shotId, { subjectId: cur.subjectId, probe: rig.probe }) : null;
@@ -887,6 +915,18 @@ export default async function view(args = {}) {
       const ev = tellFor(hs, t);
       if (ev) { feed(ev.kind, ev.subjectId, ev.t); say(ev.kind, ev.t); }
     }
+    /**
+     * 🎮 **§3.3, EVERY FRAME.** *"The Broadcast Director must hold a drivable frame … and must
+     * never cut away while the runner has input. Without this, D-P1 is unplayable."* Under D13 the
+     * runner drives by this television and by nothing else, so a STING framed on the Hunter, a
+     * fixed security camera at FOV 46, or `[FEED INTERRUPTED]` over a frozen pose is the runner's
+     * screen going dark mid-corridor. `director.js`'s `DRIVABLE_IDS` has the measurement — up to
+     * 69% of a segment, and worse the more cameras the crew had earned.
+     *
+     * ⚠️ BEFORE `tick`, so a re-solve at MAX_HOLD is already choosing from the narrowed pool, and
+     * before the solve below, so the frame that airs this frame is the right one.
+     */
+    director.drive(runnerHasInput(detent), t);
     director.tick(t);
 
     // ---- what airs
@@ -907,6 +947,14 @@ export default async function view(args = {}) {
       shot = cur ? solve(cur.shotId, { subjectId: cur.subjectId, probe: rig.probe }) : null;
       if (!shot) shot = solve('BODYCAM', { subjectId: 'runner', probe: rig.probe });
     }
+    /**
+     * 🚨 …AND WHEN THE DIRECTOR HAS CHOSEN NOTHING AT ALL, WHICH IS THE FIRST FRAMES OF EVERY
+     * SEGMENT. `director.current()` is null until the first bus event arrives, and the branch above
+     * only reaches for the fallback once a shot has been chosen and refused. §3.3 is *"must HOLD a
+     * drivable frame"* — there is no clause for "not yet", and the opening of a segment is when a
+     * runner most needs to see which way it is facing.
+     */
+    if (!shot) shot = solve('BODYCAM', { subjectId: 'runner', probe: rig.probe });
     if (shot) { rig.apply(shot); bx.setShot(shot); }
 
     /**

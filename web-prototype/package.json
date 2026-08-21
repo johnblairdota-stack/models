@@ -15,7 +15,7 @@
     "gate:role-deal": "node harness/role-deal.mjs",
     "gate:party-anon": "node harness/party-anon.mjs",
     "gate:party-isolation": "node harness/party-isolation.mjs",
-    "gates:party": "node harness/role-deal.mjs && node harness/party-anon.mjs && node harness/party-isolation.mjs && node harness/party-taken.mjs && node harness/guide-coverage.mjs && node harness/party-log.mjs && node harness/party-sockets.mjs && node harness/vote-table.mjs && node harness/cast-ballot.mjs && node harness/win-machine.mjs && node harness/round-loop.mjs && node harness/dark-run.mjs && node harness/director-cut.mjs && node harness/task-deck.mjs && node harness/role-script.mjs && node harness/reunion-truth.mjs && node harness/party-noise.mjs && node harness/party-sim.mjs && node harness/join-spike.mjs && node harness/live-session.mjs && node harness/show-wire.mjs && node harness/shot-solver.mjs && node harness/expedition-wire.mjs && node harness/premiere-stage.mjs && node harness/hunter-draw.mjs && node harness/engine-take.mjs && node harness/wire-parity.mjs && node harness/door-hop.mjs && node harness/wing-draw.mjs",
+    "gates:party": "node harness/role-deal.mjs && node harness/party-anon.mjs && node harness/party-isolation.mjs && node harness/party-taken.mjs && node harness/guide-coverage.mjs && node harness/party-log.mjs && node harness/party-sockets.mjs && node harness/vote-table.mjs && node harness/cast-ballot.mjs && node harness/win-machine.mjs && node harness/round-loop.mjs && node harness/dark-run.mjs && node harness/director-cut.mjs && node harness/task-deck.mjs && node harness/role-script.mjs && node harness/reunion-truth.mjs && node harness/party-noise.mjs && node harness/party-sim.mjs && node harness/join-spike.mjs && node harness/live-session.mjs && node harness/show-wire.mjs && node harness/shot-solver.mjs && node harness/expedition-wire.mjs && node harness/premiere-stage.mjs && node harness/hunter-draw.mjs && node harness/engine-take.mjs && node harness/wire-parity.mjs && node harness/door-hop.mjs && node harness/wing-draw.mjs && node harness/drivable-frame.mjs",
     "gate:party-taken": "node harness/party-taken.mjs",
     "gate:guide-coverage": "node harness/guide-coverage.mjs",
     "gate:party-log": "node harness/party-log.mjs",
@@ -46,7 +46,8 @@
     "gate:engine-take": "node harness/engine-take.mjs",
     "gate:wire-parity": "node harness/wire-parity.mjs",
     "gate:door-hop": "node harness/door-hop.mjs",
-    "gate:wing-draw": "node harness/wing-draw.mjs"
+    "gate:wing-draw": "node harness/wing-draw.mjs",
+    "gate:drivable-frame": "node harness/drivable-frame.mjs"
   },
   "dependencies": {
     "three": "^0.180.0",
