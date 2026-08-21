@@ -133,6 +133,31 @@ export default async function view(args = {}) {
   });
   hunter.setTargets([playerBody]);
   /**
+   * 🚨 **THE HUNTER'S OWN KILL ENDS THE EXPEDITION. `taken.js:27` SAID THIS WAS ALREADY WIRED AND
+   * NOTHING HAD EVER SUBSCRIBED TO IT** — *"`_attack` calls `this.onKill?.(c, socket, item)` at
+   * L1116. The party room subscribes there and applies the rule"*. `grep -rn onKill src/views/
+   * src/party/` found exactly one hit and it was that sentence.
+   *
+   * What decided a take instead was `contact < 1.35`, a distance test in the loop below, and the
+   * Hunter cannot get that close: `hunter-ai.js:692` enters ATTACK at
+   * `seenD < reach * (stage*0.35 + 0.8)` and `_attack` immediately damps `vel` — it stops where
+   * it is and swings, because `WEAPON_RANGE.hunterSlam` is 2.4 m and it is *built* to kill from
+   * arm's length. Measured across three stages and three runner behaviours: minimum contact
+   * **2.11-2.17 m** whenever the runner is not actively walking into it. So a runner who stood
+   * still while the Hunter took all four of its limbs finished the segment `'held'`.
+   *
+   * ⚠️ AND RAISING THE THRESHOLD IS THE WORSE FIX, WHICH IS WHY IT IS NOT THE ONE HERE.
+   * `hunter-ai.js:76-89` spends a page arguing that a kill must be *"something the player watched
+   * coming and failed to answer"* — entering reach starts an `ATTACK_WINDUP` of 0.85 s, and
+   * stepping out of reach inside it means the swing lands on nothing. A distance test races that
+   * windup and wins: in the one staging where 1.35 m *did* fire, it fired 0.32-0.83 s after the
+   * first ATTACK, so the anticipation the AI is built around never completed. Subscribing to the
+   * kill means the take lands exactly when the arm does, in every staging, and the reaction
+   * window is the AI's rather than a number in this file. `engine-take` K1-K3 measures both.
+   */
+  let simT = 0;
+  hunter.onKill = () => finish('taken', simT);
+  /**
    * ⚠️ `hunter.body` IS A FRESH OBJECT EVERY CALL AND CARRIES NO POSITION. `hunter-ai.js:275` is
    * `get body() { return { root, rig: null, height, radius, hunter } }` — a descriptor for the
    * weapon system, allocated per access. The position lives on `hunter.root`. Reading
@@ -305,6 +330,9 @@ export default async function view(args = {}) {
 
   engine.onUpdate((dt, t) => {
     if (outcome) return;
+    // The one thing `onKill` needs and cannot be handed: the simulation's clock, for the caption
+    // and the report. `hunter.update` is called from inside this loop, so it is never stale.
+    simT = t;
     clock = Math.max(0, clock - dt);
 
     // ---- the runner
@@ -356,11 +384,10 @@ export default async function view(args = {}) {
     bx.setFrame(state, clock);
     bx.tick(t);
 
-    // ---- the three ways ninety seconds end
+    // ---- the three ways ninety seconds end. The fourth — being taken — is not measured here
+    // at all: it arrives from `hunter.onKill` above, at the moment the Hunter's arm lands.
     const reach = Math.hypot(player.pos.x - terminal.x, player.pos.z - terminal.z);
-    const contact = Math.hypot(player.pos.x - hunter.root.position.x, player.pos.z - hunter.root.position.z);
-    if (contact < 1.35) finish('taken', t);
-    else if (reach < TERMINAL_REACH) finish('lit', t);
+    if (reach < TERMINAL_REACH) finish('lit', t);
     else if (clock <= 0) finish('held', t);
 
     // ---- the report. Positions go to the SERVER, which decides who has earned to see them.
