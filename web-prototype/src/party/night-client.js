@@ -4,8 +4,10 @@
  */
 
 import { CODE_ABC, normalizeCodeDisplay, normalizeCodeWire } from './look.js';
+import { STUB_SHOW_PLAN } from './show.js';
 
-export { CODE_ABC, normalizeCodeDisplay, normalizeCodeWire };
+export { CODE_ABC, normalizeCodeDisplay, normalizeCodeWire, STUB_SHOW_PLAN };
+export { SHOW_BEATS, isShowBeat, recapAfterMs } from './show.js';
 
 export function makeCode(rand = Math.random) {
   let s = '';
@@ -26,12 +28,6 @@ export function tokenKey(code, kind = 'phone') {
   const seat = (kind === 'tv' || kind === 'host') ? 'tv' : 'phone';
   return `rrr.party.${String(code || '').toLowerCase()}.${seat}.token`;
 }
-
-/** After Send them in: reveal stays up, then the stub run, then recap. No extra host click. */
-export const STUB_SHOW_PLAN = [
-  { beat: 'expedition', ms: 1800 },
-  { beat: 'recap', ms: 4800 },
-];
 
 export class PartyNightClient {
   constructor({ url, onMessage, onClose } = {}) {

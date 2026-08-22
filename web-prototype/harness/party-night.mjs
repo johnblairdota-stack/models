@@ -116,6 +116,8 @@ t('N1b · host and phone tokens are namespaced apart',
     && tokenKey('test', 'phone').endsWith('.phone.token'));
 t('N1c · stub show plan ends on recap without a host click',
   STUB_SHOW_PLAN.at(-1)?.beat === 'recap' && STUB_SHOW_PLAN.some((s) => s.beat === 'expedition'));
+t('N1c2 · expedition is immediate — the TV does not wait on Watch the run',
+  (STUB_SHOW_PLAN.find((s) => s.beat === 'expedition')?.ms ?? 1) === 0);
 
 const host = await open(`${base}&host=1`);
 t('N2 · host=1 is the TV spectator, not a robot',
@@ -272,6 +274,12 @@ t('N10 · TV never received a role card or a flyover',
 
 t('N10c · episode does not pin the show beat back to casting',
   host.msgs.filter((m) => m.t === 'show' && m.beat === 'casting').length <= 1);
+t('N10d · playEpisode fans expedition to every socket, including the TV',
+  last(host, 'show')?.beat === 'expedition'
+    && last(a, 'show')?.beat === 'expedition'
+    && last(b, 'show')?.beat === 'expedition'
+    && srv.rooms.get('night')?.show === 'expedition',
+  `host=${last(host, 'show')?.beat} a=${last(a, 'show')?.beat} room=${srv.rooms.get('night')?.show}`);
 
 const aCards = aEvs.filter((e) => e.type === 'role.card');
 const bCards = bEvs.filter((e) => e.type === 'role.card');
@@ -298,11 +306,26 @@ const replay = back.msgs.filter((m) => m.t === 'event' && m.replay);
 t('N13b · catch-up is entitled replay, not a dump',
   replay.length > 0 && replay.every((m) => m.ev.vis !== 'SEALED' && (!m.ev.for || m.ev.for === a.welcome.playerId)),
   `${replay.length} replayed`);
+t('N13c · a refresh resumes the server show beat, not casting',
+  last(back, 'show')?.beat === 'expedition' || last(back, 'show')?.beat === 'recap',
+  last(back, 'show')?.beat);
 
 host.send({ t: 'show', beat: 'recap' });
 await sleep(40);
 t('N14 · host can pace the room onto the recap beat',
   last(b, 'show')?.beat === 'recap' && last(back, 'show')?.beat === 'recap');
+
+{
+  const tok = host.welcome.token;
+  host.close();
+  await sleep(80);
+  const tvBack = await open(`${base}&host=1&token=${tok}`);
+  await sleep(40);
+  t('N14b · a refreshed TV resumes the server show beat, not casting',
+    last(tvBack, 'show')?.beat === 'recap' || last(tvBack, 'show')?.beat === 'expedition',
+    last(tvBack, 'show')?.beat);
+  tvBack.close();
+}
 
 {
   const steal = await open(`${base}&host=1&token=${tok}`);

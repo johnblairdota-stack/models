@@ -3,11 +3,11 @@
  *
  * Host socket is the TV spectator. Phones are robots. The mansion stays on ?view=game.play.
  */
-import { PartyNightClient, defaultWsUrl, makeCode, tokenKey, STUB_SHOW_PLAN } from '../party/night-client.js';
+import { PartyNightClient, defaultWsUrl, makeCode, tokenKey } from '../party/night-client.js';
 import { recapFromEvents } from '../party/recap.js';
 import { injectNightSkin, markPartyReady, playerName } from '../party/night-skin.js';
 import { qrSvg } from '../party/qr.js';
-import { cleanLook, robotFaceSvg } from '../party/look.js';
+import { DEFAULT_LOOK, cleanLook, robotFaceSvg } from '../party/look.js';
 import { mergePublicNames } from '../party/cast-ui.js';
 
 const LINE = 'Two of you go in. One walks, one talks. The rest of us watch. Someone in this room is lying.';
@@ -40,7 +40,6 @@ export default async function partyHost({ params }) {
     beat: 'lobby',
     err: '',
     locked: false,
-    auto: false,
   };
 
   const client = new PartyNightClient({
@@ -49,12 +48,6 @@ export default async function partyHost({ params }) {
       if (m.t === 'welcome') sessionStorage.setItem(tokenKey(code, 'tv'), m.token);
       if (m.t === 'show' && m.beat) ui.beat = m.beat;
       if (m.t === 'full') ui.err = 'The TV seat is taken. Close the other host tab, or pick a new room code.';
-      if (m.t === 'event' && m.ev?.type === 'cast.pair' && ui.locked && !ui.auto) {
-        ui.auto = true;
-        for (const step of STUB_SHOW_PLAN) {
-          setTimeout(() => setBeat(step.beat), step.ms);
-        }
-      }
       if (m.t === 'lobby' && patchLobby(root, client, ui, m)) return;
       paint();
     },
@@ -97,7 +90,8 @@ export default async function partyHost({ params }) {
     if (!(client.ballots || []).length) return;
     ui.locked = true;
     client.send({ t: 'episode', opts: {} });
-    ui.beat = 'casting';
+    // Optimistic — the server fans expedition to every socket including this TV.
+    ui.beat = 'expedition';
     paint();
   }
 
@@ -118,12 +112,41 @@ export default async function partyHost({ params }) {
       && (client.ballots || []).length >= 1
       && !client.events.some((e) => e.type === 'cast.pair');
     const hasPair = !!(pair.runner || recap.runner);
-    const hasRecap = client.events.some((e) => e.type === 'phase.RECAP' || e.type === 'run.camera_lit' || e.type === 'panel.alarm');
+    const onRun = show === 'expedition' || (hasPair && show !== 'recap' && show !== 'casting');
 
     let body = '';
     if (ui.err) body += `<div class="err">${esc(ui.err)}</div>`;
 
-    if (show === 'lobby' || (!hasPair && show !== 'casting')) {
+    if (onRun) {
+      body += runStage({
+        names,
+        lobby: client.lobby,
+        runnerId: pair.runner || recap.runner,
+        guideId: pair.guide || recap.guide,
+        cameras: frame?.cameras,
+        alarms: frame?.incident?.alarms,
+      });
+      body += `<div class="actions">
+        <button class="btn ghost" id="to-recap">Recap</button>
+        <button class="btn ghost" id="to-run">Watch the run</button>
+      </div>`;
+    } else if (show === 'recap') {
+      body += recapBoard(recap, names);
+      body += `<div class="actions"><button class="btn ghost" id="to-cast">Ballots</button>
+        <button class="btn ghost" id="to-run">Run</button></div>`;
+      if (episode === 1 || phase === 'DEBRIEF' || phase === 'VERDICT') {
+        body += `<p class="hint" style="margin-top:16px">No eviction this episode. Phones down — talk.</p>`;
+      }
+    } else if (show === 'casting') {
+      body += ballotBoard(votes, names, pair, recap, episode);
+      body += `<div class="actions">`;
+      if (canLock) body += `<button class="btn" id="lock">Send them in</button>`;
+      if (hasPair) body += `<button class="btn ghost" id="to-run">Watch the run</button>`;
+      body += `</div>`;
+      if (episode === 1) {
+        body += `<p class="hint" style="margin-top:16px">Episode 1 airs every ballot. Nobody is evicted tonight.</p>`;
+      }
+    } else {
       body += `
         <div class="night-row">
           <div>
@@ -138,31 +161,6 @@ export default async function partyHost({ params }) {
           <button class="btn" id="go" ${canStart ? '' : 'disabled'}>Start the night</button>
         </div>
         <p class="hint" data-live-hint style="margin-top:14px">${nLive} phone${nLive === 1 ? '' : 's'} live · need 2 to start · empty chairs stay empty</p>`;
-    } else if (show === 'casting') {
-      body += ballotBoard(votes, names, pair, recap, episode);
-      body += `<div class="actions">`;
-      if (canLock) body += `<button class="btn" id="lock">Send them in</button>`;
-      if (hasPair) body += `<button class="btn ghost" id="to-run">Watch the run</button>`;
-      body += `</div>`;
-      if (episode === 1) {
-        body += `<p class="hint" style="margin-top:16px">Episode 1 airs every ballot. Nobody is evicted tonight.</p>`;
-      }
-    } else if (show === 'expedition') {
-      const runner = playerName(names, pair.runner || recap.runner);
-      const guide = playerName(names, pair.guide || recap.guide);
-      const cams = frame?.cameras;
-      body += `
-        <div class="pair-hero">${esc(runner)} walks.<br>${esc(guide)} talks.</div>
-        <p class="night-line" style="padding:0">The rest of us watch. The mansion is dark. The hammer is automatic — do not aim it.</p>
-        <p class="hint">Cameras live ${cams?.unlocked ?? '—'} / needed ${cams?.needed ?? '—'} · alarms ${frame?.incident?.alarms ?? 0}</p>
-        <div class="actions"><button class="btn" id="to-recap">Recap</button></div>`;
-    } else {
-      body += recapBoard(recap, names);
-      body += `<div class="actions"><button class="btn ghost" id="to-cast">Ballots</button>
-        <button class="btn ghost" id="to-run">Run</button></div>`;
-      if (episode === 1 || phase === 'DEBRIEF' || phase === 'VERDICT') {
-        body += `<p class="hint" style="margin-top:16px">No eviction this episode. Phones down — talk.</p>`;
-      }
     }
 
     root.innerHTML = `
@@ -170,7 +168,7 @@ export default async function partyHost({ params }) {
         <div class="night-brand">Prime Time</div>
         <div class="night-phase">${esc(show.toUpperCase())} · episode ${esc(String(episode))} · ${esc(phase)}</div>
       </div>
-      <div class="night-line">${esc(LINE)}</div>
+      ${onRun ? '' : `<div class="night-line">${esc(LINE)}</div>`}
       <div class="night-main">${body}</div>`;
 
     root.querySelector('#go')?.addEventListener('click', startNight);
@@ -181,6 +179,43 @@ export default async function partyHost({ params }) {
   }
 
   paint();
+}
+
+/** Joined lobby name, never a leftover Robot N or a raw id on the TV. */
+function joinedName(names, id, fallback) {
+  const n = playerName(names, id);
+  if (!n || n === id || /^Robot \d+$/i.test(n)) return fallback;
+  return n;
+}
+
+function seatLook(lobby, playerId) {
+  const seat = (lobby?.seats || []).find((s) => s.playerId === playerId);
+  return cleanLook(seat);
+}
+
+/**
+ * First picture on the TV during the run — a framed follow slot + huge names.
+ * Not the D13 mansion camera. That is the next slice.
+ */
+function runStage({ names, lobby, runnerId, guideId, cameras, alarms }) {
+  const runner = joinedName(names, runnerId, 'The runner');
+  const guide = joinedName(names, guideId, 'The guide');
+  const look = seatLook(lobby, runnerId) || DEFAULT_LOOK;
+  const face = robotFaceSvg(look.shell, look.accent, { size: 220 });
+  const cams = cameras;
+  return `
+    <div class="run-stage">
+      <div class="run-frame" aria-label="${esc(runner)} is running">
+        <div class="run-follow">
+          <div class="run-face">${face}</div>
+          <div class="run-tag">${esc(runner)} is running</div>
+          <div class="run-slot">follow</div>
+        </div>
+      </div>
+      <div class="pair-hero">${esc(runner)} walks.<br>${esc(guide)} talks.</div>
+      <p class="night-line" style="padding:0">The rest of us watch. The mansion is dark. The hammer is automatic — do not aim it.</p>
+      <p class="hint">Cameras live ${cams?.unlocked ?? '—'} / needed ${cams?.needed ?? '—'} · alarms ${alarms ?? 0}</p>
+    </div>`;
 }
 
 function seatGrid(lobby) {
@@ -270,7 +305,7 @@ function ballotBoard(votes, names, pair, recap, episode) {
   const runner = pair.runner || recap.runner;
   const guide = pair.guide || recap.guide;
   const hero = runner
-    ? `<div class="pair-hero">${esc(playerName(names, runner))} walks · ${esc(playerName(names, guide))} talks</div>`
+    ? `<div class="pair-hero">${esc(joinedName(names, runner, 'The runner'))} walks · ${esc(joinedName(names, guide, 'The guide'))} talks</div>`
     : `<p class="hint">Ballots land here, huge. Lock when the room has spoken.</p>`;
   // playEpisode increments episode after the premiere; recap.episode stays 1.
   const huge = Number(episode) === 1 || recap.episode === 1;
@@ -279,7 +314,7 @@ function ballotBoard(votes, names, pair, recap, episode) {
 
 function recapBoard(recap, names) {
   const taken = recap.taken?.length
-    ? recap.taken.map((t) => playerName(names, t.id)).join(', ')
+    ? recap.taken.map((t) => joinedName(names, t.id, 'The runner')).join(', ')
     : 'CAME BACK';
   return `<div class="recap">
     <div class="fact"><div class="k">Camera</div><div class="v ${recap.cameraLit ? 'ok' : 'bad'}">${recap.cameraLit ? 'LIT' : 'STAYED DARK'}</div></div>

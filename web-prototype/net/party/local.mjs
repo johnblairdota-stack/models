@@ -38,6 +38,7 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
 import { createRoom } from '../../src/party/room.js';
+import { isShowBeat, recapAfterMs } from '../../src/party/show.js';
 
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 export const MAX_PHONES = 8;
@@ -97,9 +98,35 @@ function getRoom(code, opts) {
     send: (id, frame) => outbox(id, { t: 'state', frame }),
     emit: (id, ev) => outbox(id, { t: 'event', ev }),
   });
-  r = { code, game, conns, seatsTaken: new Set(), tvTaken: false, ballots: new Map(), show: 'lobby' };
+  r = { code, game, conns, seatsTaken: new Set(), tvTaken: false, ballots: new Map(), show: 'lobby', showClock: null };
   rooms.set(code, r);
   return r;
+}
+
+function clearShowClock(room) {
+  if (room.showClock) {
+    clearTimeout(room.showClock);
+    room.showClock = null;
+  }
+}
+
+/** Persist + fan the beat so a refreshed TV resumes here, not on host-tab RAM. */
+function setShow(room, beat) {
+  if (!isShowBeat(beat)) return;
+  room.show = beat;
+  fanout(room, { t: 'show', beat: room.show });
+}
+
+/** Pair locked / playEpisode started — every client including the TV enters the run. */
+function startStubShow(room) {
+  clearShowClock(room);
+  setShow(room, 'expedition');
+  const wait = recapAfterMs();
+  room.showClock = setTimeout(() => {
+    room.showClock = null;
+    if (room.show === 'expedition') setShow(room, 'recap');
+  }, wait);
+  room.showClock.unref?.();
 }
 
 /**
@@ -304,7 +331,14 @@ export function startServer({ port = 5181, count = 8, castSeed = 1, worldSeed = 
   });
 
   server.listen(port);
-  return { server, rooms, close: () => new Promise((r) => server.close(r)) };
+  return {
+    server,
+    rooms,
+    close: () => {
+      for (const room of rooms.values()) clearShowClock(room);
+      return new Promise((r) => server.close(r));
+    },
+  };
 }
 
 /** Joined phone player ids. Empty deal slots are not seated. */
@@ -338,14 +372,19 @@ function handleClient(room, bound, self, msg) {
     return;
   }
   if (msg.t === 'show' && typeof msg.beat === 'string') {
-    room.show = msg.beat;
-    fanout(room, { t: 'show', beat: room.show });
+    // Host workaround ("Watch the run") and N14 pacing. Not the product clock.
+    if (msg.beat !== 'expedition') clearShowClock(room);
+    setShow(room, msg.beat);
     return;
   }
   // start / episode stay callable from any socket so party-sockets (which drives
   // phone-0) keeps working. The host view is the only UI that sends them.
   if (msg.t === 'start') { room.game.start(); fanout(room, lobbySnapshot(room)); }
-  if (msg.t === 'casting') { room.game.beginCasting(); room.show = 'casting'; fanout(room, { t: 'show', beat: 'casting' }); }
+  if (msg.t === 'casting') {
+    clearShowClock(room);
+    room.game.beginCasting();
+    setShow(room, 'casting');
+  }
   if (msg.t === 'episode') {
     const seated = seatedPlayerIds(room);
     const votes = [...room.ballots.values()].filter((v) =>
@@ -358,7 +397,8 @@ function handleClient(room, bound, self, msg) {
       ...(votes.length ? { ballots: votes } : {}),
       ...(seated.length ? { living: seated } : {}),
     });
-    // Do not pin the show on CASTING — the host auto-advances the stub run into recap.
+    // Durable show: expedition now, recap after the stub window. Do not pin CASTING.
+    startStubShow(room);
     fanout(room, lobbySnapshot(room));
   }
 }

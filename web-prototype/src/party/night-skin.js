@@ -84,7 +84,19 @@ export function injectNightSkin() {
     .ballot.huge .who { font-size:clamp(52px, 9vw, 96px); }
     .ballot.huge .pick { font-size:clamp(44px, 8vw, 84px); }
     .ballot .arrow { color:#f5a14a; letter-spacing:.2em; font-size:18px; text-transform:uppercase; }
-    .pair-hero { margin:18px 0 8px; font-size:clamp(40px, 8vw, 96px); font-weight:800; line-height:1.15; }
+    .pair-hero { margin:18px 0 8px; font-size:clamp(48px, 10vw, 120px); font-weight:800; line-height:1.1; }
+    .run-stage { display:flex; flex-direction:column; min-height:min(68vh, 720px); }
+    .run-frame { flex:1; min-height:280px; display:flex; align-items:center; justify-content:center;
+      border:2px solid rgba(245,161,74,.35); border-radius:14px; overflow:hidden;
+      background:
+        radial-gradient(ellipse 70% 80% at 50% 70%, rgba(245,161,74,.16), transparent 58%),
+        linear-gradient(180deg, #16110c 0%, #0a0806 100%);
+      box-shadow: inset 0 0 80px rgba(0,0,0,.45); }
+    .run-follow { display:flex; flex-direction:column; align-items:center; gap:14px; padding:28px 20px; }
+    .run-face { filter: drop-shadow(0 16px 36px rgba(245,161,74,.28)); animation: night-breathe 2.4s ease-in-out infinite; }
+    .run-face .bot-face { width:min(42vw, 220px); height:auto; }
+    .run-tag { font-size:clamp(28px, 5vw, 56px); font-weight:800; letter-spacing:.04em; color:#f3ece3; }
+    .run-slot { letter-spacing:.28em; text-transform:uppercase; color:#f5a14a; font-size:13px; font-weight:700; }
     .recap { display:grid; grid-template-columns:1fr; gap:16px; max-width:900px; }
     .recap .fact { padding:28px 30px; border-radius:10px; background:rgba(18,14,10,.85);
       border:1px solid rgba(245,161,74,.2); }
