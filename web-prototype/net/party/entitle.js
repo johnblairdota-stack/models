@@ -56,6 +56,31 @@ export const MATRIX = [
   ['you.teammates[].role',     'evil'],
   ['you.teammates[].claimDraft', 'evil'],   // the Production Panel, and the ONLY draft on any wire
 
+  /*
+   * ---- what this player has been told about where the bodies are.
+   *
+   * 🚨 EVERY ROW IS `self`, AND THAT IS NOT THE SAME AS SAYING EVERY PLAYER GETS THE SAME THING.
+   * The asymmetry John asked for — *"Evil can see exactly where the runner and the hunter are at
+   * the same time"* against *"Good players get sporadic/vague information"* — is computed in
+   * `src/party/intel.js` and applied in `src/party/room.js` BEFORE this table ever runs. A good
+   * player's `you.intel` genuinely has no `at` key on it; it is not an exact value hidden behind a
+   * row they lack.
+   *
+   * That ordering is deliberate. An `evil`-audience row on `you.intel.hunter.at` would work too,
+   * and would be worse: the coarse read and the exact read would then be the SAME object with one
+   * field filtered, so the moment anybody added a second exact field and forgot its row, the good
+   * player would receive it. Coarsening at the source cannot fail that way.
+   *
+   * `you.*` is never sent to the TV (`fullFor` gives a TV socket no `you` at all, and `role-peek`
+   * W4 asserts it), so none of this can reach the shared screen.
+   */
+  ['you.intel.hunter.room',    'self'],
+  ['you.intel.hunter.at',      'self'],
+  ['you.intel.runner.room',    'self'],
+  ['you.intel.runner.at',      'self'],
+  ['you.intel.grade',          'self'],
+  ['you.intel.age',            'self'],
+
   // ---- the room
   ['players[].id',             'all'],
   ['players[].seat',           'all'],

@@ -27,6 +27,7 @@ import { tallyVote, executioner, NO_ONE } from './vote.js';
 import { foldWin, OUTCOME } from './win.js';
 import { PHASE, orderFor, EPISODE_CAP } from './phases.js';
 import { cleanLook } from './look.js';
+import { STALE_MAX, intelFor } from './intel.js';
 
 export const PHASES = ['LOBBY', 'CASTING', 'EXPEDITION', 'DEBRIEF', 'VERDICT'];
 
@@ -76,6 +77,23 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     // frame one, which the Director needs anyway.
     cameras: { unlocked: 1, needed: deal.cameras },
     incident: { alarms: 0 },
+    /**
+     * 🌍 **WHERE THE BODIES ARE, AS LAST REPORTED BY THE TV.**
+     *
+     * `docs/slices/task-prime-time-lobby-warm-night.md` §3.8. This module has never simulated an
+     * expedition — `playEpisode` resolves a whole episode synchronously — and the mansion lives
+     * inside the TV's follow slot, so the renderer is the only process that knows where anybody
+     * is standing. `setWorld` is how that fact arrives; everything below decides who is told.
+     *
+     * ⚠️ **NOT PART OF ANY FRAME.** `state.world` is ground truth and is never spread into
+     * `base`. It reaches a socket only through `intelFor`, which is where the good/evil asymmetry
+     * is applied, and only ever as `you.intel`.
+     */
+    world: null,
+    /** A hunter sighting up to `STALE_MAX` old — what a good player is allowed to be told. */
+    worldStale: null,
+    /** Monotonic, so the vague read can be sporadic without a clock or an RNG. */
+    worldTick: 0,
   };
 
   const record = (e) => {
@@ -110,14 +128,50 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
         return row;
       });
     }
+    /*
+     * 🔎 THE INTEL SPLIT. Good hears something vague and late; evil sees both bodies exactly and
+     * simultaneously. The whole asymmetry is computed in `src/party/intel.js` and applied HERE,
+     * before `project()` — a good player's frame does not contain an exact coordinate behind a
+     * missing row, it does not contain one at all. See `net/party/entitle.js`'s `you.intel` block.
+     *
+     * The roll is derived from `worldTick` rather than `Math.random()` so two identical rooms
+     * behave identically, which is what makes `party-isolation` and `party-sim` reproducible.
+     */
+    if (!sock.isTV && state.world && base.you) {
+      const intel = intelFor({
+        alignment: sock.alignment,
+        world: state.world,
+        stale: state.worldStale,
+        cameras: state.cameras,
+        roll: ((state.worldTick * 0x9e3779b1) >>> 0) / 0x100000000,
+      });
+      if (intel) base.you = { ...base.you, intel };
+    }
     if (sock.seatRole === 'guide' && state.phase === 'EXPEDITION') {
       // 🚨 S3. The Hunter is on the map only where a live camera watches. `hunterMark.visible =
       // hs.inScene && !!hp` (views/game.js L2559) is the debug view this replaces.
       const seen = hunterVisibleToGuide({
         worldSeed: state.worldSeed, unlocked: state.cameras.unlocked, hunterRoom: state.hunterRoom,
       });
-      const marks = [{ x: 1.5, z: -2.0, kind: 'you' }];
-      if (seen) marks.push({ x: 7.0, z: 3.0, kind: 'hunter' });
+      /*
+       * 🗺️ THE MARKS ARE THE REAL BODIES NOW, WHEN THE TV HAS REPORTED ANY — and they still travel
+       * as `marks`, not as a richer `flyover.hunter`.
+       *
+       * ⚠️ `flyover.hunter` STAYS A BOOLEAN, deliberately. Widening it to `{x,z}` would introduce
+       * `flyover.hunter.x` / `.z` as unrowed paths — `party-isolation` I1's exact failure — and
+       * `guide-coverage` reads it as the "is the guide sighted this tick" signal it has always
+       * been. `marks[].x` / `.z` / `.kind` already have `guide` rows, so the position rides the
+       * channel that was built for it.
+       */
+      const w = state.world;
+      const marks = [w?.runner
+        ? { x: w.runner.x, z: w.runner.z, kind: 'you' }
+        : { x: 1.5, z: -2.0, kind: 'you' }];
+      if (seen) {
+        marks.push(w?.hunter
+          ? { x: w.hunter.x, z: w.hunter.z, kind: 'hunter' }
+          : { x: 7.0, z: 3.0, kind: 'hunter' });
+      }
       base.flyover = { hunter: seen, marks };
     }
     // ---- the four injected leaks. `harness/party-isolation.mjs` I9 requires each to turn
@@ -380,6 +434,52 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     },
     /** Push the current projected frame to every socket — names are public. */
     syncAll() { broadcast(); },
+
+    /**
+     * 🌍 **THE TV REPORTS THE WORLD. THE ROOM DECIDES WHO IS TOLD.**
+     *
+     * Called from the transport on a `{ t:'world' }` from the TV socket, at about 2 Hz. It writes
+     * ground truth into `state.world`, ages the good players' sighting, appends a mission event
+     * when the mission moves, and broadcasts. `net/party/local.mjs` has already run
+     * `worldViolations`, so this can only ever receive rooms, coordinates and a mission phase.
+     *
+     * ⚠️ **THE STALE SIGHTING IS HELD HERE, NOT ON THE PHONE.** A client-side delay is a
+     * suggestion — the fresh value would still be on the wire. `worldStale` is only refreshed once
+     * `STALE_MAX` has elapsed, so the vague read is genuinely old by the time it is projected.
+     * `age` is in ticks-of-report scaled to seconds at the caller's 2 Hz; it is approximate on
+     * purpose, because a precise age is itself information.
+     *
+     * @returns {boolean} true when the mission phase changed, so the transport can act on it
+     */
+    setWorld({ runner = null, hunter = null, mission = null } = {}) {
+      const wasPhase = state.world?.mission?.phase ?? 'none';
+      state.worldTick += 1;
+      state.world = { runner, hunter, mission };
+
+      const ageSeconds = 0.5;                       // the TV reports twice a second
+      if (hunter?.room) {
+        const prev = state.worldStale;
+        const aged = (prev?.age ?? STALE_MAX) + ageSeconds;
+        state.worldStale = aged >= STALE_MAX
+          ? { ...hunter, age: 0 }
+          : { ...prev, age: aged };
+      }
+
+      const phase = mission?.phase ?? 'none';
+      const moved = phase !== wasPhase;
+      if (moved && phase !== 'none') {
+        /*
+         * 🚨 PUBLIC, AND CARRYING NO ATTRIBUTION. `party-anon` A4's rule applies to a mission
+         * beat exactly as it does to a failure: the room may know the painting broke, and may not
+         * be told anything about who was standing where when it did. The room id is the ROOM, and
+         * the pair is already public on `pair`.
+         */
+        record(makeEvent(`mission.${phase}`, VIS.PUBLIC, { room: mission?.room ?? null }));
+        if (phase === 'done') setPhase('DEBRIEF');
+      }
+      broadcast();
+      return moved;
+    },
     /**
      * Published face colours. Closed palette — unknown hex is ignored.
      * Does not broadcast; the transport fans the lobby snapshot.

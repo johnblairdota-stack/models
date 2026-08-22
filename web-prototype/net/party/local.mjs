@@ -38,6 +38,7 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
 import { createRoom } from '../../src/party/room.js';
+import { WARM_STAGES, moveViolations, warmPct, worldViolations } from '../../src/party/follow.js';
 import { isShowBeat, recapAfterMs } from '../../src/party/show.js';
 
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
@@ -188,6 +189,13 @@ export const FANOUT_KEYS = {
   ballots: ['t', 'votes'],
   ballotVote: ['voter', 'runner', 'guide'],
   show: ['t', 'beat'],
+  /*
+   * 🔥 How far along the TV's mansion bake is. Public, because it is the ROOM's wait, not the
+   * TV's: `docs/slices/task-prime-time-lobby-warm-night.md` §3.4, and John's playtest note that
+   * the load had "no loading indicator". A percentage and one of five stage words is the whole
+   * payload — there is no room, no seed and no cast on it, so there is nothing here to filter.
+   */
+  warm: ['t', 'pct', 'stage'],
 };
 export const FANOUT_FORBIDDEN = ['role', 'alignment', 'cover', 'claim', 'castSeed', 'you', 'teammates', 'flyover', 'hunter', 'deal'];
 
@@ -211,6 +219,8 @@ export function fanoutViolations(msg) {
     for (let i = 0; i < (msg.votes || []).length; i++) extraKeys(msg.votes[i], FANOUT_KEYS.ballotVote, `ballots.votes[${i}]`, bad);
   } else if (msg.t === 'show') {
     extraKeys(msg, FANOUT_KEYS.show, 'show', bad);
+  } else if (msg.t === 'warm') {
+    extraKeys(msg, FANOUT_KEYS.warm, 'warm', bad);
   } else {
     bad.push(`t:${msg.t}`);
   }
@@ -371,6 +381,64 @@ function handleClient(room, bound, self, msg) {
     }
     return;
   }
+  /*
+   * 🔥 THE WARM — the TV telling the room how far along its bake is.
+   *
+   * TV-only, because the TV is the only socket that has a mansion in it. It is fanned to
+   * everybody rather than kept on the host screen because the wait belongs to the room: a phone
+   * that has just typed its name wants to know the night is loading, not wonder whether the host
+   * has wandered off. `stage` is validated against `WARM_STAGES` so a typo reads as 0% rather than
+   * as a bar that sticks at an arbitrary place forever.
+   */
+  if (msg.t === 'warm' && isTV) {
+    const stage = WARM_STAGES.includes(msg.stage) ? msg.stage : WARM_STAGES[0];
+    room.warm = { stage, pct: warmPct(stage) };
+    fanout(room, { t: 'warm', stage, pct: room.warm.pct });
+    return;
+  }
+
+  /*
+   * 🕹️ THE PAD — the runner's thumbs, relayed to the one screen that has a body to move.
+   *
+   * ⚠️ DIRECTED TO THE TV, NEVER FANNED. This is not squeamishness about the data (a stick vector
+   * says nothing the TV is not already showing everybody); it is that a 20 Hz message multiplied
+   * by every socket in the room is eight times the traffic for seven sockets that would throw it
+   * away. `fanout()` is for facts the room shares; this is a control input with one consumer.
+   *
+   * The sender is checked against `pair.runner`, so a phone that is not running cannot drive the
+   * body — the ballot is what grants control, not the willingness to send.
+   */
+  if (msg.t === 'move' && self && !isTV && self.playerId) {
+    if (room.game.state.pair?.runner !== self.playerId) return;
+    if (moveViolations(msg).length) return;
+    const out = {
+      t: 'move', x: +msg.x || 0, y: +msg.y || 0,
+      run: !!msg.run, swing: !!msg.swing, act: msg.act ?? 0,
+    };
+    for (const s of room.game.sockets) if (s.isTV) push(room, s.id, out);
+    return;
+  }
+
+  /*
+   * 🌍 THE WORLD REPORT — the TV saying where the bodies are, so the server can decide who is
+   * told.
+   *
+   * 🚨 THE TV IS THE WORLD AUTHORITY AND THAT IS A STATEMENT ABOUT THIS PROTOTYPE, NOT A DESIGN
+   * IDEAL. `playEpisode` has never simulated an expedition — it resolves a whole episode
+   * synchronously — and the mansion exists only inside the follow slot. So the only process that
+   * knows where the runner is standing is the one rendering him. The server's job here is the one
+   * it is actually good at: taking a fact and deciding, per socket, who may have it.
+   *
+   * `worldViolations` is what stops this from becoming a general-purpose pipe into the frame. A
+   * report may carry rooms, coordinates and a mission phase. It is structurally incapable of
+   * carrying a role.
+   */
+  if (msg.t === 'world' && isTV) {
+    if (worldViolations(msg).length) return;
+    room.game.setWorld({ runner: msg.runner, hunter: msg.hunter, mission: msg.mission });
+    return;
+  }
+
   if (msg.t === 'show' && typeof msg.beat === 'string') {
     // Host workaround ("Watch the run") and N14 pacing. Not the product clock.
     if (msg.beat !== 'expedition') clearShowClock(room);

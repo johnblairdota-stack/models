@@ -21,8 +21,32 @@ export const FOLLOW_BEATS = ['expedition'];
 
 /** Closed allow-list — what the TV may SEND. A param not on this list is a violation, not a pass. */
 export const FOLLOW_KEYS = [
-  'view', 'room', 'runner', 'name', 'shell', 'accent', 'seed', 'throttle', 'tag',
+  'view', 'room', 'runner', 'name', 'shell', 'accent', 'seed', 'throttle', 'tag', 'warm',
 ];
+
+/**
+ * 🔥 **THE WARM SLOT — the same view, mounted at LOBBY, carrying no cast at all.**
+ *
+ * `docs/slices/task-prime-time-lobby-warm-night.md` §3.1. John's playtest note on `bb7cf6a`:
+ * *"the mansion only loaded AFTER nominations locked, took a long time, and had no loading
+ * indicator."* All three are the same defect — `followUrl()` returns `null` until there is a
+ * runner, so the iframe is created at the moment the room stops looking at anything else, and
+ * then spends 22.6-23.7 s (`show.js`'s own measured figure) fetching a 9.0 MB character and
+ * baking a mansion behind a slate.
+ *
+ * The warm slot is the fix and it is a URL, not a flag: `?view=party.follow&warm=1&seed=N`. It
+ * carries **no runner, no name and no look**, for one reason that is worth more than the
+ * tidiness — those are the fields that CHANGE during a night, and a slot URL that changed would
+ * reassign `iframe.src`, and reassigning `src` is a reload (`party-host.js` `ensureFollow`). One
+ * URL per night means one WebGL context, one fetch and one bake per night. Everything that varies
+ * arrives on the cue channel below instead.
+ *
+ * ⚠️ **`FOLLOW_BEATS` IS NOT WIDENED AND MUST NOT BE.** The obvious implementation — add `'lobby'`
+ * to `FOLLOW_BEATS` so `followUrl` starts returning a string earlier — turns `party-follow` F0c
+ * (`FOLLOW_BEATS.length === 1`) red, and it would also mean the lobby slot carried a runner field
+ * it has no business having. Separate function, separate key list, same forbidden list.
+ */
+export const WARM_KEYS = ['view', 'room', 'seed', 'warm'];
 
 /**
  * ⚠️ **INSTRUMENTS — what a developer may TYPE, and a separate list on purpose.**
@@ -62,6 +86,28 @@ export const FOLLOW_FORBIDDEN = [
   'flyover', 'hunter', 'deal',
   'marks', 'lid', 'plan',
 ];
+
+/**
+ * 🚨 **THE IDENTITY SECRETS — the subset of `FOLLOW_FORBIDDEN` that is forbidden in BOTH
+ * DIRECTIONS, and the distinction is not pedantry.**
+ *
+ * `FOLLOW_FORBIDDEN` is a rule about what may be sent *into* the renderer, and most of it is
+ * SPATIAL: `hunter`, `flyover`, `marks`, `lid` and `plan` are on that list because a TV that was
+ * told them would put a god-view on the shared screen. `docs/slices/task-prime-time-lobby-warm-
+ * night.md` §3.6 adds a channel pointing the other way — the TV reporting to the server where the
+ * bodies it is already rendering have got to — and on that channel `hunter` is not a leak, it is
+ * the payload. The TV cannot leak to itself something it computed.
+ *
+ * What stays forbidden in every direction is IDENTITY. No message on any channel, at any time,
+ * carries a role, an alignment, a cover, a claim, the cast seed, a `you` or a teammate list. That
+ * is `party-loop.md`'s hidden-role floor and it does not have a direction.
+ *
+ * Derived from `FOLLOW_FORBIDDEN` rather than restated, so a word added there is refused here
+ * unless it is deliberately excluded as spatial — and `harness/party-warm.mjs` W4h asserts the
+ * partition covers the whole list.
+ */
+export const SPATIAL_WORDS = ['flyover', 'hunter', 'marks', 'lid', 'plan'];
+export const IDENTITY_SECRETS = FOLLOW_FORBIDDEN.filter((k) => !SPATIAL_WORDS.includes(k));
 
 /** The four the phone pad already sends (`views/party-phone.js`). Anything else is STILL. */
 export const THROTTLES = ['STILL', 'CREEP', 'WALK', 'RUN'];
@@ -199,4 +245,212 @@ export function followUrl(opts = {}) {
   const origin = opts.origin
     ?? (typeof location !== 'undefined' ? location.origin : 'http://localhost:5178');
   return `${origin}/?${new URLSearchParams(p).toString()}`;
+}
+
+// =============================================================================================
+// THE WARM SLOT AND THE CUE CHANNEL
+// =============================================================================================
+
+/** Normalise a room code the same way `followUrl` does, so the two slots agree byte for byte. */
+function cleanRoom(room) {
+  return String(room ?? '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8);
+}
+
+/**
+ * The night-long slot's params. Pure, and **constant for the whole night** — that is the property
+ * the whole design rests on, so it takes only the two things that cannot change once the room
+ * exists.
+ *
+ * ⚠️ `seed` IS NEVER ABSENT. `followParams` drops a non-numeric seed, which is right for a slot
+ * that is rebuilt per episode and wrong here: a slot mounted with no seed and later rebuilt with
+ * one is a second bake, in front of the room. A missing or unparseable `worldSeed` becomes `0`.
+ */
+export function warmParams({ room, worldSeed } = {}) {
+  const seed = Number(worldSeed);
+  const out = {
+    view: FOLLOW_VIEW,
+    warm: '1',
+    seed: String(Number.isFinite(seed) ? (seed | 0) : 0),
+  };
+  const r = cleanRoom(room);
+  if (r) out.room = r;
+  return out;
+}
+
+/** Empty = the warm slot holds. A stricter list than the run slot's, because it carries less. */
+export function warmViolations(input) {
+  const bad = followViolations(input);
+  let params;
+  if (input instanceof URLSearchParams) params = input;
+  else if (typeof input === 'string') {
+    try { params = new URL(input, 'http://x').searchParams; } catch { return ['<unparseable>']; }
+  } else if (input && typeof input === 'object') {
+    params = new URLSearchParams();
+    for (const [k, v] of Object.entries(input)) if (v != null) params.set(k, String(v));
+  } else return ['<empty>'];
+  for (const k of new Set([...params.keys()])) {
+    if (!WARM_KEYS.includes(k) && !bad.includes(`follow.${k}`)) bad.push(`warm.${k}`);
+  }
+  return bad;
+}
+
+/**
+ * The `src` for the TV's night-long mansion iframe. Never `null` — there is always a house to
+ * warm, even before anyone has joined, which is the earliest the bake can possibly start.
+ */
+export function warmUrl(opts = {}) {
+  const p = warmParams(opts);
+  const bad = warmViolations(p);
+  if (bad.length) throw new Error(`warm closed schema: ${bad.join(', ')}`);
+  const origin = opts.origin
+    ?? (typeof location !== 'undefined' ? location.origin : 'http://localhost:5178');
+  return `${origin}/?${new URLSearchParams(p).toString()}`;
+}
+
+/**
+ * 🔁 **THE CUE CHANNEL — the second way into a renderer that used to have only one.**
+ *
+ * The warm slot's URL is fixed for the night, so everything that varies has to arrive some other
+ * way, and that way is `postMessage` from the host. That is a real widening of this view's attack
+ * surface and it is treated as one: a cue goes through a closed, per-kind allow-list that reuses
+ * `FOLLOW_FORBIDDEN` verbatim, and a violation THROWS at both ends rather than being dropped.
+ *
+ * The reasoning is `follow.js`'s own, one channel over. The follow view still has no socket; it
+ * still cannot read the room. What it can now be TOLD is exactly these five shapes and nothing
+ * else, and the words that may never appear in any of them are the same words that may never
+ * appear in a URL or on the public side-channel.
+ *
+ * `intros.cast[]` looks like the widest of these and is in fact the narrowest kind of data on the
+ * wire: `id`, `seat`, `name`, `shell`, `accent` are precisely `FANOUT_KEYS.lobbySeat`'s public
+ * fields, already fanned out to every socket in the room by a decision that predates this slice.
+ */
+export const CUE_KINDS = ['intros', 'run', 'move', 'shot', 'idle'];
+
+/** Per-kind closed allow-lists. A key not listed for its kind is a violation, not a pass. */
+export const CUE_KEYS = {
+  intros: ['kind', 'cast'],
+  run: ['kind', 'runner', 'name', 'shell', 'accent'],
+  move: ['kind', 'x', 'y', 'run', 'swing', 'act'],
+  shot: ['kind', 'shot'],
+  idle: ['kind'],
+};
+
+/** What one seat may contribute to an `intros` cue. `FANOUT_KEYS.lobbySeat`'s public subset. */
+export const CUE_CAST_KEYS = ['id', 'seat', 'name', 'shell', 'accent'];
+
+function scanKeys(obj, allowed, path, bad, forbidden = FOLLOW_FORBIDDEN) {
+  if (!obj || typeof obj !== 'object') { bad.push(`${path}:<not an object>`); return; }
+  for (const k of Object.keys(obj)) {
+    if (forbidden.includes(k)) bad.push(`${path}.${k}`);
+    else if (!allowed.includes(k)) bad.push(`${path}.${k}`);
+  }
+}
+
+/** Empty = the cue holds. Used as an assertion by the gate and as a throw by both ends. */
+export function cueViolations(cue) {
+  const bad = [];
+  if (!cue || typeof cue !== 'object') return ['<empty>'];
+  const kind = cue.kind;
+  if (!CUE_KINDS.includes(kind)) return [`cue.kind=${String(kind)}`];
+  scanKeys(cue, CUE_KEYS[kind], `cue.${kind}`, bad);
+  if (kind === 'intros') {
+    const cast = cue.cast;
+    if (!Array.isArray(cast)) bad.push('cue.intros.cast:<not an array>');
+    else cast.forEach((s, i) => scanKeys(s, CUE_CAST_KEYS, `cue.intros.cast[${i}]`, bad));
+  }
+  if (kind === 'shot' && cue.shot != null && !SHOT_NAMES.includes(cue.shot)) {
+    bad.push(`cue.shot.shot=${cue.shot}`);
+  }
+  return bad;
+}
+
+/**
+ * 📊 **THE WARM STAGES — five named milestones with fixed percentages, and no fake ease.**
+ *
+ * A progress bar that interpolates on a timer is a lie that gets found out on a slow TV, which is
+ * the only machine where the bar matters. These are the five points the view can honestly say it
+ * has reached, and the numbers are roughly proportional to the measured time each span takes on a
+ * software rasteriser (the GLB fetch and the material bake dominate; `finalizeScene`'s compile
+ * pass is the last fifth).
+ *
+ * They live here rather than in the view because `harness/party-warm.mjs` asserts the ladder is
+ * monotonic and ends at exactly 100 in bare node, with no browser.
+ */
+export const WARM_STAGES = ['boot', 'engine', 'house', 'dress', 'ready'];
+
+const WARM_PCT = { boot: 8, engine: 22, house: 55, dress: 80, ready: 100 };
+
+export function warmPct(stage) {
+  return WARM_PCT[String(stage ?? '')] ?? 0;
+}
+
+/** What the TV prints next to the bar. Never a room name — the TV is still not the map. */
+export function warmLabel(stage) {
+  if (stage === 'ready') return 'the mansion is ready';
+  if (stage === 'dress') return 'dressing the rooms';
+  return 'warming the mansion';
+}
+
+/**
+ * 🕹️ **THE PAD — what a runner's phone may say about its own thumbs, and nothing else.**
+ *
+ * `party-loop.md` line 21 makes the runner a first-person body in dark corridors; D13 shipped a
+ * four-button throttle that the phone did not even send. This is the wire for a real stick, and it
+ * is deliberately a STICK and not a POSITION: the phone says where its thumb is, the TV owns where
+ * the body ends up. A phone that could post a position could post any position.
+ */
+export const MOVE_KEYS = ['t', 'x', 'y', 'run', 'swing', 'act'];
+
+export function moveViolations(msg) {
+  const bad = [];
+  if (!msg || typeof msg !== 'object') return ['<empty>'];
+  scanKeys(msg, MOVE_KEYS, 'move', bad);
+  for (const k of ['x', 'y']) {
+    const v = Number(msg[k]);
+    if (!Number.isFinite(v) || v < -1.001 || v > 1.001) bad.push(`move.${k}=${msg[k]}`);
+  }
+  return bad;
+}
+
+/**
+ * 🌍 **THE WORLD REPORT — the TV telling the server where the bodies are.**
+ *
+ * ⚠️ **THE ARROW POINTS THIS WAY BECAUSE NOTHING ELSE KNOWS.** `src/party/room.js`'s `playEpisode`
+ * runs an entire episode synchronously and has never simulated an expedition; the mansion only
+ * exists inside the follow slot. So the TV is the world authority and the server is the
+ * ENTITLEMENT FILTER — which is the right split, because it keeps hidden-role filtering in
+ * `net/party/entitle.js` where it already lives instead of growing a second copy.
+ *
+ * ⚠️ **THIS CHANNEL SCANS `IDENTITY_SECRETS`, NOT `FOLLOW_FORBIDDEN`, AND THE DIFFERENCE IS THE
+ * DIRECTION OF THE ARROW.** `hunter` is a forbidden word on every channel that points INTO the
+ * renderer, because a TV that was told where the hunter is would put it on the shared screen. This
+ * channel points OUT of the renderer: the hunter's position is the payload, reported by the one
+ * process that computed it, so that the server can decide who is told. See `IDENTITY_SECRETS`.
+ *
+ * 🚨 What remains structurally impossible is a role. Rooms and coordinates are facts about the
+ * house; `role`, `alignment`, `cover`, `claim`, `castSeed`, `you`, `teammates` and `deal` are
+ * facts about a person, and not one of them has a key here or can be added by accident.
+ */
+export const WORLD_KEYS = ['t', 'runner', 'hunter', 'mission', 'seq'];
+export const WORLD_SPOT_KEYS = ['room', 'x', 'z'];
+export const WORLD_MISSION_KEYS = ['phase', 'room'];
+
+/** The mission's four states. `none` before it is placed; `done` when the runner is home. */
+export const MISSION_PHASES = ['none', 'seek', 'return', 'done'];
+
+export function worldViolations(msg) {
+  const bad = [];
+  if (!msg || typeof msg !== 'object') return ['<empty>'];
+  scanKeys(msg, WORLD_KEYS, 'world', bad, IDENTITY_SECRETS);
+  for (const k of ['runner', 'hunter']) {
+    if (msg[k] == null) continue;
+    scanKeys(msg[k], WORLD_SPOT_KEYS, `world.${k}`, bad, IDENTITY_SECRETS);
+  }
+  if (msg.mission != null) {
+    scanKeys(msg.mission, WORLD_MISSION_KEYS, 'world.mission', bad, IDENTITY_SECRETS);
+    if (msg.mission.phase != null && !MISSION_PHASES.includes(msg.mission.phase)) {
+      bad.push(`world.mission.phase=${msg.mission.phase}`);
+    }
+  }
+  return bad;
 }
