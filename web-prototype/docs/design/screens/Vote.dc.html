@@ -1,0 +1,165 @@
+<script src="./support.js"></script>
+<div class="board"><style>
+:root{--ink:#f2f4f8;--dim:#8b93a3;--bg:#0b0d12;--panel:#161b25;--edge:#262d3d;
+ --tvp:#141821;--tve:#232937;--live:#4cc27a;--gone:#e4483a;--warn:#e0b23c}
+*{box-sizing:border-box;margin:0;padding:0}
+.board{width:1420px;height:1075px;background:var(--bg);color:var(--ink);
+ font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;padding:30px 32px;
+ display:flex;flex-direction:column;gap:16px}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:#a9b4c8}
+.hd{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;
+ border-bottom:1px solid var(--edge);padding-bottom:13px}
+.hd .l .ph-n{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--warn)}
+.hd .l h2{font-size:31px;font-weight:700;letter-spacing:-.02em;margin-top:3px}
+.hd .l p{font-size:13px;color:var(--dim);line-height:1.45;margin-top:6px;max-width:840px}
+.hd .r{text-align:right;flex:0 0 auto}
+.hd .r .s{font-size:36px;font-weight:700;letter-spacing:-.03em;line-height:1}
+.hd .r .u{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin-top:5px}
+.badge{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+ color:#0b0d12;background:var(--live);border-radius:4px;padding:2px 6px;margin-left:7px;vertical-align:middle}
+/* ---- television */
+.tvwrap{display:flex;justify-content:center}
+.tv{width:860px;background:var(--tvp);border:1px solid var(--tve);border-radius:10px;
+ box-shadow:0 18px 44px -22px #000;position:relative;padding:26px 30px;min-height:342px;
+ display:flex;flex-direction:column;justify-content:center;gap:13px}
+.tv::before{content:"THE TELEVISION";position:absolute;top:-9px;left:20px;background:var(--bg);padding:0 8px;
+ font-size:9px;letter-spacing:.2em;color:#5f6e8a}
+.tv .big{font-size:40px;font-weight:700;letter-spacing:-.025em;line-height:1.05}
+.tv .sub{font-size:15.5px;color:var(--dim);line-height:1.45}
+.bad{color:var(--gone)} .cl{color:var(--live)}
+.shot{border-radius:8px;overflow:hidden;border:1px solid var(--tve);position:relative;background:#0c1017}
+.shotsvg{display:block;width:100%;height:186px}
+.shot-hud{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:space-between;
+ padding:7px 11px;font:600 10px/1 ui-monospace,Menlo,monospace;letter-spacing:.14em;color:#8b93a3;
+ background:linear-gradient(transparent,#0b0d12cc)}
+.shot-hud .clk{color:var(--warn)}
+.facts{display:grid;grid-template-columns:auto 1fr;gap:5px 22px;margin-top:4px}
+.facts dt{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);align-self:center}
+.facts dd{font-size:16px;font-weight:600}
+.slate{margin-top:8px;border-top:1px solid var(--tve);padding-top:10px}
+.slate .h{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);margin-bottom:7px}
+.slate table{width:100%;border-collapse:collapse;font-size:13px;font-weight:600}
+.slate td,.slate th{padding:3px 8px;text-align:left}
+.slate thead th{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);font-weight:600}
+.slate tbody tr{border-top:1px solid var(--tve)}
+.slate tbody th{color:var(--dim);font-weight:600}
+.slate .self{color:var(--warn);font-size:8.5px;letter-spacing:.12em}
+.slate .dm{color:var(--dim)}
+.noms .n{font-size:16px;margin-top:5px}
+.noms .n b{font-weight:700}
+.roll{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:6px}
+.roll div{background:#1a1f2b;border:1px solid var(--tve);border-radius:7px;padding:7px 9px;font-size:12.5px}
+.roll span{display:block;color:var(--dim);font-size:10.5px;margin-top:2px}
+/* ---- phones */
+.rail-h{font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;color:#5f6e8a;text-align:center}
+.rail{display:flex;gap:9px;justify-content:center}
+.ph{width:158px;background:var(--panel);border:1px solid var(--edge);border-radius:13px;padding:8px;
+ display:flex;flex-direction:column;gap:6px}
+.ph.evil{border-color:#3a2226} .ph.guide{border-color:#2f4a38} .ph.runner{border-color:#3a3320}
+.ph.holds{border-color:#3d3016} .ph.off{opacity:.5}
+.ph-top{display:flex;align-items:center;gap:5px;font-size:10px}
+.seat{width:15px;height:15px;border-radius:50%;background:#232b3b;color:var(--dim);
+ display:flex;align-items:center;justify-content:center;font-size:8.5px;font-weight:700;flex:none}
+.nm{font-weight:600;font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tag{font-size:7.5px;font-weight:700;letter-spacing:.1em;padding:2px 4px;border-radius:3px}
+.tag.guide{background:#1d3327;color:var(--live)} .tag.runner{background:#332c18;color:var(--warn)}
+.ph-scr{background:#0d1017;border:1px solid #1e2532;border-radius:9px;padding:9px;flex:1;
+ display:flex;flex-direction:column;gap:7px;min-height:258px}
+.ph-foot{font-size:8px;line-height:1.3;text-align:center}
+.ph-foot .w{color:var(--warn)} .ph-foot .r{color:var(--gone)} .ph-foot .g{color:var(--live)}
+.say{font-size:10.5px;line-height:1.4;color:var(--dim)}
+.btns{display:flex;flex-direction:column;gap:4px;margin-top:auto}
+.btn{background:#1a2130;border:1px solid #283143;border-radius:7px;padding:6px;text-align:center;
+ font-size:10px;font-weight:600}
+.btn.big{padding:9px;font-size:11.5px;background:#20293a}
+.dk{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;text-align:center}
+.dk-i{color:#2a3244;font-size:15px} .dk-t{font-size:9.5px;color:#5f6e8a;line-height:1.45}
+.idle{margin-top:auto;text-align:center;color:#3d4658;font-size:9.5px}
+.card .c-role{font-size:15px;font-weight:700;letter-spacing:-.01em}
+.card .c-al{font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin-top:2px}
+.card .c-al.evil{color:var(--gone)}
+.card .c-line{font-size:9.5px;line-height:1.42;color:var(--dim);margin-top:7px}
+.panel-blk{margin-top:8px;border-top:1px solid #1e2532;padding-top:6px;font-size:9px}
+.panel-blk b{display:block;color:var(--gone);font-size:8px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:3px}
+.panel-blk span{display:block;color:var(--dim);line-height:1.4}
+.pick{margin-top:auto} .pk-h{font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:#5f6e8a;margin:5px 0 3px}
+.map{background:#0b0e14;border:1px solid #1e2532;border-radius:7px;padding:6px}
+.mp-h{font-size:7.5px;letter-spacing:.14em;color:#5f6e8a;margin-bottom:4px}
+.mp{width:100%;display:block}
+.mp-r{font-size:9.5px;font-weight:700;color:var(--dim);margin-top:4px;letter-spacing:.06em}
+.mp-r span{font-weight:400;letter-spacing:0}
+.stick{height:56px;background:#0b0e14;border:1px solid #1e2532;border-radius:7px;position:relative;margin-top:auto}
+.knob{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:26px;height:26px;
+ border-radius:50%;background:#232b3b;border:1px solid #2f3a4e}
+.plate{background:#0b0e14;border:1px solid #1e2532;border-radius:7px;padding:7px;margin-top:4px}
+.pl-h{font-size:7.5px;letter-spacing:.14em;color:#5f6e8a} .pl-v{font-size:12px;font-weight:600;margin-top:3px}
+.pl-s{font-size:8px;color:#4d566a;margin-top:2px}
+.doss{margin-top:6px;border-top:1px solid #2b2415;padding-top:6px}
+.ds-h{font-size:7.5px;letter-spacing:.14em;color:var(--warn);margin-bottom:5px}
+.ds-r{display:grid;grid-template-columns:26px 1fr;gap:1px 5px;font-size:9px;margin-top:6px}
+.ds-r span{color:#5f6e8a;font-size:8px;padding-top:1px}
+.ds-r b{font-weight:600;line-height:1.25}
+.ds-r i{grid-column:2;font-style:normal;font-weight:700;font-size:8px;letter-spacing:.08em}
+.ds-r i.yes{color:var(--warn)} .ds-r i.no{color:var(--dim)}
+.ds-n{font-size:7.5px;color:#4d566a;margin-top:6px;line-height:1.35}
+/* ---- footer note */
+.note{margin-top:auto;background:var(--panel);border:1px solid var(--edge);border-left:3px solid var(--warn);
+ border-radius:11px;padding:12px 16px;font-size:12.5px;line-height:1.5;color:#cfd5e0}
+.note b{color:var(--ink);font-weight:600} .note i{font-style:italic;color:var(--dim)}
+.oncl{background:#101a14;border:1px solid #234533;border-left:3px solid var(--live);
+ border-radius:11px;padding:10px 16px;font-size:12.5px;color:#cfe6d8}
+</style>
+  <div class="hd">
+    <div class="l">
+      <div class="ph-n">07 · episode 2</div>
+      <h2>VOTE</h2>
+      <p>Held back until close, so the last voter is never decisive.</p>
+    </div>
+    <div class="r"><div class="s">25</div><div class="u">seconds</div></div>
+  </div>
+  <div class="tvwrap"><div class="tv"><div class="big">Vote.</div><div class="sub">More than half the living, or nobody swings. Abstaining protects them.</div></div></div>
+  
+  <div class="rail-h">the eight phones</div>
+  <div class="rail"><div class="ph">
+    <div class="ph-top"><span class="seat">1</span><span class="nm">Ana</span>
+      </div>
+    <div class="ph-scr"><div class="say">More than half the living, or nobody swings. Abstaining protects them.</div><div class="btns"><div class="btn big">Finn</div><div class="btn big">Gus</div><div class="btn big">Abstain</div></div></div>
+    
+  </div><div class="ph">
+    <div class="ph-top"><span class="seat">2</span><span class="nm">Ben</span>
+      <span class="tag runner">RUNNER</span></div>
+    <div class="ph-scr"><div class="say">More than half the living, or nobody swings. Abstaining protects them.</div><div class="btns"><div class="btn big">Finn</div><div class="btn big">Gus</div><div class="btn big">Abstain</div></div></div>
+    
+  </div><div class="ph">
+    <div class="ph-top"><span class="seat">3</span><span class="nm">Cass</span>
+      </div>
+    <div class="ph-scr"><div class="say">More than half the living, or nobody swings. Abstaining protects them.</div><div class="btns"><div class="btn big">Finn</div><div class="btn big">Gus</div><div class="btn big">Abstain</div></div></div>
+    
+  </div><div class="ph">
+    <div class="ph-top"><span class="seat">4</span><span class="nm">Dev</span>
+      </div>
+    <div class="ph-scr"><div class="say">More than half the living, or nobody swings. Abstaining protects them.</div><div class="btns"><div class="btn big">Finn</div><div class="btn big">Gus</div><div class="btn big">Abstain</div></div></div>
+    
+  </div><div class="ph">
+    <div class="ph-top"><span class="seat">5</span><span class="nm">Eve</span>
+      </div>
+    <div class="ph-scr"><div class="say">More than half the living, or nobody swings. Abstaining protects them.</div><div class="btns"><div class="btn big">Finn</div><div class="btn big">Gus</div><div class="btn big">Abstain</div></div></div>
+    
+  </div><div class="ph">
+    <div class="ph-top"><span class="seat">6</span><span class="nm">Finn</span>
+      <span class="tag guide">GUIDE</span></div>
+    <div class="ph-scr"><div class="say">More than half the living, or nobody swings. Abstaining protects them.</div><div class="btns"><div class="btn big">Finn</div><div class="btn big">Gus</div><div class="btn big">Abstain</div></div></div>
+    
+  </div><div class="ph">
+    <div class="ph-top"><span class="seat">7</span><span class="nm">Gus</span>
+      </div>
+    <div class="ph-scr"><div class="say">More than half the living, or nobody swings. Abstaining protects them.</div><div class="btns"><div class="btn big">Finn</div><div class="btn big">Gus</div><div class="btn big">Abstain</div></div></div>
+    
+  </div><div class="ph">
+    <div class="ph-top"><span class="seat">8</span><span class="nm">Hana</span>
+      </div>
+    <div class="ph-scr"><div class="say">More than half the living, or nobody swings. Abstaining protects them.</div><div class="btns"><div class="btn big">Finn</div><div class="btn big">Gus</div><div class="btn big">Abstain</div></div></div>
+    
+  </div></div>
+  <div class="note">A vote may be changed until the phase closes and is not aired until then. <b>The vote is still worth about two points over guessing</b> — 24.8% of executions hit Production against a 22.7% baseline — and today’s two evidence channels are not in that number.</div>
+</div>

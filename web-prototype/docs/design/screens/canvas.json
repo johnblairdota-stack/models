@@ -1,0 +1,103 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1420,
+      "h": 1075,
+      "title": "PREMIERE"
+    },
+    {
+      "file": "Casting.dc.html",
+      "x": 1550,
+      "y": 0,
+      "w": 1420,
+      "h": 1075,
+      "title": "CASTING"
+    },
+    {
+      "file": "Expedition.dc.html",
+      "x": 3100,
+      "y": 0,
+      "w": 1420,
+      "h": 1075,
+      "title": "EXPEDITION"
+    },
+    {
+      "file": "Recap.dc.html",
+      "x": 4650,
+      "y": 0,
+      "w": 1420,
+      "h": 1075,
+      "title": "RECAP"
+    },
+    {
+      "file": "Debrief.dc.html",
+      "x": 6200,
+      "y": 0,
+      "w": 1420,
+      "h": 1075,
+      "title": "DEBRIEF"
+    },
+    {
+      "file": "Reckoning.dc.html",
+      "x": 0,
+      "y": 1285,
+      "w": 1420,
+      "h": 1075,
+      "title": "RECKONING"
+    },
+    {
+      "file": "Vote.dc.html",
+      "x": 1550,
+      "y": 1285,
+      "w": 1420,
+      "h": 1075,
+      "title": "VOTE"
+    },
+    {
+      "file": "Execution.dc.html",
+      "x": 3100,
+      "y": 1285,
+      "w": 1420,
+      "h": 1075,
+      "title": "EXECUTION"
+    },
+    {
+      "file": "Verdict.dc.html",
+      "x": 4650,
+      "y": 1285,
+      "w": 1420,
+      "h": 1075,
+      "title": "VERDICT"
+    },
+    {
+      "file": "Reunion.dc.html",
+      "x": 6200,
+      "y": 1285,
+      "w": 1420,
+      "h": 1075,
+      "title": "REUNION"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "how",
+      "x": 0,
+      "y": -170,
+      "w": 640,
+      "text": "One episode, eight players, read left to right. The television is the shared screen; the eight phones below it are what each seat is actually holding at that moment. Copy is lifted verbatim from show-tv.html and show-phone.html."
+    },
+    {
+      "id": "deal",
+      "x": 760,
+      "y": -170,
+      "w": 640,
+      "text": "The deal: Ana Continuity · Ben Camera Op · Cass Focus Puller · Dev Editor · Eve GLITCHED, covered as Continuity · Finn The Static · Gus The Plant (evil) · Hana The Producer (evil). Ben runs, Finn guides."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}
