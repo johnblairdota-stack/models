@@ -32,12 +32,13 @@ import {
 } from '../src/party/follow.js';
 import {
   HOME_ROOM, MISSION_ROOM, PLAN_OPTS, PLAN_TRIES,
-  pickPlanSeed, planFor, planOptsFor, planPasses, planRegions, roomLabel,
+  pickPlanSeed, planFor, planOptsFor, planPasses, planRegions, roomLabel, spaceLabel,
 } from '../src/party/mansion.js';
 import { buildPlan } from './genspike.mjs';
 import { DROP_RATE, GRADES, STALE_MAX, gradeFor, intelFor, intelLine } from '../src/party/intel.js';
 import { GUIDE_MAP_CSS, guideMapSvg } from '../src/party/guidemap.js';
 import { ACCENTS, SHELLS, cleanLook } from '../src/party/look.js';
+import { COMPOSITION, dealCast } from '../src/party/cast.js';
 import { isNightToken } from '../src/party/palette.js';
 import { MATRIX } from '../net/party/entitle.js';
 import { FANOUT_KEYS, fanoutViolations } from '../net/party/local.mjs';
@@ -343,8 +344,32 @@ console.log('\nparty-warm — the lobby-warm night');
     `good {${goodPaths}} vs evil {${evilPaths}}`);
 
   t('W7j · the copy never implies more precision than the data has',
-    !/\d+\.\d/.test(intelLine(good)) && /exact|Hunter/.test(intelLine(evil)),
+    !/\d+\.\d/.test(intelLine(good)) && /Hunter/.test(intelLine(evil)),
     intelLine(good));
+
+  /*
+   * 🗣️ THE FIRST BROWSER PASS PHOTOGRAPHED THIS LINE READING *"Something somewhere near them,
+   * c0.3."* — a raw corridor rect id, on the one screen whose entire job is a person saying a room
+   * name to the room. Room NAMING is the guide's job (`party-loop.md` line 20); a name nobody can
+   * pronounce hands them nothing. Asserted on the rendered copy rather than on `spaceLabel` alone,
+   * because the defect was that the line never called it.
+   */
+  t('W7m · a room reaches the copy as something a person can say out loud',
+    spaceLabel('r1.gallery') === 'the Gallery' && spaceLabel('r0.ballroom') === 'the Ballroom');
+  t('W7n · and a corridor stays vague — there are nine of them and none has a name',
+    spaceLabel('c0.3') === 'a passage' && spaceLabel('c12.0') === 'a passage'
+    && spaceLabel(null) === 'somewhere');
+  const spoken = [
+    intelLine(intelFor({ alignment: 'good', world, cameras: lit, roll: 1 })),
+    intelLine(intelFor({ alignment: 'evil', world, cameras: lit, roll: 1 })),
+    intelLine(intelFor({
+      alignment: 'good', cameras: lit, roll: 1,
+      world: { runner: { room: 'c0.3', x: 0, z: 0 }, hunter: { room: 'c0.3', x: 1, z: 1 } },
+    })),
+  ];
+  const raw = spoken.filter((l) => /\b[rc]\d+\./.test(l));
+  t('W7o · no intel line anywhere prints a raw space id',
+    raw.length === 0, raw.join(' | ') || spoken[1]);
 
   /*
    * Every field intel emits has to have a row in the entitlement matrix, or `project()` drops it
@@ -420,6 +445,65 @@ console.log('\nparty-warm — the lobby-warm night');
     fanoutViolations({ t: 'warm', pct: 55, stage: 'house', role: 'PLANT' }).length > 0);
   t('W10d · the warm message carries no secret — it is a percentage and a word',
     (FANOUT_KEYS.warm || []).every((k) => ['t', 'pct', 'stage'].includes(k)));
+}
+
+// ---- W11 · THE DEAL IS FOR WHO TURNED UP -----------------------------------------------------
+//
+// 🚨 John, playing this branch with two phones: *"the role cards are only giving me continuity."*
+// Three faults compounded and this asserts all three are gone:
+//
+//   1. `createRoom` is built at CAPACITY (8) so the transport can bind a token per seat, and
+//      `dealRoles()` took that literally — a two-phone table was handed cards 0 and 1 of an
+//      EIGHT-player bag, and `GUARANTEED[8]` leads with `continuity`.
+//   2. `startServer` defaulted `castSeed = 1`, so `dealCast` was asked the identical question
+//      every night this server has ever run and produced the identical shuffle.
+//   3. `COMPOSITION` had no row below 4 at all, so a small table could not be dealt honestly even
+//      once someone thought to try.
+{
+  const seatsOf = (n, seed) => dealCast({
+    count: n, castSeed: seed, playerIds: Array.from({ length: n }, (_, i) => `p${i + 1}`),
+  }).seats;
+
+  t('W11 · a two- and three-phone table has a composition at all',
+    !!COMPOSITION[2] && !!COMPOSITION[3], `2:${JSON.stringify(COMPOSITION[2])}`);
+  for (const n of [2, 3]) {
+    const c = COMPOSITION[n];
+    const total = c.informed + c.contestant + c.outsider + c.minion + c.producer;
+    t(`W11a · the ${n}-player bag fills exactly ${n} seats`, total === n, `${total}`);
+    t(`W11b · and puts exactly one Production seat at the table`, c.producer + c.minion === 1);
+  }
+
+  /*
+   * THE ACTUAL COMPLAINT, ASSERTED. Over 200 cast seeds a two-player table must not keep dealing
+   * the same card — and the control is the SPREAD, not merely "not always continuity", because a
+   * bag that alternated between two roles would satisfy the weaker test and still feel broken.
+   */
+  for (const n of [2, 3, 4]) {
+    const seen = new Map();
+    for (let s = 1; s <= 200; s++) {
+      for (const seat of seatsOf(n, s)) seen.set(seat.role, (seen.get(seat.role) ?? 0) + 1);
+    }
+    const roles = [...seen.keys()];
+    const top = Math.max(...seen.values()) / (200 * n);
+    t(`W11c · at ${n} players the deal spreads across the bag rather than stamping one card`,
+      roles.length >= 3 && top < 0.62,
+      `${roles.length} distinct roles, commonest ${(top * 100).toFixed(0)}% — ${roles.join(',')}`);
+    t(`W11d control · and every ${n}-player deal still has exactly one evil`,
+      Array.from({ length: 40 }, (_, i) => seatsOf(n, i + 1)
+        .filter((x) => x.alignment === 'evil').length).every((k) => k === 1));
+  }
+
+  t('W11e · the seated ids are what the deal is keyed to, so seat 0 is not always the same card',
+    new Set([1, 2, 3, 4, 5, 6, 7, 8].map((s) => seatsOf(2, s)[0].role)).size > 1,
+    [1, 2, 3, 4].map((s) => seatsOf(2, s)[0].role).join(','));
+
+  /*
+   * ⚠️ The four-player row is UNTOUCHED and this pins it, because `role-deal` R1 measures the
+   * bible's counts and a slice that quietly moved one would be caught here first with a clearer
+   * message than a composition mismatch 10k seeds deep.
+   */
+  t('W11f · the bible\'s own rows are unchanged',
+    COMPOSITION[4].informed === 2 && COMPOSITION[8].informed === 4 && COMPOSITION[8].outsider === 2);
 }
 
 console.log(`\nparty-warm: ${pass} passed, ${fail} failed`);

@@ -94,8 +94,25 @@ function getRoom(code, opts) {
     const c = conns.get(id);
     if (c && !c.sock.destroyed) c.sock.write(encodeFrame(JSON.stringify(msg)));
   };
+  /*
+   * 🚨 **A FRESH castSeed PER ROOM, AND THE CONSTANT IT REPLACES WAS THE SECOND HALF OF JOHN'S
+   * "the role cards are only giving me continuity".**
+   *
+   * `startServer` defaults `castSeed = 1` and every room took it, so `dealCast` produced the
+   * IDENTICAL shuffle on every night this server has ever hosted. Seat 0 drew the same card in
+   * January and in August. `dealCast` shuffles properly; it was being asked the same question
+   * every time.
+   *
+   * `net/party/server.js` L62 already mints one per room on the PartyKit side — this is that line,
+   * brought across, and the two transports now agree. It stays a per-ROOM value rather than a
+   * per-deal one so a reconnecting phone still resumes into the cast it was dealt.
+   *
+   * ⚠️ An explicitly passed `castSeed` still wins, because every party gate passes one and a
+   * deal that cannot be reproduced cannot be gated (`cast.js`'s own header).
+   */
+  const castSeed = opts.castSeed ?? ((Math.random() * 0x7fffffff) | 0);
   const game = createRoom({
-    count: opts.count, castSeed: opts.castSeed, worldSeed: opts.worldSeed,
+    count: opts.count, castSeed, worldSeed: opts.worldSeed,
     send: (id, frame) => outbox(id, { t: 'state', frame }),
     emit: (id, ev) => outbox(id, { t: 'event', ev }),
   });
@@ -265,7 +282,7 @@ function fanout(room, msg) {
 }
 
 // ---------------------------------------------------------------- server
-export function startServer({ port = 5181, count = 8, castSeed = 1, worldSeed = 1, code = 'test' } = {}) {
+export function startServer({ port = 5181, count = 8, castSeed = null, worldSeed = 1, code = 'test' } = {}) {
   const server = http.createServer((req, res) => {
     res.writeHead(200, { 'content-type': 'text/plain' });
     res.end('prime time room server — send a WebSocket\n');
@@ -453,7 +470,9 @@ function handleClient(room, bound, self, msg) {
     // phone gets its own `role.card` here, through `emit`, so it is holding a card before the
     // first ballot rather than after the pair has locked. Nothing about this reaches the TV:
     // `role.card` is SELF and `production.panel` is EVIL, and the deal itself is SEALED.
-    room.game.dealRoles();
+    // 🚨 THE SEATED IDS, NOT THE CAPACITY. See `dealRoles`' header — dealing an eight-player bag
+    // to a two-phone table is what handed John the same card every night.
+    room.game.dealRoles(seatedPlayerIds(room));
     fanout(room, lobbySnapshot(room));
   }
   if (msg.t === 'casting') {

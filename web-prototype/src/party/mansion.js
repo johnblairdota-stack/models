@@ -184,3 +184,24 @@ export function roomLabel(type) {
     service: 'Service', chapel: 'Chapel',
   })[type] ?? 'Passage';
 }
+
+/**
+ * 🗣️ **A SPACE ID AS SOMETHING A PERSON CAN SAY OUT LOUD.**
+ *
+ * `genplan.js` ids rooms `r1.gallery` and corridor rects `c0.3`, which is right for a table and
+ * wrong for the one screen whose entire job is a human reading a room name to the room. The first
+ * browser pass caught it: the runner's intel line read *"Something somewhere near them, c0.3."*
+ *
+ * Corridors deliberately stay vague. There are up to nine of them in a generated house and they
+ * have no distinguishing feature to name, so "a passage" is not a cop-out — it is the true
+ * precision of the information, and pretending otherwise would have the guide calling a number
+ * nobody else can see.
+ */
+export function spaceLabel(id) {
+  const s = String(id ?? '');
+  if (!s) return 'somewhere';
+  const type = s.includes('.') ? s.split('.')[1] : s;
+  if (/^\d+$/.test(type) || s.startsWith('c')) return 'a passage';
+  const label = roomLabel(type);
+  return label === 'Passage' ? 'a passage' : `the ${label}`;
+}

@@ -58,11 +58,15 @@ const STAND_IN = 0.62;
  * means on the 2D face — so a robot's wedge colour on the phone and its cap colour on the TV are
  * the same decision, which is what makes "that one is mine" legible from a sofa.
  */
-function tintedMaterials(base, shellHex, accentHex) {
+function tintedMaterials(base, shellHex, accentHex, owned) {
   const shell = base.shell?.clone?.() ?? base.shell;
   const mint = base.mint?.clone?.() ?? base.mint;
   if (shell?.color && shellHex) shell.color.set(shellHex);
   if (mint?.color && accentHex) mint.color.set(accentHex);
+  // Only the two CLONES are ours to destroy later. Everything else in the returned set is a
+  // reference the runner is also rendering with — see `dispose()`.
+  if (shell !== base.shell) owned?.push(shell);
+  if (mint !== base.mint) owned?.push(mint);
   return { ...base, shell, mint };
 }
 
@@ -188,6 +192,8 @@ export function buildIntroBed(engine, { room, cast, materials, reelSight } = {})
   scene.add(group);
 
   const base = materials ?? unit4hMaterials();
+  /** Only what this file cloned. `dispose()` destroys these and nothing else — see its header. */
+  const ownedMaterials = [];
   const robots = seats.map((seat, i) => {
     const chair = circle.seats[i] ?? { x: cx, z: cz, rotY: 0 };
     // Outward: from the circle's centre through the chair. The chair faces the centre, so the
@@ -201,7 +207,7 @@ export function buildIntroBed(engine, { room, cast, materials, reelSight } = {})
       world: room,
       rng,
       id: `intro-${seat.id ?? i}`,
-      materials: tintedMaterials(base, seat.shell, seat.accent),
+      materials: tintedMaterials(base, seat.shell, seat.accent, ownedMaterials),
     });
     const start = new THREE.Vector3(cx + ux * (radius + ENTRY_OUT), room.floorY ?? 0, cz + uz * (radius + ENTRY_OUT));
     // Nudge the entry point back inside the house if the ballroom is not big enough to hold it.
@@ -326,9 +332,40 @@ export function buildIntroBed(engine, { room, cast, materials, reelSight } = {})
       if (!done && clock >= total) done = true;
     },
 
+    /**
+     * 🚨 **TEARDOWN DISPOSES GEOMETRY AND THE CLONES THIS FILE MADE. IT MUST NOT CALL
+     * `Player.dispose()`, AND THAT IS THE BUG THAT REACHED JOHN'S PLAYTEST.**
+     *
+     * `Player.dispose()` -> `unit.dispose()` -> `unit4h.js` L3670:
+     *
+     *     for (const m of Object.values(mats)) m.dispose?.();
+     *
+     * — **every material in the set it was handed.** The intro robots are handed
+     * `{ ...botMats, shell: clone, mint: clone }`, so `chrome`, `face`, `brand` and `gap` in that
+     * object are the SHARED originals: the ones the runner's own body, the runner's Meshy avatar
+     * kit and the sledge prop are all still rendering with. Tearing down three intro robots
+     * disposed the runner's materials three times, one cue before the runner appeared — so the
+     * crash landed on the EXPEDITION beat with `main.js` L25's window `error` handler painting
+     * `VIEW "party.follow" FAILED` over the show, on the biggest screen in the room.
+     *
+     * ⚠️ It did **not** reproduce on SwiftShader, which is why the first drive came back clean and
+     * a playtest found it instead. Disposing a live material frees its `WebGLProgram` and whether
+     * the next frame rebuilds it or throws is a driver-level detail. `harness/party-warm-drive.mjs`
+     * W3f now asserts the invariant directly — no material still reachable from the scene may have
+     * been disposed — rather than hoping a given GPU turns it into an exception.
+     *
+     * Sharing one baked material set across eight robots is still right (see `tintedMaterials`);
+     * what was wrong was letting a borrower run the destructor.
+     */
     dispose() {
-      for (const r of robots) r.body.dispose?.();
       scene.remove(group);
+      group.traverse((o) => {
+        if (o.isMesh || o.isSkinnedMesh || o.isInstancedMesh || o.isLine || o.isPoints) {
+          o.geometry?.dispose?.();
+        }
+      });
+      for (const m of ownedMaterials) m.dispose?.();
+      ownedMaterials.length = 0;
     },
   };
 }

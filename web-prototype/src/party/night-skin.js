@@ -129,7 +129,7 @@ export function injectNightSkin() {
        once the layer is live so the lobby never fades toward a frame that has not rendered. */
     body.rrr-warming .night { background:
       radial-gradient(900px 520px at 50% -8%, rgba(var(--night-accent-rgb), .10), transparent 58%),
-      linear-gradient(180deg, rgba(12,10,8,.86) 0%, rgba(12,10,8,.62) 46%, rgba(12,10,8,.88) 100%); }
+      linear-gradient(180deg, rgba(12,10,8,.86) 0%, rgba(12,10,8,.46) 46%, rgba(12,10,8,.88) 100%); }
     body.rrr-warming .night-main { text-shadow: 0 2px 18px rgba(0,0,0,.85); }
     /* 📊 The indicator itself. 'warm-fill' is the only thing that moves, and party-host.js patches
        its width in place rather than repainting the lobby for a percentage. */
@@ -229,8 +229,14 @@ export function injectNightSkin() {
       border:1px solid rgba(var(--night-accent-rgb), .28); }
     .stick-btn.on { background:var(--night-accent); color:var(--night-deep); }
     .stick-btn.swing.on { background:var(--night-bad); }
+    /* The slot is ALWAYS present and always this tall, whether it is speaking or not. A good
+       player's read is sporadic by design (intel.js drops one in three), and an element that
+       comes and goes twice a second moves the stick under the player's thumb. Reserving the
+       height is what makes 'sporadic information' a property of the TEXT rather than of the
+       layout. */
     .intel { margin-top:12px; padding:12px 14px; border-radius:10px; background:var(--night-panel);
-      border:1px solid rgba(var(--night-accent-rgb), .2); font-size:16px; line-height:1.35; }
+      border:1px solid rgba(var(--night-accent-rgb), .2); font-size:16px; line-height:1.35;
+      min-height:66px; transition: border-color .3s ease; }
     .intel.exact { border-color:var(--night-bad); color:var(--night-ink); }
     .intel .k { display:block; color:var(--night-dim); font-size:11px; letter-spacing:.2em;
       text-transform:uppercase; margin-bottom:5px; }

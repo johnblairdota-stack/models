@@ -201,6 +201,8 @@ export default async function partyFollow({ params }) {
     readout: () => bed.readout(),
     spaceOfCamera: () => bed.room.spaceAt(engine.camera.position)?.id ?? null,
     cameraY: () => engine.camera.position.y,
+    mode: () => bed.mode,
+    world: () => bed.world(),
     storeyOfCamera: () => bed.room.spaceAt(engine.camera.position)?.storey ?? null,
   };
 

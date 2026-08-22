@@ -503,6 +503,37 @@ the guide's map name rooms the TV never names, (5) is `you.intel` absent from th
 
 ---
 
+## 8b. What the playtest found that the gates could not
+
+John played the branch. Three bugs, and the interesting thing is that **none of them was
+catchable in bare node** — which is the argument for `harness/party-warm-drive.mjs` existing.
+
+1. **The mansion crashed on the expedition beat**, painting `VIEW "party.follow" FAILED` over the
+   show. Cause: `intro.dispose()` called `Player.dispose()`, which calls `unit4h.js` L3670 —
+   `for (const m of Object.values(mats)) m.dispose?.()`, **every material in the set it was
+   handed**. The intro robots are handed `{ ...botMats, shell: clone, mint: clone }`, so
+   `chrome`, `face`, `brand` and `gap` in that object are the shared originals the runner's body,
+   its Meshy kit and the sledge prop are all still rendering with. Sharing one baked set across
+   eight robots is still right; letting a borrower run the destructor was not. It did **not**
+   reproduce on SwiftShader — whether a freed `WebGLProgram` rebuilds or throws is a driver
+   detail — so W3f asserts the invariant directly instead: nothing still reachable from the scene
+   may have been disposed.
+2. **Every card said Continuity.** Three faults compounding: `dealRoles` dealt for the room's
+   CAPACITY (8) rather than for who joined, so a two-phone table got cards 0 and 1 of an
+   eight-player bag whose `GUARANTEED[8]` leads with `continuity`; `startServer` defaulted
+   `castSeed = 1`, so the shuffle was identical on every night this server has ever hosted; and
+   `COMPOSITION` had no row below 4, so a small table could not be dealt honestly even once
+   somebody tried.
+3. **The phone thrashed.** `setWorld` broadcasts on every world report — 2 Hz for the whole
+   expedition — and every one reached `root.innerHTML = ...`. The visible symptom was the intel
+   line flashing and shoving the pad around; the invisible one is worse, because the stick element
+   was being destroyed under the player's thumb and taking its `setPointerCapture` with it.
+
+Two lessons worth keeping. **A beat that is only ever tested from a cold start is not tested** —
+the first probe checked warm and checked intros and the bug lived in the join between them. And
+**a scene-graph walk cannot see a disposed material**; the graph stays perfectly well-formed while
+the GPU state under it is freed.
+
 ## 9. What this slice does NOT do
 
 Written down so the next reader does not mistake an omission for an oversight, and so the PR can

@@ -56,6 +56,8 @@ export default async function partyHost({ params }) {
     introsDone: false,
     /** The runner the run cue named, so a repaint cannot re-cue the same runner. */
     cuedRunner: null,
+    /** How many world reports have been relayed. Read by the drive, never by the UI. */
+    worldSent: 0,
   };
 
   /**
@@ -321,6 +323,7 @@ export default async function partyHost({ params }) {
        * relays it. A TV that interpreted the report would be a TV that knew where the hunter was,
        * which is the second item on `party-loop.md`'s "Do not" list.
        */
+      ui.worldSent = (ui.worldSent || 0) + 1;
       client.send({ t: 'world', ...m.world });
     }
   });
@@ -486,6 +489,7 @@ export default async function partyHost({ params }) {
       warm: ui.warm,
       warmPct: ui.warmPct,
       followMode: follow.mode,
+      worldSent: ui.worldSent,
     };
 
     root.querySelector('#go')?.addEventListener('click', startNight);

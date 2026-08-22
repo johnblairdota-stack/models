@@ -36,7 +36,8 @@
     "gate:party-sim": "node harness/party-sim.mjs",
     "gate:party-follow": "node harness/party-follow.mjs",
     "gate:party-warm": "node harness/party-warm.mjs",
-    "drive:party-follow": "node harness/party-follow-drive.mjs"
+    "drive:party-follow": "node harness/party-follow-drive.mjs",
+    "drive:party-warm": "node harness/party-warm-drive.mjs"
   },
   "dependencies": {
     "three": "^0.180.0",

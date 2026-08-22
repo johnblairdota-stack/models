@@ -335,6 +335,33 @@ export default async function partyPhone({ params }) {
     }
     state.lastBeat = beat;
 
+    /**
+     * 🚨 **THE STRUCTURAL STAMP — WITHOUT IT THIS SHEET REBUILT ITSELF TWICE A SECOND.**
+     *
+     * `src/party/room.js` `setWorld` broadcasts on every world report, which the TV sends at 2 Hz
+     * for the whole expedition. Every one of those arrives here as a `state` message and used to
+     * reach `root.innerHTML = ...`. The visible symptom was John's — the intel line flashing and
+     * shoving the pad around — but the invisible one is worse: the stick element is destroyed and
+     * rebuilt under the player's thumb, taking its `setPointerCapture` with it, so a drag stops
+     * being delivered and the runner walks on after the thumb has lifted.
+     *
+     * Same instrument `paintCasting` already uses one sheet over. The stamp is everything that
+     * changes the SHAPE of the screen; the intel text and the guide's two marks are deliberately
+     * NOT in it, because those are exactly what `patchLive` writes in place.
+     */
+    const missionPhase = (() => {
+      const last = [...(c.events ?? [])].reverse().find((e) => String(e.type ?? '').startsWith('mission.'));
+      return last ? String(last.type) : 'mission.seek';
+    })();
+    const liveStamp = beat === 'expedition' && !state.stage
+      ? `${beat}:${iAmRunner ? 'run' : iAmGuide ? 'guide' : 'watch'}:${missionPhase}`
+        + `:${hasCard() ? 'card' : 'nocard'}:${!!frame?.flyover?.marks?.some((m) => m.kind === 'hunter')}`
+      : null;
+    if (liveStamp && root.dataset.liveUi === liveStamp && patchLive(frame)) {
+      window.__rrrPhone = { frame, beat, seat: me.seat, iAmRunner, iAmGuide };
+      return;
+    }
+
     let body = '';
     if (state.err) body += `<div class="err">${esc(state.err)}</div>`;
 
@@ -444,6 +471,15 @@ export default async function partyPhone({ params }) {
     root.innerHTML = `
       <div class="phone-top"><span>${esc(state.code.toUpperCase())}</span><span>${esc(beat)} · ${esc(myName)}</span></div>
       ${body}`;
+    if (liveStamp) root.dataset.liveUi = liveStamp; else delete root.dataset.liveUi;
+
+    /*
+     * A read-only handle for the drive, and DELIBERATELY THIS PHONE'S OWN PROJECTED FRAME rather
+     * than the client — the same reasoning as `window.__rrrHost` in `views/party-host.js`. It is
+     * what the entitlement matrix already decided this socket may see, so exposing it cannot leak
+     * anything a screenshot of this screen would not.
+     */
+    window.__rrrPhone = { frame, beat, seat: me.seat, iAmRunner, iAmGuide };
 
     root.querySelector('#save-name')?.addEventListener('click', () => {
       const v = root.querySelector('#name')?.value || '';
@@ -590,14 +626,73 @@ export default async function partyPhone({ params }) {
    * an exact coordinate for this to round off. If this function ever starts doing arithmetic on a
    * position, the filter has moved to the client and stopped being a filter.
    */
+  /**
+   * 🚨 **A RESERVED SLOT, ALWAYS PRESENT, NEVER RE-CREATED — AND IT USED TO BE NONE OF THOSE
+   * THINGS.**
+   *
+   * John, playing this branch: *"Guide and Runner screens are flashing 'word from the house',
+   * which moves and resizes everything else on the phone."*
+   *
+   * Two separate faults produced that, and both are fixed here and in `patchLive` below:
+   *
+   *   · The block RETURNED `''` when there was no intel. A good player's read is deliberately
+   *     sporadic — `intel.js` drops one in three — so the element appeared and vanished twice a
+   *     second and everything under it, the stick included, jumped by its height each time.
+   *     It is now always emitted and its text is swapped; `min-height` in `night-skin.js` holds
+   *     the space whether it is speaking or not.
+   *   · It was rebuilt by a FULL `root.innerHTML` write on every world report. That does not just
+   *     look bad, it breaks the pad: the stick's element is destroyed mid-drag, so the
+   *     `setPointerCapture` goes with it and the runner keeps walking after the thumb lifts.
+   */
   function intelBlock(frame) {
     const intel = frame?.you?.intel;
-    if (!intel) return '';
-    const exact = intel.grade === 'exact';
-    return `<div class="intel${exact ? ' exact' : ''}">
-      <span class="k">${exact ? 'Production feed' : 'Word from the house'}</span>
-      ${esc(intelLine(intel))}
+    const exact = intel?.grade === 'exact';
+    return `<div class="intel${exact ? ' exact' : ''}" data-intel>
+      <span class="k" data-intel-k>${exact ? 'Production feed' : 'Word from the house'}</span>
+      <span data-intel-v>${esc(intelLine(intel))}</span>
     </div>`;
+  }
+
+  /**
+   * The live half of the expedition sheet, patched in place: the intel line, and the guide's two
+   * marks. Everything structural — the stick, the map's rooms and doors, the card tab — is left
+   * exactly where it is.
+   *
+   * Returns false when the sheet is the wrong shape for patching, which sends `paint()` down the
+   * full rebuild it would have done anyway.
+   */
+  function patchLive(frame) {
+    const slot = root.querySelector('[data-intel]');
+    if (!slot) return false;
+    const intel = frame?.you?.intel;
+    const exact = intel?.grade === 'exact';
+    slot.classList.toggle('exact', exact);
+    const k = slot.querySelector('[data-intel-k]');
+    const v = slot.querySelector('[data-intel-v]');
+    if (k) k.textContent = exact ? 'Production feed' : 'Word from the house';
+    if (v) v.textContent = intelLine(intel);
+
+    const map = root.querySelector('.guide-map');
+    if (map) {
+      // The plan is a pure function of the seed and never moves; only the two marks do. Rewriting
+      // the whole SVG at 2 Hz would re-lay-out the map under the guide's thumb.
+      const marks = frame?.flyover?.marks ?? [];
+      const put = (cls, m, r) => {
+        let el = map.querySelector(`.${cls}`);
+        if (!m) { el?.remove(); return; }
+        if (!el) {
+          el = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          el.setAttribute('class', cls);
+          el.setAttribute('r', String(r));
+          map.appendChild(el);
+        }
+        el.setAttribute('cx', String(Math.round(m.x * 100) / 100));
+        el.setAttribute('cy', String(Math.round(m.z * 100) / 100));
+      };
+      put('gm-runner', marks.find((m) => m.kind === 'you'), 1.15);
+      put('gm-hunter', marks.find((m) => m.kind === 'hunter'), 1.3);
+    }
+    return true;
   }
 
   function paintCasting(players, me, episode) {

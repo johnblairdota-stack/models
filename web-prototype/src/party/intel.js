@@ -20,6 +20,8 @@
  * gates with no `npm install`.
  */
 
+import { spaceLabel } from './mansion.js';
+
 /** How a good player is told the hunter sits relative to the runner. Never a coordinate. */
 export const GRADES = ['near', 'somewhere near', 'far from'];
 
@@ -106,10 +108,10 @@ export function intelFor({ alignment, world, stale, cameras, roll = 1 } = {}) {
 export function intelLine(intel) {
   if (!intel) return 'No word on the hunter.';
   if (intel.grade === 'exact') {
-    const h = intel.hunter ? `Hunter ${intel.hunter.room ?? '—'}` : 'Hunter —';
-    const r = intel.runner ? `Runner ${intel.runner.room ?? '—'}` : 'Runner —';
+    const h = intel.hunter ? `Hunter in ${spaceLabel(intel.hunter.room)}` : 'Hunter —';
+    const r = intel.runner ? `Runner in ${spaceLabel(intel.runner.room)}` : 'Runner —';
     return `${h} · ${r}`;
   }
-  const when = intel.age > 1 ? ` ${intel.age}s ago` : '';
-  return `Something ${intel.grade} them, ${intel.hunter?.room ?? 'somewhere'}${when}.`;
+  const when = intel.age > 1 ? `, ${intel.age}s ago` : '';
+  return `Something ${intel.grade} them, in ${spaceLabel(intel.hunter?.room)}${when}.`;
 }

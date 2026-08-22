@@ -16,7 +16,7 @@
  * three tier-0 gates have something real to assert against before any party code ships.
  */
 
-import { dealCast, viewFor, EVIL } from './cast.js';
+import { COMPOSITION, dealCast, viewFor, EVIL } from './cast.js';
 import { project } from '../../net/party/entitle.js';
 import { makeEvent, VIS } from './events.js';
 import { createLog, visibleTo } from './log.js';
@@ -41,7 +41,14 @@ export const PHASES = ['LOBBY', 'CASTING', 'EXPEDITION', 'DEBRIEF', 'VERDICT'];
  * @param {number} [opts.leak]         inject a known leak — the gate's controls, never shipped
  */
 export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak = 0 }) {
-  const deal = dealCast({ count, castSeed });
+  /**
+   * ⚠️ `let`, NOT `const`, AND ONLY `dealRoles` MAY REASSIGN IT — see its header.
+   *
+   * The room is constructed at CAPACITY, before anybody has joined, because the transport needs a
+   * socket per seat to bind reconnect tokens to. That makes this first deal a placeholder: it is
+   * for eight players when the night may turn out to be two.
+   */
+  let deal = dealCast({ count, castSeed });
   const sockets = deal.seats.map((s) => ({
     id: `phone-${s.seat}`, playerId: s.id, isTV: false,
     alignment: s.alignment, seatRole: null,
@@ -116,9 +123,16 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       cameras: { ...state.cameras },
       incident: { ...state.incident },
     };
-    if (!sock.isTV) {
+    if (!sock.isTV && deal.seats.some((s) => s.id === sock.playerId)) {
       const v = viewFor(deal, sock.playerId);
       base.you = v.you;
+    } else if (!sock.isTV) {
+      /*
+       * A phone holding a seat the deal does not cover. That is the normal state of chairs 3..8
+       * once `dealRoles` has re-dealt for the two people who actually turned up — `viewFor` throws
+       * on an unknown id by design, so the absence is handled here rather than by loosening it.
+       * No `you` means no role, which is the correct thing to tell a chair nobody is sitting in.
+       */
     } else {
       // Host/TV is a spectator. `playEpisode` writes covers into `players[].claim` so the
       // Reunion has a finalClaim; that field is phones-only. Strip it here too so a later
@@ -147,7 +161,21 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       });
       if (intel) base.you = { ...base.you, intel };
     }
-    if (sock.seatRole === 'guide' && state.phase === 'EXPEDITION') {
+    /*
+     * 🗺️ **`|| state.world` — AND WITHOUT IT THE GUIDE'S NEW MAP IS A FLOOR PLAN WITH NO MARKS ON
+     * IT, WHICH THE FIRST BROWSER PASS PHOTOGRAPHED.**
+     *
+     * `playEpisode` resolves an entire episode SYNCHRONOUSLY: by the time the show beat says
+     * `expedition` and the TV is rendering a live run, `state.phase` has already walked to VERDICT
+     * and this gate is shut. The stub clock and the phase machine have never agreed, and D13 got
+     * away with it because nothing was reading `flyover`.
+     *
+     * A live world report is the honest signal that an expedition is actually happening — it only
+     * exists while the TV is rendering one. Gates that never call `setWorld` leave `state.world`
+     * null and see byte-identical behaviour, which is why `guide-coverage` and `party-isolation`
+     * are unmoved by this.
+     */
+    if (sock.seatRole === 'guide' && (state.phase === 'EXPEDITION' || state.world)) {
       // 🚨 S3. The Hunter is on the map only where a live camera watches. `hunterMark.visible =
       // hs.inScene && !!hp` (views/game.js L2559) is the debug view this replaces.
       const seen = hunterVisibleToGuide({
@@ -229,9 +257,43 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
    * @returns {boolean} true if this call wrote the deal
    */
   let dealt = false;
-  function dealRoles() {
+  function dealRoles(seatedIds = null) {
     if (dealt) return false;
     dealt = true;
+
+    /**
+     * 🚨 **DEAL FOR WHO TURNED UP, NOT FOR THE CAPACITY — AND THIS IS THE THIRD AND LARGEST HALF
+     * OF JOHN'S "the role cards are only giving me continuity".**
+     *
+     * `createRoom` is constructed with `count = 8` because the transport needs eight sockets to
+     * bind tokens to, and the deal above was taking that literally. So a two-phone table was dealt
+     * an EIGHT-player bag and the two people present were handed cards 0 and 1 of it —
+     * `GUARANTEED[8]` leads with `continuity`, and with the server's constant `castSeed` (fixed
+     * separately, in `net/party/local.mjs`) the shuffle landed the same way every night.
+     *
+     * Re-dealing here rather than at construction is what makes the count right, because THIS is
+     * the first moment the room knows it: `start` is pressed once the chairs are full.
+     *
+     * ⚠️ **A GATE THAT CALLS `dealRoles()` WITH NO ARGUMENT GETS THE OLD BEHAVIOUR, BYTE FOR
+     * BYTE.** Every party gate fills every seat and passes nothing, so `role-deal`, `role-script`,
+     * `reunion-truth` and `party-isolation` are measuring exactly what they measured before.
+     * `COMPOSITION` has no row below 2, so a lone phone keeps the capacity deal rather than
+     * throwing at the one moment a host is watching.
+     */
+    const ids = Array.isArray(seatedIds) ? seatedIds.filter(Boolean) : null;
+    if (ids && ids.length >= 2 && ids.length < count && COMPOSITION[ids.length]) {
+      deal = dealCast({ count: ids.length, castSeed, playerIds: ids });
+      const byId = new Map(deal.seats.map((s) => [s.id, s]));
+      // The sockets carry alignment for `log.js`'s EVIL filter, so they have to follow the deal.
+      // A chair nobody sat in is not GOOD, it is not playing: `null` keeps it out of every
+      // audience rather than quietly adding it to the good side.
+      for (const s of sockets) {
+        if (s.isTV) continue;
+        s.alignment = byId.get(s.playerId)?.alignment ?? null;
+      }
+      state.cameras.needed = deal.cameras;
+    }
+
     // The deal itself is written once, SEALED. The Reunion is the same replay with the filter
     // off, so this is what makes the roll call complete without a second reveal pipeline.
     record(makeEvent('cast.deal', VIS.SEALED, {
@@ -343,7 +405,15 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     // Claims are published from a phone at any time; the stub sets one per episode so the roll
     // call has a `finalClaim` to put beside the truth.
     for (const p of state.players.filter((x) => x.alive)) {
-      const claim = deal.seats.find((s) => s.id === p.id).cover ?? 'contestant';
+      /*
+       * ⚠️ `state.players` IS THE CAPACITY AND `deal.seats` MAY NOT BE. Once `dealRoles` re-deals
+       * for the phones that actually joined, chairs 3..8 exist as players and hold no card — so
+       * this lookup can miss, and it used to throw right here in the middle of an episode.
+       * A chair nobody sat in publishes nothing rather than publishing a default nameplate.
+       */
+      const seat = deal.seats.find((s) => s.id === p.id);
+      if (!seat) continue;
+      const claim = seat.cover ?? 'contestant';
       p.claim = claim;
       record(makeEvent('player.claim_set', VIS.PUBLIC, { id: p.id, claim }));
     }
@@ -455,6 +525,23 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       const wasPhase = state.world?.mission?.phase ?? 'none';
       state.worldTick += 1;
       state.world = { runner, hunter, mission };
+
+      /*
+       * ⚠️ **RE-ASSERT THE SEAT ROLES, BECAUSE `playEpisode` CLEARS THEM BEFORE THE RUN IS OVER.**
+       *
+       * Its last two lines are `state.episode++` and clearing every `seatRole` — correct for a
+       * function that models a whole episode as one synchronous call, and wrong now that the run
+       * is a live thing happening afterwards on the TV. Without this the guide loses the `guide`
+       * audience the moment the pair is locked, and the map they were just handed goes blank.
+       *
+       * Derived from `state.pair`, which is public and is what the phones are already rendering
+       * from, so this cannot invent a crew member the room has not seen elected.
+       */
+      for (const s of sockets) {
+        if (s.isTV || !s.playerId) continue;
+        if (s.playerId === state.pair.runner) s.seatRole = 'runner';
+        else if (s.playerId === state.pair.guide) s.seatRole = 'guide';
+      }
 
       const ageSeconds = 0.5;                       // the TV reports twice a second
       if (hunter?.room) {
