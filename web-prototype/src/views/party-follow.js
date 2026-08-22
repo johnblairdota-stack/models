@@ -1,7 +1,8 @@
 import { estate } from './_studio.js';
 import { buildFollowBed } from '../game/follow-bed.js';
-import { followViolations, cleanThrottle } from '../party/follow.js';
+import { CAM_LABEL, FOLLOW_CHROME_CSS, followViolations, cleanThrottle } from '../party/follow.js';
 import { DEFAULT_LOOK, cleanLook, robotFaceSvg } from '../party/look.js';
+import { NIGHT_TOKENS } from '../party/palette.js';
 
 /**
  * 📺 **THE FOLLOW — what is actually on the TV during the run.**
@@ -23,8 +24,6 @@ import { DEFAULT_LOOK, cleanLook, robotFaceSvg } from '../party/look.js';
  * deliberately the SHOT and the THROTTLE — production facts, not navigation.
  */
 
-const REC_LABEL = 'RRR CAM 01';
-
 export default async function partyFollow({ params }) {
   /*
    * ⚠️ KILL `#boot` FIRST. `main.js` only adds `.gone` when the view's promise RESOLVES, and the
@@ -37,7 +36,7 @@ export default async function partyFollow({ params }) {
   if (boot) { boot.style.transition = 'none'; boot.style.display = 'none'; }
 
   document.title = 'PRIME TIME — follow';
-  document.body.style.cssText = 'margin:0;background:#07060a;overflow:hidden';
+  document.body.style.cssText = 'margin:0;background:#080604;overflow:hidden';   // --night-deep
 
   /*
    * The closed schema, enforced at the door. A violation THROWS rather than being dropped:
@@ -127,32 +126,20 @@ export default async function partyFollow({ params }) {
  * picture rather than two.
  */
 function buildChrome({ name, look }) {
+  /*
+   * 🎨 THE PALETTE IS IMPORTED, NOT INHERITED, AND THIS SURFACE IS THE REASON IT HAS TO BE.
+   *
+   * `palette.js` (#6): *"the card's colours are not hexes… a reskin that misses the card now
+   * fails a gate instead of a playtest."* Same hazard, one frame further out — this overlay lives
+   * in an IFRAME, so it is in a different document from `injectNightSkin()`'s `:root` block and
+   * inherits nothing at all. Without these two lines the follow would be the one surface in the
+   * house that a reskin could not reach, on the biggest screen in the room.
+   *
+   * The rules themselves are in `src/party/follow.js` so a bare-node gate can walk them, exactly
+   * as `rolecard.js` holds `ROLE_CARD_CSS` for `role-peek` P11.
+   */
   const style = document.createElement('style');
-  style.textContent = `
-    #fl { position:fixed; inset:0; pointer-events:none; z-index:20;
-      font-family: ui-sans-serif, system-ui, sans-serif; color:#f3ece3; }
-    #fl .bar { position:absolute; left:0; right:0; height:6.5%; background:#000; }
-    #fl .bar.t { top:0; } #fl .bar.b { bottom:0; }
-    #fl .wash { position:absolute; inset:0;
-      background:
-        radial-gradient(ellipse 92% 88% at 50% 46%, transparent 52%, rgba(0,0,0,.55) 100%),
-        repeating-linear-gradient(0deg, rgba(0,0,0,.16) 0 1px, transparent 1px 3px); }
-    #fl .rec { position:absolute; top:9%; left:2.6%; display:flex; align-items:center; gap:9px;
-      letter-spacing:.24em; text-transform:uppercase; font-size:12px; font-weight:700;
-      color:#e8dcc8; text-shadow:0 2px 10px rgba(0,0,0,.9); }
-    #fl .dot { width:11px; height:11px; border-radius:50%; background:#ff4d3d;
-      box-shadow:0 0 12px rgba(255,77,61,.85); animation: fl-rec 2s ease-in-out infinite; }
-    #fl .third { position:absolute; left:2.6%; bottom:10.5%; display:flex; align-items:flex-end; gap:14px; }
-    #fl .third .face { width:64px; height:64px; filter: drop-shadow(0 8px 20px rgba(0,0,0,.8)); }
-    #fl .third .who { font-size:clamp(30px, 4.6vw, 62px); font-weight:800; line-height:.98;
-      text-shadow:0 3px 18px rgba(0,0,0,.95); }
-    #fl .third .sub { margin-top:6px; font-size:12px; letter-spacing:.26em; text-transform:uppercase;
-      color:#f5a14a; text-shadow:0 2px 10px rgba(0,0,0,.9); }
-    #fl .slug { position:absolute; right:2.6%; bottom:11%; text-align:right;
-      font-size:11px; letter-spacing:.26em; text-transform:uppercase; color:#a89884;
-      text-shadow:0 2px 10px rgba(0,0,0,.9); }
-    #fl .slug b { color:#e8dcc8; font-weight:700; }
-    @keyframes fl-rec { 0%,100% { opacity:.25; } 50% { opacity:1; } }`;
+  style.textContent = `${NIGHT_TOKENS}\n${FOLLOW_CHROME_CSS}`;
   document.head.appendChild(style);
 
   const el = document.createElement('div');
@@ -160,7 +147,7 @@ function buildChrome({ name, look }) {
   el.innerHTML = `
     <div class="wash"></div>
     <div class="bar t"></div><div class="bar b"></div>
-    <div class="rec"><span class="dot"></span><span>${esc(REC_LABEL)}</span></div>
+    <div class="rec"><span class="dot"></span><span>${esc(CAM_LABEL)}</span></div>
     <div class="third">
       <div class="face">${robotFaceSvg(look.shell, look.accent, { size: 64 })}</div>
       <div>

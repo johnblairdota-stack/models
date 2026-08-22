@@ -204,6 +204,40 @@ try {
   // ------------------------------------------------------------- the night
   await tv.click('#go', { timeout: 15000 });
   console.log('  host started the night');
+
+  /*
+   * ---------------------------------------------------------------------------------------
+   * #6's DEAL SITS BETWEEN "START THE NIGHT" AND THE BALLOT, SO THIS DRIVE HAS TO GO THROUGH IT.
+   * ---------------------------------------------------------------------------------------
+   * That is not an obstacle to route around — it is the half of the night this slice must not
+   * break. `role-peek` proves the card's own contract in bare node; what only a browser can say
+   * is that the deal, the hold, the dismissal and the casting list still compose into one
+   * sequence a person can walk, with a mansion camera mounted at the end of it.
+   */
+  const cardOk = [];
+  for (const { page, name } of phones) {
+    await page.waitForSelector('#card-done', { state: 'visible', timeout: 20000 });
+    const atRest = await page.evaluate(() => {
+      const v = document.querySelector('.card-view');
+      return !!v && !v.classList.contains('hide') && !v.classList.contains('lit');
+    });
+    // Hold the bar, then let go. `lit` on is immediate; off waits REBLUR_MS (400 ms).
+    const bar = await page.$('#card-hold');
+    const box = await bar.boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await sleep(250);
+    const held = await page.evaluate(() => document.querySelector('.card-view')?.classList.contains('lit') === true);
+    await page.mouse.up();
+    await sleep(700);
+    const reblurred = await page.evaluate(() => document.querySelector('.card-view')?.classList.contains('lit') === false);
+    cardOk.push(atRest && held && reblurred);
+    await page.click('#card-done', { timeout: 10000 });
+    console.log(`  ${name} was dealt a card, read it, and put it down`);
+  }
+  t('D0c · #6 is intact — the card is dealt at night start, blurred at rest, lit only while held',
+    cardOk.length === 2 && cardOk.every(Boolean), cardOk.join(','));
+
   for (const { page, name } of phones) {
     await page.waitForSelector('[data-pick]', { timeout: 15000 });
     // Sequential casting through the real UI: tap, padlock, tap, padlock. Two locks, one ballot.
@@ -427,6 +461,19 @@ try {
   t('D6b · the overlay is broadcast furniture: rec dot, lower-third, shot slug',
     overlay.rec && !!overlay.who && !!overlay.shot,
     `${overlay.who} · ${overlay.shot}`);
+
+  // #6 §2.3: the card is reachable in ANY phase, as a face-down tab. A follow that ate the phone's
+  // card tab during the run would have taken away the one thing the table reasons with while it
+  // watches — so this is asserted from the phone, during expedition, with the camera live.
+  const tabs = [];
+  for (const { page } of phones) {
+    tabs.push(await page.evaluate(() => {
+      const tab = document.querySelector('#card-tab');
+      return !!tab && !/producer|contestant|camera op|editor|the static/i.test(tab.textContent || '');
+    }));
+  }
+  t('D6c · #6 is intact — the face-down card tab is still on the phones during the run, naming no role',
+    tabs.length === 2 && tabs.every(Boolean), tabs.join(','));
 
   // ------------------------------------------------------------- errors
   t('D7 · no page error on the TV, the phones, or inside the follow',

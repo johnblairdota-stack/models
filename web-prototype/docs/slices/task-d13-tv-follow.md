@@ -19,9 +19,14 @@
 - `src/views/game.js`, `src/game/room.js`, `src/game/player.js`, `src/game/spaces.js`,
   `src/world/*`, `src/lighting/*` — the mansion bed. **Read them, import them, change none of
   them.** This slice does not get to refactor `game.play`.
-- `src/views/party-phone.js`, `src/party/cast-ui.js`, `src/party/roles.js` — **PR #6 (role deal
-  + hold-to-peek) is in flight on these.** Nothing in this slice needs a phone card, and a
-  conflict there costs both PRs.
+- `src/views/party-phone.js`, `src/party/rolecard.js`, `src/party/palette.js`,
+  `src/party/cast-ui.js`, `src/party/roles.js` — **PR #6 (role deal + hold-to-reveal YOUR CARD).
+  Merged on main as of `d91fd90`.** Not edited here. Two things follow from it and both are
+  obligations rather than options:
+  - **Import the palette, do not re-hex.** `palette.js` says the named tokens are *"the whole
+    palette for anything built after it"*, and the follow overlay is built after it. §3.3.5.
+  - **The deal now sits between "Start the night" and the first ballot.** Any browser drive has
+    to walk through it, not around it — §4.2.
 - `net/party/local.mjs`, `net/party/server.js`, `net/party/entitle.js`, `src/party/room.js` —
   the party session. **This slice makes no wire change at all.** See §3.0.
 
@@ -273,7 +278,20 @@ Default export `async function partyFollow({ params })`, per `main.js`'s contrac
      huge, and `LIVE · EXPEDITION` under it;
    - bottom-right: the current shot name and throttle, small, letterspaced;
    - a light scanline/vignette wash and 2.35:1 letterbox bars.
-   Palette is `night-skin.js`'s: `#f5a14a` accent, `#f3ece3` text, `#0c0a08` ground.
+
+   ⚠️ **The palette is `palette.js`'s named tokens, and it is IMPORTED, not inherited.** #6's
+   argument, one frame further out: the card's colours became names because *"a reskin that
+   misses the card now fails a gate instead of a playtest"*, and this overlay is in an **iframe**,
+   in a different document from `injectNightSkin()`'s `:root` block, inheriting nothing at all.
+   Without the import it would be the one surface a reskin could not reach, on the biggest screen
+   in the room. So the rules live in `src/party/follow.js` as `FOLLOW_CHROME_CSS` — the same shape
+   as `rolecard.js`'s `ROLE_CARD_CSS`, and for the same reason: so a bare-node gate can walk them
+   (§4.1 F8). The view prepends `NIGHT_TOKENS` and mounts the pair.
+
+   The only literals left are **black** — the letterbox matte, the text shadows, the vignette.
+   Those are photographic rather than brand, and F8b permits them by name rather than by a regex
+   that happens not to catch them.
+
    **Nothing on this overlay may name a room, a heading, a coordinate or a camera count** — the
    guide's job is to be the only source of that, and a TV that captions the room has taken it.
 6. **Report ready.** `document.body.dataset.rrrFollow = 'live'` and
@@ -357,6 +375,12 @@ never skipped for want of a module. So this gate imports **only** `src/party/fol
 | F5 | `FOLLOW_FORBIDDEN` is a superset of `local.mjs`'s `FANOUT_FORBIDDEN`, so a field banned from the socket cannot arrive by URL instead |
 | F6 | the same inputs produce the same url — the slot is a pure function, so a repaint cannot reload the mansion |
 | F7 | expedition is still immediate, and the run is long enough to hold a produced beat rather than a caption |
+| F8 | the overlay CSS holds no hex, its only literal colours are black, every variable it names is a palette token, and it names no room |
+
+**F8 is `role-peek` P11 applied to the surface that needs it most.** The card at least shares a
+document with `injectNightSkin()`; the follow overlay is in an iframe and inherits nothing, so a
+reskin that missed it would leave one stale surface on the biggest screen in the room and no gate
+would say so.
 
 **F7 is the one number outside this slice's own files.** `show.js`'s stub clock was 4800 ms —
 right for a still, and shorter than the mansion takes to bake, so the beat would flip to recap
@@ -381,11 +405,19 @@ It owns its own ports so it cannot collide with a dev session: room server **518
 
 1. start `net/party/local.mjs` and Vite;
 2. open the TV at `?view=party.host&room=…&wsPort=5183`;
-3. open **two** phones, join both, lock a look in on each;
-4. **Start the night**, then drive real sequential casting on both phones — tap, padlock, tap,
-   padlock — through the DOM, not by faking a socket message;
-5. click **Send them in**;
-6. wait for `{ t:'follow', ready:true }` / `body[data-rrrFollow="live"]` inside the frame.
+3. open **two** phones, join both, lock a look in on each — **one browser context each.**
+   `party-phone.js` keeps the published name in `localStorage`, which is shared across a context,
+   so two phones in one context are the same person and the second silently republishes the
+   first's name (measured: both seats came up under one nameplate and the TV fell back to "The
+   runner");
+4. **Start the night**, then walk #6's deal: wait for the card, hold the bar, release it, put it
+   down. That is not an obstacle to route around — it is the half of the night this slice must
+   not break, and only a browser can say the deal, the hold, the dismissal and the ballot still
+   compose into one sequence a person can walk;
+5. drive real sequential casting on both phones — tap, padlock, tap, padlock — through the DOM,
+   not by faking a socket message;
+6. click **Send them in**;
+7. wait for `{ t:'follow', ready:true }` / `body[data-rrrFollow="live"]` inside the frame.
 
 Then it must prove four things, and each one is a specific way this slice can be wrong:
 
@@ -402,6 +434,16 @@ And two negative assertions that are the traps in §5:
 |---|---|
 | D5 | **no god-view** — the follow camera's y stays under the storey height for the whole drive, and `room.setLid` was never called with `false` |
 | D6 | **no guide map** — nothing in the follow document's DOM or its URL matches `flyover\|marks\|hunter\|minimap` |
+
+And two that exist only to say this slice did not take anything away from #6:
+
+| id | proves |
+|---|---|
+| D0c | the card is dealt at night start, is **blurred at rest**, lights only while the bar is held, and re-blurs on release |
+| D6c | the face-down card tab is still on both phones **during the run**, with the camera live, naming no role |
+
+`role-peek` proves the card's own contract in bare node and this does not duplicate it. What only
+a browser can say is that the deal and the follow are the same night.
 
 ⚠️ **And D2a, which exists because the first version of this drive lied.** The stub clock can flip
 to recap mid-measurement; the host then hides the camera layer and the clip rect photographs the
@@ -568,3 +610,22 @@ Four things, all now corrected above rather than left as a trap for the next rea
 And one thing that was right but understated: **§3.2h's ordering note.** The reason the beat
 number in §4.1's F7 had to move at all is that `finalizeScene()` plus the material bake is
 seconds of work, and the show clock was written when there was no work to do.
+
+## 10. The rebase onto #6
+
+PR #6 merged to main (`d91fd90`) while this was in flight. Rebased; the only conflict was the
+`gates:party` chain in `package.json`, where both PRs appended a gate. Both are in it now, in
+merge order: `… party-night → role-peek → party-follow`.
+
+Nothing else collided. `party-host.js`, `views.js`, `show.js` and the whole mansion side are
+untouched by #6, and #6's `night-skin.js` edits (it removed `ROLE_LABEL`/`roleLabel`/`sideLabel`
+and prepended `NIGHT_TOKENS` + appended `ROLE_CARD_CSS`) are nowhere near the `.run-*` block.
+
+Two things changed in this slice **because** of #6, and both are the merge being taken seriously
+rather than merely survived:
+
+1. **The palette is adopted, not shadowed** — §3.3.5 and F8. The `.run-*` rules and the whole
+   follow overlay are named colours now.
+2. **The drive walks the deal** — §4.2's step 4, D0c and D6c. #6 put the card between "Start the
+   night" and the first ballot, so a drive that reached for `[data-pick]` straight after `#go`
+   hangs. Going through it is also the cheapest possible proof that the follow did not eat it.

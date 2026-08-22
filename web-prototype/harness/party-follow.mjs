@@ -19,10 +19,11 @@
  */
 
 import {
-  FOLLOW_BEATS, FOLLOW_KEYS, FOLLOW_FORBIDDEN, FOLLOW_VIEW, THROTTLES,
+  CAM_LABEL, FOLLOW_BEATS, FOLLOW_CHROME_CSS, FOLLOW_KEYS, FOLLOW_FORBIDDEN, FOLLOW_VIEW, THROTTLES,
   cleanThrottle, followParams, followUrl, followViolations, isFollowBeat,
 } from '../src/party/follow.js';
 import { ACCENTS, SHELLS } from '../src/party/look.js';
+import { isNightToken } from '../src/party/palette.js';
 import { STUB_SHOW_PLAN, recapAfterMs } from '../src/party/show.js';
 import { FANOUT_FORBIDDEN } from '../net/party/local.mjs';
 
@@ -157,6 +158,37 @@ console.log('\nparty-follow — the TV follow slot');
     (STUB_SHOW_PLAN.find((s) => s.beat === 'expedition')?.ms ?? 1) === 0);
   t('F7b · and the run is long enough to hold a produced beat, not a caption',
     recapAfterMs() >= 20000, `${(recapAfterMs() / 1000).toFixed(0)} s`);
+}
+
+// ---- F8 · the overlay cannot drift off the night's palette --------------------------------
+//
+// `role-peek` P11's assertion, applied to the surface that needs it most. The card at least lives
+// in the same document as `injectNightSkin()`; this overlay is inside an IFRAME and inherits
+// nothing, so a reskin that missed it would leave one stale surface on the biggest screen in the
+// room and no gate would say so. Same reasoning, one frame further out.
+//
+// The blacks that survive are photographic rather than brand — the letterbox matte is the absence
+// of picture, and the shadows are what keep white type legible over a lit room. They are permitted
+// BY NAME here rather than by a regex that happens not to catch them, so the exception is a
+// decision a reader can see rather than a hole.
+{
+  const hex = FOLLOW_CHROME_CSS.match(/#[0-9a-f]{3,8}\b/gi) || [];
+  t('F8 · the overlay CSS holds no hex of its own', hex.length === 0, hex.join(',') || 'no literals');
+
+  const colours = FOLLOW_CHROME_CSS.match(/rgba?\([^)]*\)/gi) || [];
+  const notBlack = colours.filter((c) => !/^rgba?\(\s*0\s*,\s*0\s*,\s*0\s*[,)]/i.test(c));
+  t('F8b · and the only literal colours left are black — matte, shadow, vignette',
+    notBlack.length === 0, notBlack.join(',') || `${colours.length} blacks`);
+
+  const used = [...new Set([...FOLLOW_CHROME_CSS.matchAll(/var\((--[a-z-]+)/g)].map((m) => m[1]))];
+  const orphans = used.filter((n) => !isNightToken(n));
+  t('F8c · every variable it reaches for is a palette name',
+    used.length >= 4 && orphans.length === 0, orphans.join(',') || `${used.length} tokens`);
+
+  t('F8d · the camera names itself, and the overlay never names a room',
+    /^RRR CAM \d\d$/.test(CAM_LABEL)
+      && !/gallery|ballroom|study|chapel|service|corridor/i.test(FOLLOW_CHROME_CSS),
+    CAM_LABEL);
 }
 
 console.log(`\nparty-follow: ${pass} passed, ${fail} failed`);

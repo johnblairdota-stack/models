@@ -85,6 +85,9 @@ export function injectNightSkin() {
        slate: the mansion takes seconds to bake, and a TV with no WebGL degrades to exactly the
        screen it had before rather than to black. The live class is set when the follow reports
        its first rendered frame.
+       These rules are NAMED, not hexed. palette.js: the tokens are "the whole palette for
+       anything built after it", and the run frame is built after it. Widening the older rules
+       above is still a tidy-up rather than this change.
        NOTE: this whole block is inside a JS template literal, so NO BACKTICKS in these comments
        — one terminated the string and took the dev server down while this slice was built. */
     /* A 16:9 box driven by HEIGHT, so the picture is a television rather than a letterbox strip
@@ -93,26 +96,27 @@ export function injectNightSkin() {
     .run-frame { position:relative; height:min(58vh, 620px); aspect-ratio:16/9; width:auto;
       max-width:100%; margin:0 auto; display:flex;
       align-items:center; justify-content:center;
-      border:2px solid rgba(245,161,74,.35); border-radius:14px; overflow:hidden;
+      border:2px solid rgba(var(--night-accent-rgb), .35); border-radius:14px; overflow:hidden;
       background:
-        radial-gradient(ellipse 70% 80% at 50% 70%, rgba(245,161,74,.16), transparent 58%),
-        linear-gradient(180deg, #16110c 0%, #0a0806 100%);
+        radial-gradient(ellipse 70% 80% at 50% 70%, rgba(var(--night-accent-rgb), .16), transparent 58%),
+        linear-gradient(180deg, var(--night-panel) 0%, var(--night-deep) 100%);
       box-shadow: inset 0 0 80px rgba(0,0,0,.45); }
     /* The camera is a LAYER over the frame, parented to body, never inside .night — moving an
        iframe between parents discards its browsing context and re-fetches its src, so it can
        never live in a subtree that paint() rewrites. party-host.js registers this with the
        run frame's client rect every frame. */
     .run-cam-layer { position:fixed; z-index:5; overflow:hidden; border-radius:12px;
-      background:#07060a; box-shadow: inset 0 0 60px rgba(0,0,0,.5);
+      background:var(--night-deep); box-shadow: inset 0 0 60px rgba(0,0,0,.5);
       opacity:0; transition: opacity .8s ease; pointer-events:none; }
     .run-cam-layer.live { opacity:1; }
     .run-cam-layer[hidden] { display:none; }
-    .run-cam-layer iframe.run-cam { width:100%; height:100%; border:0; display:block; background:#07060a; }
+    .run-cam-layer iframe.run-cam { width:100%; height:100%; border:0; display:block;
+      background:var(--night-deep); }
     .run-mount { position:absolute; inset:0; }
     .run-slate { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
       transition: opacity .8s ease; pointer-events:none; }
     .run-frame.live .run-slate { opacity:0; }
-    .run-frame.live { border-color:rgba(245,161,74,.55); }
+    .run-frame.live { border-color:rgba(var(--night-accent-rgb), .55); }
     .run-follow { display:flex; flex-direction:column; align-items:center; gap:14px; padding:28px 20px; }
     .run-face { filter: drop-shadow(0 16px 36px rgba(245,161,74,.28)); animation: night-breathe 2.4s ease-in-out infinite; }
     .run-face .bot-face { width:min(42vw, 220px); height:auto; }

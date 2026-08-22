@@ -113,6 +113,52 @@ export function followParams({
 }
 
 /**
+ * 📺 **THE BROADCAST FURNITURE, AS A STRING — and it lives here for `rolecard.js`'s reason.**
+ *
+ * #6 pulled the role card's CSS into a pure module so `role-peek` P11 could assert it holds no
+ * colour of its own. This is the same hazard one frame further out: the follow overlay renders
+ * inside an IFRAME, in a different document from `injectNightSkin()`, so it inherits nothing and
+ * a reskin that missed it would leave the one stale surface on the biggest screen in the room.
+ * Keeping it here — no THREE, no DOM — is what lets `party-follow.mjs` F8 walk it in bare node.
+ *
+ * ⚠️ **NO HEX, AND THE ONLY LITERALS ARE BLACK.** Every brand colour is a `--night-*` name. The
+ * blacks that remain are photographic rather than brand — the letterbox matte is the absence of
+ * picture, and the text shadows and vignette are what keep white type legible over a lit room —
+ * so F8 permits `rgba(0,0,0,…)` by name and refuses everything else.
+ *
+ * ⚠️ It does NOT declare the tokens. `party-follow.js` prepends `NIGHT_TOKENS`, so there is still
+ * exactly one place the palette is defined.
+ */
+export const FOLLOW_CHROME_CSS = `
+    #fl { position:fixed; inset:0; pointer-events:none; z-index:20;
+      font-family: ui-sans-serif, system-ui, sans-serif; color:var(--night-ink); }
+    #fl .bar { position:absolute; left:0; right:0; height:6.5%; background:rgba(0,0,0,1); }
+    #fl .bar.t { top:0; } #fl .bar.b { bottom:0; }
+    #fl .wash { position:absolute; inset:0;
+      background:
+        radial-gradient(ellipse 92% 88% at 50% 46%, transparent 52%, rgba(0,0,0,.55) 100%),
+        repeating-linear-gradient(0deg, rgba(0,0,0,.16) 0 1px, transparent 1px 3px); }
+    #fl .rec { position:absolute; top:9%; left:2.6%; display:flex; align-items:center; gap:9px;
+      letter-spacing:.24em; text-transform:uppercase; font-size:12px; font-weight:700;
+      color:var(--night-ink); text-shadow:0 2px 10px rgba(0,0,0,.9); }
+    #fl .dot { width:11px; height:11px; border-radius:50%; background:var(--night-bad);
+      box-shadow:0 0 12px var(--night-bad); animation: fl-rec 2s ease-in-out infinite; }
+    #fl .third { position:absolute; left:2.6%; bottom:10.5%; display:flex; align-items:flex-end; gap:14px; }
+    #fl .third .face { width:64px; height:64px; filter: drop-shadow(0 8px 20px rgba(0,0,0,.8)); }
+    #fl .third .who { font-size:clamp(30px, 4.6vw, 62px); font-weight:800; line-height:.98;
+      text-shadow:0 3px 18px rgba(0,0,0,.95); }
+    #fl .third .sub { margin-top:6px; font-size:12px; letter-spacing:.26em; text-transform:uppercase;
+      color:var(--night-accent); text-shadow:0 2px 10px rgba(0,0,0,.9); }
+    #fl .slug { position:absolute; right:2.6%; bottom:11%; text-align:right;
+      font-size:11px; letter-spacing:.26em; text-transform:uppercase; color:var(--night-soft);
+      text-shadow:0 2px 10px rgba(0,0,0,.9); }
+    #fl .slug b { color:var(--night-ink); font-weight:700; }
+    @keyframes fl-rec { 0%,100% { opacity:.25; } 50% { opacity:1; } }`;
+
+/** What the camera calls itself on air. One camera for now; the unlock ladder is a later slice. */
+export const CAM_LABEL = 'RRR CAM 01';
+
+/**
  * The `src` for the TV's follow iframe, or `null`.
  *
  * `room` is carried for the operator's log line only — the follow view opens no socket with it.
