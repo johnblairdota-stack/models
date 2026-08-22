@@ -112,7 +112,6 @@ export function injectNightSkin() {
     .run-cam-layer[hidden] { display:none; }
     .run-cam-layer iframe.run-cam { width:100%; height:100%; border:0; display:block;
       background:var(--night-deep); }
-    .run-mount { position:absolute; inset:0; }
     .run-slate { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
       transition: opacity .8s ease; pointer-events:none; }
     .run-frame.live .run-slate { opacity:0; }

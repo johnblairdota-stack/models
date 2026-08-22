@@ -19,7 +19,8 @@
  */
 
 import {
-  CAM_LABEL, FOLLOW_BEATS, FOLLOW_CHROME_CSS, FOLLOW_KEYS, FOLLOW_FORBIDDEN, FOLLOW_VIEW, THROTTLES,
+  CAM_LABEL, FOLLOW_BEATS, FOLLOW_CHROME_CSS, FOLLOW_INSTRUMENTS, FOLLOW_KEYS, FOLLOW_FORBIDDEN,
+  FOLLOW_VIEW, SHOT_NAMES, THROTTLES,
   cleanThrottle, followParams, followUrl, followViolations, isFollowBeat,
 } from '../src/party/follow.js';
 import { ACCENTS, SHELLS } from '../src/party/look.js';
@@ -189,6 +190,41 @@ console.log('\nparty-follow — the TV follow slot');
     /^RRR CAM \d\d$/.test(CAM_LABEL)
       && !/gallery|ballroom|study|chapel|service|corridor/i.test(FOLLOW_CHROME_CSS),
     CAM_LABEL);
+}
+
+// ---- F9 · the instruments the docs advertise have to actually open ---------------------------
+//
+// 🚨 THE BUG THIS GATE EXISTS FOR SHIPPED IN THE FIRST DRAFT AND A HOSTILE REVIEW CAUGHT IT, NOT
+// A GATE. `party-follow.js` reads `?still=` and `?shot=` and the PR's how-to advertises both, and
+// neither was on the allow-list — so every camera-alone URL in the documentation threw
+// "forbidden or unknown params" at the door. A closed schema is only as closed as its list is
+// COMPLETE; a list that omits something the code already reads is not strict, it is broken.
+//
+// The two halves are asserted separately on purpose. Accepting an instrument at the door and
+// never EMITTING one are different properties, and folding `still` into `FOLLOW_KEYS` would have
+// satisfied the first while quietly voiding F2c — a TV that started shipping `still=1` to the
+// whole room would then have passed its own gate.
+{
+  const url = `?view=${FOLLOW_VIEW}&runner=p1&name=Hai&seed=1&still=1&shot=lead`;
+  t('F9 · the camera-alone URL the docs advertise opens — ?still=1 and ?shot=lead are accepted',
+    followViolations(url).length === 0, followViolations(url).join(',') || 'clean');
+  for (const shot of SHOT_NAMES) {
+    if (!t(`F9b · ?shot=${shot} is a shot the operator actually has`,
+      followViolations({ view: FOLLOW_VIEW, runner: 'p1', shot }).length === 0)) break;
+  }
+  t('F9c control · a shot the bed does not have is a violation, not a silent no-op',
+    followViolations({ view: FOLLOW_VIEW, runner: 'p1', shot: 'leed' }).length === 1,
+    'a mistyped pin would otherwise read as the cut logic being broken');
+
+  const slot = followParams(SLOT);
+  t('F9d · and a host-built slot emits neither instrument — they are typed, never sent',
+    FOLLOW_INSTRUMENTS.every((k) => slot[k] === undefined)
+      && !followUrl(SLOT).includes('still=') && !followUrl(SLOT).includes('shot='));
+  const overlap = FOLLOW_INSTRUMENTS.filter((k) => FOLLOW_KEYS.includes(k));
+  t('F9e · the two lists are disjoint, so F2c still means what it says',
+    overlap.length === 0, overlap.join(',') || `${FOLLOW_KEYS.length} sent, ${FOLLOW_INSTRUMENTS.length} typed`);
+  t('F9f · an instrument cannot smuggle a forbidden name',
+    FOLLOW_INSTRUMENTS.every((k) => !FOLLOW_FORBIDDEN.includes(k)));
 }
 
 console.log(`\nparty-follow: ${pass} passed, ${fail} failed`);

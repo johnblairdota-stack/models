@@ -479,6 +479,47 @@ try {
   t('D7 · no page error on the TV, the phones, or inside the follow',
     pageErrors.length === 0, pageErrors.slice(0, 3).join(' | ') || 'clean');
 
+  /*
+   * ---------------------------------------------------------------------------------------
+   * D8 · THE URL THE DOCUMENTATION ADVERTISES, OPENED FOR REAL.
+   * ---------------------------------------------------------------------------------------
+   * `party-follow.mjs` F9 proves the schema accepts `?still=1&shot=lead`. It cannot prove the
+   * PAGE comes up, and the page is what was broken: both instruments were read by the view and
+   * missing from the allow-list, so every camera-alone URL in the PR threw at the door and
+   * `main.js` painted the red failure card. A hostile review caught that, not a gate — so the
+   * proof is a real navigation, and it asserts the pin took rather than merely that nothing
+   * exploded.
+   */
+  const solo = await ctx.newPage();
+  trackErrors(solo, 'solo');
+  const soloUrl = `${base}/?view=party.follow&runner=p1&name=Hai`
+    + '&shell=%236b3a2a&accent=%23f5a14a&seed=1&throttle=CREEP&still=1&shot=lead';
+  await solo.goto(soloUrl, { waitUntil: 'domcontentloaded' });
+  const soloLive = await waitFor(solo, () => {
+    if (document.body.dataset.rrrError || window.__rrrError) return 'error';
+    return document.body.dataset.rrrFollow === 'live' ? 'live' : null;
+  }, { timeout: 300000, every: 1000 });
+  t('D8 · the camera-alone URL the how-to advertises actually opens', soloLive === 'live',
+    soloLive === 'error'
+      ? await solo.evaluate(() => String(window.__rrrError || document.body.dataset.rrrError).slice(0, 160))
+      : String(soloLive));
+  if (soloLive === 'live') {
+    const pinned = await solo.evaluate(async () => {
+      const f = window.__rrrFollow;
+      const a = { shot: f.readout().shot, x: f.runner.pos.x, z: f.runner.pos.z };
+      await new Promise((r) => setTimeout(r, 2500));
+      return { ...a, shot2: f.readout().shot, x2: f.runner.pos.x, z2: f.runner.pos.z };
+    });
+    t('D8b · ?shot=lead pins the operator, and ?still=1 freezes the runner',
+      pinned.shot === 'lead' && pinned.shot2 === 'lead'
+        && Math.abs(pinned.x2 - pinned.x) < 0.01 && Math.abs(pinned.z2 - pinned.z) < 0.01,
+      `${pinned.shot}/${pinned.shot2} · moved ${Math.hypot(pinned.x2 - pinned.x, pinned.z2 - pinned.z).toFixed(3)} m`);
+    if (SHOTS) {
+      await mkdir(SHOTDIR, { recursive: true });
+      await solo.screenshot({ path: path.join(SHOTDIR, 'camera-alone-lead.png'), timeout: 120000 });
+    }
+  }
+
   // ------------------------------------------------------------- evidence
   if (SHOTS) {
     await mkdir(SHOTDIR, { recursive: true });

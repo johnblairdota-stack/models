@@ -105,12 +105,12 @@ export default async function partyHost({ params }) {
    * presents as a TV that never finishes loading.
    *
    * 🚨 **AND MOVING AN IFRAME BETWEEN PARENTS RELOADS IT TOO, WHICH IS WHY THE OBVIOUS FIX DOES
-   * NOT WORK.** Holding the element in this closure and `appendChild`-ing it into whatever
-   * `[data-follow-mount]` the current paint produced *looks* like it preserves the element, and
-   * it does — but the HTML spec discards a nested browsing context when its `iframe` is removed
-   * from a document, and re-inserting it creates a new one and re-fetches `src`. So the element
-   * would survive and the mansion inside it would not. That was built, run, and measured
-   * reloading; this is the second design.
+   * NOT WORK.** Holding the element in this closure and `appendChild`-ing it into a mount point
+   * the current paint had just written *looks* like it preserves the element, and it does — but
+   * the HTML spec discards a nested browsing context when its `iframe` is removed from a
+   * document, and re-inserting it creates a new one and re-fetches `src`. So the element would
+   * survive and the mansion inside it would not. That was built, run, and measured reloading;
+   * this is the second design, and it is why `runStage()` emits no mount point.
    *
    * What works: a LAYER — a `position:fixed` element created once, parented to `document.body`,
    * outside everything `paint()` touches. It never moves in the DOM, so it never reloads. It is
@@ -316,8 +316,8 @@ export default async function partyHost({ params }) {
     root.querySelector('#to-recap')?.addEventListener('click', () => setBeat('recap'));
     root.querySelector('#to-cast')?.addEventListener('click', () => setBeat('casting'));
 
-    // Last, because it re-parents into the DOM this paint just wrote. Off the run beat this
-    // tears the WebGL context down — the recap card does not need a mansion behind it.
+    // Last, because it measures the frame this paint just wrote in order to sit over it. Off the
+    // run beat it hides the layer rather than destroying it — see `syncFollow`.
     const runnerId = pair.runner || recap.runner;
     syncFollow(onRun && runnerId
       ? followUrl({
@@ -362,10 +362,12 @@ function seatLook(lobby, playerId) {
  * cannot build WebGL at all degrades to exactly the screen it had before rather than to black.
  * `.run-frame.live` fades it out under the canvas.
  *
- * ⚠️ THE `<iframe>` IS NOT WRITTEN HERE. `paint()` rebuilds `root.innerHTML` on every websocket
- * message, so an iframe in this string would be destroyed and re-created — a fresh WebGL context
- * and a fresh bake — several times a second. `syncFollow()` owns one element outside the
- * repainted subtree and re-parents it into `[data-follow-mount]`. Slice §5.1.
+ * ⚠️ THE `<iframe>` IS NOT WRITTEN HERE, AND THERE IS NO MOUNT POINT FOR IT EITHER. `paint()`
+ * rebuilds `root.innerHTML` on every websocket message, so an iframe in this string would be
+ * destroyed and re-created — a fresh WebGL context and a fresh bake — several times a second.
+ * The camera is a `position:fixed` layer on `<body>`, sized to this element's client rect; it
+ * never enters this subtree at all. See `syncFollow()` and slice §5.1 for why an empty div here
+ * to append into would not have worked.
  */
 function runStage({ names, lobby, runnerId, guideId, cameras, alarms }) {
   const runner = joinedName(names, runnerId, 'The runner');
@@ -376,7 +378,6 @@ function runStage({ names, lobby, runnerId, guideId, cameras, alarms }) {
   return `
     <div class="run-stage">
       <div class="run-frame" aria-label="${esc(runner)} is running">
-        <div class="run-mount" data-follow-mount></div>
         <div class="run-slate">
           <div class="run-follow">
             <div class="run-face">${face}</div>

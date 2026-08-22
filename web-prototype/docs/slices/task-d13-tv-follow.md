@@ -300,6 +300,16 @@ Default export `async function partyFollow({ params })`, per `main.js`'s contrac
 7. `?still=1` freezes the runner for a deterministic screenshot. `?shot=lead` pins one shot.
    Both are instruments; live play passes neither.
 
+   ⚠️ **PUT THEM ON THE ALLOW-LIST — as `FOLLOW_INSTRUMENTS`, not as `FOLLOW_KEYS`.** They were
+   read by this view and absent from the schema in the first draft, so every camera-alone URL the
+   documentation advertised threw at the door. A closed schema is only as closed as its list is
+   *complete*; a list that omits something the code already reads is not strict, it is broken.
+   Two lists rather than one because F2c asserts that every key a **host-built** slot emits is a
+   `FOLLOW_KEYS` name — folding `still` in there would let a TV ship `still=1` to the whole room
+   and still pass its own gate. And `?shot=` is checked against `SHOT_NAMES` (declared in
+   `follow.js`, read by the bed), so a mistyped pin is a violation rather than a silent no-op
+   that reads as the cut logic being broken.
+
 ### 3.4 `src/views.js`
 
 One row, in the `party` group, after `party.phone`:
@@ -376,6 +386,7 @@ never skipped for want of a module. So this gate imports **only** `src/party/fol
 | F6 | the same inputs produce the same url — the slot is a pure function, so a repaint cannot reload the mansion |
 | F7 | expedition is still immediate, and the run is long enough to hold a produced beat rather than a caption |
 | F8 | the overlay CSS holds no hex, its only literal colours are black, every variable it names is a palette token, and it names no room |
+| F9 | `?still=1` and `?shot=lead` are accepted, only real shot names are, a host-built slot emits neither instrument, and the two lists are disjoint |
 
 **F8 is `role-peek` P11 applied to the surface that needs it most.** The card at least shares a
 document with `injectNightSkin()`; the follow overlay is in an iframe and inherits nothing, so a
@@ -441,6 +452,15 @@ And two that exist only to say this slice did not take anything away from #6:
 |---|---|
 | D0c | the card is dealt at night start, is **blurred at rest**, lights only while the bar is held, and re-blurs on release |
 | D6c | the face-down card tab is still on both phones **during the run**, with the camera live, naming no role |
+
+And one that exists because a gate cannot see it:
+
+| id | proves |
+|---|---|
+| D8 | the camera-alone URL **this document advertises** navigates to a live follow, and `?shot=lead` / `?still=1` actually take |
+
+F9 proves the schema accepts those params. It cannot prove the page comes up, and the page is
+what was broken.
 
 `role-peek` proves the card's own contract in bare node and this does not duplicate it. What only
 a browser can say is that the deal and the follow are the same night.
@@ -606,6 +626,14 @@ Four things, all now corrected above rather than left as a trap for the next rea
 4. **§3.5 did not mention `joinedName`.** PR #5's helper treats `playerName`'s `'—'` not-found
    sentinel as a real name, so an unresolved runner reaches the TV as "— is running". Caught by
    the drive, fixed in place, one line.
+
+5. **§3.3.7's two instruments were never on the allow-list, and a hostile review found it, not a
+   gate.** `party-follow.js` reads `?still=` and `?shot=`, §4.2 and the PR how-to both advertise
+   them, and `followViolations()` rejected both — so every camera-alone URL in the documentation
+   threw the red failure card at the door. The gate could not have caught it: F2 only ever
+   validated slots the *host* builds, and the host never sends an instrument. The lesson is
+   narrower than "add a test" — **a closed schema needs an assertion per DOCUMENTED entry point,
+   not per code path**, which is what F9 and D8 are.
 
 And one thing that was right but understated: **§3.2h's ordering note.** The reason the beat
 number in §4.1's F7 had to move at all is that `finalizeScene()` plus the material bake is

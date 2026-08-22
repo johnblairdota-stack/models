@@ -3,6 +3,7 @@ import { WallField } from '../destruction/wall.js';
 import { buildTestRoom } from './room.js';
 import { Player } from './player.js';
 import { MOVE } from './rules.js';
+import { SHOT_NAMES } from '../party/follow.js';
 
 /**
  * 🎥 **THE FOLLOW BED — the mansion, a runner walking it, and a camera operator following.**
@@ -191,7 +192,9 @@ class RunnerRoute {
  * them is ever above the storey. A cut is a CUT — an edit, not a drone move — and between cuts
  * the eye lags the body rather than being welded to it.
  */
-const SHOTS = ['chase', 'shoulder', 'lead', 'doorway'];
+// Named in `src/party/follow.js` so `?shot=` can be validated at the door without loading THREE.
+// One list, so a shot the bed does not have cannot be advertised on the URL.
+const SHOTS = SHOT_NAMES;
 
 class FollowOperator {
   constructor(room, rng) {

@@ -19,10 +19,32 @@ import { cleanLook } from './look.js';
 /** The only beat that mounts a camera. Casting, recap and lobby get no follow. */
 export const FOLLOW_BEATS = ['expedition'];
 
-/** Closed allow-list. A param not on this list is a violation, not a pass. */
+/** Closed allow-list — what the TV may SEND. A param not on this list is a violation, not a pass. */
 export const FOLLOW_KEYS = [
   'view', 'room', 'runner', 'name', 'shell', 'accent', 'seed', 'throttle', 'tag',
 ];
+
+/**
+ * ⚠️ **INSTRUMENTS — what a developer may TYPE, and a separate list on purpose.**
+ *
+ * `?still=1` freezes the runner for a deterministic screenshot; `?shot=lead` pins one camera.
+ * Both are documented on the camera-alone URL and both were **missing from the allow-list**, so
+ * every URL the PR advertised threw `follow slot: forbidden or unknown params` at the door. Found
+ * in review; it is the difference between a closed schema and a schema that is merely closed to
+ * the things somebody remembered.
+ *
+ * They are not folded into `FOLLOW_KEYS` because the two lists answer different questions. F2c
+ * asserts that **every key a host-built slot emits** is a `FOLLOW_KEYS` name — put `still` on that
+ * list and a TV that started shipping `still=1` to the whole room would pass its own gate. So:
+ * accepted at the door, never emitted by `followParams`, and F9 holds both halves.
+ */
+export const FOLLOW_INSTRUMENTS = ['still', 'shot'];
+
+/**
+ * The operator's shots, named here rather than in `follow-bed.js`, because `?shot=` has to be
+ * checkable without loading THREE. The bed reads this list; so does the gate.
+ */
+export const SHOT_NAMES = ['chase', 'shoulder', 'lead', 'doorway'];
 
 /**
  * 🚨 A SUPERSET OF `local.mjs`'s `FANOUT_FORBIDDEN`, AND THAT IS ASSERTED BY THE GATE (F5).
@@ -77,9 +99,13 @@ export function followViolations(input) {
 
   for (const k of new Set([...params.keys()])) {
     if (FOLLOW_FORBIDDEN.includes(k)) bad.push(`follow.${k}`);
-    else if (!FOLLOW_KEYS.includes(k)) bad.push(`follow.${k}`);
+    else if (!FOLLOW_KEYS.includes(k) && !FOLLOW_INSTRUMENTS.includes(k)) bad.push(`follow.${k}`);
   }
   if (params.get('view') && params.get('view') !== FOLLOW_VIEW) bad.push(`follow.view=${params.get('view')}`);
+  // An instrument is allowed to be present; it is not allowed to mean anything it likes. A
+  // mistyped `?shot=leed` would otherwise pin nothing and read as the cut logic being broken.
+  const shot = params.get('shot');
+  if (shot && !SHOT_NAMES.includes(shot)) bad.push(`follow.shot=${shot}`);
   return bad;
 }
 
