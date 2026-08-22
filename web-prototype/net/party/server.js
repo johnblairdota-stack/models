@@ -89,7 +89,9 @@ export default class PrimeTimeRoom {
     let msg; try { msg = JSON.parse(raw); } catch { return; }
     const seat = [...this.conns.entries()].find(([, c]) => c === conn)?.[0];
     if (!seat) return;
-    if (msg.t === 'start') this.game.start();
+    // The draw belongs to the night start, not to the first expedition — same as `local.mjs`,
+    // for the same reason: a phone must hold its card before it votes a runner in.
+    if (msg.t === 'start') { this.game.start(); this.game.dealRoles(); }
     if (msg.t === 'episode') this.game.playEpisode(msg.opts || {});
   }
 
