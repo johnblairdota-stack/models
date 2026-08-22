@@ -11,6 +11,10 @@ import { ACCENTS, DEFAULT_LOOK, SHELLS, cleanLook, robotFaceSvg } from '../party
 import { applyCastLock, applyCastTap, ballotFromCast, castPrompt, freshCast, mergePublicNames, nominationPlayers, padlockSvg } from '../party/cast-ui.js';
 import { cardFor, faceDownHtml, mountRoleCard, premiereHtml } from '../party/rolecard.js';
 import { EVIL } from '../party/cast.js';
+import { guideMapSvg } from '../party/guidemap.js';
+import { MISSION_ROOM, pickPlanSeed, roomLabel } from '../party/mansion.js';
+import { intelLine } from '../party/intel.js';
+import { warmLabel } from '../party/follow.js';
 
 export default async function partyPhone({ params }) {
   injectNightSkin();
@@ -37,6 +41,15 @@ export default async function partyPhone({ params }) {
     castEpisode: null,
     /** null · 'deal' while the backs are flying · 'premiere' while the card is first up. */
     stage: null,
+    /**
+     * 🕹️ The pad's own state. `x`/`y` is the stick as a clamped unit vector; `sent` is the last
+     * thing put on the wire, which is what makes the 20 Hz tick change-gated rather than a
+     * metronome. See `startPad`.
+     */
+    pad: { x: 0, y: 0, run: false, swing: false, sent: '', timer: 0 },
+    /** How far along the TV's mansion bake is — fanned to every phone, not just the host. */
+    warm: '',
+    warmPct: 0,
     /** The deal is one moment. A reconnect replays the card; it does not re-deal it. */
     dealSeen: false,
     /** Dealt to, but the face picker still owns the screen. See `maybeRunDeal`. */
@@ -81,6 +94,13 @@ export default async function partyPhone({ params }) {
       onMessage: (m) => {
         if (m.t === 'welcome') sessionStorage.setItem(tokenKey(code, 'phone'), m.token);
         if (m.t === 'full') state.err = 'Room is full (8 phones + TV).';
+        if (m.t === 'warm') {
+          // The wait belongs to the room, not to the host tab. A phone that has just typed its
+          // name should be able to see the night loading rather than wonder if anyone is there.
+          state.warm = m.stage; state.warmPct = m.pct ?? 0;
+          const el = root.querySelector('[data-warm-line]');
+          if (el) { el.textContent = warmSummary(); return; }
+        }
         if (m.t === 'event' && m.ev?.type === 'role.card') dealt(!!m.replay);
         if (m.t === 'lobby' && !state.lookLocked) {
           const me = (m.seats || []).find((s) => s.id === client.welcome?.id);
@@ -333,6 +353,7 @@ export default async function partyPhone({ params }) {
     } else if (beat === 'lobby' || phase === 'LOBBY') {
       body += `<h1>${esc(myName)}</h1>
         <p class="hint">Seat ${me.seat != null ? me.seat + 1 : '—'} · waiting for the host. The TV is the show — this is a pad.</p>
+        <p class="hint" data-warm-line>${esc(warmSummary())}</p>
         ${nameField()}
         ${roster(c.lobby)}`;
     } else if (beat === 'casting' && (pair.runner || recap.runner)) {
@@ -340,16 +361,57 @@ export default async function partyPhone({ params }) {
         <p class="hint">${esc(playerName(players, pair.runner || recap.runner))} walks · ${esc(playerName(players, pair.guide || recap.guide))} talks.</p>`;
     } else if (beat === 'expedition') {
       if (iAmRunner) {
+        /*
+         * 🕹️ **FULL CONTROL, NOT FOUR SPEEDS.** John: *"replace STILL/CREEP/WALK/RUN with full
+         * movement control and freedom. Runner spawns equipped with the sledge."*
+         *
+         * ⚠️ THE OLD PAD DID NOT EVEN SEND. `state.throttle` was set on tap and repainted, and
+         * nothing ever put it on the wire — the TV's follow ran on a scripted schedule with the
+         * URL's default `throttle=WALK` for the whole expedition. So this is not "a nicer control
+         * for the existing thing", it is the first time this screen has moved anything.
+         */
         body += `<h1>You walk.</h1>
-          <p class="hint">Eyes on the TV. Thumbs on this pad. RUN is loud.</p>
-          <div class="pad" id="thr">
-            ${['STILL', 'CREEP', 'WALK', 'RUN'].map((t) =>
-              `<button data-t="${t}" class="${state.throttle === t ? 'on' : ''}">${t}</button>`).join('')}
-          </div>`;
+          <p class="hint">Eyes on the TV. Drag to move, hold RUN, tap SWING. Running is loud.</p>
+          ${missionLine(frame)}
+          <div class="stick-wrap">
+            <div class="stick" id="stick"><div class="nub" data-nub></div></div>
+            <div class="stick-side">
+              <button class="stick-btn" id="run-btn" type="button">Run</button>
+              <button class="stick-btn swing" id="swing-btn" type="button">Swing</button>
+            </div>
+          </div>
+          ${intelBlock(frame)}`;
       } else if (iAmGuide) {
+        /*
+         * 🗺️ **THE GUIDE FINALLY HAS THE MAP THEY HAVE BEEN TOLD THEY HAVE.** D13 shipped the
+         * sentence *"The map is yours"* over an empty screen.
+         *
+         * It is built from `worldSeed` — public, `all` audience — through the same
+         * `pickPlanSeed` the mansion is built from, so this is the house the runner is standing
+         * in rather than a diagram of a different one. The marks come from `frame.flyover`, which
+         * `net/party/entitle.js` L81-84 restricts to the `guide` audience and gates on a lit
+         * camera, so a blind guide gets a floor plan and knows they are blind.
+         *
+         * 🚨 The TV still gets none of this. `party-loop.md`'s "Do not" list, first item.
+         */
+        const seed = pickPlanSeed(frame?.worldSeed ?? 0).seed;
+        const marks = frame?.flyover?.marks ?? [];
+        const meMark = marks.find((k) => k.kind === 'you') ?? null;
+        const hunterMark = marks.find((k) => k.kind === 'hunter') ?? null;
         body += `<h1>You talk.</h1>
-          <p class="hint">The map is yours. The TV does not get it. Call rooms. Do not read a debug overlay that is not here.</p>
-          <p class="hint">Cameras live ${frame?.cameras?.unlocked ?? '—'}.</p>`;
+          <p class="hint">The map is yours. The TV does not get it — call the rooms out loud.</p>
+          ${guideMapSvg({
+            seed,
+            goal: MISSION_ROOM,
+            runner: meMark,
+            flyover: hunterMark ? { hunter: hunterMark } : null,
+          })}
+          <p class="hint ${hunterMark ? '' : 'gm-blind'}">${hunterMark
+            ? 'A camera has the hunter. The red mark is live.'
+            : 'No camera has the hunter. You are calling this one blind.'}</p>
+          ${missionLine(frame)}
+          <p class="hint">Cameras live ${frame?.cameras?.unlocked ?? '—'}.</p>
+          ${intelBlock(frame)}`;
       } else {
         body += `<h1>Watch.</h1>
           <p class="hint">Reaction only. Dead air is the metric.</p>
@@ -359,6 +421,7 @@ export default async function partyPhone({ params }) {
             <button data-r="SUS">❓ Sus</button>
             <button data-r="SHOCK">‼ Shock</button>
           </div>
+          ${intelBlock(frame)}
           ${state.flash ? `<p class="hint">${esc(state.flash)}</p>` : ''}`;
       }
     } else {
@@ -388,12 +451,7 @@ export default async function partyPhone({ params }) {
       localStorage.setItem('rrr.party.name', v);
       c.send({ t: 'name', name: v });
     });
-    root.querySelector('#thr')?.addEventListener('click', (e) => {
-      const t = e.target?.dataset?.t;
-      if (!t) return;
-      state.throttle = t;
-      paint();
-    });
+    bindPad();
     root.querySelector('#react')?.addEventListener('click', (e) => {
       const r = e.target?.dataset?.r;
       if (!r) return;
@@ -403,7 +461,149 @@ export default async function partyPhone({ params }) {
     bindCardTab();
   }
 
+  /**
+   * 🕹️ **THE STICK — a pointer drag, clamped to a unit disc, posted at 20 Hz WHEN IT CHANGES.**
+   *
+   * Three decisions, all of which cost something if they go the other way:
+   *
+   * · **`setPointerCapture`.** Without it a thumb that slides off the 230 px circle stops
+   *   delivering `pointermove` and the runner keeps walking into a wall until the player lifts.
+   *   With it the drag belongs to the stick until `pointerup`, wherever the thumb goes.
+   * · **`touch-action:none` in the CSS**, not `preventDefault` here. The browser decides whether a
+   *   gesture is a scroll before the first `pointermove` fires, so a JS-side cancel is too late.
+   * · **CHANGE-GATED.** A phone posting an unchanged stick twenty times a second costs battery and
+   *   wire for nothing. The timer runs at 20 Hz and only sends when the rounded value moved — but
+   *   it always sends the zero, so releasing the stick reliably stops the body.
+   *
+   * A swing is an EDGE, sent immediately rather than waiting for the tick: a hammer that fires up
+   * to 50 ms after the tap reads as an unresponsive game rather than a lagged one.
+   */
+  function bindPad() {
+    const stick = root.querySelector('#stick');
+    const nub = root.querySelector('[data-nub]');
+    const runBtn = root.querySelector('#run-btn');
+    const swingBtn = root.querySelector('#swing-btn');
+    if (!stick) { stopPad(); return; }
+
+    const set = (x, y) => {
+      const mag = Math.hypot(x, y);
+      const k = mag > 1 ? 1 / mag : 1;
+      state.pad.x = x * k;
+      state.pad.y = y * k;
+      if (nub) nub.style.transform = `translate(calc(-50% + ${state.pad.x * 78}%), calc(-50% + ${-state.pad.y * 78}%))`;
+      stick.classList.toggle('on', Math.hypot(state.pad.x, state.pad.y) > 0.12);
+    };
+
+    const fromEvent = (e) => {
+      const r = stick.getBoundingClientRect();
+      // +y is FORWARD, so the screen's downward axis is negated once, here, rather than at the
+      // three places downstream that would each have to remember to.
+      set((e.clientX - (r.left + r.width / 2)) / (r.width / 2),
+        -((e.clientY - (r.top + r.height / 2)) / (r.height / 2)));
+    };
+
+    stick.addEventListener('pointerdown', (e) => {
+      stick.setPointerCapture(e.pointerId);
+      fromEvent(e);
+      sendPad();
+    });
+    stick.addEventListener('pointermove', (e) => {
+      if (!stick.hasPointerCapture(e.pointerId)) return;
+      fromEvent(e);
+    });
+    const release = (e) => {
+      try { stick.releasePointerCapture(e.pointerId); } catch { /* already gone */ }
+      set(0, 0);
+      sendPad();
+    };
+    stick.addEventListener('pointerup', release);
+    stick.addEventListener('pointercancel', release);
+
+    const hold = (btn, on) => {
+      btn.addEventListener('pointerdown', () => { state.pad.run = on; btn.classList.toggle('on', on); sendPad(); });
+      btn.addEventListener('pointerup', () => { state.pad.run = false; btn.classList.remove('on'); sendPad(); });
+      btn.addEventListener('pointercancel', () => { state.pad.run = false; btn.classList.remove('on'); sendPad(); });
+    };
+    if (runBtn) hold(runBtn, true);
+    if (swingBtn) {
+      swingBtn.addEventListener('pointerdown', () => {
+        swingBtn.classList.add('on');
+        sendPad(true);
+        setTimeout(() => swingBtn.classList.remove('on'), 220);
+      });
+    }
+    startPad();
+  }
+
+  function sendPad(swing = false) {
+    const p = state.pad;
+    const msg = {
+      t: 'move',
+      x: Math.round(p.x * 100) / 100,
+      y: Math.round(p.y * 100) / 100,
+      run: !!p.run,
+      swing: !!swing,
+    };
+    const key = `${msg.x}|${msg.y}|${msg.run}`;
+    if (!swing && key === p.sent) return;
+    p.sent = key;
+    state.client?.send(msg);
+  }
+
+  function startPad() {
+    if (state.pad.timer) return;
+    state.pad.timer = setInterval(() => sendPad(), 50);      // 20 Hz, and change-gated inside
+  }
+
+  function stopPad() {
+    if (!state.pad.timer) return;
+    clearInterval(state.pad.timer);
+    state.pad.timer = 0;
+  }
+
+  /** What the mansion is doing, for the lobby. Identical wording to the TV's bar, deliberately. */
+  function warmSummary() {
+    if (!state.warm) return 'The TV is warming the mansion…';
+    if (state.warm === 'ready') return 'The mansion is ready.';
+    return `${warmLabel(state.warm).replace(/^./, (c) => c.toUpperCase())} · ${state.warmPct}%`;
+  }
+
+  /**
+   * 🖼️ The mission, in the runner's and the guide's own words. Driven by the `mission.*` events
+   * `src/party/room.js` appends off the TV's world report — PUBLIC, and carrying a room and
+   * nothing else, so a spectator can follow the beat without being told who is where.
+   */
+  function missionLine(frame) {
+    const evs = state.client?.events ?? [];
+    const last = [...evs].reverse().find((e) => String(e.type ?? '').startsWith('mission.'));
+    const phase = last ? String(last.type).slice('mission.'.length) : 'seek';
+    if (phase === 'done') return `<p class="goal">Home. That is the run.</p>`;
+    if (phase === 'return') return `<p class="goal">The painting is down. Get back to the ballroom.</p>`;
+    return `<p class="goal">Find the ${esc(roomLabel(MISSION_ROOM).toLowerCase())}. Break the painting.</p>`;
+  }
+
+  /**
+   * 🔎 What this phone has been told about where the bodies are.
+   *
+   * ⚠️ **IT RENDERS `you.intel` AND COMPUTES NOTHING.** The good/evil asymmetry is applied
+   * server-side in `src/party/room.js` before projection — a good player's frame does not contain
+   * an exact coordinate for this to round off. If this function ever starts doing arithmetic on a
+   * position, the filter has moved to the client and stopped being a filter.
+   */
+  function intelBlock(frame) {
+    const intel = frame?.you?.intel;
+    if (!intel) return '';
+    const exact = intel.grade === 'exact';
+    return `<div class="intel${exact ? ' exact' : ''}">
+      <span class="k">${exact ? 'Production feed' : 'Word from the house'}</span>
+      ${esc(intelLine(intel))}
+    </div>`;
+  }
+
   function paintCasting(players, me, episode) {
+    // This sheet returns before `paint()` reaches `bindPad`, so the 20 Hz tick has to be stopped
+    // here or a phone that ran last episode keeps posting a stick into the casting beat.
+    stopPad();
     const ep = Number(episode) || 1;
     if (state.castEpisode !== ep) {
       state.castEpisode = ep;

@@ -225,6 +225,10 @@ export const FOLLOW_CHROME_CSS = `
       font-size:11px; letter-spacing:.26em; text-transform:uppercase; color:var(--night-soft);
       text-shadow:0 2px 10px rgba(0,0,0,.9); }
     #fl .slug b { color:var(--night-ink); font-weight:700; }
+    /* Warming and intros: the frame is a frame, but there is no production to graphic yet. */
+    #fl.pre .rec, #fl.pre .third { opacity:0; }
+    #fl.pre .slug { opacity:.35; }
+    #fl .rec, #fl .third { transition: opacity .5s ease; }
     @keyframes fl-rec { 0%,100% { opacity:.25; } 50% { opacity:1; } }`;
 
 /** What the camera calls itself on air. One camera for now; the unlock ladder is a later slice. */
