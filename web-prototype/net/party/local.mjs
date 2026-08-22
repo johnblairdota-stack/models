@@ -30,13 +30,15 @@
  *   · `t:state` / `t:event` — through `project()` or `visibleTo()` for THAT socket.
  *   · `t:lobby` / `t:ballots` / `t:show` — a closed public side-channel. Occupancy, published
  *     names, casting votes, show beat. Not the entitlement matrix. `fanoutViolations()` is
- *     the freeze: a later `role` / `alignment` / `cover` / `claim` on one of these fails a
- *     gate (and throws here) rather than shipping silently.
+ *     the freeze: a later `role` / `alignment` / `cover` / `claim` / `hunter` / `deal` on
+ *     one of these fails a gate (and throws here) rather than shipping silently.
+ *     Public cosmetics (`shell`, `accent`) are on the allow-list; they are not a hole.
  */
 
 import http from 'node:http';
 import crypto from 'node:crypto';
 import { createRoom } from '../../src/party/room.js';
+import { isShowBeat, recapAfterMs } from '../../src/party/show.js';
 
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 export const MAX_PHONES = 8;
@@ -96,9 +98,35 @@ function getRoom(code, opts) {
     send: (id, frame) => outbox(id, { t: 'state', frame }),
     emit: (id, ev) => outbox(id, { t: 'event', ev }),
   });
-  r = { code, game, conns, seatsTaken: new Set(), tvTaken: false, ballots: new Map(), show: 'lobby' };
+  r = { code, game, conns, seatsTaken: new Set(), tvTaken: false, ballots: new Map(), show: 'lobby', showClock: null };
   rooms.set(code, r);
   return r;
+}
+
+function clearShowClock(room) {
+  if (room.showClock) {
+    clearTimeout(room.showClock);
+    room.showClock = null;
+  }
+}
+
+/** Persist + fan the beat so a refreshed TV resumes here, not on host-tab RAM. */
+function setShow(room, beat) {
+  if (!isShowBeat(beat)) return;
+  room.show = beat;
+  fanout(room, { t: 'show', beat: room.show });
+}
+
+/** Pair locked / playEpisode started — every client including the TV enters the run. */
+function startStubShow(room) {
+  clearShowClock(room);
+  setShow(room, 'expedition');
+  const wait = recapAfterMs();
+  room.showClock = setTimeout(() => {
+    room.showClock = null;
+    if (room.show === 'expedition') setShow(room, 'recap');
+  }, wait);
+  room.showClock.unref?.();
 }
 
 /**
@@ -156,12 +184,12 @@ export function bindConnection(room, { token, wantTV = false }) {
 /** Closed keys for the public side-channel. A field not on this list is a violation. */
 export const FANOUT_KEYS = {
   lobby: ['t', 'code', 'phase', 'episode', 'seats'],
-  lobbySeat: ['id', 'playerId', 'isTV', 'name', 'seat', 'joined', 'connected'],
+  lobbySeat: ['id', 'playerId', 'isTV', 'name', 'seat', 'joined', 'connected', 'shell', 'accent'],
   ballots: ['t', 'votes'],
   ballotVote: ['voter', 'runner', 'guide'],
   show: ['t', 'beat'],
 };
-export const FANOUT_FORBIDDEN = ['role', 'alignment', 'cover', 'claim', 'castSeed', 'you', 'teammates', 'flyover'];
+export const FANOUT_FORBIDDEN = ['role', 'alignment', 'cover', 'claim', 'castSeed', 'you', 'teammates', 'flyover', 'hunter', 'deal'];
 
 function extraKeys(obj, allowed, path, out) {
   if (!obj || typeof obj !== 'object') return;
@@ -207,6 +235,8 @@ export function lobbySnapshot(room) {
         seat: player?.seat ?? null,
         joined,
         connected: room.conns.has(s.id),
+        shell: player?.shell ?? null,
+        accent: player?.accent ?? null,
       };
     }),
   };
@@ -301,24 +331,40 @@ export function startServer({ port = 5181, count = 8, castSeed = 1, worldSeed = 
   });
 
   server.listen(port);
-  return { server, rooms, close: () => new Promise((r) => server.close(r)) };
+  return {
+    server,
+    rooms,
+    close: () => {
+      for (const room of rooms.values()) clearShowClock(room);
+      return new Promise((r) => server.close(r));
+    },
+  };
 }
 
-function livingIds(room) {
-  return room.game.state.players.filter((p) => p.alive).map((p) => p.id);
+/** Joined phone player ids. Empty deal slots are not seated. */
+export function seatedPlayerIds(room) {
+  return room.game.sockets
+    .filter((s) => !s.isTV && room.seatsTaken.has(s.id) && s.playerId)
+    .map((s) => s.playerId);
 }
 
 function handleClient(room, bound, self, msg) {
   const isTV = !!self?.isTV;
   if (msg.t === 'name' && self && !isTV) {
     room.game.setName(self.playerId, msg.name);
+    room.game.syncAll();
+    fanout(room, lobbySnapshot(room));
+    return;
+  }
+  if (msg.t === 'look' && self && !isTV) {
+    room.game.setLook(self.playerId, { shell: msg.shell, accent: msg.accent });
     fanout(room, lobbySnapshot(room));
     return;
   }
   if (msg.t === 'ballot' && self && !isTV && self.playerId) {
-    const living = new Set(livingIds(room));
-    const runner = living.has(msg.runner) ? msg.runner : null;
-    const guide = living.has(msg.guide) ? msg.guide : null;
+    const seated = new Set(seatedPlayerIds(room));
+    const runner = seated.has(msg.runner) ? msg.runner : null;
+    const guide = seated.has(msg.guide) ? msg.guide : null;
     if (runner && guide && runner !== guide) {
       room.ballots.set(self.playerId, { voter: self.playerId, runner, guide });
       fanout(room, { t: 'ballots', votes: [...room.ballots.values()] });
@@ -326,18 +372,33 @@ function handleClient(room, bound, self, msg) {
     return;
   }
   if (msg.t === 'show' && typeof msg.beat === 'string') {
-    room.show = msg.beat;
-    fanout(room, { t: 'show', beat: room.show });
+    // Host workaround ("Watch the run") and N14 pacing. Not the product clock.
+    if (msg.beat !== 'expedition') clearShowClock(room);
+    setShow(room, msg.beat);
     return;
   }
   // start / episode stay callable from any socket so party-sockets (which drives
   // phone-0) keeps working. The host view is the only UI that sends them.
   if (msg.t === 'start') { room.game.start(); fanout(room, lobbySnapshot(room)); }
-  if (msg.t === 'casting') { room.game.beginCasting(); room.show = 'casting'; fanout(room, { t: 'show', beat: 'casting' }); }
+  if (msg.t === 'casting') {
+    clearShowClock(room);
+    room.game.beginCasting();
+    setShow(room, 'casting');
+  }
   if (msg.t === 'episode') {
-    const votes = [...room.ballots.values()];
-    room.game.playEpisode({ ...(msg.opts || {}), ...(votes.length ? { ballots: votes } : {}) });
-    // Do not pin the show on CASTING — the host auto-advances the stub run into recap.
+    const seated = seatedPlayerIds(room);
+    const votes = [...room.ballots.values()].filter((v) =>
+      seated.includes(v.runner) && seated.includes(v.guide) && v.runner !== v.guide);
+    const unused = room.game.state.players.length - seated.length;
+    // Empty chairs in the deal must not invent a pair. Gates that fill every seat still synthesize.
+    if (!votes.length && unused > 0) return;
+    room.game.playEpisode({
+      ...(msg.opts || {}),
+      ...(votes.length ? { ballots: votes } : {}),
+      ...(seated.length ? { living: seated } : {}),
+    });
+    // Durable show: expedition now, recap after the stub window. Do not pin CASTING.
+    startStubShow(room);
     fanout(room, lobbySnapshot(room));
   }
 }

@@ -3,10 +3,15 @@
  * different filter. Every inbound `state` / `event` has already been projected for THIS socket.
  */
 
+import { CODE_ABC, normalizeCodeDisplay, normalizeCodeWire } from './look.js';
+import { STUB_SHOW_PLAN } from './show.js';
+
+export { CODE_ABC, normalizeCodeDisplay, normalizeCodeWire, STUB_SHOW_PLAN };
+export { SHOW_BEATS, isShowBeat, recapAfterMs } from './show.js';
+
 export function makeCode(rand = Math.random) {
-  const abc = 'abcdefghjkmnpqrstuvwxyz23456789';
   let s = '';
-  for (let i = 0; i < 4; i++) s += abc[Math.floor(rand() * abc.length)];
+  for (let i = 0; i < 4; i++) s += CODE_ABC[Math.floor(rand() * CODE_ABC.length)];
   return s;
 }
 
@@ -23,12 +28,6 @@ export function tokenKey(code, kind = 'phone') {
   const seat = (kind === 'tv' || kind === 'host') ? 'tv' : 'phone';
   return `rrr.party.${String(code || '').toLowerCase()}.${seat}.token`;
 }
-
-/** After Send them in: reveal stays up, then the stub run, then recap. No extra host click. */
-export const STUB_SHOW_PLAN = [
-  { beat: 'expedition', ms: 1800 },
-  { beat: 'recap', ms: 4800 },
-];
 
 export class PartyNightClient {
   constructor({ url, onMessage, onClose } = {}) {

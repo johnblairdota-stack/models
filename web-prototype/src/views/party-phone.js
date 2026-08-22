@@ -4,9 +4,11 @@
  * Join by code, claim a seat, reconnect by token. Hold the role card; vote; tap a pad.
  * The TV is the show. This screen never renders the house.
  */
-import { PartyNightClient, defaultWsUrl, tokenKey } from '../party/night-client.js';
+import { PartyNightClient, defaultWsUrl, tokenKey, normalizeCodeDisplay, normalizeCodeWire } from '../party/night-client.js';
 import { recapFromEvents } from '../party/recap.js';
 import { injectNightSkin, markPartyReady, playerName, roleLabel, sideLabel } from '../party/night-skin.js';
+import { ACCENTS, DEFAULT_LOOK, SHELLS, cleanLook, robotFaceSvg } from '../party/look.js';
+import { applyCastLock, applyCastTap, ballotFromCast, castPrompt, freshCast, mergePublicNames, nominationPlayers, padlockSvg } from '../party/cast-ui.js';
 
 export default async function partyPhone({ params }) {
   injectNightSkin();
@@ -18,15 +20,19 @@ export default async function partyPhone({ params }) {
   root.className = 'night phone';
   document.body.appendChild(root);
 
+  const savedLook = cleanLook(readLook()) || { ...DEFAULT_LOOK };
   const state = {
-    code: (params.get('room') || '').toLowerCase(),
+    step: 'join',
+    code: normalizeCodeWire(params.get('room') || ''),
     name: localStorage.getItem('rrr.party.name') || '',
     err: '',
     client: null,
-    runner: null,
-    guide: null,
     throttle: 'STILL',
     flash: '',
+    look: savedLook,
+    lookLocked: false,
+    cast: freshCast(),
+    castEpisode: null,
   };
 
   if (!state.code) {
@@ -36,13 +42,16 @@ export default async function partyPhone({ params }) {
   await connect();
 
   async function connect() {
-    const code = state.code.replace(/[^a-z0-9]/g, '').slice(0, 8);
-    if (code.length < 4) { state.err = 'Room code is four letters.'; paintJoin(); return; }
+    const code = normalizeCodeWire(state.code);
+    if (code.length < 4) { state.err = 'Room code is four letters.'; state.step = 'join'; paintJoin(); return; }
     state.code = code;
     const u = new URL(location.href);
     u.searchParams.set('view', 'party.phone');
     u.searchParams.set('room', code);
     history.replaceState({}, '', u);
+
+    state.step = 'connecting';
+    paintConnecting();
 
     const token = sessionStorage.getItem(tokenKey(code, 'phone'));
     const wsPort = +(params.get('wsPort') || 5181);
@@ -52,9 +61,22 @@ export default async function partyPhone({ params }) {
       onMessage: (m) => {
         if (m.t === 'welcome') sessionStorage.setItem(tokenKey(code, 'phone'), m.token);
         if (m.t === 'full') state.err = 'Room is full (8 phones + TV).';
-        paint();
+        if (m.t === 'lobby' && !state.lookLocked) {
+          const me = (m.seats || []).find((s) => s.id === client.welcome?.id);
+          if (me?.shell && me?.accent && cleanLook(me)) {
+            state.look = { shell: me.shell, accent: me.accent };
+            state.lookLocked = true;
+            writeLook(state.look);
+            if (state.step === 'customise' || state.step === 'connecting') state.step = 'night';
+          }
+        }
+        routePaint();
       },
-      onClose: () => { state.err = state.err || 'Dropped. Reload to reclaim your seat by token.'; paint(); },
+      onClose: () => {
+        state.err = state.err || 'Dropped. Reload to reclaim your seat by token.';
+        if (state.step === 'customise') paintCustomise();
+        else routePaint();
+      },
     });
     state.client = client;
     try {
@@ -62,6 +84,21 @@ export default async function partyPhone({ params }) {
       if (state.name) client.send({ t: 'name', name: state.name });
     } catch (e) {
       state.err = (e && e.message) || String(e);
+    }
+    if (client.full || !client.welcome) { state.step = 'join'; paintJoin(); return; }
+    if (!state.lookLocked) { state.step = 'customise'; paintCustomise(); return; }
+    state.step = 'night';
+    paint();
+  }
+
+  function routePaint() {
+    const c = state.client;
+    if (c?.full || (state.err && !c?.welcome)) { state.step = 'join'; paintJoin(); return; }
+    if (state.step === 'customise') return;
+    if (state.step === 'connecting') {
+      if (c?.welcome && !state.lookLocked) { state.step = 'customise'; paintCustomise(); return; }
+      if (c?.welcome && state.lookLocked) { state.step = 'night'; paint(); return; }
+      return;
     }
     paint();
   }
@@ -72,28 +109,88 @@ export default async function partyPhone({ params }) {
       <h1>Sit down.</h1>
       <p class="hint">Type the four-letter code on the TV.</p>
       ${state.err ? `<div class="err">${esc(state.err)}</div>` : ''}
-      <input class="field" id="code" maxlength="8" placeholder="CODE" value="${esc(state.code)}" autocomplete="off" autocapitalize="characters">
+      <input class="field code" id="code" maxlength="8" placeholder="CODE" value="${esc(normalizeCodeDisplay(state.code))}" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text">
       <input class="field" id="name" maxlength="12" placeholder="YOUR NAME" value="${esc(state.name)}" autocomplete="nickname">
       <button class="btn wide" id="join">Join</button>`;
+    const codeEl = root.querySelector('#code');
+    bindCodeField(codeEl);
     root.querySelector('#join').onclick = () => {
-      state.code = root.querySelector('#code').value;
+      state.code = normalizeCodeWire(codeEl.value);
       state.name = root.querySelector('#name').value;
       if (state.name) localStorage.setItem('rrr.party.name', state.name);
       connect();
     };
   }
 
+  function paintConnecting() {
+    root.innerHTML = `
+      <div class="phone-top"><span>Prime Time</span><span>…</span></div>
+      <div class="look-stage connecting">
+        ${robotFaceSvg(state.look.shell, state.look.accent, { size: 168 })}
+        <p class="hint">Sitting down…</p>
+      </div>`;
+  }
+
+  function paintCustomise() {
+    const look = state.look;
+    root.innerHTML = `
+      <div class="phone-top"><span>${esc(normalizeCodeDisplay(state.code))}</span><span>face</span></div>
+      <h1>Your face.</h1>
+      <p class="hint">Colour the robot. This is what the room sees on the TV.</p>
+      ${state.err ? `<div class="err">${esc(state.err)}</div>` : ''}
+      <div class="look-stage" id="look-stage">
+        ${robotFaceSvg(look.shell, look.accent, { size: 168 })}
+      </div>
+      <div class="hint">SHELL</div>
+      <div class="swatch-row" id="shells">${SHELLS.map((hex) =>
+        `<button type="button" class="swatch${hex === look.shell ? ' on' : ''}" data-part="shell" data-hex="${hex}" style="--swatch:${hex}" aria-label="shell ${hex}"></button>`).join('')}</div>
+      <div class="hint">ACCENT</div>
+      <div class="swatch-row" id="accents">${ACCENTS.map((hex) =>
+        `<button type="button" class="swatch${hex === look.accent ? ' on' : ''}" data-part="accent" data-hex="${hex}" style="--swatch:${hex}" aria-label="accent ${hex}"></button>`).join('')}</div>
+      <button class="btn wide" id="lock-look">Lock in</button>`;
+    for (const b of root.querySelectorAll('.swatch')) {
+      b.addEventListener('click', () => pickLook(b.dataset.part, b.dataset.hex));
+    }
+    root.querySelector('#lock-look').onclick = () => {
+      const locked = cleanLook(state.look) || DEFAULT_LOOK;
+      state.look = locked;
+      state.lookLocked = true;
+      writeLook(locked);
+      state.client?.send({ t: 'look', shell: locked.shell, accent: locked.accent });
+      state.step = 'night';
+      paint();
+    };
+  }
+
+  function pickLook(part, hex) {
+    if (part !== 'shell' && part !== 'accent') return;
+    if (part === 'shell' && !SHELLS.includes(hex)) return;
+    if (part === 'accent' && !ACCENTS.includes(hex)) return;
+    state.look[part] = hex;
+    const face = root.querySelector('.bot-face');
+    if (face) {
+      const node = face.querySelector(part === 'shell' ? '.bot-shell' : '.bot-wedge');
+      if (node) node.setAttribute('fill', hex);
+    }
+    const row = root.querySelector(part === 'shell' ? '#shells' : '#accents');
+    if (row) {
+      for (const b of row.querySelectorAll('.swatch')) b.classList.toggle('on', b.dataset.hex === hex);
+    }
+  }
+
   function paint() {
     const c = state.client;
     if (!c || (!c.welcome && !c.full && !state.err)) {
-      root.innerHTML = `<div class="phone-top"><span>Prime Time</span><span>…</span></div><p class="hint">Connecting…</p>`;
+      paintConnecting();
       return;
     }
     if (!c.welcome || c.full) { paintJoin(); return; }
+    if (!state.lookLocked) { paintCustomise(); return; }
 
     const me = c.welcome;
     const frame = c.frame;
-    const players = frame?.players || [];
+    const players = mergePublicNames(frame?.players, c.lobby);
+    const nominees = nominationPlayers(frame?.players, c.lobby);
     const you = frame?.you;
     const beat = c.beat || 'lobby';
     const phase = frame?.phase || 'LOBBY';
@@ -110,19 +207,19 @@ export default async function partyPhone({ params }) {
     let body = '';
     if (state.err) body += `<div class="err">${esc(state.err)}</div>`;
 
-    if (beat === 'lobby' || phase === 'LOBBY') {
+    if (beat !== 'casting') {
+      state.cast = freshCast();
+      state.castEpisode = null;
+    }
+
+    if (beat === 'casting' && !recap.runner && !pair.runner) {
+      paintCasting(nominees, me, frame?.episode || c.lobby?.episode || 1);
+      return;
+    } else if (beat === 'lobby' || phase === 'LOBBY') {
       body += `<h1>${esc(myName)}</h1>
         <p class="hint">Seat ${me.seat != null ? me.seat + 1 : '—'} · waiting for the host. The TV is the show — this is a pad.</p>
         ${nameField()}
         ${roster(c.lobby)}`;
-    } else if (beat === 'casting' && !recap.runner && !pair.runner) {
-      body += `<h1>Who goes in?</h1>
-        <p class="hint">Pick a runner and a different guide. Who you send is public.</p>
-        <div class="hint">RUNNER</div>
-        ${pickList('runner', players, me.playerId)}
-        <div class="hint">GUIDE</div>
-        ${pickList('guide', players, me.playerId)}
-        <button class="btn wide" id="vote">Send ballot</button>`;
     } else if (beat === 'casting' && (pair.runner || recap.runner)) {
       body += roleBlock(role, align, panelEv, players)
         + `<p class="hint">${esc(playerName(players, pair.runner || recap.runner))} walks · ${esc(playerName(players, pair.guide || recap.guide))} talks.</p>`;
@@ -160,6 +257,7 @@ export default async function partyPhone({ params }) {
         ${roleBlock(role, align, panelEv, players)}`;
     }
 
+    delete root.dataset.castUi;
     root.innerHTML = `
       <div class="phone-top"><span>${esc(state.code.toUpperCase())}</span><span>${esc(beat)} · ${esc(myName)}</span></div>
       ${body}`;
@@ -169,11 +267,6 @@ export default async function partyPhone({ params }) {
       state.name = v;
       localStorage.setItem('rrr.party.name', v);
       c.send({ t: 'name', name: v });
-    });
-    root.querySelector('#vote')?.addEventListener('click', () => {
-      if (state.runner && state.guide && state.runner !== state.guide) {
-        c.send({ t: 'ballot', runner: state.runner, guide: state.guide });
-      }
     });
     root.querySelector('#thr')?.addEventListener('click', (e) => {
       const t = e.target?.dataset?.t;
@@ -187,12 +280,96 @@ export default async function partyPhone({ params }) {
       state.flash = r;
       paint();
     });
+  }
+
+  function paintCasting(players, me, episode) {
+    const ep = Number(episode) || 1;
+    if (state.castEpisode !== ep) {
+      state.castEpisode = ep;
+      state.cast = freshCast();
+    }
+    const cast = state.cast;
+    const phase = cast.phase;
+    const living = (players || []).filter((p) => p.alive !== false);
+    const stamp = `${phase}:${living.map((p) => `${p.id}:${p.name}`).join(',')}`;
+    if (root.dataset.castUi === stamp) {
+      syncCastHighlight(cast);
+      return;
+    }
+
+    let body = '';
+    if (state.err) body += `<div class="err">${esc(state.err)}</div>`;
+    if (phase === 'sent') {
+      const runnerName = playerName(players, cast.runner);
+      const guideName = playerName(players, cast.guide);
+      body += `<h1>Sent.</h1>
+        <p class="hint">You sent ${esc(runnerName)} to walk and ${esc(guideName)} to talk. The TV has the ballot.</p>`;
+    } else {
+      const slot = phase === 'guide' ? 'guide' : 'runner';
+      body += `<h1>${esc(castPrompt(slot, ep))}</h1>
+        <p class="hint">${phase === 'guide'
+          ? `${esc(playerName(players, cast.runner))} walks. Pick someone else — nothing is sent until you lock it.`
+          : 'Tap a name. Nothing is sent until you lock it.'}</p>
+        ${castList(players, me.playerId, cast)}
+        <div class="lock-slot" id="lock-slot" ${cast.draft ? '' : 'hidden'}>
+          <button class="btn wide lock-btn${cast.draft ? ' in' : ''}" id="lock-pick">${padlockSvg()} Lock ${slot}</button>
+        </div>`;
+    }
+
+    root.innerHTML = `
+      <div class="phone-top"><span>${esc(state.code.toUpperCase())}</span><span>casting · ${esc(playerName(players, me.playerId) || me.name || 'You')}</span></div>
+      <div class="cast-step">${body}</div>`;
+    root.dataset.castUi = stamp;
+    bindCast(players, me);
+  }
+
+  function bindCast(players, me) {
     for (const b of root.querySelectorAll('[data-pick]')) {
       b.addEventListener('click', () => {
-        state[b.dataset.slot] = b.dataset.pick;
-        paint();
+        if (b.disabled || b.classList.contains('locked-out')) return;
+        state.cast = applyCastTap(state.cast, b.dataset.pick);
+        syncCastHighlight(state.cast);
       });
     }
+    root.querySelector('#lock-pick')?.addEventListener('click', () => {
+      const before = state.cast.phase;
+      state.cast = applyCastLock(state.cast);
+      if (state.cast.phase === 'sent') {
+        const ballot = ballotFromCast(state.cast, me.playerId);
+        if (ballot) state.client?.send({ t: 'ballot', runner: ballot.runner, guide: ballot.guide });
+      }
+      if (state.cast.phase !== before) {
+        delete root.dataset.castUi;
+        paintCasting(players, me, state.castEpisode);
+      }
+    });
+  }
+
+  function syncCastHighlight(cast) {
+    for (const b of root.querySelectorAll('[data-pick]')) {
+      b.classList.toggle('on', b.dataset.pick === cast.draft);
+    }
+    const slot = root.querySelector('#lock-slot');
+    const btn = root.querySelector('#lock-pick');
+    if (!slot || !btn) return;
+    if (cast.draft && slot.hidden) {
+      slot.hidden = false;
+      btn.classList.remove('in');
+      void btn.offsetWidth;
+      btn.classList.add('in');
+    } else if (!cast.draft) {
+      slot.hidden = true;
+      btn.classList.remove('in');
+    }
+  }
+
+  function castList(players, me, cast) {
+    return `<div class="pick-list">${(players || []).filter((p) => p.alive !== false).map((p) => {
+      const blocked = cast.phase === 'guide' && p.id === cast.runner;
+      const on = !blocked && cast.draft === p.id ? 'on' : '';
+      const mark = blocked ? ' · runner' : (p.id === me ? ' (you)' : '');
+      return `<button class="${on}${blocked ? ' locked-out' : ''}" data-pick="${esc(p.id)}" ${blocked ? 'disabled' : ''}>${esc(p.name || p.id)}${esc(mark)}</button>`;
+    }).join('')}</div>`;
   }
 
   function nameField() {
@@ -204,13 +381,6 @@ export default async function partyPhone({ params }) {
     const seats = (lobby?.seats || []).filter((s) => !s.isTV && s.joined);
     if (!seats.length) return '';
     return `<p class="hint" style="margin-top:16px">${seats.map((s) => s.name).join(' · ')}</p>`;
-  }
-
-  function pickList(slot, players, me) {
-    return `<div class="pick-list">${(players || []).filter((p) => p.alive !== false).map((p) => {
-      const on = state[slot] === p.id ? 'on' : '';
-      return `<button class="${on}" data-slot="${slot}" data-pick="${esc(p.id)}">${esc(p.name || p.id)}${p.id === me ? ' (you)' : ''}</button>`;
-    }).join('')}</div>`;
   }
 
   function roleBlock(role, align, panelEv, players) {
@@ -229,6 +399,28 @@ export default async function partyPhone({ params }) {
   function youTeammates() {
     return state.client?.frame?.you?.teammates || [];
   }
+}
+
+function bindCodeField(input) {
+  if (!input) return;
+  const apply = () => {
+    const next = normalizeCodeDisplay(input.value);
+    if (input.value === next) return;
+    const start = input.selectionStart;
+    input.value = next;
+    try { input.setSelectionRange(start, start); } catch { /* ignore */ }
+  };
+  input.addEventListener('input', apply);
+  input.addEventListener('paste', () => requestAnimationFrame(apply));
+  apply();
+}
+
+function readLook() {
+  try { return JSON.parse(localStorage.getItem('rrr.party.look') || ''); } catch { return null; }
+}
+
+function writeLook(look) {
+  localStorage.setItem('rrr.party.look', JSON.stringify(look));
 }
 
 function esc(s) {

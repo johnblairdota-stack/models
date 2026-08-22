@@ -11,7 +11,10 @@
 import { startServer, fanoutViolations, lobbySnapshot } from '../net/party/local.mjs';
 import { recapFromEvents } from '../src/party/recap.js';
 import { qrMatrix } from '../src/party/qr.js';
-import { tokenKey, STUB_SHOW_PLAN } from '../src/party/night-client.js';
+import { tokenKey, STUB_SHOW_PLAN, normalizeCodeDisplay, normalizeCodeWire } from '../src/party/night-client.js';
+import { ACCENTS, SHELLS, cleanLook } from '../src/party/look.js';
+import { applyCastLock, applyCastTap, ballotFromCast, castPrompt, freshCast, mergePublicNames, nominationPlayers } from '../src/party/cast-ui.js';
+import { createRoom } from '../src/party/room.js';
 
 const PORT = 5198;
 let pass = 0, fail = 0;
@@ -64,12 +67,57 @@ const srv = startServer({ port: PORT, count: 8, castSeed: 21, worldSeed: 3, code
 await sleep(120);
 const base = `ws://localhost:${PORT}/?room=night`;
 
+t('N1a · join code field uppercases, strips spaces, keeps the no-ilo01 alphabet',
+  normalizeCodeDisplay(' ab 1ilo xy') === 'ABXY'
+    && normalizeCodeDisplay('test') === 'TEST'
+    && normalizeCodeWire(' t e s t ') === 'test'
+    && !/[ILO01]/i.test(normalizeCodeDisplay('hello 10')));
+
+{
+  t('N1a2 · runner prompt uses first / real episode number',
+    castPrompt('runner', 1) === 'You are picking a runner for the first expedition.'
+      && castPrompt('runner', 3) === 'You are picking a runner for expedition 3.'
+      && castPrompt('guide', 1) === 'Now pick a guide for this expedition.');
+  let cast = freshCast();
+  const tapped = applyCastTap(cast, 'p1');
+  t('N1a3 · tapping a name highlights and does not complete a ballot',
+    tapped.draft === 'p1' && tapped.phase === 'runner' && ballotFromCast(tapped, 'me') === null);
+  cast = applyCastLock(tapped);
+  t('N1a4 · padlock lock-in moves to the guide step; still no wire ballot',
+    cast.phase === 'guide' && cast.runner === 'p1' && cast.draft == null && ballotFromCast(cast, 'me') === null);
+  t('N1a5 · the locked runner cannot be picked as guide',
+    applyCastTap(cast, 'p1').draft == null && applyCastTap(cast, 'p1').phase === 'guide');
+  cast = applyCastLock(applyCastTap(cast, 'p2'));
+  t('N1a6 · locking the guide produces today\'s {voter, runner, guide}',
+    JSON.stringify(ballotFromCast(cast, 'me')) === JSON.stringify({ voter: 'me', runner: 'p1', guide: 'p2' }));
+  const lobby = {
+    seats: [
+      { id: 'tv', playerId: null, isTV: true, name: 'TV', joined: true, connected: true },
+      { id: 'phone-0', playerId: 'p1', isTV: false, name: 'Ellie', joined: true, connected: true },
+      { id: 'phone-1', playerId: 'p2', isTV: false, name: 'Ada', joined: true, connected: false },
+      { id: 'phone-6', playerId: 'p7', isTV: false, name: 'Robot 7', joined: false, connected: false },
+    ],
+  };
+  const framePlayers = [
+    { id: 'p1', name: 'Robot 1', alive: true },
+    { id: 'p2', name: 'Ada', alive: true },
+    { id: 'p7', name: 'Robot 7', alive: true },
+  ];
+  const noms = nominationPlayers(framePlayers, lobby);
+  t('N1a7 · nomination list is joined humans, never an empty Robot N chair',
+    noms.map((p) => p.id).join(',') === 'p1,p2' && !noms.some((p) => p.id === 'p7'));
+  t('N1a8 · a lobby name wins over a leftover Robot N on the state frame',
+    mergePublicNames(framePlayers, lobby).find((p) => p.id === 'p1')?.name === 'Ellie');
+}
+
 t('N1b · host and phone tokens are namespaced apart',
   tokenKey('test', 'tv') !== tokenKey('test', 'phone')
     && tokenKey('test', 'tv').endsWith('.tv.token')
     && tokenKey('test', 'phone').endsWith('.phone.token'));
 t('N1c · stub show plan ends on recap without a host click',
   STUB_SHOW_PLAN.at(-1)?.beat === 'recap' && STUB_SHOW_PLAN.some((s) => s.beat === 'expedition'));
+t('N1c2 · expedition is immediate — the TV does not wait on Watch the run',
+  (STUB_SHOW_PLAN.find((s) => s.beat === 'expedition')?.ms ?? 1) === 0);
 
 const host = await open(`${base}&host=1`);
 t('N2 · host=1 is the TV spectator, not a robot',
@@ -99,9 +147,18 @@ t('N4b · lobby rows do not carry a role or alignment',
   const dirty = side.flatMap((m) => fanoutViolations(m));
   t('N4c · every lobby/ballots/show payload stays inside the closed fanout schema',
     dirty.length === 0, dirty.join(',') || `${side.length} side-channel messages`);
-  const leaked = { ...lobbySnapshot(srv.rooms.get('night')), seats: lobbySnapshot(srv.rooms.get('night')).seats.map((s) => ({ ...s, role: 'producer' })) };
+  const snap = lobbySnapshot(srv.rooms.get('night'));
+  const leaked = { ...snap, seats: snap.seats.map((s) => ({ ...s, role: 'producer' })) };
   t('N4d control · a role field on a lobby seat is a fanout violation',
     fanoutViolations(leaked).some((v) => v.includes('role')));
+  const withLook = { ...snap, seats: snap.seats.map((s) => ({ ...s, shell: SHELLS[0], accent: ACCENTS[0] })) };
+  t('N4e · shell/accent on a lobby seat stays inside the closed schema',
+    fanoutViolations(withLook).length === 0);
+  const hunter = { ...snap, seats: snap.seats.map((s) => ({ ...s, hunter: true })) };
+  const deal = { ...snap, seats: snap.seats.map((s) => ({ ...s, deal: { role: 'producer' } })) };
+  t('N4f control · hunter/deal on a lobby seat is a fanout violation',
+    fanoutViolations(hunter).some((v) => v.includes('hunter'))
+      && fanoutViolations(deal).some((v) => v.includes('deal')));
 }
 
 a.send({ t: 'name', name: 'Ada' });
@@ -110,6 +167,25 @@ await sleep(60);
 const named = last(host, 'lobby');
 t('N5 · phones can set a published name',
   (named?.seats || []).some((s) => s.name === 'Ada') && (named?.seats || []).some((s) => s.name === 'Bea'));
+t('N5e · setName updates players[].name on the state frame too',
+  (last(host, 'state')?.frame?.players || []).some((p) => p.name === 'Ada')
+    && (last(host, 'state')?.frame?.players || []).some((p) => p.name === 'Bea'));
+
+a.send({ t: 'look', shell: SHELLS[2], accent: ACCENTS[0] });
+await sleep(60);
+const looked = last(host, 'lobby');
+const adaSeat = (looked?.seats || []).find((s) => s.name === 'Ada');
+t('N5b · locking a colour updates that seat on the TV lobby snapshot',
+  adaSeat?.shell === SHELLS[2] && adaSeat?.accent === ACCENTS[0] && !!cleanLook(adaSeat),
+  JSON.stringify({ shell: adaSeat?.shell, accent: adaSeat?.accent }));
+t('N5c · the other phone seat is unchanged (no face required on phones)',
+  (looked?.seats || []).some((s) => s.name === 'Bea' && s.shell == null && s.accent == null));
+a.send({ t: 'look', shell: '#ff00ff', accent: 'producer' });
+await sleep(40);
+const rejected = last(host, 'lobby');
+const adaAfter = (rejected?.seats || []).find((s) => s.name === 'Ada');
+t('N5d · a look outside the closed palette is ignored',
+  adaAfter?.shell === SHELLS[2] && adaAfter?.accent === ACCENTS[0]);
 
 host.send({ t: 'start' });
 host.send({ t: 'casting' });
@@ -117,6 +193,20 @@ await sleep(80);
 t('N6 · host opens CASTING',
   last(host, 'state')?.frame?.phase === 'CASTING' || last(a, 'state')?.frame?.phase === 'CASTING',
   last(host, 'state')?.frame?.phase);
+
+{
+  const emptyId = (last(host, 'lobby')?.seats || []).find((s) => !s.isTV && !s.joined)?.playerId;
+  a.send({ t: 'ballot', runner: emptyId, guide: b.welcome.playerId });
+  await sleep(50);
+  t('N6b · a ballot that names an empty chair is ignored',
+    (last(host, 'ballots')?.votes || []).length === 0, emptyId);
+  host.send({ t: 'episode', opts: {} });
+  await sleep(80);
+  const premature = last(host, 'state')?.frame?.pair;
+  t('N6c · no human ballot means wait — do not elect Robot 7 from empty chairs',
+    !premature?.runner && !premature?.guide,
+    JSON.stringify(premature));
+}
 
 a.send({ t: 'ballot', runner: b.welcome.playerId, guide: a.welcome.playerId });
 b.send({ t: 'ballot', runner: a.welcome.playerId, guide: b.welcome.playerId });
@@ -129,6 +219,30 @@ t('N7 · casting ballots are public and attributed',
 
 host.send({ t: 'episode', opts: {} });
 await sleep(220);
+
+{
+  const frame = last(host, 'state')?.frame;
+  const nameOf = (id) => (frame?.players || []).find((p) => p.id === id)?.name;
+  const runnerName = nameOf(frame?.pair?.runner);
+  const guideName = nameOf(frame?.pair?.guide);
+  t('N7e · locked pair is the seated humans by their public names, not Robot 7',
+    ['Ada', 'Bea'].includes(runnerName) && ['Ada', 'Bea'].includes(guideName)
+      && runnerName !== guideName
+      && !/^Robot /.test(runnerName || '') && !/^Robot /.test(guideName || ''),
+    JSON.stringify({ runner: runnerName, guide: guideName, pair: frame?.pair }));
+}
+
+{
+  const r = createRoom({ count: 8, castSeed: 1, worldSeed: 1, send: () => {} });
+  r.setName('p1', 'Ellie');
+  r.playEpisode({ ballots: [], living: ['p1', 'p2'] });
+  t('N7f · playEpisode with an empty ballot list does not invent a pair',
+    r.state.pair.runner == null && r.state.pair.guide == null);
+  r.playEpisode({ ballots: [{ voter: 'p1', runner: 'p1', guide: 'p2' }], living: ['p1', 'p2'] });
+  t('N7g · a seated-human living pool cannot elect an unused deal slot',
+    [r.state.pair.runner, r.state.pair.guide].sort().join(',') === 'p1,p2'
+      && r.state.players.find((p) => p.id === 'p1')?.name === 'Ellie');
+}
 
 const hostEvs = host.msgs.filter((m) => m.t === 'event').map((m) => m.ev);
 const aEvs = a.msgs.filter((m) => m.t === 'event').map((m) => m.ev);
@@ -160,6 +274,12 @@ t('N10 · TV never received a role card or a flyover',
 
 t('N10c · episode does not pin the show beat back to casting',
   host.msgs.filter((m) => m.t === 'show' && m.beat === 'casting').length <= 1);
+t('N10d · playEpisode fans expedition to every socket, including the TV',
+  last(host, 'show')?.beat === 'expedition'
+    && last(a, 'show')?.beat === 'expedition'
+    && last(b, 'show')?.beat === 'expedition'
+    && srv.rooms.get('night')?.show === 'expedition',
+  `host=${last(host, 'show')?.beat} a=${last(a, 'show')?.beat} room=${srv.rooms.get('night')?.show}`);
 
 const aCards = aEvs.filter((e) => e.type === 'role.card');
 const bCards = bEvs.filter((e) => e.type === 'role.card');
@@ -186,11 +306,26 @@ const replay = back.msgs.filter((m) => m.t === 'event' && m.replay);
 t('N13b · catch-up is entitled replay, not a dump',
   replay.length > 0 && replay.every((m) => m.ev.vis !== 'SEALED' && (!m.ev.for || m.ev.for === a.welcome.playerId)),
   `${replay.length} replayed`);
+t('N13c · a refresh resumes the server show beat, not casting',
+  last(back, 'show')?.beat === 'expedition' || last(back, 'show')?.beat === 'recap',
+  last(back, 'show')?.beat);
 
 host.send({ t: 'show', beat: 'recap' });
 await sleep(40);
 t('N14 · host can pace the room onto the recap beat',
   last(b, 'show')?.beat === 'recap' && last(back, 'show')?.beat === 'recap');
+
+{
+  const tok = host.welcome.token;
+  host.close();
+  await sleep(80);
+  const tvBack = await open(`${base}&host=1&token=${tok}`);
+  await sleep(40);
+  t('N14b · a refreshed TV resumes the server show beat, not casting',
+    last(tvBack, 'show')?.beat === 'recap' || last(tvBack, 'show')?.beat === 'expedition',
+    last(tvBack, 'show')?.beat);
+  tvBack.close();
+}
 
 {
   const steal = await open(`${base}&host=1&token=${tok}`);
