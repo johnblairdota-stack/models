@@ -155,6 +155,11 @@ export const VIEWS = [
   { id: 'party.phone',   group: 'party', title: 'PRIME TIME — phone',
     bar: 'Jackbox phone: join by code, seat, controller (D13), not first-person',
     module: () => import('./views/party-phone.js') },
+  // The one party view that IS the mansion. Mounted by `party.host` in an iframe during
+  // expedition; it has no socket, only a URL. `docs/slices/task-d13-tv-follow.md`.
+  { id: 'party.follow',  group: 'party', title: 'PRIME TIME — TV follow camera',
+    bar: 'reality-TV follow of the runner in the mansion; never the guide map, never a god-view',
+    module: () => import('./views/party-follow.js') },
 ];
 
 export const VIEW_BY_ID = new Map(VIEWS.map((v) => [v.id, v]));
