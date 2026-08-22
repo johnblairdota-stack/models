@@ -89,7 +89,10 @@ export default async function partyFollow({ params }) {
 
   let first = true;
   engine.onUpdate((dt, t) => {
-    bed.step(Math.min(dt, 0.05), t);
+    // `Engine._liveLoop` already clamps dt to 0.1. Do not clamp harder: on a slow TV (or a
+    // software rasteriser) a tighter clamp does not protect anything, it just makes the runner
+    // crawl — the simulation falls behind the wall clock in proportion to the clamp.
+    bed.step(dt, t);
     chrome.tick(bed.readout(), t);
     if (first) {
       first = false;

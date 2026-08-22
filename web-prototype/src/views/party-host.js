@@ -50,6 +50,15 @@ export default async function partyHost({ params }) {
     locked: false,
   };
 
+  /**
+   * ⚠️ DECLARED BEFORE THE SOCKET, AND THAT IS NOT TIDINESS. `client.connect()` below delivers
+   * `welcome` and `lobby` synchronously into `onMessage`, which calls `paint()`, which calls
+   * `syncFollow()`. A `const` declared further down the function is still in its temporal dead
+   * zone at that moment — measured: `ReferenceError: Cannot access 'follow' before
+   * initialization`, thrown out of the first three paints, on a TV that otherwise looked fine.
+   */
+  const follow = { layer: null, el: null, src: null, live: false, raf: 0 };
+
   const client = new PartyNightClient({
     url: wsUrl,
     onMessage: (m) => {
@@ -88,50 +97,102 @@ export default async function partyHost({ params }) {
   }
 
   /**
-   * 🎥 THE FOLLOW SLOT — one iframe, owned OUTSIDE `paint()`.
+   * 🎥 THE FOLLOW SLOT — one iframe, in a LAYER over the run frame, never inside it.
    *
-   * 🚨 `paint()` REBUILDS `root.innerHTML` ON EVERY WEBSOCKET MESSAGE, INCLUDING EVERY LOBBY
-   * SNAPSHOT. An `<iframe>` emitted inside that string is torn down and rebuilt each time — a
+   * 🚨 **`paint()` REBUILDS `root.innerHTML` ON EVERY WEBSOCKET MESSAGE, INCLUDING EVERY LOBBY
+   * SNAPSHOT.** An `<iframe>` emitted inside that string is destroyed and rebuilt each time — a
    * fresh WebGL context and a fresh multi-second mansion bake, several times a second, which
-   * presents as a TV that never finishes loading. So the element lives here, in the closure, and
-   * is re-parented into whatever `[data-follow-mount]` the current paint produced.
+   * presents as a TV that never finishes loading.
    *
-   * 🚨 AND ASSIGNING THE SAME `src` STRING AGAIN IS ALSO A RELOAD. `followUrl()` is a pure
+   * 🚨 **AND MOVING AN IFRAME BETWEEN PARENTS RELOADS IT TOO, WHICH IS WHY THE OBVIOUS FIX DOES
+   * NOT WORK.** Holding the element in this closure and `appendChild`-ing it into whatever
+   * `[data-follow-mount]` the current paint produced *looks* like it preserves the element, and
+   * it does — but the HTML spec discards a nested browsing context when its `iframe` is removed
+   * from a document, and re-inserting it creates a new one and re-fetches `src`. So the element
+   * would survive and the mansion inside it would not. That was built, run, and measured
+   * reloading; this is the second design.
+   *
+   * What works: a LAYER — a `position:fixed` element created once, parented to `document.body`,
+   * outside everything `paint()` touches. It never moves in the DOM, so it never reloads. It is
+   * positioned over `.run-frame`'s client rect each frame while it is visible; one
+   * `getBoundingClientRect` per frame on a static layout is not a cost worth avoiding, and it
+   * cannot drift out of register the way a paint-time-only sync could.
+   *
+   * 🚨 **ASSIGNING THE SAME `src` STRING AGAIN IS ALSO A RELOAD.** `followUrl()` is a pure
    * function of (beat, room, runner, name, look, seed) exactly so this comparison is meaningful;
    * `harness/party-follow.mjs` F6 is the assertion that keeps it pure.
+   *
+   * ⚠️ **THE LAYER IS HIDDEN OFF THE RUN BEAT, NOT DESTROYED.** The mansion is baked once per
+   * night, not once per episode: a recap that tore the context down would make every episode
+   * after the first pay the bake again, in front of the room. `teardownFollow()` exists for the
+   * one case that does need it — the socket going away.
+   *
+   * (`follow` itself is declared above the socket. See the note there.)
    */
-  const follow = { el: null, src: null, live: false };
+  function ensureFollow() {
+    if (follow.layer) return;
+    const layer = document.createElement('div');
+    layer.className = 'run-cam-layer';
+    layer.hidden = true;
+    const f = document.createElement('iframe');
+    f.className = 'run-cam';
+    f.title = 'Follow camera';
+    // Scripts and same-origin only: the follow needs WebGL and `parent.postMessage`, and
+    // nothing else. No forms, no popups, no top navigation.
+    f.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+    f.setAttribute('allow', 'autoplay');
+    layer.appendChild(f);
+    document.body.appendChild(layer);
+    follow.layer = layer;
+    follow.el = f;
+  }
 
   function teardownFollow() {
-    if (follow.el) follow.el.remove();
+    if (follow.raf) { cancelAnimationFrame(follow.raf); follow.raf = 0; }
+    follow.layer?.remove();
+    follow.layer = null;
     follow.el = null;
     follow.src = null;
     follow.live = false;
   }
 
+  /** Keep the layer registered with the frame it is pretending to be inside. */
+  function placeFollow() {
+    if (!follow.layer || follow.layer.hidden) return;
+    const frame = root.querySelector('.run-frame');
+    if (!frame) { follow.layer.hidden = true; return; }
+    const r = frame.getBoundingClientRect();
+    const s = follow.layer.style;
+    s.left = `${r.left}px`;
+    s.top = `${r.top}px`;
+    s.width = `${r.width}px`;
+    s.height = `${r.height}px`;
+    // The camera fades UP over the slate rather than the slate fading out from under a black
+    // rectangle — during the bake the layer is fully transparent and the still is the picture.
+    follow.layer.classList.toggle('live', follow.live);
+    frame.classList.toggle('live', follow.live);
+  }
+
+  function followLoop() {
+    follow.raf = follow.layer && !follow.layer.hidden ? requestAnimationFrame(followLoop) : 0;
+    placeFollow();
+  }
+
   function syncFollow(src) {
-    if (!src) { teardownFollow(); return; }
-    if (!follow.el) {
-      const f = document.createElement('iframe');
-      f.className = 'run-cam';
-      f.title = 'Follow camera';
-      // Scripts and same-origin only: the follow needs WebGL and `parent.postMessage`, and
-      // nothing else. No forms, no popups, no top navigation.
-      f.setAttribute('sandbox', 'allow-scripts allow-same-origin');
-      f.setAttribute('allow', 'autoplay');
-      f.setAttribute('loading', 'eager');
-      follow.el = f;
-      follow.live = false;
+    if (!src) {
+      if (follow.layer) follow.layer.hidden = true;
+      if (follow.raf) { cancelAnimationFrame(follow.raf); follow.raf = 0; }
+      return;
     }
+    ensureFollow();
     if (follow.src !== src) {
       follow.src = src;
       follow.live = false;
       follow.el.src = src;
     }
-    const mount = root.querySelector('[data-follow-mount]');
-    if (mount && follow.el.parentElement !== mount) mount.appendChild(follow.el);
-    const frame = root.querySelector('.run-frame');
-    if (frame) frame.classList.toggle('live', follow.live);
+    follow.layer.hidden = false;
+    placeFollow();
+    if (!follow.raf) follow.raf = requestAnimationFrame(followLoop);
   }
 
   // The follow reports its first rendered frame. Until then the slate is the picture.
@@ -234,6 +295,21 @@ export default async function partyHost({ params }) {
       ${onRun ? '' : `<div class="night-line">${esc(LINE)}</div>`}
       <div class="night-main">${body}</div>`;
 
+    /*
+     * A read-only handle for `harness/party-follow-drive.mjs`, and DELIBERATELY A PROJECTION
+     * RATHER THAN THE CLIENT. The follow iframe is same-origin, so anything hung on this window
+     * is reachable from `parent` — exposing `client` would put the TV's whole message history
+     * one property away from a renderer this slice's entire safety argument says has no socket.
+     * These five fields are what is already painted on the screen.
+     */
+    window.__rrrHost = {
+      beat: show, phase, episode,
+      runner: pair.runner || recap.runner || null,
+      runnerName: joinedName(names, pair.runner || recap.runner, null),
+      followSrc: follow.src,
+      followLive: follow.live,
+    };
+
     root.querySelector('#go')?.addEventListener('click', startNight);
     root.querySelector('#lock')?.addEventListener('click', sendThemIn);
     root.querySelector('#to-run')?.addEventListener('click', () => setBeat('expedition'));
@@ -258,10 +334,17 @@ export default async function partyHost({ params }) {
   paint();
 }
 
-/** Joined lobby name, never a leftover Robot N or a raw id on the TV. */
+/**
+ * Joined lobby name, never a leftover Robot N or a raw id on the TV.
+ *
+ * ⚠️ `'—'` IS `playerName`'s NOT-FOUND SENTINEL AND IT IS NOT A NAME. Without this line an
+ * unresolved runner reaches the screen as literally "— is running", which is what the D13 drive
+ * caught on a frame where the pair had not landed yet. It is truthy, it is not the id, and it is
+ * not `Robot N`, so every other guard here lets it through.
+ */
 function joinedName(names, id, fallback) {
   const n = playerName(names, id);
-  if (!n || n === id || /^Robot \d+$/i.test(n)) return fallback;
+  if (!n || n === '—' || n === id || /^Robot \d+$/i.test(n)) return fallback;
   return n;
 }
 
@@ -302,9 +385,8 @@ function runStage({ names, lobby, runnerId, guideId, cameras, alarms }) {
           </div>
         </div>
       </div>
-      <div class="pair-hero">${esc(runner)} walks.<br>${esc(guide)} talks.</div>
-      <p class="night-line" style="padding:0">The rest of us watch. The mansion is dark. The hammer is automatic — do not aim it.</p>
-      <p class="hint">Cameras live ${cams?.unlocked ?? '—'} / needed ${cams?.needed ?? '—'} · alarms ${alarms ?? 0}</p>
+      <div class="pair-hero">${esc(runner)} walks. ${esc(guide)} talks.</div>
+      <p class="night-line" style="padding:0">The rest of us watch. Cameras live ${cams?.unlocked ?? '—'} / needed ${cams?.needed ?? '—'} · alarms ${alarms ?? 0}</p>
     </div>`;
 }
 
