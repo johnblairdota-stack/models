@@ -30,7 +30,7 @@
  *   crew    runner or guide                  tv      the host screen only
  *   all     every connected socket
  */
-export const AUDIENCE = ['self', 'evil', 'guide', 'runner', 'crew', 'tv', 'all'];
+export const AUDIENCE = ['self', 'evil', 'guide', 'runner', 'crew', 'tv', 'phones', 'all'];
 
 /**
  * `[pathGlob, audience]`. `[]` marks an array hop; `*` matches one segment.
@@ -61,7 +61,7 @@ export const MATRIX = [
   ['players[].seat',           'all'],
   ['players[].name',           'all'],
   ['players[].alive',          'all'],
-  ['players[].claim',          'all'],   // PUBLISHED claims only
+  ['players[].claim',          'phones'], // published nameplates. Never the TV — the stub writes covers here.
   ['players[].plate',          'all'],   // undeclared/drafting/published/face-down. Never the role.
   // 'players[].alignment'               NO ROW. Nobody, ever, pre-REUNION.
   // 'players[].role'                    NO ROW. Ditto.
@@ -129,6 +129,7 @@ export function keyPaths(obj, prefix = '', out = []) {
 export function entitled(aud, ctx) {
   switch (aud) {
     case 'all':    return true;
+    case 'phones': return !ctx.isTV;
     case 'tv':     return ctx.isTV;
     case 'self':   return !ctx.isTV && (ctx.ownerId == null || ctx.ownerId === ctx.playerId);
     case 'evil':   return !ctx.isTV && ctx.alignment === 'evil';

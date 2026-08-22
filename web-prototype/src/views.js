@@ -147,6 +147,14 @@ export const VIEWS = [
   { id: 'furn.smash',    group: 'game', title: 'Meshy furniture smash lab',
     bar: 'Teardown sledge feel — docs/design/teardown-reference.md + refs/teardown/',
     module: () => import('./views/furn-smash.js') },
+
+  // ---------------- prime time: the sit-down night (DOM, not the mansion) ----------------
+  { id: 'party.host',    group: 'party', title: 'PRIME TIME — TV / host',
+    bar: 'Jackbox host screen: room code, QR, lobby, casting ballot, recap card',
+    module: () => import('./views/party-host.js') },
+  { id: 'party.phone',   group: 'party', title: 'PRIME TIME — phone',
+    bar: 'Jackbox phone: join by code, seat, controller (D13), not first-person',
+    module: () => import('./views/party-phone.js') },
 ];
 
 export const VIEW_BY_ID = new Map(VIEWS.map((v) => [v.id, v]));
