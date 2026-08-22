@@ -37,6 +37,13 @@ export class PartyNightClient {
     this.ws = null;
     this.welcome = null;
     this.events = [];
+    /**
+     * Sequence numbers this socket was CAUGHT UP with rather than told live. A reconnecting phone
+     * is replayed its own role card, and a deal animation on a reconnect would announce a moment
+     * that already happened — the card is simply there. Kept beside the log rather than stamped
+     * onto the event, because the event is the server's object and gates read its shape.
+     */
+    this.replayed = new Set();
     this.frame = null;
     this.lobby = null;
     this.ballots = [];
@@ -58,7 +65,10 @@ export class PartyNightClient {
         if (m.t === 'welcome') this.welcome = m;
         if (m.t === 'full') this.full = true;
         if (m.t === 'state') this.frame = m.frame;
-        if (m.t === 'event') this.events.push(m.ev);
+        if (m.t === 'event') {
+          this.events.push(m.ev);
+          if (m.replay && m.ev?.seq != null) this.replayed.add(m.ev.seq);
+        }
         if (m.t === 'lobby') this.lobby = m;
         if (m.t === 'ballots') this.ballots = m.votes || [];
         if (m.t === 'show') this.beat = m.beat;
