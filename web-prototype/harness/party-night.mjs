@@ -11,7 +11,8 @@
 import { startServer, fanoutViolations, lobbySnapshot } from '../net/party/local.mjs';
 import { recapFromEvents } from '../src/party/recap.js';
 import { qrMatrix } from '../src/party/qr.js';
-import { tokenKey, STUB_SHOW_PLAN } from '../src/party/night-client.js';
+import { tokenKey, STUB_SHOW_PLAN, normalizeCodeDisplay, normalizeCodeWire } from '../src/party/night-client.js';
+import { ACCENTS, SHELLS, cleanLook } from '../src/party/look.js';
 
 const PORT = 5198;
 let pass = 0, fail = 0;
@@ -64,6 +65,12 @@ const srv = startServer({ port: PORT, count: 8, castSeed: 21, worldSeed: 3, code
 await sleep(120);
 const base = `ws://localhost:${PORT}/?room=night`;
 
+t('N1a · join code field uppercases, strips spaces, keeps the no-ilo01 alphabet',
+  normalizeCodeDisplay(' ab 1ilo xy') === 'ABXY'
+    && normalizeCodeDisplay('test') === 'TEST'
+    && normalizeCodeWire(' t e s t ') === 'test'
+    && !/[ILO01]/i.test(normalizeCodeDisplay('hello 10')));
+
 t('N1b · host and phone tokens are namespaced apart',
   tokenKey('test', 'tv') !== tokenKey('test', 'phone')
     && tokenKey('test', 'tv').endsWith('.tv.token')
@@ -99,9 +106,18 @@ t('N4b · lobby rows do not carry a role or alignment',
   const dirty = side.flatMap((m) => fanoutViolations(m));
   t('N4c · every lobby/ballots/show payload stays inside the closed fanout schema',
     dirty.length === 0, dirty.join(',') || `${side.length} side-channel messages`);
-  const leaked = { ...lobbySnapshot(srv.rooms.get('night')), seats: lobbySnapshot(srv.rooms.get('night')).seats.map((s) => ({ ...s, role: 'producer' })) };
+  const snap = lobbySnapshot(srv.rooms.get('night'));
+  const leaked = { ...snap, seats: snap.seats.map((s) => ({ ...s, role: 'producer' })) };
   t('N4d control · a role field on a lobby seat is a fanout violation',
     fanoutViolations(leaked).some((v) => v.includes('role')));
+  const withLook = { ...snap, seats: snap.seats.map((s) => ({ ...s, shell: SHELLS[0], accent: ACCENTS[0] })) };
+  t('N4e · shell/accent on a lobby seat stays inside the closed schema',
+    fanoutViolations(withLook).length === 0);
+  const hunter = { ...snap, seats: snap.seats.map((s) => ({ ...s, hunter: true })) };
+  const deal = { ...snap, seats: snap.seats.map((s) => ({ ...s, deal: { role: 'producer' } })) };
+  t('N4f control · hunter/deal on a lobby seat is a fanout violation',
+    fanoutViolations(hunter).some((v) => v.includes('hunter'))
+      && fanoutViolations(deal).some((v) => v.includes('deal')));
 }
 
 a.send({ t: 'name', name: 'Ada' });
@@ -110,6 +126,22 @@ await sleep(60);
 const named = last(host, 'lobby');
 t('N5 · phones can set a published name',
   (named?.seats || []).some((s) => s.name === 'Ada') && (named?.seats || []).some((s) => s.name === 'Bea'));
+
+a.send({ t: 'look', shell: SHELLS[2], accent: ACCENTS[0] });
+await sleep(60);
+const looked = last(host, 'lobby');
+const adaSeat = (looked?.seats || []).find((s) => s.name === 'Ada');
+t('N5b · locking a colour updates that seat on the TV lobby snapshot',
+  adaSeat?.shell === SHELLS[2] && adaSeat?.accent === ACCENTS[0] && !!cleanLook(adaSeat),
+  JSON.stringify({ shell: adaSeat?.shell, accent: adaSeat?.accent }));
+t('N5c · the other phone seat is unchanged (no face required on phones)',
+  (looked?.seats || []).some((s) => s.name === 'Bea' && s.shell == null && s.accent == null));
+a.send({ t: 'look', shell: '#ff00ff', accent: 'producer' });
+await sleep(40);
+const rejected = last(host, 'lobby');
+const adaAfter = (rejected?.seats || []).find((s) => s.name === 'Ada');
+t('N5d · a look outside the closed palette is ignored',
+  adaAfter?.shell === SHELLS[2] && adaAfter?.accent === ACCENTS[0]);
 
 host.send({ t: 'start' });
 host.send({ t: 'casting' });

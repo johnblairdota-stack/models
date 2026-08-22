@@ -4,9 +4,10 @@
  * Join by code, claim a seat, reconnect by token. Hold the role card; vote; tap a pad.
  * The TV is the show. This screen never renders the house.
  */
-import { PartyNightClient, defaultWsUrl, tokenKey } from '../party/night-client.js';
+import { PartyNightClient, defaultWsUrl, tokenKey, normalizeCodeDisplay, normalizeCodeWire } from '../party/night-client.js';
 import { recapFromEvents } from '../party/recap.js';
 import { injectNightSkin, markPartyReady, playerName, roleLabel, sideLabel } from '../party/night-skin.js';
+import { ACCENTS, DEFAULT_LOOK, SHELLS, cleanLook, robotFaceSvg } from '../party/look.js';
 
 export default async function partyPhone({ params }) {
   injectNightSkin();
@@ -18,8 +19,10 @@ export default async function partyPhone({ params }) {
   root.className = 'night phone';
   document.body.appendChild(root);
 
+  const savedLook = cleanLook(readLook()) || { ...DEFAULT_LOOK };
   const state = {
-    code: (params.get('room') || '').toLowerCase(),
+    step: 'join',
+    code: normalizeCodeWire(params.get('room') || ''),
     name: localStorage.getItem('rrr.party.name') || '',
     err: '',
     client: null,
@@ -27,6 +30,8 @@ export default async function partyPhone({ params }) {
     guide: null,
     throttle: 'STILL',
     flash: '',
+    look: savedLook,
+    lookLocked: false,
   };
 
   if (!state.code) {
@@ -36,13 +41,16 @@ export default async function partyPhone({ params }) {
   await connect();
 
   async function connect() {
-    const code = state.code.replace(/[^a-z0-9]/g, '').slice(0, 8);
-    if (code.length < 4) { state.err = 'Room code is four letters.'; paintJoin(); return; }
+    const code = normalizeCodeWire(state.code);
+    if (code.length < 4) { state.err = 'Room code is four letters.'; state.step = 'join'; paintJoin(); return; }
     state.code = code;
     const u = new URL(location.href);
     u.searchParams.set('view', 'party.phone');
     u.searchParams.set('room', code);
     history.replaceState({}, '', u);
+
+    state.step = 'connecting';
+    paintConnecting();
 
     const token = sessionStorage.getItem(tokenKey(code, 'phone'));
     const wsPort = +(params.get('wsPort') || 5181);
@@ -52,9 +60,22 @@ export default async function partyPhone({ params }) {
       onMessage: (m) => {
         if (m.t === 'welcome') sessionStorage.setItem(tokenKey(code, 'phone'), m.token);
         if (m.t === 'full') state.err = 'Room is full (8 phones + TV).';
-        paint();
+        if (m.t === 'lobby' && !state.lookLocked) {
+          const me = (m.seats || []).find((s) => s.id === client.welcome?.id);
+          if (me?.shell && me?.accent && cleanLook(me)) {
+            state.look = { shell: me.shell, accent: me.accent };
+            state.lookLocked = true;
+            writeLook(state.look);
+            if (state.step === 'customise' || state.step === 'connecting') state.step = 'night';
+          }
+        }
+        routePaint();
       },
-      onClose: () => { state.err = state.err || 'Dropped. Reload to reclaim your seat by token.'; paint(); },
+      onClose: () => {
+        state.err = state.err || 'Dropped. Reload to reclaim your seat by token.';
+        if (state.step === 'customise') paintCustomise();
+        else routePaint();
+      },
     });
     state.client = client;
     try {
@@ -62,6 +83,21 @@ export default async function partyPhone({ params }) {
       if (state.name) client.send({ t: 'name', name: state.name });
     } catch (e) {
       state.err = (e && e.message) || String(e);
+    }
+    if (client.full || !client.welcome) { state.step = 'join'; paintJoin(); return; }
+    if (!state.lookLocked) { state.step = 'customise'; paintCustomise(); return; }
+    state.step = 'night';
+    paint();
+  }
+
+  function routePaint() {
+    const c = state.client;
+    if (c?.full || (state.err && !c?.welcome)) { state.step = 'join'; paintJoin(); return; }
+    if (state.step === 'customise') return;
+    if (state.step === 'connecting') {
+      if (c?.welcome && !state.lookLocked) { state.step = 'customise'; paintCustomise(); return; }
+      if (c?.welcome && state.lookLocked) { state.step = 'night'; paint(); return; }
+      return;
     }
     paint();
   }
@@ -72,24 +108,83 @@ export default async function partyPhone({ params }) {
       <h1>Sit down.</h1>
       <p class="hint">Type the four-letter code on the TV.</p>
       ${state.err ? `<div class="err">${esc(state.err)}</div>` : ''}
-      <input class="field" id="code" maxlength="8" placeholder="CODE" value="${esc(state.code)}" autocomplete="off" autocapitalize="characters">
+      <input class="field code" id="code" maxlength="8" placeholder="CODE" value="${esc(normalizeCodeDisplay(state.code))}" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text">
       <input class="field" id="name" maxlength="12" placeholder="YOUR NAME" value="${esc(state.name)}" autocomplete="nickname">
       <button class="btn wide" id="join">Join</button>`;
+    const codeEl = root.querySelector('#code');
+    bindCodeField(codeEl);
     root.querySelector('#join').onclick = () => {
-      state.code = root.querySelector('#code').value;
+      state.code = normalizeCodeWire(codeEl.value);
       state.name = root.querySelector('#name').value;
       if (state.name) localStorage.setItem('rrr.party.name', state.name);
       connect();
     };
   }
 
+  function paintConnecting() {
+    root.innerHTML = `
+      <div class="phone-top"><span>Prime Time</span><span>…</span></div>
+      <div class="look-stage connecting">
+        ${robotFaceSvg(state.look.shell, state.look.accent, { size: 168 })}
+        <p class="hint">Sitting down…</p>
+      </div>`;
+  }
+
+  function paintCustomise() {
+    const look = state.look;
+    root.innerHTML = `
+      <div class="phone-top"><span>${esc(normalizeCodeDisplay(state.code))}</span><span>face</span></div>
+      <h1>Your face.</h1>
+      <p class="hint">Colour the robot. This is what the room sees on the TV.</p>
+      ${state.err ? `<div class="err">${esc(state.err)}</div>` : ''}
+      <div class="look-stage" id="look-stage">
+        ${robotFaceSvg(look.shell, look.accent, { size: 168 })}
+      </div>
+      <div class="hint">SHELL</div>
+      <div class="swatch-row" id="shells">${SHELLS.map((hex) =>
+        `<button type="button" class="swatch${hex === look.shell ? ' on' : ''}" data-part="shell" data-hex="${hex}" style="--swatch:${hex}" aria-label="shell ${hex}"></button>`).join('')}</div>
+      <div class="hint">ACCENT</div>
+      <div class="swatch-row" id="accents">${ACCENTS.map((hex) =>
+        `<button type="button" class="swatch${hex === look.accent ? ' on' : ''}" data-part="accent" data-hex="${hex}" style="--swatch:${hex}" aria-label="accent ${hex}"></button>`).join('')}</div>
+      <button class="btn wide" id="lock-look">Lock in</button>`;
+    for (const b of root.querySelectorAll('.swatch')) {
+      b.addEventListener('click', () => pickLook(b.dataset.part, b.dataset.hex));
+    }
+    root.querySelector('#lock-look').onclick = () => {
+      const locked = cleanLook(state.look) || DEFAULT_LOOK;
+      state.look = locked;
+      state.lookLocked = true;
+      writeLook(locked);
+      state.client?.send({ t: 'look', shell: locked.shell, accent: locked.accent });
+      state.step = 'night';
+      paint();
+    };
+  }
+
+  function pickLook(part, hex) {
+    if (part !== 'shell' && part !== 'accent') return;
+    if (part === 'shell' && !SHELLS.includes(hex)) return;
+    if (part === 'accent' && !ACCENTS.includes(hex)) return;
+    state.look[part] = hex;
+    const face = root.querySelector('.bot-face');
+    if (face) {
+      const node = face.querySelector(part === 'shell' ? '.bot-shell' : '.bot-wedge');
+      if (node) node.setAttribute('fill', hex);
+    }
+    const row = root.querySelector(part === 'shell' ? '#shells' : '#accents');
+    if (row) {
+      for (const b of row.querySelectorAll('.swatch')) b.classList.toggle('on', b.dataset.hex === hex);
+    }
+  }
+
   function paint() {
     const c = state.client;
     if (!c || (!c.welcome && !c.full && !state.err)) {
-      root.innerHTML = `<div class="phone-top"><span>Prime Time</span><span>…</span></div><p class="hint">Connecting…</p>`;
+      paintConnecting();
       return;
     }
     if (!c.welcome || c.full) { paintJoin(); return; }
+    if (!state.lookLocked) { paintCustomise(); return; }
 
     const me = c.welcome;
     const frame = c.frame;
@@ -229,6 +324,28 @@ export default async function partyPhone({ params }) {
   function youTeammates() {
     return state.client?.frame?.you?.teammates || [];
   }
+}
+
+function bindCodeField(input) {
+  if (!input) return;
+  const apply = () => {
+    const next = normalizeCodeDisplay(input.value);
+    if (input.value === next) return;
+    const start = input.selectionStart;
+    input.value = next;
+    try { input.setSelectionRange(start, start); } catch { /* ignore */ }
+  };
+  input.addEventListener('input', apply);
+  input.addEventListener('paste', () => requestAnimationFrame(apply));
+  apply();
+}
+
+function readLook() {
+  try { return JSON.parse(localStorage.getItem('rrr.party.look') || ''); } catch { return null; }
+}
+
+function writeLook(look) {
+  localStorage.setItem('rrr.party.look', JSON.stringify(look));
 }
 
 function esc(s) {

@@ -30,8 +30,9 @@
  *   · `t:state` / `t:event` — through `project()` or `visibleTo()` for THAT socket.
  *   · `t:lobby` / `t:ballots` / `t:show` — a closed public side-channel. Occupancy, published
  *     names, casting votes, show beat. Not the entitlement matrix. `fanoutViolations()` is
- *     the freeze: a later `role` / `alignment` / `cover` / `claim` on one of these fails a
- *     gate (and throws here) rather than shipping silently.
+ *     the freeze: a later `role` / `alignment` / `cover` / `claim` / `hunter` / `deal` on
+ *     one of these fails a gate (and throws here) rather than shipping silently.
+ *     Public cosmetics (`shell`, `accent`) are on the allow-list; they are not a hole.
  */
 
 import http from 'node:http';
@@ -156,12 +157,12 @@ export function bindConnection(room, { token, wantTV = false }) {
 /** Closed keys for the public side-channel. A field not on this list is a violation. */
 export const FANOUT_KEYS = {
   lobby: ['t', 'code', 'phase', 'episode', 'seats'],
-  lobbySeat: ['id', 'playerId', 'isTV', 'name', 'seat', 'joined', 'connected'],
+  lobbySeat: ['id', 'playerId', 'isTV', 'name', 'seat', 'joined', 'connected', 'shell', 'accent'],
   ballots: ['t', 'votes'],
   ballotVote: ['voter', 'runner', 'guide'],
   show: ['t', 'beat'],
 };
-export const FANOUT_FORBIDDEN = ['role', 'alignment', 'cover', 'claim', 'castSeed', 'you', 'teammates', 'flyover'];
+export const FANOUT_FORBIDDEN = ['role', 'alignment', 'cover', 'claim', 'castSeed', 'you', 'teammates', 'flyover', 'hunter', 'deal'];
 
 function extraKeys(obj, allowed, path, out) {
   if (!obj || typeof obj !== 'object') return;
@@ -207,6 +208,8 @@ export function lobbySnapshot(room) {
         seat: player?.seat ?? null,
         joined,
         connected: room.conns.has(s.id),
+        shell: player?.shell ?? null,
+        accent: player?.accent ?? null,
       };
     }),
   };
@@ -312,6 +315,11 @@ function handleClient(room, bound, self, msg) {
   const isTV = !!self?.isTV;
   if (msg.t === 'name' && self && !isTV) {
     room.game.setName(self.playerId, msg.name);
+    fanout(room, lobbySnapshot(room));
+    return;
+  }
+  if (msg.t === 'look' && self && !isTV) {
+    room.game.setLook(self.playerId, { shell: msg.shell, accent: msg.accent });
     fanout(room, lobbySnapshot(room));
     return;
   }

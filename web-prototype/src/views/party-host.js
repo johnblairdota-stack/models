@@ -7,6 +7,7 @@ import { PartyNightClient, defaultWsUrl, makeCode, tokenKey, STUB_SHOW_PLAN } fr
 import { recapFromEvents } from '../party/recap.js';
 import { injectNightSkin, markPartyReady, playerName } from '../party/night-skin.js';
 import { qrSvg } from '../party/qr.js';
+import { cleanLook, robotFaceSvg } from '../party/look.js';
 
 const LINE = 'Two of you go in. One walks, one talks. The rest of us watch. Someone in this room is lying.';
 
@@ -53,6 +54,7 @@ export default async function partyHost({ params }) {
           setTimeout(() => setBeat(step.beat), step.ms);
         }
       }
+      if (m.t === 'lobby' && patchLobby(root, client, ui, m)) return;
       paint();
     },
     onClose: () => { ui.err = ui.err || 'Disconnected from the room server.'; paint(); },
@@ -133,7 +135,7 @@ export default async function partyHost({ params }) {
         <div class="actions">
           <button class="btn" id="go" ${canStart ? '' : 'disabled'}>Start the night</button>
         </div>
-        <p class="hint" style="margin-top:14px">${nLive} phone${nLive === 1 ? '' : 's'} live · need 2 to start · empty chairs still sit in the deal as Robot N</p>`;
+        <p class="hint" data-live-hint style="margin-top:14px">${nLive} phone${nLive === 1 ? '' : 's'} live · need 2 to start · empty chairs still sit in the deal as Robot N</p>`;
     } else if (show === 'casting') {
       body += ballotBoard(votes, names, pair, recap, episode);
       body += `<div class="actions">`;
@@ -184,11 +186,76 @@ function seatGrid(lobby) {
   if (!seats.length) {
     return `<p class="hint" style="margin-top:22px">Waiting for the room…</p>`;
   }
-  return `<div class="seats">${seats.map((s) => {
-    const cls = s.connected ? 'seat on' : (s.joined ? 'seat away' : 'seat');
-    const meta = s.connected ? 'live' : (s.joined ? 'reconnect' : 'empty');
-    return `<div class="${cls}"><div class="who">${esc(s.name)}</div><div class="meta">${meta}</div></div>`;
-  }).join('')}</div>`;
+  return `<div class="seats">${seats.map((s) => seatCard(s)).join('')}</div>`;
+}
+
+function seatCard(s) {
+  const cls = s.connected ? 'seat on' : (s.joined ? 'seat away' : 'seat');
+  const meta = s.connected ? 'live' : (s.joined ? 'reconnect' : 'empty');
+  return `<div class="${cls}" data-seat-id="${esc(s.id)}">${seatFace(s)}<div class="who">${esc(s.name)}</div><div class="meta">${meta}</div></div>`;
+}
+
+function seatFace(s) {
+  const look = cleanLook(s);
+  if (!look) return `<div class="seat-face" hidden></div>`;
+  return `<div class="seat-face">${robotFaceSvg(look.shell, look.accent, { size: 52 })}</div>`;
+}
+
+/** In-place lobby update so a locked colour animates instead of remounting the page. */
+function patchLobby(root, client, ui, lobby) {
+  if (!patchSeats(root, lobby)) return false;
+  const nLive = (lobby.seats || []).filter((s) => !s.isTV && s.connected).length;
+  const go = root.querySelector('#go');
+  const connected = client.connected && client.welcome && !client.full;
+  const phase = client.frame?.phase || lobby.phase || 'LOBBY';
+  const canStart = connected && nLive >= 2 && (phase === 'LOBBY' || ui.beat === 'lobby') && !ui.locked;
+  if (go) go.disabled = !canStart;
+  const hint = root.querySelector('[data-live-hint]');
+  if (hint) {
+    hint.textContent = `${nLive} phone${nLive === 1 ? '' : 's'} live · need 2 to start · empty chairs still sit in the deal as Robot N`;
+  }
+  return true;
+}
+
+function patchSeats(root, lobby) {
+  const grid = root.querySelector('.seats');
+  if (!grid || !lobby?.seats) return false;
+  const seats = lobby.seats.filter((s) => !s.isTV);
+  const have = [...grid.querySelectorAll('[data-seat-id]')];
+  if (have.length !== seats.length) return false;
+  for (const s of seats) {
+    const el = grid.querySelector(`[data-seat-id="${cssEscape(s.id)}"]`);
+    if (!el) return false;
+    el.className = s.connected ? 'seat on' : (s.joined ? 'seat away' : 'seat');
+    const who = el.querySelector('.who');
+    const meta = el.querySelector('.meta');
+    if (who) who.textContent = s.name;
+    if (meta) meta.textContent = s.connected ? 'live' : (s.joined ? 'reconnect' : 'empty');
+    let faceWrap = el.querySelector('.seat-face');
+    const look = cleanLook(s);
+    if (!faceWrap) {
+      el.insertAdjacentHTML('afterbegin', look ? seatFace(s) : `<div class="seat-face" hidden></div>`);
+      continue;
+    }
+    const shell = faceWrap.querySelector('.bot-shell');
+    const wedge = faceWrap.querySelector('.bot-wedge');
+    if (look && shell && wedge) {
+      faceWrap.hidden = false;
+      shell.setAttribute('fill', look.shell);
+      wedge.setAttribute('fill', look.accent);
+    } else if (look) {
+      faceWrap.hidden = false;
+      faceWrap.innerHTML = robotFaceSvg(look.shell, look.accent, { size: 52 });
+    } else {
+      faceWrap.hidden = true;
+      faceWrap.innerHTML = '';
+    }
+  }
+  return true;
+}
+
+function cssEscape(s) {
+  return String(s ?? '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
 function ballotBoard(votes, names, pair, recap, episode) {

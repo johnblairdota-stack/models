@@ -313,6 +313,14 @@ const runs = capture(LEAK);
 
 const R = suite(runs);
 t('I1 · every key path on every frame has a matrix row', R.I1, R.detail.I1 || 'deny-by-default holds');
+t('I1b · public cosmetics are rowed; hunter/deal/role on a player still have no row',
+  audienceFor('players[].shell') === 'all'
+    && audienceFor('players[].accent') === 'all'
+    && audienceFor('players[].hunter') === null
+    && audienceFor('players[].deal') === null
+    && audienceFor('players[].role') === null
+    && audienceFor('players[].alignment') === null,
+  'a later secret field still fails I1');
 t('I2 · no key path reaches a socket its row does not entitle', R.I2, R.detail.I2 || `${SEEDS.length} seeds clean`);
 t('I3 · semantic sweep — no ground-truth value in a non-entitled transcript', R.I3, R.detail.I3 || 'no foreign role or alignment observed');
 t('I3b · every claim on the wire was published by its owner, never inferred', R.I3b,

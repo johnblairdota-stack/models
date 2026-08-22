@@ -3,10 +3,13 @@
  * different filter. Every inbound `state` / `event` has already been projected for THIS socket.
  */
 
+import { CODE_ABC, normalizeCodeDisplay, normalizeCodeWire } from './look.js';
+
+export { CODE_ABC, normalizeCodeDisplay, normalizeCodeWire };
+
 export function makeCode(rand = Math.random) {
-  const abc = 'abcdefghjkmnpqrstuvwxyz23456789';
   let s = '';
-  for (let i = 0; i < 4; i++) s += abc[Math.floor(rand() * abc.length)];
+  for (let i = 0; i < 4; i++) s += CODE_ABC[Math.floor(rand() * CODE_ABC.length)];
   return s;
 }
 
