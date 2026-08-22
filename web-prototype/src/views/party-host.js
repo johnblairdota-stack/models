@@ -8,6 +8,7 @@ import { recapFromEvents } from '../party/recap.js';
 import { injectNightSkin, markPartyReady, playerName } from '../party/night-skin.js';
 import { qrSvg } from '../party/qr.js';
 import { cleanLook, robotFaceSvg } from '../party/look.js';
+import { mergePublicNames } from '../party/cast-ui.js';
 
 const LINE = 'Two of you go in. One walks, one talks. The rest of us watch. Someone in this room is lying.';
 
@@ -76,9 +77,7 @@ export default async function partyHost({ params }) {
     return phones().filter((s) => s.connected);
   }
   function players() {
-    return client.frame?.players || (client.lobby?.seats || [])
-      .filter((s) => !s.isTV)
-      .map((s) => ({ id: s.playerId, name: s.name, seat: s.seat, alive: true }));
+    return mergePublicNames(client.frame?.players, client.lobby);
   }
 
   function setBeat(beat) {
@@ -95,6 +94,7 @@ export default async function partyHost({ params }) {
   }
 
   function sendThemIn() {
+    if (!(client.ballots || []).length) return;
     ui.locked = true;
     client.send({ t: 'episode', opts: {} });
     ui.beat = 'casting';
@@ -114,7 +114,9 @@ export default async function partyHost({ params }) {
     const connected = client.connected && client.welcome && !client.full;
     const nLive = livePhones().length;
     const canStart = connected && nLive >= 2 && (phase === 'LOBBY' || show === 'lobby') && !ui.locked;
-    const canLock = connected && (phase === 'CASTING' || show === 'casting') && !client.events.some((e) => e.type === 'cast.pair');
+    const canLock = connected && (phase === 'CASTING' || show === 'casting')
+      && (client.ballots || []).length >= 1
+      && !client.events.some((e) => e.type === 'cast.pair');
     const hasPair = !!(pair.runner || recap.runner);
     const hasRecap = client.events.some((e) => e.type === 'phase.RECAP' || e.type === 'run.camera_lit' || e.type === 'panel.alarm');
 
@@ -135,7 +137,7 @@ export default async function partyHost({ params }) {
         <div class="actions">
           <button class="btn" id="go" ${canStart ? '' : 'disabled'}>Start the night</button>
         </div>
-        <p class="hint" data-live-hint style="margin-top:14px">${nLive} phone${nLive === 1 ? '' : 's'} live · need 2 to start · empty chairs still sit in the deal as Robot N</p>`;
+        <p class="hint" data-live-hint style="margin-top:14px">${nLive} phone${nLive === 1 ? '' : 's'} live · need 2 to start · empty chairs stay empty</p>`;
     } else if (show === 'casting') {
       body += ballotBoard(votes, names, pair, recap, episode);
       body += `<div class="actions">`;
@@ -212,7 +214,7 @@ function patchLobby(root, client, ui, lobby) {
   if (go) go.disabled = !canStart;
   const hint = root.querySelector('[data-live-hint]');
   if (hint) {
-    hint.textContent = `${nLive} phone${nLive === 1 ? '' : 's'} live · need 2 to start · empty chairs still sit in the deal as Robot N`;
+    hint.textContent = `${nLive} phone${nLive === 1 ? '' : 's'} live · need 2 to start · empty chairs stay empty`;
   }
   return true;
 }

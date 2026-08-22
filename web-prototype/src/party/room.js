@@ -160,13 +160,19 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
   }
 
   /** Play one scripted episode. Deterministic — the gates need two runs to agree exactly. */
-  function playEpisode({ takeRunner = false, hunterRoom = null, ballots = null, votes = null, nominations = null } = {}) {
+  function playEpisode({ takeRunner = false, hunterRoom = null, ballots = null, votes = null, nominations = null, living: livingOpt = null } = {}) {
     const takeRunnerThisEpisode = takeRunner;
     if (hunterRoom) state.hunterRoom = hunterRoom;
+    const allLiving = state.players.filter((p) => p.alive).map((p) => p.id);
+    // Night passes the seated humans. Gates omit this and keep the full deal.
+    const living = (Array.isArray(livingOpt) && livingOpt.length)
+      ? livingOpt.filter((id) => allLiving.includes(id))
+      : allLiving;
+    // An explicit empty ballot list means wait — do not invent a pair from unused Robot N chairs.
+    if (Array.isArray(ballots) && ballots.length === 0) return;
     setPhase('CASTING');
     // 🚨 THE PAIR COMES OUT OF A BALLOT, NOT A SEAT INDEX. `ballot.js` resolves every tie
     // deterministically and publicly, so casting never stalls and never waits on a human.
-    const living = state.players.filter((p) => p.alive).map((p) => p.id);
     const cast = tallyCasting({
       ballots: ballots || living.map((v, i) => ({
         voter: v, runner: living[(i + 1) % living.length], guide: living[(i + 2) % living.length],
@@ -341,6 +347,8 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       if (clean) p.name = clean;
       return p.name;
     },
+    /** Push the current projected frame to every socket — names are public. */
+    syncAll() { broadcast(); },
     /**
      * Published face colours. Closed palette — unknown hex is ignored.
      * Does not broadcast; the transport fans the lobby snapshot.

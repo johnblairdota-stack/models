@@ -46,6 +46,49 @@ export function ballotFromCast(cast, voter) {
   return { voter, runner: cast.runner, guide: cast.guide };
 }
 
+const STOCK_NAME = /^Robot \d+$/;
+
+export function isStockRobotName(name) {
+  return STOCK_NAME.test(String(name || ''));
+}
+
+/**
+ * Joined phones only. Empty Robot N chairs cannot be nominated.
+ * A dropped phone stays if they already have a human name.
+ */
+export function nominationPlayers(framePlayers, lobby) {
+  const byId = new Map((framePlayers || []).map((p) => [p.id, p]));
+  const out = [];
+  for (const s of (lobby?.seats || [])) {
+    if (s.isTV || !s.joined || !s.playerId) continue;
+    if (!s.connected && isStockRobotName(s.name)) continue;
+    const p = byId.get(s.playerId) || {};
+    if (p.alive === false) continue;
+    out.push({
+      id: s.playerId,
+      name: s.name || p.name || s.playerId,
+      seat: s.seat ?? p.seat ?? null,
+      alive: true,
+    });
+  }
+  return out;
+}
+
+/** Lobby name wins over a leftover Robot N on the state frame. */
+export function mergePublicNames(framePlayers, lobby) {
+  const names = new Map();
+  for (const s of (lobby?.seats || [])) {
+    if (s.isTV || !s.playerId || !s.name) continue;
+    names.set(s.playerId, s.name);
+  }
+  const rows = (framePlayers && framePlayers.length)
+    ? framePlayers
+    : (lobby?.seats || []).filter((s) => !s.isTV && s.playerId).map((s) => ({
+      id: s.playerId, name: s.name, seat: s.seat, alive: true,
+    }));
+  return rows.map((p) => ({ ...p, name: names.get(p.id) || p.name }));
+}
+
 export function padlockSvg() {
   return `<svg class="padlock" viewBox="0 0 24 24" aria-hidden="true">
     <path d="M8 10V8a4 4 0 1 1 8 0v2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>

@@ -13,7 +13,8 @@ import { recapFromEvents } from '../src/party/recap.js';
 import { qrMatrix } from '../src/party/qr.js';
 import { tokenKey, STUB_SHOW_PLAN, normalizeCodeDisplay, normalizeCodeWire } from '../src/party/night-client.js';
 import { ACCENTS, SHELLS, cleanLook } from '../src/party/look.js';
-import { applyCastLock, applyCastTap, ballotFromCast, castPrompt, freshCast } from '../src/party/cast-ui.js';
+import { applyCastLock, applyCastTap, ballotFromCast, castPrompt, freshCast, mergePublicNames, nominationPlayers } from '../src/party/cast-ui.js';
+import { createRoom } from '../src/party/room.js';
 
 const PORT = 5198;
 let pass = 0, fail = 0;
@@ -89,6 +90,24 @@ t('N1a · join code field uppercases, strips spaces, keeps the no-ilo01 alphabet
   cast = applyCastLock(applyCastTap(cast, 'p2'));
   t('N1a6 · locking the guide produces today\'s {voter, runner, guide}',
     JSON.stringify(ballotFromCast(cast, 'me')) === JSON.stringify({ voter: 'me', runner: 'p1', guide: 'p2' }));
+  const lobby = {
+    seats: [
+      { id: 'tv', playerId: null, isTV: true, name: 'TV', joined: true, connected: true },
+      { id: 'phone-0', playerId: 'p1', isTV: false, name: 'Ellie', joined: true, connected: true },
+      { id: 'phone-1', playerId: 'p2', isTV: false, name: 'Ada', joined: true, connected: false },
+      { id: 'phone-6', playerId: 'p7', isTV: false, name: 'Robot 7', joined: false, connected: false },
+    ],
+  };
+  const framePlayers = [
+    { id: 'p1', name: 'Robot 1', alive: true },
+    { id: 'p2', name: 'Ada', alive: true },
+    { id: 'p7', name: 'Robot 7', alive: true },
+  ];
+  const noms = nominationPlayers(framePlayers, lobby);
+  t('N1a7 · nomination list is joined humans, never an empty Robot N chair',
+    noms.map((p) => p.id).join(',') === 'p1,p2' && !noms.some((p) => p.id === 'p7'));
+  t('N1a8 · a lobby name wins over a leftover Robot N on the state frame',
+    mergePublicNames(framePlayers, lobby).find((p) => p.id === 'p1')?.name === 'Ellie');
 }
 
 t('N1b · host and phone tokens are namespaced apart',
@@ -146,6 +165,9 @@ await sleep(60);
 const named = last(host, 'lobby');
 t('N5 · phones can set a published name',
   (named?.seats || []).some((s) => s.name === 'Ada') && (named?.seats || []).some((s) => s.name === 'Bea'));
+t('N5e · setName updates players[].name on the state frame too',
+  (last(host, 'state')?.frame?.players || []).some((p) => p.name === 'Ada')
+    && (last(host, 'state')?.frame?.players || []).some((p) => p.name === 'Bea'));
 
 a.send({ t: 'look', shell: SHELLS[2], accent: ACCENTS[0] });
 await sleep(60);
@@ -170,6 +192,20 @@ t('N6 · host opens CASTING',
   last(host, 'state')?.frame?.phase === 'CASTING' || last(a, 'state')?.frame?.phase === 'CASTING',
   last(host, 'state')?.frame?.phase);
 
+{
+  const emptyId = (last(host, 'lobby')?.seats || []).find((s) => !s.isTV && !s.joined)?.playerId;
+  a.send({ t: 'ballot', runner: emptyId, guide: b.welcome.playerId });
+  await sleep(50);
+  t('N6b · a ballot that names an empty chair is ignored',
+    (last(host, 'ballots')?.votes || []).length === 0, emptyId);
+  host.send({ t: 'episode', opts: {} });
+  await sleep(80);
+  const premature = last(host, 'state')?.frame?.pair;
+  t('N6c · no human ballot means wait — do not elect Robot 7 from empty chairs',
+    !premature?.runner && !premature?.guide,
+    JSON.stringify(premature));
+}
+
 a.send({ t: 'ballot', runner: b.welcome.playerId, guide: a.welcome.playerId });
 b.send({ t: 'ballot', runner: a.welcome.playerId, guide: b.welcome.playerId });
 await sleep(80);
@@ -181,6 +217,30 @@ t('N7 · casting ballots are public and attributed',
 
 host.send({ t: 'episode', opts: {} });
 await sleep(220);
+
+{
+  const frame = last(host, 'state')?.frame;
+  const nameOf = (id) => (frame?.players || []).find((p) => p.id === id)?.name;
+  const runnerName = nameOf(frame?.pair?.runner);
+  const guideName = nameOf(frame?.pair?.guide);
+  t('N7e · locked pair is the seated humans by their public names, not Robot 7',
+    ['Ada', 'Bea'].includes(runnerName) && ['Ada', 'Bea'].includes(guideName)
+      && runnerName !== guideName
+      && !/^Robot /.test(runnerName || '') && !/^Robot /.test(guideName || ''),
+    JSON.stringify({ runner: runnerName, guide: guideName, pair: frame?.pair }));
+}
+
+{
+  const r = createRoom({ count: 8, castSeed: 1, worldSeed: 1, send: () => {} });
+  r.setName('p1', 'Ellie');
+  r.playEpisode({ ballots: [], living: ['p1', 'p2'] });
+  t('N7f · playEpisode with an empty ballot list does not invent a pair',
+    r.state.pair.runner == null && r.state.pair.guide == null);
+  r.playEpisode({ ballots: [{ voter: 'p1', runner: 'p1', guide: 'p2' }], living: ['p1', 'p2'] });
+  t('N7g · a seated-human living pool cannot elect an unused deal slot',
+    [r.state.pair.runner, r.state.pair.guide].sort().join(',') === 'p1,p2'
+      && r.state.players.find((p) => p.id === 'p1')?.name === 'Ellie');
+}
 
 const hostEvs = host.msgs.filter((m) => m.t === 'event').map((m) => m.ev);
 const aEvs = a.msgs.filter((m) => m.t === 'event').map((m) => m.ev);

@@ -307,14 +307,18 @@ export function startServer({ port = 5181, count = 8, castSeed = 1, worldSeed = 
   return { server, rooms, close: () => new Promise((r) => server.close(r)) };
 }
 
-function livingIds(room) {
-  return room.game.state.players.filter((p) => p.alive).map((p) => p.id);
+/** Joined phone player ids. Empty deal slots are not seated. */
+export function seatedPlayerIds(room) {
+  return room.game.sockets
+    .filter((s) => !s.isTV && room.seatsTaken.has(s.id) && s.playerId)
+    .map((s) => s.playerId);
 }
 
 function handleClient(room, bound, self, msg) {
   const isTV = !!self?.isTV;
   if (msg.t === 'name' && self && !isTV) {
     room.game.setName(self.playerId, msg.name);
+    room.game.syncAll();
     fanout(room, lobbySnapshot(room));
     return;
   }
@@ -324,9 +328,9 @@ function handleClient(room, bound, self, msg) {
     return;
   }
   if (msg.t === 'ballot' && self && !isTV && self.playerId) {
-    const living = new Set(livingIds(room));
-    const runner = living.has(msg.runner) ? msg.runner : null;
-    const guide = living.has(msg.guide) ? msg.guide : null;
+    const seated = new Set(seatedPlayerIds(room));
+    const runner = seated.has(msg.runner) ? msg.runner : null;
+    const guide = seated.has(msg.guide) ? msg.guide : null;
     if (runner && guide && runner !== guide) {
       room.ballots.set(self.playerId, { voter: self.playerId, runner, guide });
       fanout(room, { t: 'ballots', votes: [...room.ballots.values()] });
@@ -343,8 +347,17 @@ function handleClient(room, bound, self, msg) {
   if (msg.t === 'start') { room.game.start(); fanout(room, lobbySnapshot(room)); }
   if (msg.t === 'casting') { room.game.beginCasting(); room.show = 'casting'; fanout(room, { t: 'show', beat: 'casting' }); }
   if (msg.t === 'episode') {
-    const votes = [...room.ballots.values()];
-    room.game.playEpisode({ ...(msg.opts || {}), ...(votes.length ? { ballots: votes } : {}) });
+    const seated = seatedPlayerIds(room);
+    const votes = [...room.ballots.values()].filter((v) =>
+      seated.includes(v.runner) && seated.includes(v.guide) && v.runner !== v.guide);
+    const unused = room.game.state.players.length - seated.length;
+    // Empty chairs in the deal must not invent a pair. Gates that fill every seat still synthesize.
+    if (!votes.length && unused > 0) return;
+    room.game.playEpisode({
+      ...(msg.opts || {}),
+      ...(votes.length ? { ballots: votes } : {}),
+      ...(seated.length ? { living: seated } : {}),
+    });
     // Do not pin the show on CASTING — the host auto-advances the stub run into recap.
     fanout(room, lobbySnapshot(room));
   }

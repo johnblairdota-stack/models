@@ -8,7 +8,7 @@ import { PartyNightClient, defaultWsUrl, tokenKey, normalizeCodeDisplay, normali
 import { recapFromEvents } from '../party/recap.js';
 import { injectNightSkin, markPartyReady, playerName, roleLabel, sideLabel } from '../party/night-skin.js';
 import { ACCENTS, DEFAULT_LOOK, SHELLS, cleanLook, robotFaceSvg } from '../party/look.js';
-import { applyCastLock, applyCastTap, ballotFromCast, castPrompt, freshCast, padlockSvg } from '../party/cast-ui.js';
+import { applyCastLock, applyCastTap, ballotFromCast, castPrompt, freshCast, mergePublicNames, nominationPlayers, padlockSvg } from '../party/cast-ui.js';
 
 export default async function partyPhone({ params }) {
   injectNightSkin();
@@ -189,9 +189,8 @@ export default async function partyPhone({ params }) {
 
     const me = c.welcome;
     const frame = c.frame;
-    const players = frame?.players || (c.lobby?.seats || [])
-      .filter((s) => !s.isTV)
-      .map((s) => ({ id: s.playerId, name: s.name, seat: s.seat, alive: true }));
+    const players = mergePublicNames(frame?.players, c.lobby);
+    const nominees = nominationPlayers(frame?.players, c.lobby);
     const you = frame?.you;
     const beat = c.beat || 'lobby';
     const phase = frame?.phase || 'LOBBY';
@@ -214,7 +213,7 @@ export default async function partyPhone({ params }) {
     }
 
     if (beat === 'casting' && !recap.runner && !pair.runner) {
-      paintCasting(players, me, frame?.episode || c.lobby?.episode || 1);
+      paintCasting(nominees, me, frame?.episode || c.lobby?.episode || 1);
       return;
     } else if (beat === 'lobby' || phase === 'LOBBY') {
       body += `<h1>${esc(myName)}</h1>
