@@ -40,6 +40,8 @@ const STAGGER = 0.55;
 const ENTRY_OUT = 3.4;
 /** Close enough to the chair to stop walking and start performing. */
 const ARRIVE = 0.42;
+/** How far in front of its chair a robot stands. See the note on `at` below. */
+const STAND_IN = 0.62;
 
 /**
  * 🎨 **PER-ROBOT COLOUR BY CLONING A BAKED MATERIAL, NOT BY BAKING A NEW ONE.**
@@ -128,8 +130,9 @@ export function ballroomOf(room) {
  * @param {object} o.room       the built mansion
  * @param {Array}  o.cast       `[{ id, seat, name, shell, accent }]` — the JOINED phones, in order
  * @param {object} [o.materials] a shared `unit4hMaterials()` set, so nothing is baked twice
+ * @param {(eye,at)=>void} [o.reelSight]  `follow-bed.js`'s sight reel — see its use below
  */
-export function buildIntroBed(engine, { room, cast, materials } = {}) {
+export function buildIntroBed(engine, { room, cast, materials, reelSight } = {}) {
   const scene = engine.scene;
   const rng = engine.rng;
   const space = ballroomOf(room);
@@ -154,10 +157,30 @@ export function buildIntroBed(engine, { room, cast, materials } = {}) {
   const room_short = space ? Math.min(space.x1 - space.x0, space.z1 - space.z0) : 12;
   const radius = Math.max(2.4, Math.min(0.62 * n, room_short / 2 - 2.2));
 
-  const gilt = room.materials?.gilt ?? room.materials?.brass ?? room.materials?.walnut ?? null;
+  /**
+   * 🪑 **THE CHAIR MATERIAL IS RESOLVED, THEN GUARANTEED, AND THE GUARANTEE IS NOT DEFENSIVE
+   * PADDING — THE FIRST DRAFT CRASHED THE RENDERER OVER IT.**
+   *
+   * The obvious line was `room.materials?.gilt ?? room.materials?.brass ?? … ?? null`, copied from
+   * `views/room-ballroom.js`, which builds its own kit. The playable mansion's bundle is
+   * `floor / wall / ceiling / mould / skirt / reveal / brick / estate` — **there is no `gilt`** —
+   * so the `?? null` won every time and `new THREE.InstancedMesh(geo, null, n)` went into the
+   * scene. three.js then read `material.visible` on it in `projectObject` and threw once per
+   * frame, in both the colour and the depth-only pass, for the entire intro sequence.
+   *
+   * It presented as *"Cannot read properties of null (reading 'visible')"* deep inside the
+   * renderer with no mention of a chair anywhere in the stack, which is the whole reason the
+   * fallback is a real material rather than a nullish chain: an absent material must be a plain
+   * chair, never an absent chair and never a dead frame.
+   *
+   * `mould` is the gilded trim of this house's own kit, so the chairs belong to the room they are
+   * in rather than to a palette this file invented.
+   */
+  const chairMat = room.materials?.mould ?? room.materials?.estate ?? room.materials?.wall
+    ?? new THREE.MeshStandardMaterial({ color: 0x6b4a22, roughness: 0.38, metalness: 0.62 });
   const circle = chairCircle({
     count: n, radius, cx, cz, y: room.floorY ?? 0,
-    material: gilt, rng, name: 'intro-chairs',
+    material: chairMat, rng, name: 'intro-chairs',
   });
   const group = new THREE.Group();
   group.name = 'intro';
@@ -196,9 +219,17 @@ export function buildIntroBed(engine, { room, cast, materials } = {}) {
     return {
       seat, body, chair,
       flair: FLAIRS[i % FLAIRS.length],
-      at: new THREE.Vector3(chair.x, room.floorY ?? 0, chair.z),
+      /*
+       * ⚠️ THE ROBOT STANDS *IN FRONT OF* ITS CHAIR, NOT ON IT, AND THE FIRST DRIVE PHOTOGRAPHED
+       * WHY. Standing at the chair's own coordinate puts the chair between the camera and the
+       * robot — the camera watches from inside the ring, the chair faces inward, so the shot was
+       * a chair back with a head over it. `STAND_IN` moves the body 0.62 m toward the centre,
+       * which reads as someone standing at their place about to sit down. (An actual seated pose
+       * is a `Gait` this body does not have — see §9 of the slice.)
+       */
+      at: new THREE.Vector3(chair.x - ux * STAND_IN, room.floorY ?? 0, chair.z - uz * STAND_IN),
       // Where the camera stands to see this robot's FRONT: inside the ring, on the same bearing.
-      eye: new THREE.Vector3(chair.x - ux * 2.6, 1.42, chair.z - uz * 2.6),
+      eye: new THREE.Vector3(chair.x - ux * (STAND_IN + 2.6), 1.42, chair.z - uz * (STAND_IN + 2.6)),
       face: Math.atan2(cx - chair.x, cz - chair.z),
       arrived: false,
       t0: i * STAGGER,
@@ -276,9 +307,17 @@ export function buildIntroBed(engine, { room, cast, materials } = {}) {
       const i = Math.min(robots.length - 1, Math.max(0, Math.floor(clock / step)));
       const r = robots[i];
       if (r) {
-        _eye.copy(r.eye);
-        engine.camera.position.lerp(_eye, 1 - Math.exp(-2.6 * dt));
         _look.set(r.body.pos.x, 1.15, r.body.pos.z);
+        _eye.copy(r.eye);
+        /*
+         * ⚠️ THE GENERATED BALLROOM HAS A COLONNADE, AND A CHAIR CIRCLE DOES NOT KNOW WHERE THE
+         * PILLARS ARE. `dressGenerated` attaches `ROOMS.ballroom`'s `columns` to a generated row,
+         * so a camera parked 2.6 m inside the ring on some bearings is looking at a pillar rather
+         * than at the robot the whole beat exists to show. Same reel `follow-bed.js` uses for the
+         * run camera — the shot tightens rather than going crooked.
+         */
+        reelSight?.(_eye, _look);
+        engine.camera.position.lerp(_eye, 1 - Math.exp(-2.6 * dt));
         engine.camera.up.set(0, 1, 0);
         engine.camera.lookAt(_look);
         // The same breath the run camera has, so the two beats are one production.

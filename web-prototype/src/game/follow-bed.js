@@ -628,6 +628,34 @@ export async function buildFollowBed(engine, opts = {}) {
   const _dir = new THREE.Vector3();
   const _views = [{ pos: engine.camera.position, dir: _dir }];
   const _warmEye = new THREE.Vector3();
+  const _warmAt = new THREE.Vector3();
+  const _reel = new THREE.Vector3();
+
+  /**
+   * 👁️ **PULL AN EYE IN UNTIL IT CAN SEE WHAT IT IS POINTED AT.**
+   *
+   * `FollowOperator._reel` does this for the run camera and the warm and intro cameras need it for
+   * the same reason, discovered the same way: **the generated ballroom has a COLONNADE.**
+   * `dressGenerated` attaches `ROOMS.ballroom`'s `columns` to a generated row, so a camera placed
+   * on a circle inside the ballroom spends part of every revolution with a pillar 40 cm from the
+   * lens. The first drive photographed exactly that — a flat lit slab filling the middle third of
+   * frame, on the screen this slice exists to make people look at.
+   *
+   * Reeling in along the eye->target ray rather than sliding sideways keeps the composition: the
+   * shot gets tighter, never crooked.
+   */
+  function reelToSight(eye, at) {
+    if (!room.blocksSight(eye, at)) return eye;
+    for (let k = 0.72; k >= 0.16; k -= 0.14) {
+      _reel.copy(at).lerp(eye, k);
+      _reel.y = eye.y;
+      if (!room.blocksSight(_reel, at)) { eye.copy(_reel); return eye; }
+    }
+    // Nothing on the ray is clear — sit just off the target rather than inside a wall.
+    eye.copy(at);
+    eye.y += 0.30;
+    return eye;
+  }
 
   /**
    * 🔥 The warm camera — a slow arc of the ballroom, and nothing else moving.
@@ -638,15 +666,54 @@ export async function buildFollowBed(engine, opts = {}) {
    * at 0.09 rad/s takes 70 s to go round, which is slower than anyone consciously notices and fast
    * enough that two glances a minute apart are different pictures.
    */
+  /*
+   * 🔥 THE WARM SHOT IS A DOLLY DOWN THE ROOM, **NOT AN ORBIT OF ITS CENTRE**, AND THAT IS A
+   * MEASURED CORRECTION RATHER THAN A PREFERENCE.
+   *
+   * The orbit was built first and the drive photographed the problem: `dressGenerated` attaches
+   * `ROOMS.ballroom`'s COLONNADE to a generated row, so a camera circling the room and looking at
+   * its centre spends a good part of every revolution with a pillar filling the middle third of
+   * frame. `room.blocksSight` does not save it — that query answers a question about wall panels,
+   * and a column is neither a panel nor a space boundary, so the reel below cannot see one.
+   *
+   * A dolly along the LONG axis, offset to one side of the centre line, points down the room
+   * instead of across it. The colonnade then runs past the lens as parallax — which is what a
+   * colonnade is for — rather than standing in front of it, and the shot picks up the windows and
+   * the mezzanine, which are the best thing in the room to have behind a join code.
+   */
+  const warmBox = (() => {
+    const s = ballroom;
+    if (!s) return null;
+    const alongX = (s.x1 - s.x0) >= (s.z1 - s.z0);
+    const long = alongX ? [s.x0, s.x1] : [s.z0, s.z1];
+    const cross = alongX ? (s.z0 + s.z1) / 2 : (s.x0 + s.x1) / 2;
+    const crossHalf = (alongX ? (s.z1 - s.z0) : (s.x1 - s.x0)) / 2;
+    return { alongX, long, cross, off: Math.min(3.4, crossHalf * 0.52) };
+  })();
+
   function warmStep(dt, t) {
-    const cx = ballroom ? (ballroom.x0 + ballroom.x1) / 2 : start.x;
-    const cz = ballroom ? (ballroom.z0 + ballroom.z1) / 2 : start.z;
-    const r = ballroom ? Math.min(6.5, Math.min(ballroom.x1 - ballroom.x0, ballroom.z1 - ballroom.z0) / 2 - 1.4) : 5;
-    const a = t * 0.09;
-    _warmEye.set(cx + Math.sin(a) * r, 1.62 + Math.sin(t * 0.21) * 0.10, cz + Math.cos(a) * r);
-    engine.camera.position.lerp(_warmEye, 1 - Math.exp(-2.2 * dt));
+    if (!warmBox) {
+      _warmEye.set(start.x, 1.62, start.z + 4.5);
+      _warmAt.set(start.x, 1.30, start.z);
+    } else {
+      const { alongX, long, cross, off } = warmBox;
+      // A 44 s round trip, eased at the ends so the reverse is a settle rather than a bounce.
+      const u = 0.5 - Math.cos(t * (Math.PI * 2 / 44)) * 0.5;
+      const a = long[0] + 2.6 + u * Math.max(0.5, (long[1] - long[0]) - 5.2);
+      const ahead = a + (Math.sin(t * (Math.PI * 2 / 44)) >= 0 ? 9.0 : -9.0);
+      const y = 1.66 + Math.sin(t * 0.19) * 0.09;
+      if (alongX) {
+        _warmEye.set(a, y, cross + off);
+        _warmAt.set(ahead, 1.34, cross - off * 0.35);
+      } else {
+        _warmEye.set(cross + off, y, a);
+        _warmAt.set(cross - off * 0.35, 1.34, ahead);
+      }
+    }
+    reelToSight(_warmEye, _warmAt);
+    engine.camera.position.lerp(_warmEye, 1 - Math.exp(-2.0 * dt));
     engine.camera.up.set(0, 1, 0);
-    engine.camera.lookAt(cx, 1.30, cz);
+    engine.camera.lookAt(_warmAt);
     engine.camera.rotateZ(Math.sin(t * 0.61) * 0.005);
   }
 
@@ -841,7 +908,7 @@ export async function buildFollowBed(engine, opts = {}) {
         introCast = (c.cast || []).slice(0, 8);
         if (!introCast.length) return;
         intro?.dispose();
-        intro = buildIntroBed(engine, { room, cast: introCast, materials: botMats });
+        intro = buildIntroBed(engine, { room, cast: introCast, materials: botMats, reelSight: reelToSight });
         mode = 'intros';
         runner.root.visible = false;
         return;
