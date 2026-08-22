@@ -1,32 +1,17 @@
 /**
  * Shared chrome for the sit-down night. DOM only — no THREE, no mansion, no flyover.
+ *
+ * ⚠️ THE ROLE'S DISPLAY NAME IS NOT DECLARED HERE. It used to be, as a second table, and the two
+ * disagreed: this file said `Editor`, `Method Actor`, `Fixer`, `Plant`, `Producer` while
+ * `roles.js` — the file `docs/design/rrr-roles.md` is written into, and the one that carries the
+ * line of rule text beside the name — says `The Editor`, `The Method Actor`, `The Fixer`,
+ * `The Plant`, `The Producer`. A card and a Reunion roll call that name the same role differently
+ * is a table arguing with itself out loud. `rolecard.js` reads `SCRIPT`, and so does everything
+ * else now.
  */
 
-export const ROLE_LABEL = {
-  contestant: 'Contestant',
-  cameraOp: 'Camera Op',
-  focusPuller: 'Focus Puller',
-  continuity: 'Continuity',
-  editor: 'Editor',
-  fanFavourite: 'Fan Favourite',
-  stuntDouble: 'Stunt Double',
-  glitched: 'Glitched',
-  theStatic: 'The Static',
-  methodActor: 'Method Actor',
-  fixer: 'Fixer',
-  plant: 'Plant',
-  producer: 'Producer',
-};
-
-export function roleLabel(id) {
-  return ROLE_LABEL[id] || (id ? String(id) : '—');
-}
-
-export function sideLabel(alignment) {
-  if (alignment === 'evil') return 'PRODUCTION';
-  if (alignment === 'good') return 'GOOD';
-  return '';
-}
+import { NIGHT_TOKENS } from './palette.js';
+import { ROLE_CARD_CSS } from './rolecard.js';
 
 export function playerName(players, id) {
   const p = (players || []).find((x) => x.id === id);
@@ -38,6 +23,7 @@ export function injectNightSkin() {
   const s = document.createElement('style');
   s.id = 'rrr-night-skin';
   s.textContent = `
+    ${NIGHT_TOKENS}
     html, body { width:100%; height:100%; overflow:hidden; background:#0c0a08; }
     #boot.gone { display:none; }
     .night { position:fixed; inset:0; color:#f3ece3; font-family: ui-sans-serif, system-ui, sans-serif;
@@ -152,6 +138,7 @@ export function injectNightSkin() {
       .ballot .row { grid-template-columns:1fr; }
       .ballot .pick { text-align:left; }
     }
+    ${ROLE_CARD_CSS}
   `;
   document.head.appendChild(s);
 }

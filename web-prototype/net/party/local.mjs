@@ -379,7 +379,15 @@ function handleClient(room, bound, self, msg) {
   }
   // start / episode stay callable from any socket so party-sockets (which drives
   // phone-0) keeps working. The host view is the only UI that sends them.
-  if (msg.t === 'start') { room.game.start(); fanout(room, lobbySnapshot(room)); }
+  if (msg.t === 'start') {
+    room.game.start();
+    // 🚨 THE DRAW IS PART OF STARTING THE NIGHT, NOT PART OF THE FIRST EXPEDITION. Every joined
+    // phone gets its own `role.card` here, through `emit`, so it is holding a card before the
+    // first ballot rather than after the pair has locked. Nothing about this reaches the TV:
+    // `role.card` is SELF and `production.panel` is EVIL, and the deal itself is SEALED.
+    room.game.dealRoles();
+    fanout(room, lobbySnapshot(room));
+  }
   if (msg.t === 'casting') {
     clearShowClock(room);
     room.game.beginCasting();

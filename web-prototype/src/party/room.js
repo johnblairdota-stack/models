@@ -159,6 +159,56 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     broadcast();
   }
 
+  /**
+   * 🚨 THE DRAW IS ITS OWN MOMENT, AND IT HAPPENS BEFORE THE FIRST EXPEDITION.
+   *
+   * This used to live inside `playEpisode` behind `if (state.episode === 1)`, which put the whole
+   * deal AFTER the pair had already locked: the phone had voted a runner in without ever having
+   * been told what it was playing for, and the card landed on a screen that had moved on. The
+   * transport now calls this when the night starts, so every joined phone has its card before the
+   * first ballot. `playEpisode` still calls it, so a gate that only plays episodes is unchanged.
+   *
+   * Idempotent, and that is the whole contract: the deal is written ONCE. `viewFor` is derived
+   * from `dealCast`, so a second call would append a second identical card and a phone would
+   * animate a deal it already had.
+   *
+   * @returns {boolean} true if this call wrote the deal
+   */
+  let dealt = false;
+  function dealRoles() {
+    if (dealt) return false;
+    dealt = true;
+    // The deal itself is written once, SEALED. The Reunion is the same replay with the filter
+    // off, so this is what makes the roll call complete without a second reveal pipeline.
+    record(makeEvent('cast.deal', VIS.SEALED, {
+      // `cover` is here so the Reunion can say "and you believed you were the Camera Op all
+      // game" without a second source. Sealed with everything else until then.
+      seats: deal.seats.map((s) => ({ id: s.id, role: s.role, alignment: s.alignment, cover: s.cover ?? null })),
+    }));
+    for (const s of deal.seats) {
+      // 🚨 THE ROLE CARD SHOWS WHAT THE PLAYER BELIEVES, NOT WHAT IS TRUE, AND THIS LINE READ
+      // `s.role` UNTIL `reunion-truth` U2 CAUGHT IT.
+      //
+      // The state channel had it right — `viewFor` has always sent the cover — and the event
+      // channel sent ground truth, so the Glitched's own phone received a card reading
+      // "glitched". The one card whose entire text is *"you are not told this"* was telling
+      // them, on episode one, in writing. Two channels is exactly the shape of bug that
+      // invites: one of them was correct the whole time.
+      //
+      // It is derived from `viewFor` now rather than restated, so there is one answer to
+      // "what does this player believe they are".
+      record({ ...makeEvent('role.card', VIS.SELF, { role: viewFor(deal, s.id).you.role }), for: s.id });
+      if (s.alignment === EVIL) {
+        record({
+          ...makeEvent('production.panel', VIS.EVIL, {
+            teammates: deal.seats.filter((o) => o.alignment === EVIL && o.id !== s.id).map((o) => ({ id: o.id, role: o.role })),
+          }), for: s.id,
+        });
+      }
+    }
+    return true;
+  }
+
   /** Play one scripted episode. Deterministic — the gates need two runs to agree exactly. */
   function playEpisode({ takeRunner = false, hunterRoom = null, ballots = null, votes = null, nominations = null, living: livingOpt = null } = {}) {
     const takeRunnerThisEpisode = takeRunner;
@@ -191,36 +241,9 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       s.seatRole = s.playerId === runner.id ? 'runner' : s.playerId === guide.id ? 'guide' : null;
     }
     record(makeEvent('cast.pair', VIS.PUBLIC, { runner: runner.id, guide: guide.id }));
-    // The deal itself is written once, SEALED. The Reunion is the same replay with the filter
-    // off, so this is what makes the roll call complete without a second reveal pipeline.
-    if (state.episode === 1) {
-      record(makeEvent('cast.deal', VIS.SEALED, {
-        // `cover` is here so the Reunion can say "and you believed you were the Camera Op all
-        // game" without a second source. Sealed with everything else until then.
-        seats: deal.seats.map((s) => ({ id: s.id, role: s.role, alignment: s.alignment, cover: s.cover ?? null })),
-      }));
-      for (const s of deal.seats) {
-        // 🚨 THE ROLE CARD SHOWS WHAT THE PLAYER BELIEVES, NOT WHAT IS TRUE, AND THIS LINE READ
-        // `s.role` UNTIL `reunion-truth` U2 CAUGHT IT.
-        //
-        // The state channel had it right — `viewFor` has always sent the cover — and the event
-        // channel sent ground truth, so the Glitched's own phone received a card reading
-        // "glitched". The one card whose entire text is *"you are not told this"* was telling
-        // them, on episode one, in writing. Two channels is exactly the shape of bug that
-        // invites: one of them was correct the whole time.
-        //
-        // It is derived from `viewFor` now rather than restated, so there is one answer to
-        // "what does this player believe they are".
-        record({ ...makeEvent('role.card', VIS.SELF, { role: viewFor(deal, s.id).you.role }), for: s.id });
-        if (s.alignment === EVIL) {
-          record({
-            ...makeEvent('production.panel', VIS.EVIL, {
-              teammates: deal.seats.filter((o) => o.alignment === EVIL && o.id !== s.id).map((o) => ({ id: o.id, role: o.role })),
-            }), for: s.id,
-          });
-        }
-      }
-    }
+    // A night start has already drawn. A gate that only plays episodes draws here, exactly where
+    // it always did — the call is idempotent, so which of the two ran is not a behaviour.
+    dealRoles();
     broadcast();
 
     setPhase('EXPEDITION');
@@ -334,6 +357,14 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       return state.outcome;
     },
     start() { setPhase('LOBBY'); },
+    /**
+     * Draw the cast. Called at night start so every joined phone holds a card before the first
+     * ballot; called again by `playEpisode` and then a no-op. Returns true only for the call that
+     * actually wrote the deal, so a transport can tell whether it has a deal to announce.
+     */
+    dealRoles,
+    /** Has the cast been drawn? A phone with no card is a phone that has not been dealt to. */
+    isDealt: () => dealt,
     /** Host-driven: open CASTING and wait for phone ballots. `playEpisode` still starts here too. */
     beginCasting() { setPhase('CASTING'); },
     /**

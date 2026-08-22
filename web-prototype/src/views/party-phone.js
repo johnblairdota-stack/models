@@ -6,9 +6,11 @@
  */
 import { PartyNightClient, defaultWsUrl, tokenKey, normalizeCodeDisplay, normalizeCodeWire } from '../party/night-client.js';
 import { recapFromEvents } from '../party/recap.js';
-import { injectNightSkin, markPartyReady, playerName, roleLabel, sideLabel } from '../party/night-skin.js';
+import { injectNightSkin, markPartyReady, playerName } from '../party/night-skin.js';
 import { ACCENTS, DEFAULT_LOOK, SHELLS, cleanLook, robotFaceSvg } from '../party/look.js';
 import { applyCastLock, applyCastTap, ballotFromCast, castPrompt, freshCast, mergePublicNames, nominationPlayers, padlockSvg } from '../party/cast-ui.js';
+import { cardFor, faceDownHtml, mountRoleCard, premiereHtml } from '../party/rolecard.js';
+import { EVIL } from '../party/cast.js';
 
 export default async function partyPhone({ params }) {
   injectNightSkin();
@@ -33,7 +35,25 @@ export default async function partyPhone({ params }) {
     lookLocked: false,
     cast: freshCast(),
     castEpisode: null,
+    /** null · 'deal' while the backs are flying · 'premiere' while the card is first up. */
+    stage: null,
+    /** The deal is one moment. A reconnect replays the card; it does not re-deal it. */
+    dealSeen: false,
+    /** Dealt to, but the face picker still owns the screen. See `maybeRunDeal`. */
+    dealPending: false,
+    lastBeat: null,
   };
+
+  /**
+   * 🚨 THE CARD IS MOUNTED ONCE, OUTSIDE `root`. Every sheet on this screen repaints by writing
+   * `root.innerHTML`, and a `pointerdown` on a node that is replaced before its `pointerup` never
+   * delivers a release — the card would latch lit on a phone the owner has already put down. It is
+   * the same lesson `cast-ui.js`'s structural stamp exists for, one layer up. See `rolecard.js`.
+   */
+  const card = mountRoleCard({
+    nameOf: (id) => playerName(mergePublicNames(state.client?.frame?.players, state.client?.lobby), id),
+    onClose: () => { state.stage = null; paint(); },
+  });
 
   if (!state.code) {
     paintJoin();
@@ -61,6 +81,7 @@ export default async function partyPhone({ params }) {
       onMessage: (m) => {
         if (m.t === 'welcome') sessionStorage.setItem(tokenKey(code, 'phone'), m.token);
         if (m.t === 'full') state.err = 'Room is full (8 phones + TV).';
+        if (m.t === 'event' && m.ev?.type === 'role.card') dealt(!!m.replay);
         if (m.t === 'lobby' && !state.lookLocked) {
           const me = (m.seats || []).find((s) => s.id === client.welcome?.id);
           if (me?.shell && me?.accent && cleanLook(me)) {
@@ -70,6 +91,9 @@ export default async function partyPhone({ params }) {
             if (state.step === 'customise' || state.step === 'connecting') state.step = 'night';
           }
         }
+        // The face may have just been resumed from the server rather than picked, which hands the
+        // screen over the same way Lock in does.
+        maybeRunDeal();
         routePaint();
       },
       onClose: () => {
@@ -158,6 +182,8 @@ export default async function partyPhone({ params }) {
       writeLook(locked);
       state.client?.send({ t: 'look', shell: locked.shell, accent: locked.accent });
       state.step = 'night';
+      // A deal that landed while this sheet was up has been waiting for exactly this moment.
+      maybeRunDeal();
       paint();
     };
   }
@@ -178,6 +204,87 @@ export default async function partyPhone({ params }) {
     }
   }
 
+  /**
+   * The night has dealt. One `role.card` per phone, at night start, before the first ballot.
+   *
+   * ⚠️ A REPLAYED CARD IS NOT A DEAL. A phone that drops and comes back is caught up with its own
+   * card through the same filter; animating the deal again would announce a moment that already
+   * happened and hide the sheet the player came back for. The card is simply there.
+   */
+  function dealt(replay) {
+    if (state.dealSeen) return;
+    state.dealSeen = true;
+    if (replay) return;
+    state.dealPending = true;
+    maybeRunDeal();
+  }
+
+  /**
+   * ⚠️ THE DEAL WAITS FOR THE FACE, IT DOES NOT SKIP. A phone that is still colouring its robot
+   * when the host starts the night would otherwise play the deal underneath the swatch picker —
+   * two moments at once, and the one the player is not looking at is the one that matters. It
+   * fires the instant Lock in hands the screen over, so a late joiner still sees their card dealt.
+   */
+  function maybeRunDeal() {
+    if (!state.dealPending || !state.lookLocked) return;
+    state.dealPending = false;
+    state.stage = 'deal';
+    runDeal();
+  }
+
+  async function runDeal() {
+    const seats = joinedPhones();
+    await card.deal({ seats: seats.length || 1, mine: Math.max(0, myPhoneIndex(seats)) });
+    if (state.stage !== 'deal') return;              // a beat moved on under us
+    state.stage = 'premiere';
+    card.openCard(currentCard(), { premiere: true });
+    paint();
+  }
+
+  function joinedPhones() {
+    return (state.client?.lobby?.seats || []).filter((s) => !s.isTV && s.joined);
+  }
+
+  function myPhoneIndex(seats) {
+    return seats.findIndex((s) => s.id === state.client?.welcome?.id);
+  }
+
+  /** Has this phone been dealt to? The card event is the deal; `you.role` is standing state. */
+  function hasCard() {
+    return (state.client?.events || []).some((e) => e.type === 'role.card');
+  }
+
+  /**
+   * What the card says right now. Read at open time rather than cached, so a Production Panel
+   * that lands after the deal is on the card the next time it is held.
+   */
+  function currentCard() {
+    const c = state.client;
+    const you = c?.frame?.you || {};
+    const roleEv = [...(c?.events || [])].reverse().find((e) => e.type === 'role.card');
+    const panelEv = [...(c?.events || [])].reverse().find((e) => e.type === 'production.panel');
+    return cardFor({
+      role: you.role || roleEv?.data?.role,
+      // A Production Panel is addressed and EVIL-visible, so holding one IS the alignment. The
+      // frame is the source; this only covers a panel that arrived before the first frame.
+      alignment: you.alignment || (panelEv ? EVIL : undefined),
+      teammates: you.teammates || panelEv?.data?.teammates || [],
+    });
+  }
+
+  /** §2.3's persistent tab. A card back and a label — never the role, in any phase. */
+  function cardTab() {
+    return hasCard() ? faceDownHtml() : '';
+  }
+
+  /** Every sheet rebuilds its own DOM, so the tab is re-bound wherever it was just emitted. */
+  function bindCardTab() {
+    root.querySelector('#card-tab')?.addEventListener('click', () => {
+      // Opening is a tap; READING is a hold. Nothing here reveals anything.
+      card.openCard(currentCard(), { premiere: state.stage === 'premiere' });
+    });
+  }
+
   function paint() {
     const c = state.client;
     if (!c || (!c.welcome && !c.full && !state.err)) {
@@ -191,18 +298,22 @@ export default async function partyPhone({ params }) {
     const frame = c.frame;
     const players = mergePublicNames(frame?.players, c.lobby);
     const nominees = nominationPlayers(frame?.players, c.lobby);
-    const you = frame?.you;
     const beat = c.beat || 'lobby';
     const phase = frame?.phase || 'LOBBY';
     const recap = recapFromEvents(c.events);
     const myName = playerName(players, me.playerId) || me.name || 'You';
-    const roleEv = [...c.events].reverse().find((e) => e.type === 'role.card');
-    const panelEv = [...c.events].reverse().find((e) => e.type === 'production.panel');
-    const role = you?.role || roleEv?.data?.role;
-    const align = you?.alignment;
     const pair = frame?.pair || {};
     const iAmRunner = pair.runner && pair.runner === me.playerId;
     const iAmGuide = pair.guide && pair.guide === me.playerId;
+
+    // 🚨 THE CARD PUTS ITSELF AWAY WHEN THE SHOW MOVES. Nobody has to remember to. The premiere
+    // stage ends with it, so a phone that was still holding its card when the pair locked lands
+    // on the pad rather than on a card it now has to dismiss.
+    if (state.lastBeat !== null && beat !== state.lastBeat) {
+      if (state.stage === 'premiere') state.stage = null;
+      if (card.isOpen()) card.closeCard();
+    }
+    state.lastBeat = beat;
 
     let body = '';
     if (state.err) body += `<div class="err">${esc(state.err)}</div>`;
@@ -212,7 +323,11 @@ export default async function partyPhone({ params }) {
       state.castEpisode = null;
     }
 
-    if (beat === 'casting' && !recap.runner && !pair.runner) {
+    if (state.stage) {
+      // The premiere owns the sheet while the deal is landing. The ballot is one tap behind it,
+      // and the beat that opens casting has usually already arrived.
+      body += premiereHtml();
+    } else if (beat === 'casting' && !recap.runner && !pair.runner) {
       paintCasting(nominees, me, frame?.episode || c.lobby?.episode || 1);
       return;
     } else if (beat === 'lobby' || phase === 'LOBBY') {
@@ -221,8 +336,8 @@ export default async function partyPhone({ params }) {
         ${nameField()}
         ${roster(c.lobby)}`;
     } else if (beat === 'casting' && (pair.runner || recap.runner)) {
-      body += roleBlock(role, align, panelEv, players)
-        + `<p class="hint">${esc(playerName(players, pair.runner || recap.runner))} walks · ${esc(playerName(players, pair.guide || recap.guide))} talks.</p>`;
+      body += `<h1>Locked.</h1>
+        <p class="hint">${esc(playerName(players, pair.runner || recap.runner))} walks · ${esc(playerName(players, pair.guide || recap.guide))} talks.</p>`;
     } else if (beat === 'expedition') {
       if (iAmRunner) {
         body += `<h1>You walk.</h1>
@@ -253,9 +368,14 @@ export default async function partyPhone({ params }) {
           <div class="rule">Camera ${recap.cameraLit ? 'LIT' : 'STAYED DARK'}</div>
           <div class="rule">Runner ${recap.taken?.length ? 'TAKEN' : 'CAME BACK'}</div>
           <div class="rule">${recap.alarmCount} alarm${recap.alarmCount === 1 ? '' : 's'}</div>
-        </div>
-        ${roleBlock(role, align, panelEv, players)}`;
+        </div>`;
     }
+
+    // 🚨 §2.3: *"a persistent ROLE tab … reopens it in any phase"*. It used to be a static CLEAR
+    // card dumped into the sheet after the pair locked and then HIDDEN for the whole expedition —
+    // readable by the neighbour for as long as its owner looked away, and gone for the twenty
+    // minutes the card is actually being reasoned about. It is a face-down tab now, everywhere.
+    body += cardTab();
 
     delete root.dataset.castUi;
     root.innerHTML = `
@@ -280,6 +400,7 @@ export default async function partyPhone({ params }) {
       state.flash = r;
       paint();
     });
+    bindCardTab();
   }
 
   function paintCasting(players, me, episode) {
@@ -291,7 +412,9 @@ export default async function partyPhone({ params }) {
     const cast = state.cast;
     const phase = cast.phase;
     const living = (players || []).filter((p) => p.alive !== false);
-    const stamp = `${phase}:${living.map((p) => `${p.id}:${p.name}`).join(',')}`;
+    // The card arriving is a change of SHAPE — the tab appears — so it belongs in the structural
+    // stamp. Without it the sheet would keep a cached DOM that has no way to reach the card.
+    const stamp = `${phase}:${hasCard() ? 'card' : 'nocard'}:${living.map((p) => `${p.id}:${p.name}`).join(',')}`;
     if (root.dataset.castUi === stamp) {
       syncCastHighlight(cast);
       return;
@@ -318,9 +441,11 @@ export default async function partyPhone({ params }) {
 
     root.innerHTML = `
       <div class="phone-top"><span>${esc(state.code.toUpperCase())}</span><span>casting · ${esc(playerName(players, me.playerId) || me.name || 'You')}</span></div>
-      <div class="cast-step">${body}</div>`;
+      <div class="cast-step">${body}</div>
+      ${cardTab()}`;
     root.dataset.castUi = stamp;
     bindCast(players, me);
+    bindCardTab();
   }
 
   function bindCast(players, me) {
@@ -383,22 +508,6 @@ export default async function partyPhone({ params }) {
     return `<p class="hint" style="margin-top:16px">${seats.map((s) => s.name).join(' · ')}</p>`;
   }
 
-  function roleBlock(role, align, panelEv, players) {
-    if (!role) return `<p class="hint">Your card arrives when the cast locks.</p>`;
-    const mates = (panelEv?.data?.teammates || youTeammates()).map((t) => playerName(players, t.id)).filter(Boolean);
-    return `<div class="role-card">
-      <div class="role">${esc(roleLabel(role))}</div>
-      <div class="side">${esc(sideLabel(align))}</div>
-      <div class="rule">${align === 'evil'
-        ? 'You are Production. Do not get caught. Do not feed the room your card.'
-        : 'You want the cameras lit. Someone in this room is lying.'}</div>
-      ${mates.length ? `<div class="rule">Your table: ${esc(mates.join(', '))}</div>` : ''}
-    </div>`;
-  }
-
-  function youTeammates() {
-    return state.client?.frame?.you?.teammates || [];
-  }
 }
 
 function bindCodeField(input) {
