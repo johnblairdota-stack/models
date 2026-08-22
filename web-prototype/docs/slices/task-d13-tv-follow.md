@@ -301,17 +301,26 @@ One row, in the `party` group, after `party.phone`:
    `<div class="run-frame"><div class="run-slot-mount" data-follow-mount></div>…</div>`, and
    keep the face + name as the **slate** the slot covers once the follow reports ready. The
    pair-hero line below the frame stays exactly as PR #5 shipped it.
-3. **Own the iframe outside `paint()`.** One `<iframe>` element, created lazily, held in a
-   closure variable, re-parented into `[data-follow-mount]` after each paint. `paint()` rebuilds
-   `root.innerHTML` on every message; an iframe written into that string reloads the whole
-   mansion on every lobby snapshot. See trap §5.1.
+3. **Put the iframe in a LAYER, not in the frame.** ⚠️ **This paragraph was rewritten during the
+   build — see §5.1 and the report.** The first design held the element in a closure and
+   `appendChild`-ed it into `[data-follow-mount]` after each paint. That preserves the *element*
+   and destroys the *page*: removing an `iframe` from a document discards its nested browsing
+   context, and re-inserting it re-fetches `src`. So the mansion reloaded on every lobby
+   snapshot anyway.
+
+   What works is a `position:fixed` layer created once and parented to `document.body`, outside
+   everything `paint()` touches. It never moves in the DOM, so it never reloads. Register it with
+   `.run-frame`'s `getBoundingClientRect()` on a rAF while it is visible — one rect read a frame
+   on a static layout, and it cannot drift the way a paint-time-only sync could.
 4. Set `iframe.src` **once**, when `followUrl()` first returns non-null. Recompute the url each
    paint and only assign if it actually changed (name edits, look changes). Never assign the
    same string twice — that is a reload.
-5. On `{ t:'follow', ready:true }` from `message`, add `.live` to the frame so the slate fades
-   out under the canvas.
-6. Tear the iframe down when the beat leaves `expedition` — the follow is a WebGL context and
-   the recap does not need one. Coming back to expedition builds a new one.
+5. On `{ t:'follow', ready:true }` from `message`, put `.live` on the layer and the frame. The
+   camera fades **up** over the slate; the slate is not hidden behind a black rectangle while it
+   bakes.
+6. **Hide the layer off the run beat. Do not destroy it.** The mansion is baked once per night,
+   not once per episode — a recap that tore the context down would make every episode after the
+   first pay the bake again, in front of the room.
 7. **`sandbox="allow-scripts allow-same-origin"`**, `allow="autoplay"`, no `allow-forms`,
    no `allow-popups`.
 8. Everything else in this file — join, the seat grid, the ballot board, sequential casting,
@@ -347,6 +356,13 @@ never skipped for want of a module. So this gate imports **only** `src/party/fol
 | F4 | a `flyover`, `marks`, `hunter` or `lid` param is a violation — **four control arms, each must go red** |
 | F5 | `FOLLOW_FORBIDDEN` is a superset of `local.mjs`'s `FANOUT_FORBIDDEN`, so a field banned from the socket cannot arrive by URL instead |
 | F6 | the same inputs produce the same url — the slot is a pure function, so a repaint cannot reload the mansion |
+| F7 | expedition is still immediate, and the run is long enough to hold a produced beat rather than a caption |
+
+**F7 is the one number outside this slice's own files.** `show.js`'s stub clock was 4800 ms —
+right for a still, and shorter than the mansion takes to bake, so the beat would flip to recap
+before the camera it exists to hold had a first frame. It is 26 s now, which is one produced beat
+(three or four cuts) and near `game.js`'s own 28 s capture LOOP. No wire field changes; the host's
+Recap button and any `{ t:'show' }` still cut it short.
 
 **F4 is the control arm and it is the point.** `party-isolation`'s four injected leaks exist
 because a gate whose controls stop failing has gone blind. Same discipline here: if a
@@ -375,17 +391,31 @@ Then it must prove four things, and each one is a specific way this slice can be
 
 | id | proves | how |
 |---|---|---|
-| D1 | **not lobby** | no QR node in the TV's DOM, and the run frame exists |
+| D1 | **not lobby** | no QR node in the TV's DOM, and the run frame exists, named for a joined player |
 | D2 | **not black** | crop the run frame from the TV screenshot; mean luma **≥ 12** and stdev **≥ 8** over the crop. A black canvas passes a "canvas exists" test and fails this one. |
-| D3 | **live, not a still** | three crops ~1.2 s apart; consecutive pairs must differ by **> 0.5%** of pixels. This is the assertion that separates a real follow from a rendered postcard. |
-| D4 | **the mansion, not a slate** | inside the frame, `window.__rrr.engine` exists, `perf().tris > 50_000`, and `room.spaceAt(camera.position)` is a real space id — the camera is standing **in** the house |
+| D3 | **live, not a still** | three crops seconds apart; consecutive pairs must differ by **> 0.5%** of a 160×90 luma grid. This is the assertion that separates a real follow from a rendered postcard. |
+| D4 | **the mansion, not a slate** | inside the frame, `perf().tris` and `calls` are real geometry, and `room.spaceAt(camera.position)` names a real space — the camera is standing **in** the house |
 
 And two negative assertions that are the traps in §5:
 
 | id | proves |
 |---|---|
 | D5 | **no god-view** — the follow camera's y stays under the storey height for the whole drive, and `room.setLid` was never called with `false` |
-| D6 | **no guide map** — nothing in the follow document's DOM or its URL matches `flyover\|marks\|hunter\|minimap`, and the TV's own socket transcript still passes `fanoutViolations()` |
+| D6 | **no guide map** — nothing in the follow document's DOM or its URL matches `flyover\|marks\|hunter\|minimap` |
+
+⚠️ **And D2a, which exists because the first version of this drive lied.** The stub clock can flip
+to recap mid-measurement; the host then hides the camera layer and the clip rect photographs the
+DOM behind it. On that run **D2 passed** — mean 57, stdev 47, a perfectly respectable-looking
+number about the wrong pixels — and only D3 caught it by noticing two grabs were byte-identical.
+So every grab now asserts the layer is visible and `.live` first, and re-pins expedition through
+the host's own "Watch the run" button if it is not. A measurement that can be taken of the wrong
+thing must say which thing it was taken of.
+
+⚠️ **Launch args.** `playtest.mjs` and `rrr-playcritique/SKILL.md` both use
+`--use-gl=angle --enable-unsafe-swiftshader`. On a box with no GPU that pair yields **no WebGL2
+context at all** — ANGLE resolves to Mesa/llvmpipe and `new WebGLRenderer` throws. Adding
+`--use-angle=swiftshader` fixes it. Do not "simplify" the args back to the documented recipe
+without checking on a headless machine.
 
 Shots land in `progress/follow/` — `tv-expedition.png` (the whole TV) and `follow-crop-{1,2,3}.png`.
 **Put `tv-expedition.png` in the PR.** A reviewer must be able to see the runner in the house
@@ -411,11 +441,20 @@ A slice that lands the mechanism and looks like a debug view has failed here bef
 
 ## 5. The traps — each of these has already cost this project time
 
-**5.1 `paint()` will reload your mansion.** `party-host.js` repaints on **every** websocket
-message, including every lobby snapshot. An `<iframe>` emitted inside the `innerHTML` string is
-destroyed and recreated each time — a fresh WebGL context and a fresh 20-second bake, several
-times a second. **The element must live outside the repainted subtree and be re-parented.** And
-assigning the same `src` string again is also a reload; compare before you assign.
+**5.1 `paint()` will reload your mansion, and the obvious fix will too.** `party-host.js`
+repaints on **every** websocket message, including every lobby snapshot. An `<iframe>` emitted
+inside the `innerHTML` string is destroyed and recreated each time — a fresh WebGL context and a
+fresh multi-second bake, several times a second.
+
+⚠️ **And holding the element in a closure and re-parenting it does not fix that.** This was the
+first design in this document and it is wrong: the HTML spec discards a nested browsing context
+when its `iframe` is removed from a document, so re-inserting it creates a new one and re-fetches
+`src`. The element survives; the page inside it does not, which is the half that mattered. Built,
+run, measured reloading, replaced.
+
+**The iframe must never move in the DOM at all.** A `position:fixed` layer on `document.body`,
+sized to `.run-frame`'s client rect on a rAF, is the shape that works. And assigning the same
+`src` string again is also a reload; compare before you assign.
 
 **5.2 Do not put the flyover on the TV.** `party-loop.md` line 50, first item under "Do not".
 The temptation is real, because `game.js`'s `[F]` is *right there* and gives a beautiful shot of
@@ -506,3 +545,26 @@ slice after this is where the runner's throttle starts moving a body the server 
    in the PR body.
 4. Anything in this document that turned out to be **wrong**. The bed was read closely to write
    it, but it was read, not run — say so rather than diverging silently.
+
+## 9. What was wrong in this document — filled in by the build
+
+Four things, all now corrected above rather than left as a trap for the next reader.
+
+1. **§3.5.3 and §5.1 specified a mechanism that does not work.** "Hold the element in a closure
+   and re-parent it into the mount" preserves the element and destroys the page inside it: the
+   spec discards a nested browsing context when its `iframe` leaves a document. Replaced with the
+   fixed layer.
+2. **§4.1 said this gate imports only `follow.js` and `look.js`.** It also imports `show.js` (F7)
+   and `local.mjs` (F5, the superset assertion). Both are dependency-free; the CI constraint
+   holds.
+3. **§4.2's D4 bar of `tris > 50_000` was a guess and it was too high.** Residency switches off
+   every space the camera cannot see — that is the reason this runs at all — so one lit room plus
+   the robot measures 14–20k triangles over 35–88 calls. The bar is 8k now, set under a
+   measurement.
+4. **§3.5 did not mention `joinedName`.** PR #5's helper treats `playerName`'s `'—'` not-found
+   sentinel as a real name, so an unresolved runner reaches the TV as "— is running". Caught by
+   the drive, fixed in place, one line.
+
+And one thing that was right but understated: **§3.2h's ordering note.** The reason the beat
+number in §4.1's F7 had to move at all is that `finalizeScene()` plus the material bake is
+seconds of work, and the show clock was written when there was no work to do.
