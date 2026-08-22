@@ -1,7 +1,14 @@
 /**
  * TV / host — the shared screen. Not game.play. Not a flyover. Not a sledge tutorial.
  *
- * Host socket is the TV spectator. Phones are robots. The mansion stays on ?view=game.play.
+ * Host socket is the TV spectator. Phones are robots.
+ *
+ * 🎥 **D13: DURING EXPEDITION THE RUN FRAME IS A REAL MANSION CAMERA.** This file is still DOM
+ * only — no THREE, no scene, no flyover. What it does is mount `?view=party.follow` in an iframe
+ * inside `.run-frame` and hand it a closed set of URL params (`src/party/follow.js`). That
+ * iframe is the ownership boundary as well as the render: the follow has no socket, so it is
+ * structurally incapable of putting a role, a hunter or the guide's map on the shared screen.
+ * `docs/slices/task-d13-tv-follow.md`.
  */
 import { PartyNightClient, defaultWsUrl, makeCode, tokenKey } from '../party/night-client.js';
 import { recapFromEvents } from '../party/recap.js';
@@ -9,6 +16,7 @@ import { injectNightSkin, markPartyReady, playerName } from '../party/night-skin
 import { qrSvg } from '../party/qr.js';
 import { DEFAULT_LOOK, cleanLook, robotFaceSvg } from '../party/look.js';
 import { mergePublicNames } from '../party/cast-ui.js';
+import { followUrl } from '../party/follow.js';
 
 const LINE = 'Two of you go in. One walks, one talks. The rest of us watch. Someone in this room is lying.';
 
@@ -78,6 +86,61 @@ export default async function partyHost({ params }) {
     client.send({ t: 'show', beat });
     paint();
   }
+
+  /**
+   * 🎥 THE FOLLOW SLOT — one iframe, owned OUTSIDE `paint()`.
+   *
+   * 🚨 `paint()` REBUILDS `root.innerHTML` ON EVERY WEBSOCKET MESSAGE, INCLUDING EVERY LOBBY
+   * SNAPSHOT. An `<iframe>` emitted inside that string is torn down and rebuilt each time — a
+   * fresh WebGL context and a fresh multi-second mansion bake, several times a second, which
+   * presents as a TV that never finishes loading. So the element lives here, in the closure, and
+   * is re-parented into whatever `[data-follow-mount]` the current paint produced.
+   *
+   * 🚨 AND ASSIGNING THE SAME `src` STRING AGAIN IS ALSO A RELOAD. `followUrl()` is a pure
+   * function of (beat, room, runner, name, look, seed) exactly so this comparison is meaningful;
+   * `harness/party-follow.mjs` F6 is the assertion that keeps it pure.
+   */
+  const follow = { el: null, src: null, live: false };
+
+  function teardownFollow() {
+    if (follow.el) follow.el.remove();
+    follow.el = null;
+    follow.src = null;
+    follow.live = false;
+  }
+
+  function syncFollow(src) {
+    if (!src) { teardownFollow(); return; }
+    if (!follow.el) {
+      const f = document.createElement('iframe');
+      f.className = 'run-cam';
+      f.title = 'Follow camera';
+      // Scripts and same-origin only: the follow needs WebGL and `parent.postMessage`, and
+      // nothing else. No forms, no popups, no top navigation.
+      f.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+      f.setAttribute('allow', 'autoplay');
+      f.setAttribute('loading', 'eager');
+      follow.el = f;
+      follow.live = false;
+    }
+    if (follow.src !== src) {
+      follow.src = src;
+      follow.live = false;
+      follow.el.src = src;
+    }
+    const mount = root.querySelector('[data-follow-mount]');
+    if (mount && follow.el.parentElement !== mount) mount.appendChild(follow.el);
+    const frame = root.querySelector('.run-frame');
+    if (frame) frame.classList.toggle('live', follow.live);
+  }
+
+  // The follow reports its first rendered frame. Until then the slate is the picture.
+  window.addEventListener('message', (e) => {
+    if (!follow.el || e.source !== follow.el.contentWindow) return;
+    if (e.data?.t !== 'follow' || !e.data.ready) return;
+    follow.live = true;
+    root.querySelector('.run-frame')?.classList.add('live');
+  });
 
   function startNight() {
     client.send({ t: 'start' });
@@ -176,6 +239,20 @@ export default async function partyHost({ params }) {
     root.querySelector('#to-run')?.addEventListener('click', () => setBeat('expedition'));
     root.querySelector('#to-recap')?.addEventListener('click', () => setBeat('recap'));
     root.querySelector('#to-cast')?.addEventListener('click', () => setBeat('casting'));
+
+    // Last, because it re-parents into the DOM this paint just wrote. Off the run beat this
+    // tears the WebGL context down — the recap card does not need a mansion behind it.
+    const runnerId = pair.runner || recap.runner;
+    syncFollow(onRun && runnerId
+      ? followUrl({
+        beat: 'expedition',
+        room: code,
+        runnerId,
+        name: joinedName(names, runnerId, 'The runner'),
+        look: seatLook(client.lobby, runnerId) || DEFAULT_LOOK,
+        worldSeed: frame?.worldSeed,
+      })
+      : null);
   }
 
   paint();
@@ -194,8 +271,18 @@ function seatLook(lobby, playerId) {
 }
 
 /**
- * First picture on the TV during the run — a framed follow slot + huge names.
- * Not the D13 mansion camera. That is the next slice.
+ * 🎥 The run frame — a mount for the D13 follow camera, with the PR #5 still behind it as the
+ * slate.
+ *
+ * The slate is not a fallback that nobody sees: the mansion takes seconds to bake, and until it
+ * reports ready this IS the picture. It is the same face + name PR #5 shipped, so a TV that
+ * cannot build WebGL at all degrades to exactly the screen it had before rather than to black.
+ * `.run-frame.live` fades it out under the canvas.
+ *
+ * ⚠️ THE `<iframe>` IS NOT WRITTEN HERE. `paint()` rebuilds `root.innerHTML` on every websocket
+ * message, so an iframe in this string would be destroyed and re-created — a fresh WebGL context
+ * and a fresh bake — several times a second. `syncFollow()` owns one element outside the
+ * repainted subtree and re-parents it into `[data-follow-mount]`. Slice §5.1.
  */
 function runStage({ names, lobby, runnerId, guideId, cameras, alarms }) {
   const runner = joinedName(names, runnerId, 'The runner');
@@ -206,10 +293,13 @@ function runStage({ names, lobby, runnerId, guideId, cameras, alarms }) {
   return `
     <div class="run-stage">
       <div class="run-frame" aria-label="${esc(runner)} is running">
-        <div class="run-follow">
-          <div class="run-face">${face}</div>
-          <div class="run-tag">${esc(runner)} is running</div>
-          <div class="run-slot">follow</div>
+        <div class="run-mount" data-follow-mount></div>
+        <div class="run-slate">
+          <div class="run-follow">
+            <div class="run-face">${face}</div>
+            <div class="run-tag">${esc(runner)} is running</div>
+            <div class="run-slot">camera warming</div>
+          </div>
         </div>
       </div>
       <div class="pair-hero">${esc(runner)} walks.<br>${esc(guide)} talks.</div>

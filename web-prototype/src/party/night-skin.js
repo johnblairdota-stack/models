@@ -72,12 +72,24 @@ export function injectNightSkin() {
     .ballot .arrow { color:#f5a14a; letter-spacing:.2em; font-size:18px; text-transform:uppercase; }
     .pair-hero { margin:18px 0 8px; font-size:clamp(48px, 10vw, 120px); font-weight:800; line-height:1.1; }
     .run-stage { display:flex; flex-direction:column; min-height:min(68vh, 720px); }
-    .run-frame { flex:1; min-height:280px; display:flex; align-items:center; justify-content:center;
+    /* 🎥 D13. The frame is a MOUNT for the follow camera with the PR #5 still behind it as the
+       slate: the mansion takes seconds to bake, and a TV with no WebGL degrades to exactly the
+       screen it had before rather than to black. `.live` is set when the follow reports its
+       first rendered frame. `position:relative` is load-bearing — the camera is absolute. */
+    .run-frame { position:relative; flex:1; min-height:280px; display:flex;
+      align-items:center; justify-content:center;
       border:2px solid rgba(245,161,74,.35); border-radius:14px; overflow:hidden;
       background:
         radial-gradient(ellipse 70% 80% at 50% 70%, rgba(245,161,74,.16), transparent 58%),
         linear-gradient(180deg, #16110c 0%, #0a0806 100%);
       box-shadow: inset 0 0 80px rgba(0,0,0,.45); }
+    .run-mount { position:absolute; inset:0; }
+    .run-frame iframe.run-cam { position:absolute; inset:0; width:100%; height:100%;
+      border:0; display:block; background:#07060a; }
+    .run-slate { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+      transition: opacity .8s ease; pointer-events:none; }
+    .run-frame.live .run-slate { opacity:0; }
+    .run-frame.live { border-color:rgba(245,161,74,.55); }
     .run-follow { display:flex; flex-direction:column; align-items:center; gap:14px; padding:28px 20px; }
     .run-face { filter: drop-shadow(0 16px 36px rgba(245,161,74,.28)); animation: night-breathe 2.4s ease-in-out infinite; }
     .run-face .bot-face { width:min(42vw, 220px); height:auto; }
