@@ -30,7 +30,7 @@
 import { startServer } from '../net/party/local.mjs';
 import { SCRIPT } from '../src/party/roles.js';
 import {
-  DEAL_MS, PREMIERE_COPY, REBLUR_MS, ROLE_CARD_CSS,
+  DEAL_MS, HOLD_NOTE, HOLD_NOTE_LIT, PREMIERE_COPY, REBLUR_MS, ROLE_CARD_CSS,
   cardFor, dealDeckHtml, faceDownHtml, premiereHtml, roleCardFaceHtml, roleLine, roleName, sideLabel,
 } from '../src/party/rolecard.js';
 
@@ -108,6 +108,21 @@ const ROSTER = [
 
   t('P7b · a hold cannot be swallowed by a scroll',
     /\.card-view \{[^}]*touch-action:none/.test(css) && /\.hold-bar \{[^}]*touch-action:none/.test(css));
+
+  // 🚨 THE OVERLAY IS OUTSIDE `.night`, SO IT DECLARES ITS OWN FAMILY, AND EVERY `font:`
+  // SHORTHAND CARRIES THE STACK. The shorthand resets `font-family`, so `font:800 34px/1.1
+  // ui-sans-serif` rendered §2.3's 34 px name in the browser's default SERIF.
+  const fonts = css.match(/font:[^;]+;/g) || [];
+  t('P7c · every font shorthand keeps a family fallback, and the overlays declare one',
+    fonts.length > 0 && fonts.every((f) => f.includes('inherit') || /sans-serif;$/.test(f))
+      && /\.card-view \{[^}]*font-family:ui-sans-serif/.test(css)
+      && /\.deal-view \{[^}]*font-family:ui-sans-serif/.test(css),
+    `${fonts.length} shorthands`);
+
+  t('P7d · the strip above the bar is a STATE readout, not a second instruction',
+    HOLD_NOTE !== HOLD_NOTE_LIT && /blurred/i.test(HOLD_NOTE) && /release/i.test(HOLD_NOTE_LIT)
+      && /\.card-view \.when-lit[^}]*display:none/.test(css)
+      && /\.card-view\.lit \.when-lit \{ display:inline/.test(css));
 }
 
 {

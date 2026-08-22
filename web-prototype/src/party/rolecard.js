@@ -47,7 +47,13 @@ export const REBLUR_MS = 400;
 /** How long the deal runs before it settles into the blurred card. */
 export const DEAL_MS = 1600;
 
-export const HOLD_NOTE = 'Hold anywhere to read';
+/**
+ * The strip above the hold bar is a STATE READOUT, not a second instruction. The bar already says
+ * what to do; what the player cannot otherwise tell is which state the card is in — and the state
+ * is the whole security property, so it is the thing named out loud.
+ */
+export const HOLD_NOTE = 'Blurred · nobody can read this';
+export const HOLD_NOTE_LIT = 'Reading · release to hide';
 export const HOLD_BUTTON = 'Hold to read';
 export const CARD_TAB = 'Your card — hold to read';
 export const FACE_DOWN = 'Your card';
@@ -148,6 +154,15 @@ export function premiereHtml() {
     <p class="hint" style="margin-top:10px">${esc(PREMIERE_FOOT)}</p>`;
 }
 
+/**
+ * ⚠️ EVERY `font:` SHORTHAND CARRIES THE WHOLE FAMILY STACK, AND THE OVERLAYS DECLARE ONE.
+ * The shorthand RESETS `font-family`, and these two elements are appended to `document.body`
+ * rather than inside `.night`, so there is nothing to inherit: `font:800 34px/1.1 ui-sans-serif`
+ * rendered §2.3's 34 px role name in the browser's default SERIF on a screen where every other
+ * word is sans. Caught in a real Chromium, not in a review.
+ */
+export const NIGHT_FONT = 'ui-sans-serif, system-ui, sans-serif';
+
 export const ROLE_CARD_CSS = `
   /* ---- the face-down tab. Never the role: a card back and a label, in any phase. */
   .card-tab { display:flex; align-items:center; gap:14px; width:100%; margin:14px 0 4px;
@@ -165,39 +180,43 @@ export const ROLE_CARD_CSS = `
   /* ---- §2.3's full-bleed card. touch-action:none so a hold is a hold, not a scroll. */
   .card-view { position:fixed; inset:0; z-index:9; background:#07080c; padding:26px 20px;
     display:flex; flex-direction:column; justify-content:center; gap:18px; touch-action:none;
-    -webkit-tap-highlight-color:transparent; }
+    -webkit-tap-highlight-color:transparent;
+    font-family:${NIGHT_FONT}; color:#e8eef6; }
   .card-view.hide, .card-view .hide { display:none; }
   /* 🚨 THE BLUR IS THE RESTING STATE AND .lit IS THE EXCEPTION. A script that never runs
      leaves the card unreadable rather than open. */
   .card-view .face { filter:blur(16px); transition:filter .16s ease;
     user-select:none; -webkit-user-select:none; }
   .card-view.lit .face { filter:none; }
-  .card-view .align { font:600 12px/1 ui-sans-serif; letter-spacing:.24em; text-transform:uppercase;
+  .card-view .align { font:600 12px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing:.24em; text-transform:uppercase;
     color:#7d8fa3; }
   /* §2.3: the role name at 34 px. */
-  .card-view .role { font:800 34px/1.1 ui-sans-serif; margin-top:8px; }
+  .card-view .role { font:800 34px/1.1 ui-sans-serif, system-ui, sans-serif; margin-top:8px; }
   /* §2.3: one line of rule text at 24 px, the card's own words, above the team sentence. */
-  .card-view .line { font:500 24px/1.35 ui-sans-serif; color:#e8eef6; margin-top:12px; }
+  .card-view .line { font:500 24px/1.35 ui-sans-serif, system-ui, sans-serif; color:#e8eef6; margin-top:12px; }
   .card-view .sentence { color:#9fb0c3; font-size:16px; line-height:1.45; margin-top:14px; }
   .card-view .mates { margin-top:18px; border-top:1px solid rgba(125,211,252,.18); padding-top:12px; }
-  .card-view .mates h3 { font:600 12px/1 ui-sans-serif; letter-spacing:.18em; text-transform:uppercase;
+  .card-view .mates h3 { font:600 12px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing:.18em; text-transform:uppercase;
     color:#7d8fa3; margin:0 0 10px; }
   .card-view .mates .m { display:flex; gap:10px; align-items:baseline; font-size:17px; margin-top:6px; }
   .card-view .mates .m b { color:#ff8a7a; }
   .card-view .mates .m .r { color:#9fb0c3; font-size:14px; }
   .card-view .note { color:#7d8fa3; font-size:14px; line-height:1.45; }
-  .card-view .holdnote { font:600 13px/1.4 ui-sans-serif; letter-spacing:.18em; text-transform:uppercase;
+  .card-view .holdnote { font:600 13px/1.4 ui-sans-serif, system-ui, sans-serif; letter-spacing:.18em; text-transform:uppercase;
     color:#7d8fa3; text-align:center; }
   .card-view.lit .holdnote { color:#9ff2c8; }
+  .card-view .when-lit, .card-view.lit .when-dark { display:none; }
+  .card-view.lit .when-lit { display:inline; }
   .card-view .hold-bar { width:100%; min-height:88px; border-radius:14px; border:1px dashed rgba(125,211,252,.5);
-    background:#0d141c; color:#e8eef6; font:700 20px/1.2 ui-sans-serif; letter-spacing:.14em;
+    background:#0d141c; color:#e8eef6; font:700 20px/1.2 ui-sans-serif, system-ui, sans-serif; letter-spacing:.14em;
     text-transform:uppercase; touch-action:none; }
   .card-view.lit .hold-bar { border-style:solid; border-color:#9ff2c8; background:#10241c; }
   .card-view .card-done { width:100%; }
 
   /* ---- the deal. Card backs out of the middle, then this phone's own back to the front. */
   .deal-view { position:fixed; inset:0; z-index:10; background:#05060a; display:flex;
-    flex-direction:column; align-items:center; justify-content:center; gap:22px; }
+    flex-direction:column; align-items:center; justify-content:center; gap:22px;
+    font-family:${NIGHT_FONT}; color:#e8eef6; }
   .deal-view.hide { display:none; }
   .deal-view .deck { position:relative; width:min(86vw,360px); height:min(46vh,300px); }
   .deal-view .b { position:absolute; left:50%; top:50%; width:52px; height:74px;
@@ -257,7 +276,7 @@ export function mountRoleCard({ nameOf = (id) => id, onClose = () => {} } = {}) 
   view.className = 'card-view hide';
   view.innerHTML = `<div class="face" id="card-face"></div>
     <div class="note hide" id="card-note"></div>
-    <div class="holdnote" id="card-holdnote">${esc(HOLD_NOTE)}</div>
+    <div class="holdnote" id="card-holdnote"><span class="when-dark">${esc(HOLD_NOTE)}</span><span class="when-lit">${esc(HOLD_NOTE_LIT)}</span></div>
     <button class="hold-bar" id="card-hold" type="button">${esc(HOLD_BUTTON)}</button>
     <button class="btn ghost card-done" id="card-done" type="button">Put it down</button>`;
   document.body.appendChild(view);
