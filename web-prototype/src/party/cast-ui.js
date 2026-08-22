@@ -1,0 +1,55 @@
+/**
+ * Sequential casting on the phone. Highlight is not a vote; the padlock is.
+ * The wire is still one complete public ballot: { voter, runner, guide }.
+ */
+
+export function freshCast() {
+  return { phase: 'runner', draft: null, runner: null, guide: null };
+}
+
+/** Episode 1 says "first"; later episodes use the real number. */
+export function castPrompt(slot, episode = 1) {
+  const ep = Number(episode) || 1;
+  if (slot === 'runner') {
+    return ep === 1
+      ? 'You are picking a runner for the first expedition.'
+      : `You are picking a runner for expedition ${ep}.`;
+  }
+  return 'Now pick a guide for this expedition.';
+}
+
+export function applyCastTap(cast, playerId) {
+  const cur = cast || freshCast();
+  if (!playerId || cur.phase === 'sent') return cur;
+  if (cur.phase === 'guide' && playerId === cur.runner) return cur;
+  if (cur.draft === playerId) return cur;
+  return { ...cur, draft: playerId };
+}
+
+export function applyCastLock(cast) {
+  const cur = cast || freshCast();
+  if (!cur.draft || cur.phase === 'sent') return cur;
+  if (cur.phase === 'runner') {
+    return { ...cur, runner: cur.draft, draft: null, phase: 'guide' };
+  }
+  if (cur.phase === 'guide') {
+    if (cur.draft === cur.runner) return cur;
+    return { ...cur, guide: cur.draft, draft: null, phase: 'sent' };
+  }
+  return cur;
+}
+
+/** Null until both seats are locked. This is what the phone may send. */
+export function ballotFromCast(cast, voter) {
+  if (!cast || cast.phase !== 'sent') return null;
+  if (!voter || !cast.runner || !cast.guide || cast.runner === cast.guide) return null;
+  return { voter, runner: cast.runner, guide: cast.guide };
+}
+
+export function padlockSvg() {
+  return `<svg class="padlock" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M8 10V8a4 4 0 1 1 8 0v2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    <rect x="6" y="10" width="12" height="10" rx="2" fill="currentColor"/>
+    <circle cx="12" cy="15" r="1.4" fill="#1a1208"/>
+  </svg>`;
+}

@@ -95,7 +95,7 @@ export function injectNightSkin() {
     .phone { padding:16px 16px 24px; overflow:auto; }
     .phone-top { display:flex; justify-content:space-between; color:#8a7d70; font-size:12px;
       letter-spacing:.16em; text-transform:uppercase; margin-bottom:14px; }
-    .phone h1 { font-size:28px; margin:0 0 8px; letter-spacing:.04em; }
+    .phone h1 { font-size:28px; margin:0 0 8px; letter-spacing:.04em; line-height:1.2; }
     .field { width:100%; padding:14px 12px; border-radius:6px; border:1px solid rgba(245,161,74,.25);
       background:#161310; color:#fff; font:inherit; font-size:20px; letter-spacing:.08em; margin:8px 0 14px; }
     .field.code { text-transform:uppercase; letter-spacing:.28em; }
@@ -110,8 +110,16 @@ export function injectNightSkin() {
     .pad button.on { background:#f5a14a; color:#1a1208; }
     .pick-list { display:flex; flex-direction:column; gap:8px; margin:8px 0 16px; }
     .pick-list button { text-align:left; padding:14px 16px; border-radius:8px; border:1px solid rgba(245,161,74,.2);
-      background:#161310; color:#f3ece3; font-size:18px; font-weight:700; }
-    .pick-list button.on { border-color:#f5a14a; background:#3a2614; }
+      background:#161310; color:#f3ece3; font-size:18px; font-weight:700;
+      transition: border-color .25s ease, background .25s ease, transform .2s ease, opacity .25s ease; }
+    .pick-list button.on { border-color:#f5a14a; background:#3a2614; transform: scale(1.01); }
+    .pick-list button.locked-out { opacity:.4; cursor:not-allowed; }
+    .cast-step { animation: night-rise .4s ease; }
+    .lock-slot { margin-top:8px; min-height:58px; }
+    .lock-slot[hidden] { display:none; }
+    .lock-btn { display:flex; align-items:center; justify-content:center; gap:10px; }
+    .lock-btn .padlock { width:22px; height:22px; flex:0 0 auto; }
+    .lock-btn.in { animation: night-rise .4s ease; }
     .hint { color:#8a7d70; font-size:14px; line-height:1.45; }
     .bot-face { display:block; }
     .bot-shell, .bot-wedge { transition: fill .4s ease; }

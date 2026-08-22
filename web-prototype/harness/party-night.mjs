@@ -13,6 +13,7 @@ import { recapFromEvents } from '../src/party/recap.js';
 import { qrMatrix } from '../src/party/qr.js';
 import { tokenKey, STUB_SHOW_PLAN, normalizeCodeDisplay, normalizeCodeWire } from '../src/party/night-client.js';
 import { ACCENTS, SHELLS, cleanLook } from '../src/party/look.js';
+import { applyCastLock, applyCastTap, ballotFromCast, castPrompt, freshCast } from '../src/party/cast-ui.js';
 
 const PORT = 5198;
 let pass = 0, fail = 0;
@@ -70,6 +71,25 @@ t('N1a · join code field uppercases, strips spaces, keeps the no-ilo01 alphabet
     && normalizeCodeDisplay('test') === 'TEST'
     && normalizeCodeWire(' t e s t ') === 'test'
     && !/[ILO01]/i.test(normalizeCodeDisplay('hello 10')));
+
+{
+  t('N1a2 · runner prompt uses first / real episode number',
+    castPrompt('runner', 1) === 'You are picking a runner for the first expedition.'
+      && castPrompt('runner', 3) === 'You are picking a runner for expedition 3.'
+      && castPrompt('guide', 1) === 'Now pick a guide for this expedition.');
+  let cast = freshCast();
+  const tapped = applyCastTap(cast, 'p1');
+  t('N1a3 · tapping a name highlights and does not complete a ballot',
+    tapped.draft === 'p1' && tapped.phase === 'runner' && ballotFromCast(tapped, 'me') === null);
+  cast = applyCastLock(tapped);
+  t('N1a4 · padlock lock-in moves to the guide step; still no wire ballot',
+    cast.phase === 'guide' && cast.runner === 'p1' && cast.draft == null && ballotFromCast(cast, 'me') === null);
+  t('N1a5 · the locked runner cannot be picked as guide',
+    applyCastTap(cast, 'p1').draft == null && applyCastTap(cast, 'p1').phase === 'guide');
+  cast = applyCastLock(applyCastTap(cast, 'p2'));
+  t('N1a6 · locking the guide produces today\'s {voter, runner, guide}',
+    JSON.stringify(ballotFromCast(cast, 'me')) === JSON.stringify({ voter: 'me', runner: 'p1', guide: 'p2' }));
+}
 
 t('N1b · host and phone tokens are namespaced apart',
   tokenKey('test', 'tv') !== tokenKey('test', 'phone')

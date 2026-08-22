@@ -8,6 +8,7 @@ import { PartyNightClient, defaultWsUrl, tokenKey, normalizeCodeDisplay, normali
 import { recapFromEvents } from '../party/recap.js';
 import { injectNightSkin, markPartyReady, playerName, roleLabel, sideLabel } from '../party/night-skin.js';
 import { ACCENTS, DEFAULT_LOOK, SHELLS, cleanLook, robotFaceSvg } from '../party/look.js';
+import { applyCastLock, applyCastTap, ballotFromCast, castPrompt, freshCast, padlockSvg } from '../party/cast-ui.js';
 
 export default async function partyPhone({ params }) {
   injectNightSkin();
@@ -26,12 +27,12 @@ export default async function partyPhone({ params }) {
     name: localStorage.getItem('rrr.party.name') || '',
     err: '',
     client: null,
-    runner: null,
-    guide: null,
     throttle: 'STILL',
     flash: '',
     look: savedLook,
     lookLocked: false,
+    cast: freshCast(),
+    castEpisode: null,
   };
 
   if (!state.code) {
@@ -188,7 +189,9 @@ export default async function partyPhone({ params }) {
 
     const me = c.welcome;
     const frame = c.frame;
-    const players = frame?.players || [];
+    const players = frame?.players || (c.lobby?.seats || [])
+      .filter((s) => !s.isTV)
+      .map((s) => ({ id: s.playerId, name: s.name, seat: s.seat, alive: true }));
     const you = frame?.you;
     const beat = c.beat || 'lobby';
     const phase = frame?.phase || 'LOBBY';
@@ -205,19 +208,19 @@ export default async function partyPhone({ params }) {
     let body = '';
     if (state.err) body += `<div class="err">${esc(state.err)}</div>`;
 
-    if (beat === 'lobby' || phase === 'LOBBY') {
+    if (beat !== 'casting') {
+      state.cast = freshCast();
+      state.castEpisode = null;
+    }
+
+    if (beat === 'casting' && !recap.runner && !pair.runner) {
+      paintCasting(players, me, frame?.episode || c.lobby?.episode || 1);
+      return;
+    } else if (beat === 'lobby' || phase === 'LOBBY') {
       body += `<h1>${esc(myName)}</h1>
         <p class="hint">Seat ${me.seat != null ? me.seat + 1 : '—'} · waiting for the host. The TV is the show — this is a pad.</p>
         ${nameField()}
         ${roster(c.lobby)}`;
-    } else if (beat === 'casting' && !recap.runner && !pair.runner) {
-      body += `<h1>Who goes in?</h1>
-        <p class="hint">Pick a runner and a different guide. Who you send is public.</p>
-        <div class="hint">RUNNER</div>
-        ${pickList('runner', players, me.playerId)}
-        <div class="hint">GUIDE</div>
-        ${pickList('guide', players, me.playerId)}
-        <button class="btn wide" id="vote">Send ballot</button>`;
     } else if (beat === 'casting' && (pair.runner || recap.runner)) {
       body += roleBlock(role, align, panelEv, players)
         + `<p class="hint">${esc(playerName(players, pair.runner || recap.runner))} walks · ${esc(playerName(players, pair.guide || recap.guide))} talks.</p>`;
@@ -255,6 +258,7 @@ export default async function partyPhone({ params }) {
         ${roleBlock(role, align, panelEv, players)}`;
     }
 
+    delete root.dataset.castUi;
     root.innerHTML = `
       <div class="phone-top"><span>${esc(state.code.toUpperCase())}</span><span>${esc(beat)} · ${esc(myName)}</span></div>
       ${body}`;
@@ -264,11 +268,6 @@ export default async function partyPhone({ params }) {
       state.name = v;
       localStorage.setItem('rrr.party.name', v);
       c.send({ t: 'name', name: v });
-    });
-    root.querySelector('#vote')?.addEventListener('click', () => {
-      if (state.runner && state.guide && state.runner !== state.guide) {
-        c.send({ t: 'ballot', runner: state.runner, guide: state.guide });
-      }
     });
     root.querySelector('#thr')?.addEventListener('click', (e) => {
       const t = e.target?.dataset?.t;
@@ -282,12 +281,96 @@ export default async function partyPhone({ params }) {
       state.flash = r;
       paint();
     });
+  }
+
+  function paintCasting(players, me, episode) {
+    const ep = Number(episode) || 1;
+    if (state.castEpisode !== ep) {
+      state.castEpisode = ep;
+      state.cast = freshCast();
+    }
+    const cast = state.cast;
+    const phase = cast.phase;
+    const living = (players || []).filter((p) => p.alive !== false);
+    const stamp = `${phase}:${living.map((p) => `${p.id}:${p.name}`).join(',')}`;
+    if (root.dataset.castUi === stamp) {
+      syncCastHighlight(cast);
+      return;
+    }
+
+    let body = '';
+    if (state.err) body += `<div class="err">${esc(state.err)}</div>`;
+    if (phase === 'sent') {
+      const runnerName = playerName(players, cast.runner);
+      const guideName = playerName(players, cast.guide);
+      body += `<h1>Sent.</h1>
+        <p class="hint">You sent ${esc(runnerName)} to walk and ${esc(guideName)} to talk. The TV has the ballot.</p>`;
+    } else {
+      const slot = phase === 'guide' ? 'guide' : 'runner';
+      body += `<h1>${esc(castPrompt(slot, ep))}</h1>
+        <p class="hint">${phase === 'guide'
+          ? `${esc(playerName(players, cast.runner))} walks. Pick someone else — nothing is sent until you lock it.`
+          : 'Tap a name. Nothing is sent until you lock it.'}</p>
+        ${castList(players, me.playerId, cast)}
+        <div class="lock-slot" id="lock-slot" ${cast.draft ? '' : 'hidden'}>
+          <button class="btn wide lock-btn${cast.draft ? ' in' : ''}" id="lock-pick">${padlockSvg()} Lock ${slot}</button>
+        </div>`;
+    }
+
+    root.innerHTML = `
+      <div class="phone-top"><span>${esc(state.code.toUpperCase())}</span><span>casting · ${esc(playerName(players, me.playerId) || me.name || 'You')}</span></div>
+      <div class="cast-step">${body}</div>`;
+    root.dataset.castUi = stamp;
+    bindCast(players, me);
+  }
+
+  function bindCast(players, me) {
     for (const b of root.querySelectorAll('[data-pick]')) {
       b.addEventListener('click', () => {
-        state[b.dataset.slot] = b.dataset.pick;
-        paint();
+        if (b.disabled || b.classList.contains('locked-out')) return;
+        state.cast = applyCastTap(state.cast, b.dataset.pick);
+        syncCastHighlight(state.cast);
       });
     }
+    root.querySelector('#lock-pick')?.addEventListener('click', () => {
+      const before = state.cast.phase;
+      state.cast = applyCastLock(state.cast);
+      if (state.cast.phase === 'sent') {
+        const ballot = ballotFromCast(state.cast, me.playerId);
+        if (ballot) state.client?.send({ t: 'ballot', runner: ballot.runner, guide: ballot.guide });
+      }
+      if (state.cast.phase !== before) {
+        delete root.dataset.castUi;
+        paintCasting(players, me, state.castEpisode);
+      }
+    });
+  }
+
+  function syncCastHighlight(cast) {
+    for (const b of root.querySelectorAll('[data-pick]')) {
+      b.classList.toggle('on', b.dataset.pick === cast.draft);
+    }
+    const slot = root.querySelector('#lock-slot');
+    const btn = root.querySelector('#lock-pick');
+    if (!slot || !btn) return;
+    if (cast.draft && slot.hidden) {
+      slot.hidden = false;
+      btn.classList.remove('in');
+      void btn.offsetWidth;
+      btn.classList.add('in');
+    } else if (!cast.draft) {
+      slot.hidden = true;
+      btn.classList.remove('in');
+    }
+  }
+
+  function castList(players, me, cast) {
+    return `<div class="pick-list">${(players || []).filter((p) => p.alive !== false).map((p) => {
+      const blocked = cast.phase === 'guide' && p.id === cast.runner;
+      const on = !blocked && cast.draft === p.id ? 'on' : '';
+      const mark = blocked ? ' · runner' : (p.id === me ? ' (you)' : '');
+      return `<button class="${on}${blocked ? ' locked-out' : ''}" data-pick="${esc(p.id)}" ${blocked ? 'disabled' : ''}>${esc(p.name || p.id)}${esc(mark)}</button>`;
+    }).join('')}</div>`;
   }
 
   function nameField() {
@@ -299,13 +382,6 @@ export default async function partyPhone({ params }) {
     const seats = (lobby?.seats || []).filter((s) => !s.isTV && s.joined);
     if (!seats.length) return '';
     return `<p class="hint" style="margin-top:16px">${seats.map((s) => s.name).join(' · ')}</p>`;
-  }
-
-  function pickList(slot, players, me) {
-    return `<div class="pick-list">${(players || []).filter((p) => p.alive !== false).map((p) => {
-      const on = state[slot] === p.id ? 'on' : '';
-      return `<button class="${on}" data-slot="${slot}" data-pick="${esc(p.id)}">${esc(p.name || p.id)}${p.id === me ? ' (you)' : ''}</button>`;
-    }).join('')}</div>`;
   }
 
   function roleBlock(role, align, panelEv, players) {
