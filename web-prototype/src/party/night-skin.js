@@ -10,6 +10,7 @@
  * else now.
  */
 
+import { NIGHT_TOKENS } from './palette.js';
 import { ROLE_CARD_CSS } from './rolecard.js';
 
 export function playerName(players, id) {
@@ -22,6 +23,7 @@ export function injectNightSkin() {
   const s = document.createElement('style');
   s.id = 'rrr-night-skin';
   s.textContent = `
+    ${NIGHT_TOKENS}
     html, body { width:100%; height:100%; overflow:hidden; background:#0c0a08; }
     #boot.gone { display:none; }
     .night { position:fixed; inset:0; color:#f3ece3; font-family: ui-sans-serif, system-ui, sans-serif;

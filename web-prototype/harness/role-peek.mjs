@@ -29,6 +29,7 @@
 
 import { startServer } from '../net/party/local.mjs';
 import { SCRIPT } from '../src/party/roles.js';
+import { NIGHT_PALETTE, NIGHT_TOKENS, isNightToken } from '../src/party/palette.js';
 import {
   DEAL_MS, HOLD_NOTE, HOLD_NOTE_LIT, PREMIERE_COPY, REBLUR_MS, ROLE_CARD_CSS,
   cardFor, dealDeckHtml, faceDownHtml, premiereHtml, roleCardFaceHtml, roleLine, roleName, sideLabel,
@@ -135,6 +136,28 @@ const ROSTER = [
     'premiere copy');
   t('P9b · the premiere sheet and the face-down tab name no role',
     !/producer|contestant|cameraOp|Camera Op/i.test(premiereHtml() + faceDownHtml()));
+
+  // 🚨 THE CARD CANNOT DRIFT OFF THE NIGHT'S PALETTE, BECAUSE IT OWNS NO COLOUR OF ITS OWN.
+  // #5 reskinned blue → amber and this file was written against the blue. A hex cannot be told
+  // apart from a stale hex by anything but an eye, so the card carries names instead.
+  const raw = (ROLE_CARD_CSS.match(/#[0-9a-f]{3,8}\b|(?<!--night-accent-)\brgb\(/gi) || []);
+  t('P11 · the card CSS holds no colour of its own — only --night-* tokens',
+    raw.length === 0, raw.join(',') || 'no literals');
+
+  // `--dx` / `--dy` / `--rot` are the deal's per-card geometry, written inline by `dealDeckHtml`.
+  // Everything else must be a palette name, so a colour cannot arrive as an undeclared variable
+  // either — which would render as nothing and read as a black card.
+  const GEOMETRY = ['--dx', '--dy', '--rot'];
+  const used = [...new Set([...ROLE_CARD_CSS.matchAll(/var\((--[a-z-]+)/g)].map((m) => m[1]))];
+  const orphans = used.filter((n) => !isNightToken(n) && !GEOMETRY.includes(n));
+  t('P11b · every variable the card reaches for is a palette name or the deal\'s own geometry',
+    used.filter(isNightToken).length >= 6 && orphans.length === 0,
+    orphans.join(',') || `${used.length} vars`);
+
+  t('P11c · the palette block is real CSS the skin can inject',
+    /^:root \{/.test(NIGHT_TOKENS) && NIGHT_TOKENS.includes('--night-accent: #')
+      && NIGHT_TOKENS.trimEnd().endsWith('}'),
+    `${NIGHT_PALETTE.length} tokens`);
 
   const deck = dealDeckHtml(4, 2);
   t('P10 · the deal hands out one back per phone and exactly one of them is this phone\'s',

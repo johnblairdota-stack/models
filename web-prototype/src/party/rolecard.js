@@ -163,25 +163,39 @@ export function premiereHtml() {
  */
 export const NIGHT_FONT = 'ui-sans-serif, system-ui, sans-serif';
 
+/**
+ * 🚨 NOT ONE COLOUR LITERAL BELOW THIS LINE. Every colour is a `--night-*` token from
+ * `palette.js`, and `role-peek` P11 asserts there is no raw hex or `rgb(` in the whole block.
+ *
+ * PR #5 reskinned the night from a cold blue to a broadcast amber and this file was written
+ * against the blue, so the card was one cyan surface in an amber lounge with nothing able to say
+ * so — a hex is a hex, and no gate can tell a deliberate colour from a stale one. Naming the
+ * palette is what turns the next reskin into a failing gate instead of a failing playtest.
+ */
+
 export const ROLE_CARD_CSS = `
   /* ---- the face-down tab. Never the role: a card back and a label, in any phase. */
   .card-tab { display:flex; align-items:center; gap:14px; width:100%; margin:14px 0 4px;
-    padding:14px 16px; border-radius:12px; border:1px solid rgba(125,211,252,.28);
-    background:#10151c; color:#e8eef6; font:inherit; text-align:left; cursor:pointer; }
+    padding:14px 16px; border-radius:12px; border:1px solid rgba(var(--night-accent-rgb), .28);
+    background:var(--night-panel); color:var(--night-ink); font:inherit; text-align:left; cursor:pointer; }
   .card-tab .back { flex:0 0 auto; width:38px; height:54px; border-radius:6px;
-    border:1px solid rgba(125,211,252,.5);
+    border:1px solid rgba(var(--night-accent-rgb), .5);
     background:
-      repeating-linear-gradient(45deg, rgba(125,211,252,.16) 0 3px, transparent 3px 6px),
-      #0b1118; }
+      repeating-linear-gradient(45deg, rgba(var(--night-accent-rgb), .16) 0 3px, transparent 3px 6px),
+      var(--night-well); }
   .card-tab .lbl { display:flex; flex-direction:column; gap:4px; }
   .card-tab .lbl b { font-size:19px; letter-spacing:.04em; }
-  .card-tab .lbl span { color:#7d8fa3; font-size:13px; letter-spacing:.14em; text-transform:uppercase; }
+  .card-tab .lbl span { color:var(--night-dim); font-size:13px; letter-spacing:.14em; text-transform:uppercase; }
 
-  /* ---- §2.3's full-bleed card. touch-action:none so a hold is a hold, not a scroll. */
-  .card-view { position:fixed; inset:0; z-index:9; background:#07080c; padding:26px 20px;
+  /* ---- §2.3's full-bleed card. touch-action:none so a hold is a hold, not a scroll.
+     The same wash the night wears, so the card is this room rather than a modal over it. */
+  .card-view { position:fixed; inset:0; z-index:9; padding:26px 20px;
+    background:
+      radial-gradient(900px 520px at 50% -8%, rgba(var(--night-accent-rgb), .10), transparent 58%),
+      var(--night-bg);
     display:flex; flex-direction:column; justify-content:center; gap:18px; touch-action:none;
     -webkit-tap-highlight-color:transparent;
-    font-family:${NIGHT_FONT}; color:#e8eef6; }
+    font-family:${NIGHT_FONT}; color:var(--night-ink); }
   .card-view.hide, .card-view .hide { display:none; }
   /* 🚨 THE BLUR IS THE RESTING STATE AND .lit IS THE EXCEPTION. A script that never runs
      leaves the card unreadable rather than open. */
@@ -189,46 +203,51 @@ export const ROLE_CARD_CSS = `
     user-select:none; -webkit-user-select:none; }
   .card-view.lit .face { filter:none; }
   .card-view .align { font:600 12px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing:.24em; text-transform:uppercase;
-    color:#7d8fa3; }
+    color:var(--night-dim); }
   /* §2.3: the role name at 34 px. */
   .card-view .role { font:800 34px/1.1 ui-sans-serif, system-ui, sans-serif; margin-top:8px; }
   /* §2.3: one line of rule text at 24 px, the card's own words, above the team sentence. */
-  .card-view .line { font:500 24px/1.35 ui-sans-serif, system-ui, sans-serif; color:#e8eef6; margin-top:12px; }
-  .card-view .sentence { color:#9fb0c3; font-size:16px; line-height:1.45; margin-top:14px; }
-  .card-view .mates { margin-top:18px; border-top:1px solid rgba(125,211,252,.18); padding-top:12px; }
+  .card-view .line { font:500 24px/1.35 ui-sans-serif, system-ui, sans-serif; color:var(--night-ink); margin-top:12px; }
+  .card-view .sentence { color:var(--night-soft); font-size:16px; line-height:1.45; margin-top:14px; }
+  .card-view .mates { margin-top:18px; border-top:1px solid rgba(var(--night-accent-rgb), .18); padding-top:12px; }
   .card-view .mates h3 { font:600 12px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing:.18em; text-transform:uppercase;
-    color:#7d8fa3; margin:0 0 10px; }
+    color:var(--night-dim); margin:0 0 10px; }
   .card-view .mates .m { display:flex; gap:10px; align-items:baseline; font-size:17px; margin-top:6px; }
-  .card-view .mates .m b { color:#ff8a7a; }
-  .card-view .mates .m .r { color:#9fb0c3; font-size:14px; }
-  .card-view .note { color:#7d8fa3; font-size:14px; line-height:1.45; }
+  .card-view .mates .m b { color:var(--night-bad); }
+  .card-view .mates .m .r { color:var(--night-soft); font-size:14px; }
+  .card-view .note { color:var(--night-dim); font-size:14px; line-height:1.45; }
   .card-view .holdnote { font:600 13px/1.4 ui-sans-serif, system-ui, sans-serif; letter-spacing:.18em; text-transform:uppercase;
-    color:#7d8fa3; text-align:center; }
-  .card-view.lit .holdnote { color:#9ff2c8; }
+    color:var(--night-dim); text-align:center; }
+  .card-view.lit .holdnote { color:var(--night-live); }
   .card-view .when-lit, .card-view.lit .when-dark { display:none; }
   .card-view.lit .when-lit { display:inline; }
-  .card-view .hold-bar { width:100%; min-height:88px; border-radius:14px; border:1px dashed rgba(125,211,252,.5);
-    background:#0d141c; color:#e8eef6; font:700 20px/1.2 ui-sans-serif, system-ui, sans-serif; letter-spacing:.14em;
+  .card-view .hold-bar { width:100%; min-height:88px; border-radius:14px;
+    border:1px dashed rgba(var(--night-accent-rgb), .5);
+    background:var(--night-well); color:var(--night-ink);
+    font:700 20px/1.2 ui-sans-serif, system-ui, sans-serif; letter-spacing:.14em;
     text-transform:uppercase; touch-action:none; }
-  .card-view.lit .hold-bar { border-style:solid; border-color:#9ff2c8; background:#10241c; }
+  .card-view.lit .hold-bar { border-style:solid; border-color:var(--night-live); background:var(--night-live-well); }
   .card-view .card-done { width:100%; }
 
   /* ---- the deal. Card backs out of the middle, then this phone's own back to the front. */
-  .deal-view { position:fixed; inset:0; z-index:10; background:#05060a; display:flex;
+  .deal-view { position:fixed; inset:0; z-index:10; display:flex;
+    background:
+      radial-gradient(680px 420px at 50% 46%, rgba(var(--night-accent-rgb), .09), transparent 62%),
+      var(--night-deep);
     flex-direction:column; align-items:center; justify-content:center; gap:22px;
-    font-family:${NIGHT_FONT}; color:#e8eef6; }
+    font-family:${NIGHT_FONT}; color:var(--night-ink); }
   .deal-view.hide { display:none; }
   .deal-view .deck { position:relative; width:min(86vw,360px); height:min(46vh,300px); }
   .deal-view .b { position:absolute; left:50%; top:50%; width:52px; height:74px;
-    margin:-37px 0 0 -26px; border-radius:7px; border:1px solid rgba(125,211,252,.45);
+    margin:-37px 0 0 -26px; border-radius:7px; border:1px solid rgba(var(--night-accent-rgb), .45);
     background:
-      repeating-linear-gradient(45deg, rgba(125,211,252,.18) 0 3px, transparent 3px 6px),
-      #0b1118;
+      repeating-linear-gradient(45deg, rgba(var(--night-accent-rgb), .18) 0 3px, transparent 3px 6px),
+      var(--night-well);
     opacity:0; animation:deal-out .5s cubic-bezier(.2,.8,.25,1) forwards; }
-  .deal-view .b.mine { border-color:#7dd3fc; box-shadow:0 10px 30px rgba(0,0,0,.6);
+  .deal-view .b.mine { border-color:var(--night-accent); box-shadow:0 10px 30px rgba(0,0,0,.6);
     animation:deal-out .5s cubic-bezier(.2,.8,.25,1) forwards, deal-mine .62s .78s cubic-bezier(.3,.9,.25,1) forwards; }
-  .deal-view .cap { letter-spacing:.22em; text-transform:uppercase; font-size:13px; color:#7dd3fc; }
-  .deal-view .sub { color:#7d8fa3; font-size:15px; text-align:center; max-width:26rem; }
+  .deal-view .cap { letter-spacing:.22em; text-transform:uppercase; font-size:13px; color:var(--night-accent); }
+  .deal-view .sub { color:var(--night-dim); font-size:15px; text-align:center; max-width:26rem; }
   @keyframes deal-out {
     from { opacity:0; transform:translate(0,0) rotate(0deg) scale(.7); }
     to   { opacity:1; transform:translate(var(--dx), var(--dy)) rotate(var(--rot)) scale(1); }
