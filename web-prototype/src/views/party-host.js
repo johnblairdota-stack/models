@@ -298,9 +298,9 @@ function cssEscape(s) {
 function ballotBoard(votes, names, pair, recap, episode) {
   const rows = (votes || []).map((v) => `
     <div class="row">
-      <div class="who">${esc(playerName(names, v.voter))}</div>
+      <div class="who">${esc(joinedName(names, v.voter, 'Someone'))}</div>
       <div class="arrow">sent</div>
-      <div class="pick">RUNNER ${esc(playerName(names, v.runner))}<br>GUIDE ${esc(playerName(names, v.guide))}</div>
+      <div class="pick">RUNNER ${esc(joinedName(names, v.runner, 'The runner'))}<br>GUIDE ${esc(joinedName(names, v.guide, 'The guide'))}</div>
     </div>`).join('');
   const runner = pair.runner || recap.runner;
   const guide = pair.guide || recap.guide;
