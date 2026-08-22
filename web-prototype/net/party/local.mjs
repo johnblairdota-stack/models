@@ -325,6 +325,25 @@ export function startServer({ port = 5181, count = 8, castSeed = null, worldSeed
       playerId: self?.playerId ?? null,
       seat: player?.seat ?? null,
       name: player?.name ?? null,
+      /**
+       * 🚨 **`worldSeed` ON THE WELCOME, AND IT IS HERE TO CLOSE A RACE THAT BUILT TWO DIFFERENT
+       * MANSIONS IN ONE ROOM.**
+       *
+       * `PartyNightClient.connect()` resolves on THIS message, and `views/party-host.js` paints on
+       * every message — so the TV's first paint happens with `client.frame` still null. That paint
+       * mounts the night-long mansion slot, whose `src` is assigned exactly once and never again
+       * (deliberately: reassigning it is a reload and a 9 MB refetch). So the TV was baking
+       * `seed=0` while every phone derived its guide map from `frame.worldSeed`, which
+       * `startServer` defaults to 1 — a different floor plan, different rooms, different doors.
+       * `src/party/mansion.js`'s header forbids exactly that disagreement and the TV was the one
+       * breaking it.
+       *
+       * It is public by a decision that predates this file: `net/party/entitle.js` L47 gives
+       * `worldSeed` the `all` audience, and the frame has always carried it. Putting it one
+       * message earlier costs nothing and means the first paint can build the right URL rather
+       * than having to be told to wait.
+       */
+      worldSeed: room.game.state.worldSeed,
     })));
 
     // 🚨 A RESUMING SOCKET IS CAUGHT UP THROUGH THE SAME FILTER, NOT WITH A FULL SNAPSHOT.

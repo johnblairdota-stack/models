@@ -144,13 +144,55 @@ export function pickPlanSeed(worldSeed) {
  * `doors` are the mid-points of the `canDoor` runs — where you can actually get through, which is
  * the one thing a map is for.
  */
+/** Structural minimum a corridor rect must clear to become a `SPACES` row. genspike's `W_MIN_S`. */
+const W_MIN_S = 1.90;
+
+/** Do two structural rects share a wall line with a non-zero run along it? */
+function touching(a, b) {
+  const overlapX = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0);
+  const overlapZ = Math.min(a.z1, b.z1) - Math.max(a.z0, b.z0);
+  const EPS = 1e-6;
+  if (Math.abs(a.x1 - b.x0) < EPS || Math.abs(b.x1 - a.x0) < EPS) return overlapZ > EPS;
+  if (Math.abs(a.z1 - b.z0) < EPS || Math.abs(b.z1 - a.z0) < EPS) return overlapX > EPS;
+  return false;
+}
+
+/**
+ * 🧱 **WHICH CORRIDOR RECTS THE BUILDER WILL ACTUALLY MAKE INTO ROOMS.**
+ *
+ * `genplan.js` `keepMaskFor` drops a sub-minimum alcove — one narrower than `W_MIN_S` — unless it
+ * is load-bearing for the region's connectivity, in which case it is kept as a narrow row. The map
+ * has to make the same call or it draws passages the house does not have: measured in a browser,
+ * the guide's map showed **13 rects against the built house's 12**, and the extra one was an
+ * alcove the builder had infilled. A map that offers a route which is a solid wall is worse than
+ * no map, because the guide will call it.
+ *
+ * ⚠️ **THIS IS AN APPROXIMATION OF `keepMaskFor`, NOT A COPY OF IT, AND IT ERRS TOWARD KEEPING.**
+ * The real thing runs a greedy multi-component bridge search; reproducing that here would be the
+ * second copy of a subtle algorithm that `genplan.js`'s own header warns drifts the first time
+ * anybody edits one. The test used instead — an alcove that touches two or more of its
+ * region's other rects is a bridge and is kept — agrees with it on every seed measured, and where
+ * it can differ it keeps a rect the builder dropped rather than dropping one the builder kept.
+ * That is the safe direction: a map showing one dead-end too many costs a wasted glance; a map
+ * missing a real corridor costs the run.
+ */
+function keptCorridorRects(rects) {
+  return rects.filter((r, i) => {
+    const minDim = Math.min(r.x1 - r.x0, r.z1 - r.z0);
+    if (minDim >= W_MIN_S) return true;                    // a full-width passage, always built
+    const contacts = rects.filter((o, j) => j !== i && touching(r, o)).length;
+    return contacts >= 2;                                  // a bridge between two halves — kept
+  });
+}
+
 export function planRegions(seedish) {
   const plan = buildPlan(String(seedish), PLAN_OPTS);
   const HALF = 0.15;                                   // WALL_T / 2, genplan.js `deflate`
   const rooms = [];
   const corridors = [];
   plan.regions.forEach((R) => {
-    for (const r of R.rects) {
+    const src = R.kind === 'room' ? R.rects : keptCorridorRects(R.rects);
+    for (const r of src) {
       const rect = {
         id: R.id, type: R.type,
         x0: r.x0 + HALF, x1: r.x1 - HALF, z0: r.z0 + HALF, z1: r.z1 - HALF,
@@ -197,6 +239,25 @@ export function roomLabel(type) {
  * precision of the information, and pretending otherwise would have the guide calling a number
  * nobody else can see.
  */
+/**
+ * 📹 **A GENERATED SPACE ID AS A `coverage.js` ROOM NAME, OR `null`.**
+ *
+ * `coverage.js`'s `ROOMS` is a flat list of six bare names and `hunterVisibleToGuide` asks
+ * `coveredRooms(...).has(hunterRoom)`. A generated id (`r2.study`, `c0.3`) is never in that set,
+ * so handing one straight in makes the guide permanently blind — the failure is silent, because
+ * "no camera has the hunter" is a legitimate answer the map already knows how to draw.
+ *
+ * A corridor returns `null` on purpose rather than being mapped to something. There is no camera
+ * in a passage, so a hunter crossing one is genuinely off the roster, and inventing coverage there
+ * would hand the guide sight the camera ladder has not paid for.
+ */
+export function coverageRoomOf(id) {
+  const s = String(id ?? '');
+  if (!s || s.startsWith('c')) return null;
+  const type = s.includes('.') ? s.split('.')[1] : s;
+  return /^\d+$/.test(type) ? null : type;
+}
+
 export function spaceLabel(id) {
   const s = String(id ?? '');
   if (!s) return 'somewhere';

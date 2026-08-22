@@ -32,8 +32,9 @@ import {
 } from '../src/party/follow.js';
 import {
   HOME_ROOM, MISSION_ROOM, PLAN_OPTS, PLAN_TRIES,
-  pickPlanSeed, planFor, planOptsFor, planPasses, planRegions, roomLabel, spaceLabel,
+  coverageRoomOf, pickPlanSeed, planFor, planOptsFor, planPasses, planRegions, roomLabel, spaceLabel,
 } from '../src/party/mansion.js';
+import { ROOMS, hunterVisibleToGuide } from '../src/party/coverage.js';
 import { buildPlan } from './genspike.mjs';
 import { DROP_RATE, GRADES, STALE_MAX, gradeFor, intelFor, intelLine } from '../src/party/intel.js';
 import { GUIDE_MAP_CSS, guideMapSvg } from '../src/party/guidemap.js';
@@ -504,6 +505,117 @@ console.log('\nparty-warm — the lobby-warm night');
    */
   t('W11f · the bible\'s own rows are unchanged',
     COMPOSITION[4].informed === 2 && COMPOSITION[8].informed === 4 && COMPOSITION[8].outsider === 2);
+}
+
+// ---- W12 · ONE HOUSE PER NIGHT, AND THE RACE THAT BUILT TWO ----------------------------------
+//
+// 🚨 THE TV WAS WARMING A DIFFERENT MANSION FROM THE ONE THE PHONES' MAPS DREW, AND NOTHING SAID
+// SO. `PartyNightClient.connect()` resolves on `welcome`; `views/party-host.js` paints on every
+// message; so the first paint ran with `client.frame` still null and mounted the night-long slot
+// with `frame?.worldSeed ?? 0`. That `src` is assigned exactly once per night — deliberately,
+// because reassigning it is a reload and a 9 MB refetch — so seed 0 was the whole night, while the
+// server's default `worldSeed` is 1 and every phone derived its guide map from that.
+//
+// `src/party/mansion.js`'s header is explicit that the two ends must not be able to disagree. The
+// fix is `worldSeed` on the welcome plus a mount that refuses a guess; this asserts BOTH halves
+// over a real socket, because the bug was one of ordering and no pure test can see ordering.
+{
+  const { startServer } = await import('../net/party/local.mjs');
+  const { PartyNightClient } = await import('../src/party/night-client.js');
+  const PORT = 5188;
+  const WORLD = 7;
+  const srv = startServer({ port: PORT, count: 8, castSeed: 5, worldSeed: WORLD, code: 'warm' });
+  const url = (q = '') => `ws://localhost:${PORT}/?room=warm${q}`;
+
+  /*
+   * ⚠️ **SAMPLED INSIDE `onMessage`, ON THE WELCOME, WHICH IS EXACTLY WHERE THE HOST PAINTS.**
+   *
+   * Reading after `await connect()` would prove nothing: the server writes welcome and state in
+   * one burst and node hands both to the socket before the connect promise's microtask runs, so
+   * `frame` is already populated by then. The browser is not so kind — `views/party-host.js`
+   * calls `paint()` synchronously from this very callback, on this very message, and that paint
+   * mounts the mansion for the whole night. This hook IS the host's first paint.
+   */
+  const atFirstPaint = [];
+  const tv = new PartyNightClient({
+    url: url('&host=1'),
+    onMessage(m) { atFirstPaint.push({ t: m.t, frame: tv.frame, seed: tv.worldSeed }); },
+  });
+  await tv.connect();
+
+  const first = atFirstPaint[0];
+  t('W12 · the welcome carries the world seed, so the FIRST paint can build the right house',
+    tv.welcome?.worldSeed === WORLD, `welcome.worldSeed=${tv.welcome?.worldSeed}`);
+  t('W12a · and at the very first message — before any state frame — the seed is already right',
+    first?.t === 'welcome' && first?.frame === null && first?.seed === WORLD,
+    `first message ${first?.t} · frame ${first?.frame} · seed ${first?.seed}`);
+
+  const earlyUrl = warmUrl({ room: 'warm', worldSeed: first.seed, origin: ORIGIN });
+  const earlySeed = new URL(earlyUrl).searchParams.get('seed');
+  t('W12b · so the slot the TV mounts is seeded with the room\'s real world, not a default',
+    earlySeed === String(WORLD), earlyUrl);
+
+  const phone = new PartyNightClient({ url: url() });
+  await phone.connect();
+  await new Promise((r) => setTimeout(r, 200));
+
+  t('W12c · the phone agrees, from the frame as well as the welcome',
+    phone.worldSeed === WORLD && phone.frame?.worldSeed === WORLD);
+
+  /*
+   * THE ASSERTION THE PLAYTEST NEEDED: the TV's slot and the guide's map must resolve to the SAME
+   * generated plan. Compared as the plan SEED rather than as the world seed, because that is the
+   * value the two renderers actually build from — `pickPlanSeed` may walk past a candidate, and an
+   * off-by-one there would be just as night-breaking as an off-by-one here.
+   */
+  const tvPlan = pickPlanSeed(Number(earlySeed)).seed;
+  const phonePlan = pickPlanSeed(phone.worldSeed).seed;
+  t('W12d · THE TV\'S HOUSE AND THE GUIDE\'S MAP ARE THE SAME HOUSE',
+    tvPlan === phonePlan, `tv plan ${tvPlan} · phone plan ${phonePlan}`);
+
+  /*
+   * The control. The bug produced `seed=0` against a world of 7, and it has to be the case that
+   * such a slip really does build a different house — otherwise W12d passes for free and this
+   * whole section is decoration.
+   */
+  t('W12e control · a defaulted seed really would have been a different house',
+    pickPlanSeed(0).seed !== phonePlan,
+    `default plan ${pickPlanSeed(0).seed} vs real ${phonePlan}`);
+
+  t('W12f · and a socket that knows nothing yet says so, rather than guessing 0',
+    new PartyNightClient({ url: url() }).worldSeed === null);
+
+  srv.close();
+  for (const c of [tv, phone]) c.ws?.close?.();
+}
+
+// ---- W13 · the guide's sight is gated on the room the hunter is IN ---------------------------
+//
+// `coverage.js`'s roster holds six BARE room names. The mark the guide sees is built from
+// `state.world.hunter`, whose `room` is a generated space id — so the visibility test and the mark
+// were talking about two different rooms, and the test was talking about a stub that only
+// `playEpisode` ever wrote.
+{
+  t('W13 · a generated room id maps onto the camera roster',
+    coverageRoomOf('r2.study') === 'study' && coverageRoomOf('r0.ballroom') === 'ballroom'
+    && coverageRoomOf('r1.gallery') === 'gallery');
+  t('W13a · a passage is honestly uncovered — there is no camera in a corridor',
+    coverageRoomOf('c0.3') === null && coverageRoomOf('c12.0') === null
+    && coverageRoomOf(null) === null);
+  t('W13b · and every mapped name is one the roster can actually answer about',
+    ['r0.ballroom', 'r1.gallery', 'r2.study', 'r5.chapel']
+      .every((id) => ROOMS.includes(coverageRoomOf(id))), ROOMS.join(','));
+  /*
+   * The control, and it is the shape of the bug: handing the raw id in makes the guide blind in
+   * every room, forever, and the map draws that as a legitimate "no camera has the hunter".
+   */
+  const cams = { worldSeed: 3, unlocked: 3 };
+  const anyRaw = ['r0.ballroom', 'r1.gallery', 'r2.study', 'r5.chapel']
+    .some((id) => hunterVisibleToGuide({ ...cams, hunterRoom: id }));
+  const anyMapped = ['r0.ballroom', 'r1.gallery', 'r2.study', 'r5.chapel']
+    .some((id) => hunterVisibleToGuide({ ...cams, hunterRoom: coverageRoomOf(id) }));
+  t('W13c control · the raw id is invisible at FULL coverage; the mapped one is not',
+    !anyRaw && anyMapped, `raw ${anyRaw} · mapped ${anyMapped}`);
 }
 
 console.log(`\nparty-warm: ${pass} passed, ${fail} failed`);

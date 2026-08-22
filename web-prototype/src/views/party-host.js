@@ -256,7 +256,23 @@ export default async function partyHost({ params }) {
   function mountFollow() {
     ensureFollow();
     if (follow.src) return;
-    follow.src = warmUrl({ room: code, worldSeed: client.frame?.worldSeed ?? 0 });
+    /*
+     * 🚨 **NOT ONE BYTE OF `src` UNTIL THE SEED IS REAL. THIS GUARD IS THE SECOND HALF OF A FIX
+     * FOR A NIGHT-BREAKING RACE, AND IT USED TO READ `client.frame?.worldSeed ?? 0`.**
+     *
+     * `connect()` resolves on `welcome` and this view paints on every message, so the first paint
+     * ran with `client.frame` still null. The `?? 0` then baked seed 0 into a URL that is
+     * ASSIGNED EXACTLY ONCE PER NIGHT — while every phone derived its guide map from
+     * `frame.worldSeed`, which the server defaults to 1. The TV rendered one mansion and the
+     * guide called rooms off the plan of another, all night, silently.
+     *
+     * `worldSeed` now rides the welcome (`net/party/local.mjs`), so in practice this never has to
+     * wait. The guard stays anyway: a default seed is a silent wrong house, and a late mount is a
+     * bar that sits at 0% for one message. Those failures are not close to equally bad.
+     */
+    const seed = client.worldSeed;
+    if (seed == null) return;
+    follow.src = warmUrl({ room: code, worldSeed: seed });
     follow.el.src = follow.src;
     if (!follow.raf) follow.raf = requestAnimationFrame(followLoop);
   }

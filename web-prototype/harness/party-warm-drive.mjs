@@ -123,13 +123,38 @@ t('W1c · the night is procedural and holds both mission rooms',
   `${house.n} spaces · ${house.types.join(',')}`);
 t('W1d · the warm graph is clean', (await graphFaults()).length === 0, (await graphFaults()).join(' | ') || 'clean');
 
+/*
+ * 🚨 **THE TV'S HOUSE AND THE GUIDE'S MAP ARE THE SAME HOUSE, COMPARED AS GEOMETRY.**
+ *
+ * `party-warm` W12 proves the two ends agree on the SEED. This proves the two derivations agree on
+ * the RESULT, which is a different claim: the map comes from `planRegions` (pure, `buildPlan`) and
+ * the mansion from `generatedTablesFor` (which drops dead-end alcoves the builder infills). A
+ * browser is the only place both can be evaluated at once. Measured before the fix: 13 map rects
+ * against 12 built spaces — a passage drawn on the guide's map that is a solid wall in the house.
+ */
+const houses = await page.evaluate(async () => {
+  const M = await import('/src/party/mansion.js');
+  const seed = M.pickPlanSeed(Number(new URL(location.href).searchParams.get('seed')) | 0).seed;
+  const r = M.planRegions(seed);
+  const built = window.__rrrFollow.room.spaces;
+  const key = (o) => `${o.x0.toFixed(2)},${o.z0.toFixed(2)},${o.x1.toFixed(2)},${o.z1.toFixed(2)}`;
+  const map = [...r.rooms, ...r.corridors].map(key).sort();
+  const house = built.map(key).sort();
+  return { map, house, onlyMap: map.filter((k) => !house.includes(k)), onlyHouse: house.filter((k) => !map.includes(k)) };
+});
+t('W1e · the guide\'s map draws exactly the spaces the mansion built',
+  houses.onlyMap.length === 0 && houses.onlyHouse.length === 0,
+  `${houses.map.length} map vs ${houses.house.length} built`
+  + (houses.onlyMap.length ? ` · map-only ${houses.onlyMap.join(' ')}` : '')
+  + (houses.onlyHouse.length ? ` · house-only ${houses.onlyHouse.join(' ')}` : ''));
+
 // ---- W2 · the intros ---------------------------------------------------------------------
 const CAST = [
   { id: 'p1', seat: 0, name: 'Ada', shell: '#1c2a3a', accent: '#7fb3e8' },
   { id: 'p2', seat: 1, name: 'Bo', shell: '#5c2733', accent: '#e5c04a' },
   { id: 'p3', seat: 2, name: 'Cy', shell: '#8a6f45', accent: '#d95a8a' },
 ];
-t('W1e · the dispose trap is armed', await armDisposeTrap());
+t('W1f · the dispose trap is armed', await armDisposeTrap());
 
 await cue({ kind: 'intros', cast: CAST });
 await page.waitForTimeout(4000);

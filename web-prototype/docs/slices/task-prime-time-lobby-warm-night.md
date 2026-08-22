@@ -534,6 +534,42 @@ the first probe checked warm and checked intros and the bug lived in the join be
 **a scene-graph walk cannot see a disposed material**; the graph stays perfectly well-formed while
 the GPU state under it is freed.
 
+## 8c. The review that caught the worst one
+
+A hostile read of the PR found a bug worse than any of the three above, because it was silent:
+**the TV was warming a different mansion from the one the phones' maps drew.**
+
+`PartyNightClient.connect()` resolves on `welcome`. `views/party-host.js` paints on every message.
+So the TV's first paint ran with `client.frame` still `null`, and `mountFollow` read
+`client.frame?.worldSeed ?? 0` — into a `src` that is assigned **exactly once per night**,
+deliberately, because reassigning it is a reload and a 9 MB refetch. `startServer` defaults
+`worldSeed` to 1, so the TV baked seed 0 and every phone derived its guide map from seed 1: a
+different floor plan, different rooms, different doors, for the whole night, with nothing on any
+screen to say so. §3.2 of this document says in as many words that the two ends must not be able
+to disagree, and the TV was the one breaking it.
+
+Fixed at both ends of the race: `worldSeed` now rides the `welcome` message (it is `all`-audience
+in `net/party/entitle.js` and has always been on the frame, so this costs nothing), and
+`mountFollow` refuses to assign `src` at all until the seed is a real number. `client.worldSeed`
+is the single accessor both screens use and it returns `null` rather than a default — **a `?? 0`
+at a call site is the disagreement, written as a default.**
+
+Two smaller things fell out of chasing it:
+
+- The guide's hunter mark was gated on `hunterVisibleToGuide({ hunterRoom: state.hunterRoom })` —
+  a stub only `playEpisode` ever writes — while the mark's coordinates came from
+  `state.world.hunter`. Sight was being decided about one room and drawn at another. It gates on
+  the live room now, through `coverageRoomOf`, which is also what makes the question answerable at
+  all: `coverage.js`'s roster holds six bare names and a generated `r2.study` is in none of them,
+  so handing the raw id in made the guide blind everywhere, forever, and the map drew that as a
+  legitimate "no camera has the hunter".
+- The map drew **13 rects against the house's 12**: `genplan` infills dead-end alcoves and
+  `planRegions` was keeping them, so the guide had a passage on their map that is a solid wall.
+  `party-warm-drive` W1e now compares the two derivations as coordinate keys, not counts.
+
+The lesson here is narrower than the last two and sharper: **`?? 0` on a value another process
+derives a whole world from is not a default, it is a second source of truth.**
+
 ## 9. What this slice does NOT do
 
 Written down so the next reader does not mistake an omission for an oversight, and so the PR can

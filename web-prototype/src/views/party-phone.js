@@ -421,18 +421,27 @@ export default async function partyPhone({ params }) {
          *
          * 🚨 The TV still gets none of this. `party-loop.md`'s "Do not" list, first item.
          */
-        const seed = pickPlanSeed(frame?.worldSeed ?? 0).seed;
+        /*
+         * ⚠️ `client.worldSeed`, NEVER `frame?.worldSeed ?? 0`. The TV mounts its mansion from the
+         * same accessor; a local default on either side is how the two ends end up drawing
+         * different houses, which `src/party/mansion.js` exists to forbid. `null` means the socket
+         * does not know yet, and a map of the wrong house is worse than a map that is one message
+         * late.
+         */
+        const seed = c.worldSeed == null ? null : pickPlanSeed(c.worldSeed).seed;
         const marks = frame?.flyover?.marks ?? [];
         const meMark = marks.find((k) => k.kind === 'you') ?? null;
         const hunterMark = marks.find((k) => k.kind === 'hunter') ?? null;
         body += `<h1>You talk.</h1>
           <p class="hint">The map is yours. The TV does not get it — call the rooms out loud.</p>
-          ${guideMapSvg({
-            seed,
-            goal: MISSION_ROOM,
-            runner: meMark,
-            flyover: hunterMark ? { hunter: hunterMark } : null,
-          })}
+          ${seed == null
+            ? '<p class="hint gm-blind">Waiting for the house…</p>'
+            : guideMapSvg({
+              seed,
+              goal: MISSION_ROOM,
+              runner: meMark,
+              flyover: hunterMark ? { hunter: hunterMark } : null,
+            })}
           <p class="hint ${hunterMark ? '' : 'gm-blind'}">${hunterMark
             ? 'A camera has the hunter. The red mark is live.'
             : 'No camera has the hunter. You are calling this one blind.'}</p>

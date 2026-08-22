@@ -28,6 +28,7 @@ import { foldWin, OUTCOME } from './win.js';
 import { PHASE, orderFor, EPISODE_CAP } from './phases.js';
 import { cleanLook } from './look.js';
 import { STALE_MAX, intelFor } from './intel.js';
+import { coverageRoomOf } from './mansion.js';
 
 export const PHASES = ['LOBBY', 'CASTING', 'EXPEDITION', 'DEBRIEF', 'VERDICT'];
 
@@ -178,8 +179,24 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     if (sock.seatRole === 'guide' && (state.phase === 'EXPEDITION' || state.world)) {
       // 🚨 S3. The Hunter is on the map only where a live camera watches. `hunterMark.visible =
       // hs.inScene && !!hp` (views/game.js L2559) is the debug view this replaces.
+      /*
+       * 📹 **THE COVERAGE TEST IS ASKED ABOUT THE ROOM THE HUNTER IS ACTUALLY IN.**
+       *
+       * It used to be asked about `state.hunterRoom` — a stub initialised to `ROOMS[0]` and only
+       * ever written by `playEpisode`'s optional argument — while the MARK below was already being
+       * built from `state.world.hunter`. So the guide's sight was decided about one room and drawn
+       * at another: with the stub sitting on `ballroom` the mark blinked on whenever a camera
+       * happened to cover the ballroom, regardless of where the hunter had walked.
+       *
+       * `coverageRoomOf` is what makes the live id askable at all — `coverage.js`'s roster holds
+       * bare names, so a generated `r2.study` is not in it and a passage is in it nowhere. See its
+       * header for why a corridor is honestly uncovered rather than mapped to something.
+       */
+      const liveRoom = coverageRoomOf(state.world?.hunter?.room);
       const seen = hunterVisibleToGuide({
-        worldSeed: state.worldSeed, unlocked: state.cameras.unlocked, hunterRoom: state.hunterRoom,
+        worldSeed: state.worldSeed,
+        unlocked: state.cameras.unlocked,
+        hunterRoom: state.world ? liveRoom : state.hunterRoom,
       });
       /*
        * 🗺️ THE MARKS ARE THE REAL BODIES NOW, WHEN THE TV HAS REPORTED ANY — and they still travel

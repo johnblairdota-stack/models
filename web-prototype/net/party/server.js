@@ -70,7 +70,13 @@ export default class PrimeTimeRoom {
     const fresh = resumed ? token : crypto.randomUUID();
     this.tokens.set(fresh, seat);
     this.conns.set(seat, conn);
-    this.#to(seat, { t: 'welcome', id: seat, token: fresh, resumed: !!resumed });
+    // `worldSeed` rides the welcome for `net/party/local.mjs`'s reason — the TV mounts its
+    // night-long mansion on the first paint, which happens before the first `state` arrives, and a
+    // TV that guesses the seed bakes a different house from the one the phones' maps draw.
+    this.#to(seat, {
+      t: 'welcome', id: seat, token: fresh, resumed: !!resumed,
+      worldSeed: this.game.state.worldSeed,
+    });
 
     // Catch a resuming socket up through the SAME filter, never with a full snapshot —
     // `net/server.mjs` L335-336 is the leak this refuses.
