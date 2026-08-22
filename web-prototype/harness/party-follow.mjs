@@ -23,6 +23,7 @@ import {
   cleanThrottle, followParams, followUrl, followViolations, isFollowBeat,
 } from '../src/party/follow.js';
 import { ACCENTS, SHELLS } from '../src/party/look.js';
+import { STUB_SHOW_PLAN, recapAfterMs } from '../src/party/show.js';
 import { FANOUT_FORBIDDEN } from '../net/party/local.mjs';
 
 let pass = 0, fail = 0;
@@ -142,6 +143,20 @@ console.log('\nparty-follow — the TV follow slot');
   t('F6 · the same inputs give the same url, byte for byte', a === b, a);
   const c = followUrl({ ...SLOT, name: 'Ellie' });
   t('F6b · and a real change does change it — the comparison is not vacuous', c !== a);
+}
+
+// ---- F7 · the run has to be long enough to be a show ----------------------------------------
+//
+// The stub clock was 4800 ms, which was right for a caption and is shorter than the mansion takes
+// to bake on a cold tab — so the beat would flip to recap before the camera it exists to hold had
+// a first frame, and the whole slice would present as "the follow does not work". Measured on a
+// software rasteriser: 22.6-23.7 s to the follow's first rendered frame. Asserted here rather
+// than in `party-night`, because it is this slice's number and this slice's reason.
+{
+  t('F7 · expedition is still immediate — the TV never waits on a host click',
+    (STUB_SHOW_PLAN.find((s) => s.beat === 'expedition')?.ms ?? 1) === 0);
+  t('F7b · and the run is long enough to hold a produced beat, not a caption',
+    recapAfterMs() >= 20000, `${(recapAfterMs() / 1000).toFixed(0)} s`);
 }
 
 console.log(`\nparty-follow: ${pass} passed, ${fail} failed`);
