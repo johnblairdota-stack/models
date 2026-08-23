@@ -1936,16 +1936,11 @@ export default async function view(args = {}) {
    * `src/game/player.js`).
    *
    * Composes only what already exists, per dig face:
-   *   OFF  `panel.setBarrier(false)` — `DamageField.setBarrierEverywhere` via `wall.js`. Clears
-   *        the cyan everywhere so a dig goes through anywhere, without touching depth (whatever
-   *        is already dug stays dug — this is the barrier channel only).
-   *   ON   `room.setDigPlan({ link, seed })` — the exact call `applyExitPlan()` already makes on
-   *        every round reset. It re-arms the barrier on every face first
-   *        (`setInterconnect(null)` fills the channel back to 1), HEALS every dig face's damage
-   *        (`resetDamage()`, inside `setDigPlan`'s free-mode branch), and only then re-derives a
-   *        fresh interconnect region from the seed. That is "reset the interconnect mechanic",
-   *        not only the wall look — a barrier put back behind an already-dug wall would not
-   *        reset anything.
+   *   OFF  `panel.setBarrier(false)` on **interior** dig faces only. Envelope faces keep G=1
+   *        so [B] cannot walk you off the map (PR B, 2026-08-23).
+   *   ON   `room.setDigPlan({ link, seed })` — the exact call `applyExitPlan()` already makes.
+   *        Inter-room G stays 0; envelope G stays 1; damage is healed. The old
+   *        `setInterconnect(null)` fill-to-1 is gone — that was the inter-room cyan.
    *
    * ⚠️ Deliberately does NOT call `resetRound()`/`run.reset()`: those also reshuffle the escape
    * exit/lock and move the player and the hunter, which is the ESCAPE mechanic, not the
@@ -2001,7 +1996,7 @@ export default async function view(args = {}) {
        * real defect (HANDOFF's open list, Phase 1 of the campaign, owner `wall.js`) and it is
        * what made this one so hard to see — but the fix for a lying prompt is to stop it lying.
        */
-      for (const p of room.panels) if (p.spec?.dig) p.setBarrier(false);
+      for (const p of room.panels) if (p.spec?.dig && !p.spec.envelope) p.setBarrier(false);
       let opened = 0;
       for (const p of room.panels) {
         if (!p.spec?.dig) continue;

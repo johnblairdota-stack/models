@@ -1092,6 +1092,12 @@ export class DestructibleWall {
         width: this.width, height: this.height,
         cell: _cellSpec ? _cellSpec.cell : _dmg?.cell,
         apertures: this.apertures,
+        /**
+         * PR B: interior dig faces open through (G=0). Envelope keeps cyan (G=1).
+         * Packed on `o.damage.barrier` from `room.js`; furniture callers omit it and
+         * keep the constructor default (1).
+         */
+        barrier: _dmg?.barrier ?? _cellSpec?.barrier ?? 1,
       })
       : null;
     /**

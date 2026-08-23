@@ -373,7 +373,7 @@ export async function buildTestRoom(engine, o = {}) {
        * collision, tracing, sight, the shader's threshold — reads that one grid. Undefined here
        * is the stage machine, byte-identical to before.
        */
-      damage: def.free ? { cell: def.cell } : null,
+      damage: def.free ? { cell: def.cell, barrier: def.envelope ? 1 : 0 } : null,
       bandThickness: def.bandT ?? undefined,
       // ⚠️ AND SO IS `def.dig`. Undefined here is byte-identical to the pre-dig build: the panel
       // gets `STAGE_DEFS` from `WallState`'s own default, exactly as before.
@@ -692,7 +692,11 @@ export async function buildTestRoom(engine, o = {}) {
        * work you already paid for becomes a route. The segmented build did the same thing with
        * 36 stage-table swaps and 36 collider drops; this is a `fill(0)`.
        */
-      if (p.spec.free) { p.setBarrier(false); continue; }
+      if (p.spec.free) {
+        if (p.spec.envelope) continue;   // map-edge cyan never lifts
+        p.setBarrier(false);
+        continue;
+      }
       _setDefs(p, DIG_OPEN_DEFS);
       _setBrick(_col(p.spec), false);
     }
@@ -718,6 +722,7 @@ export async function buildTestRoom(engine, o = {}) {
    */
   function hunterBreach(p) {
     if (!dig.on || !dig.hunterCrossing || !p?.spec?.dig) return false;
+    if (p.spec.envelope) return false;   // hunter does not leave the map either
     if (dig.breached.has(_col(p.spec))) return false;
     /**
      * ⚠️ **IT TAKES THE BAY NEXT DOOR TOO, AND THAT IS NOT DECORATION — IT IS THE ONLY WAY THE
@@ -787,10 +792,17 @@ export async function buildTestRoom(engine, o = {}) {
      * `_couple()` mirrors the same way and for the same reason.
      */
     if (FREE) {
-      const regions = plan.free ?? chooseFreeInterconnect(plan.seed ?? '');
+      /**
+       * 🚨 **PR B — CYAN IS A PROPERTY OF THE EDGE KIND, NOT A SEARCH ON EVERY FACE.**
+       *
+       * Inter-room faces start and stay at G=0: digging through opens the next room.
+       * Envelope faces start and stay at G=1: smash the white, hit impassable cyan.
+       * `setInterconnect` fills G=1 then punches a blob — that would put cyan BACK on
+       * every interior wall. It is not called here.
+       */
       for (const p of digSegments()) {
         p.resetDamage();
-        p.setInterconnect(null);
+        p.setBarrier(!!p.spec.envelope);
       }
       /**
        * 🖼️ **AND THE DRESSING COMES BACK WITH THE WALL.** `resetDamage()` zeroes the grid; the
@@ -800,20 +812,12 @@ export async function buildTestRoom(engine, o = {}) {
        * `tracked().hide()` records for the brick twenty lines up, and the same failure mode.
        */
       skin?.reset();
-      for (const [edgeId, r] of regions) {
-        if (!r) continue;
-        const a = panelById.get(r.panel);
-        if (!a) continue;
-        a.setInterconnect(r.u, r.v, r.ru, r.rv, r.salt);
-        // ⚠️ COPIED, NOT RECOMPUTED — see `DamageField.mirrorBarrierFrom`. Rasterising the same
-        // blob at `1 - u` put the two faces 1-2 cells apart and that is a passage on one side
-        // and masonry on the other.
-        if (a.twin?.field) { a.twin.field.mirrorBarrierFrom(a.field); a.twin._solidBoxes = null; a.twin._sightBoxes = null; }
-      }
-      dig.link = new Set([...regions.values()].flatMap((r) => {
-        const a = panelById.get(r.panel);
-        return a ? [a.id, ...(a.twin ? [a.twin.id] : [])] : [];
-      }));
+      /**
+       * Interconnect regions are still derived so a census / old unlock ablation can
+       * read them, but they do not write G. Travel between rooms is "dig through".
+       */
+      const regions = plan.free ?? chooseFreeInterconnect(plan.seed ?? '');
+      dig.link = new Set();
       dig.free_regions = regions;
       dig.opened.clear();
       dig.unlockedAt = null;

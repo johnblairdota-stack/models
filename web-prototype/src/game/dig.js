@@ -1,7 +1,9 @@
 import { STAGE_DEFS } from '../destruction/wall.js';
 import { seedRand } from './run.js';
-import { WALL_T, GEN } from './spaces.js';
+import { WALL_T, GEN, SPACES, CONNECTORS } from './spaces.js';
+import { CONNECTOR_W, CONNECTOR_H } from './connectors.js';
 import { CELL } from '../destruction/damagefield.js';
+import { leftoverRuns, isOutsideId } from './dig-policy.js';
 
 /**
  * DIGGING — a shared wall segmented into panels, a depth falloff, and the brick barrier.
@@ -10,6 +12,12 @@ import { CELL } from '../destruction/damagefield.js';
  * into the next room... each robot has to destroy the walls 'dig' into the other rooms. They can
  * destroy big chunks initially but it becomes less and less over time and then where the rooms
  * interconnect there is a solid visible barrier that robots can't enter."*
+ *
+ * 🚨 **PR B, John 2026-08-23 — THAT INTER-ROOM CYAN IS RETIRED.** Locked rules 5–7:
+ * every wall stays smashable; **map-envelope** faces keep the impassable G-channel cyan so
+ * nobody leaves the house; **room–room** faces have **no cyan** and open through. The
+ * interconnect search no longer gates travel between rooms. `dig-policy.js` is the
+ * THREE-free statement of that; this file emits the edges.
  *
  * ⚠️ **EVERYTHING IN THIS FILE IS BEHIND `?dig=1` AND DEFAULT OFF.** `room.js` is the only
  * importer and it reads the flag once; with the flag off not one row here reaches the build, no
@@ -869,6 +877,164 @@ export function genDigTable() {
 }
 
 /**
+ * 🧱 **MAP-ENVELOPE DIG EDGES — one-sided, G-channel cyan, never a twin.**
+ *
+ * Inventory (verified on this tree, 2026-08-23): live cyan used to sit only on *interior*
+ * shared runs (`DIG_EDGES` / `generatedDigEdges`). The envelope was solid architecture —
+ * you could not leave because there was **no dig face**, not because of cyan. John's lock
+ * is the other way around: smash the outer wall, then hit impassable cyan.
+ *
+ * Leftover of each space's four sides after neighbour overlaps are subtracted. Same
+ * doorway / straddle / jamb walk as an interior generated run, so an exit site becomes a
+ * hole in the face rather than a slab across the only way out.
+ */
+function envelopeSideSpecs(A) {
+  return [
+    {
+      normal: 'x', at: A.x0 - WALL_T / 2, a: A.id, b: 'outside', lo: A.z0, hi: A.z1,
+      overlap: (B) => (Math.abs((A.x0 - WALL_T) - B.x1) < 1e-6
+        ? [Math.max(A.z0, B.z0), Math.min(A.z1, B.z1)] : null),
+    },
+    {
+      normal: 'x', at: A.x1 + WALL_T / 2, a: 'outside', b: A.id, lo: A.z0, hi: A.z1,
+      overlap: (B) => (Math.abs((B.x0 - WALL_T) - A.x1) < 1e-6
+        ? [Math.max(A.z0, B.z0), Math.min(A.z1, B.z1)] : null),
+    },
+    {
+      normal: 'z', at: A.z0 - WALL_T / 2, a: A.id, b: 'outside', lo: A.x0, hi: A.x1,
+      overlap: (B) => (Math.abs((A.z0 - WALL_T) - B.z1) < 1e-6
+        ? [Math.max(A.x0, B.x0), Math.min(A.x1, B.x1)] : null),
+    },
+    {
+      normal: 'z', at: A.z1 + WALL_T / 2, a: 'outside', b: A.id, lo: A.x0, hi: A.x1,
+      overlap: (B) => (Math.abs((B.z0 - WALL_T) - A.z1) < 1e-6
+        ? [Math.max(A.x0, B.x0), Math.min(A.x1, B.x1)] : null),
+    },
+  ];
+}
+
+/**
+ * Connectors on this wall LINE. Envelope exits often omit `w`/`h` (they default in
+ * `room.js` `aperture()`); a missing size here would let the slab span the door.
+ *
+ * ⚠️ **IN-BAND, NOT EXACT-AT.** Generated exit rows sit on the inner face (`rect.x0`),
+ * not the band centre. A 1e-6 match would miss every one of them.
+ */
+function envelopeCutsOn(connectors, normal, at, aId, bId) {
+  const out = [];
+  for (const c of connectors ?? []) {
+    if (!(c.a === aId || c.b === aId || c.a === bId || c.b === bId)) continue;
+    const coord = normal === 'x' ? c.x : c.z;
+    if (!Number.isFinite(coord) || Math.abs(coord - at) > WALL_T / 2 + 1e-6) continue;
+    let w = c.w, h = c.h;
+    if (!(w > 0) || !(h > 0)) {
+      if (!isOutsideId(c.a) && !isOutsideId(c.b)) continue;
+      w = w > 0 ? w : CONNECTOR_W;
+      h = h > 0 ? h : CONNECTOR_H;
+    }
+    out.push({ id: c.id, at: normal === 'x' ? c.z : c.x, w, h, sill: 0 });
+  }
+  return out.sort((p, q) => p.at - q.at);
+}
+
+/**
+ * The generated-interior commit (straddle / jamb / cap-split) reused for envelope leftovers
+ * so the two kinds of edge cannot drift on what "too short" or "a doorway eats the run" means.
+ */
+function commitDigRun(c, cuts, stats, edges, extra = {}) {
+  let s0 = c.lo, s1 = c.hi;
+  for (let pass = 0; pass < 4; pass++) {
+    let moved = false;
+    for (const d of cuts) {
+      const a0 = d.at - d.w / 2, a1 = d.at + d.w / 2;
+      if (a1 <= s0 + GEN_CUT_TOL || a0 >= s1 - GEN_CUT_TOL) continue;
+      if (a0 >= s0 - GEN_CUT_TOL && a1 <= s1 + GEN_CUT_TOL) continue;
+      if (a0 < s0 + GEN_CUT_TOL) { s0 = Math.max(s0, a1); } else { s1 = Math.min(s1, a0); }
+      stats.straddle++; moved = true;
+    }
+    if (!moved) break;
+  }
+  if (s1 - s0 < GEN_L_DIG) { stats.tooShort++; return; }
+  const ds = [];
+  for (const d of cuts) {
+    const a0 = d.at - d.w / 2, a1 = d.at + d.w / 2;
+    if (a1 <= s0 + GEN_CUT_TOL || a0 >= s1 - GEN_CUT_TOL) continue;
+    const q0 = Math.max(a0, s0), q1 = Math.min(a1, s1);
+    if (q0 !== a0 || q1 !== a1) stats.clamped++;
+    ds.push({ ...d, at: (q0 + q1) / 2, w: q1 - q0 });
+  }
+  while (ds.length && (ds[0].at - ds[0].w / 2) - s0 < GEN_JAMB_MIN) {
+    s0 = ds[0].at + ds[0].w / 2; ds.shift(); stats.trimmed++;
+  }
+  while (ds.length && s1 - (ds[ds.length - 1].at + ds[ds.length - 1].w / 2) < GEN_JAMB_MIN) {
+    s1 = ds[ds.length - 1].at - ds[ds.length - 1].w / 2; ds.pop(); stats.trimmed++;
+  }
+  if (s1 - s0 < GEN_L_DIG) { stats.tooShort++; return; }
+  for (let k = 1; k < ds.length; k++) {
+    if ((ds[k].at - ds[k].w / 2) - (ds[k - 1].at + ds[k - 1].w / 2) < GEN_JAMB_MIN) stats.thinPier++;
+  }
+  for (const d of ds) { stats.doorways++; if (d.h > DIG_H + 1e-6) stats.overTall++; }
+  const spans = genSplitSpans(s0, s1, ds);
+  if (spans.length > 1) stats.capSplit++;
+  for (const [a, b] of spans) {
+    if (b - a > stats.longest) stats.longest = b - a;
+    if (b - a > GEN_SLAB_MAX + 1e-6) stats.overCap++;
+  }
+  edges.push({
+    id: extra.id ?? `g${edges.length}`,
+    normal: c.normal, at: c.at, a: c.a, b: c.b,
+    spans, doorways: ds.length ? ds : undefined,
+    ...extra.flags,
+  });
+}
+
+function envelopeEdgesFromSpaces(spaces, connectors) {
+  const stats = {
+    runs: 0, edges: 0, doorways: 0, tooShort: 0, trimmed: 0, straddle: 0, clamped: 0,
+    capSplit: 0, overCap: 0, thinPier: 0, overTall: 0, longest: 0,
+  };
+  if (!spaces?.length) return { edges: [], stats };
+  const cand = [];
+  for (const A of spaces) {
+    for (const side of envelopeSideSpecs(A)) {
+      const occupied = [];
+      for (const B of spaces) {
+        if (B === A) continue;
+        const ov = side.overlap(B);
+        if (ov && ov[1] - ov[0] > 1e-6) occupied.push(ov);
+      }
+      for (const [lo, hi] of leftoverRuns(side.lo, side.hi, occupied, 0)) {
+        if (hi - lo > 1e-6) {
+          cand.push({
+            normal: side.normal, at: side.at, a: side.a, b: side.b, lo, hi,
+          });
+        }
+      }
+    }
+  }
+  cand.sort((p, q) => (p.normal < q.normal ? -1 : p.normal > q.normal ? 1 : 0)
+    || (p.at - q.at) || (p.lo - q.lo) || (p.a < q.a ? -1 : p.a > q.a ? 1 : 0));
+
+  const edges = [];
+  for (const c of cand) {
+    stats.runs++;
+    const cuts = envelopeCutsOn(connectors, c.normal, c.at, c.a, c.b);
+    commitDigRun(c, cuts, stats, edges, {
+      id: `env${edges.length}`,
+      flags: { envelope: true },
+    });
+  }
+  stats.edges = edges.length;
+  return { edges, stats };
+}
+
+let _envTable = null;
+export function envDigTable() {
+  if (!_envTable) _envTable = envelopeEdgesFromSpaces(SPACES, CONNECTORS);
+  return _envTable;
+}
+
+/**
  * ⚠️ **THE ONE SWITCH, AND EVERY CONSUMER'S DEFAULT ARGUMENT GOES THROUGH IT.** `room.js` calls
  * `freePanels()` and `chooseFreeInterconnect(seed)` with no table, `views/game.js` calls
  * `interconnectIds(seed)`, and `harness/scenarios/*` import `DIG_EDGES` directly. Routing every
@@ -876,10 +1042,15 @@ export function genDigTable() {
  * about which arm they are on — the failure `room.js`'s own `?dig=` note calls "a toggle that
  * reverts less than it claims", found three times in two days.
  *
- * ✅ With the flag off this returns **the same array object** `DIG_EDGES` always was.
+ * ✅ Interior table is still **the same array object** it always was (`DIG_EDGES` / slab /
+ * generated). Envelope rows are **appended**, never inserted — interior ids do not move.
  */
-export function digEdges() {
+export function interiorEdges() {
   return GEN ? genDigTable().edges : (SLAB ? SLAB_EDGES : DIG_EDGES);
+}
+
+export function digEdges() {
+  return [...interiorEdges(), ...envDigTable().edges];
 }
 
 /** What a probe asserts the build on, rather than on the URL it typed. */
@@ -919,14 +1090,18 @@ export function digPanels(edges = digEdges()) {
   for (const e of edges) {
     const xAxis = e.normal === 'x';
     let i = 0;
+    const sides = e.envelope
+      ? (isOutsideId(e.a) ? ['b'] : ['a'])
+      : ['a', 'b'];
     for (const [lo, hi] of e.spans) {
       for (const u of segmentCentres(lo, hi)) {
-        for (const side of ['a', 'b']) {
+        for (const side of sides) {
           const sign = side === 'a' ? 1 : -1;             // `a` sits on the greater side of `at`
           const n = e.at + sign * HALF_BAND;              // that room's inner wall face
           out.push({
             id: `d.${e.id}.${i}.${side}`,
             dig: true, edge: e.id, seg: i, side,
+            envelope: !!e.envelope,
             state: 'breachable',
             a: side === 'a' ? e.a : e.b,
             b: side === 'a' ? e.b : e.a,
@@ -968,9 +1143,12 @@ export function barrierSlabs(edges = digEdges()) {
   for (const e of edges) {
     const xAxis = e.normal === 'x';
     let i = 0;
+    const sides = e.envelope
+      ? (isOutsideId(e.a) ? ['b'] : ['a'])
+      : ['a', 'b'];
     for (const [lo, hi] of e.spans) {
       for (const u of segmentCentres(lo, hi)) {
-        for (const side of ['a', 'b']) {
+        for (const side of sides) {
           const sign = side === 'a' ? 1 : -1;
           const c = e.at + sign * (half / 2);             // centre of that room's half-slab
           out.push({
@@ -1039,6 +1217,7 @@ export function segmentCount(edge) {
 export function chooseInterconnect(seed, edges = digEdges()) {
   const out = new Map();
   for (const e of edges) {
+    if (e.envelope) continue;
     const n = segmentCount(e);
     if (n < 1) continue;
     out.set(e.id, Math.min(n - 1, Math.floor(seedRand(seed, `dig.link|${e.id}`) * n)));
@@ -1171,13 +1350,16 @@ export function freePanels(edges = digEdges()) {
   for (const e of edges) {
     const xAxis = e.normal === 'x';
     let i = 0;
+    const sides = e.envelope
+      ? (isOutsideId(e.a) ? ['b'] : ['a'])
+      : ['a', 'b'];
     for (const [lo, hi] of e.spans) {
       const w = hi - lo;
       const u = (lo + hi) / 2;
       // a span too short to dig a body through is not a dig site; skip it rather than build a
       // face nobody can ever use, which would read as a wall that refuses to break
       if (w >= 1.2) {
-        for (const side of ['a', 'b']) {
+        for (const side of sides) {
           const sign = side === 'a' ? 1 : -1;
           const n = e.at + sign * (WALL_T / 2);
           /**
@@ -1189,6 +1371,7 @@ export function freePanels(edges = digEdges()) {
           out.push({
             id: `f.${e.id}.${i}.${side}`,
             dig: true, free: true, edge: e.id, seg: i, side,
+            envelope: !!e.envelope,
             state: 'breachable',
             a: side === 'a' ? e.a : e.b,
             b: side === 'a' ? e.b : e.a,
@@ -1333,8 +1516,9 @@ export function chooseFreeInterconnect(seed, edges = digEdges()) {
    */
   const byRoom = new Map();
   for (const e of edges) {
+    if (e.envelope) continue;            // never punch a hole in the map edge
     for (const r of [e.a, e.b]) {
-      if (!r) continue;
+      if (isOutsideId(r)) continue;
       if (!byRoom.has(r)) byRoom.set(r, []);
       byRoom.get(r).push(e);
     }
@@ -1345,7 +1529,8 @@ export function chooseFreeInterconnect(seed, edges = digEdges()) {
   const rooms = [...byRoom.keys()].sort();
   const used = new Set();
   for (const room of rooms) {
-    const all = byRoom.get(room).flatMap((e) => freePanels([e])).filter((p) => p.side === 'a');
+    const all = byRoom.get(room).flatMap((e) => freePanels([e]))
+      .filter((p) => p.side === 'a' && !p.envelope);
     if (!all.length) continue;
     // prefer a wall no other room has already claimed, so two rooms do not share one soft spot;
     // fall back to the full set rather than leaving a room with no way out at all.
@@ -1432,6 +1617,7 @@ export function chooseFreeInterconnect(seed, edges = digEdges()) {
 {
   for (const e of digEdges()) {
     if (!e.doorways?.length) continue;
+    // envelope faces have one side — the pair-invariant below does not apply
     for (const d of e.doorways) {
       if (!(d.w > 0) || !(d.h > 0)) throw new Error(`[dig] doorway on "${e.id}" has no size`);
       const a0 = d.at - d.w / 2, a1 = d.at + d.w / 2;
@@ -1451,6 +1637,8 @@ export function chooseFreeInterconnect(seed, edges = digEdges()) {
         }
       }
       // the pair invariant, at build time: `b`'s rects must be `a`'s mirrored, exactly
+      // envelope faces have no twin — there is nothing to disagree with
+      if (e.envelope) continue;
       const mirror = apertureRects(e, lo, hi, 'b').map((r) => r).sort((p, q) => p.u0 - q.u0);
       for (let k = 0; k < sorted.length; k++) {
         const m = mirror[mirror.length - 1 - k];

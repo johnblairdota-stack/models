@@ -19,6 +19,35 @@ inside it.
 
 ---
 
+## 0. PR B — cyan is the map edge, not the room wall (John 2026-08-23) ✅
+
+Locked against the live inventory (which was **correct** and is now history):
+
+5. All walls are destructible.
+6. Walls on the **edge of the map** keep the **cyan barrier** so players cannot leave.
+7. Walls **between rooms** have **no cyan** — dig through wall to wall and reach any room.
+
+**Before:** G=1 on every interior dig face. The interconnect blob was the only G=0 region.
+The envelope was solid architecture — you could not leave because there was no dig face.
+
+**After:**
+
+| kind | G channel | smash | walk through |
+|---|---|---|---|
+| inter-room (`DIG_EDGES` / `generatedDigEdges`) | 0 | yes | yes, once white is gone |
+| map envelope (`envDigTable`) | 1 | yes | no — cyan stays |
+
+The interconnect search no longer gates room-to-room travel. `setInterconnect` still exists
+for the smash bed and old harnesses; `setDigPlan` does not write it onto G. `[B]` and
+`unlockBarrier` never lift envelope cyan.
+
+Verify: `node harness/_cy1-edge.mjs` and party-warm W16. Play: smash a shared wall, walk
+through; smash an outer wall, hit cyan.
+
+Map-designer "cyan" (short nodig < 1.20 m) is still a different mark. Do not conflate them.
+
+---
+
 ## 1. The shape it creates
 
 **Act 1 — sealed.** Five rooms, every door chained and decorative. You are in a box with a monster

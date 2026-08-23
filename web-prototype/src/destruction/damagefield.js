@@ -953,8 +953,15 @@ export class DamageField {
 
     /** THE TRUTH. Depth 0..1 per cell. Written only by `_add`. */
     this.depth = new Float32Array(n);
-    /** 1 where something impassable stands behind this cell. Written only by `setBarrier`. */
-    this.barrier = new Uint8Array(n).fill(1);
+    /**
+     * 1 where something impassable stands behind this cell. Written only by `setBarrier`.
+     *
+     * 🚨 **PR B (2026-08-23): DEFAULT IS STILL 1.** Furniture smash fields and every existing
+     * headless fixture keep G=1 unless they pass `barrier: 0`. Inter-room dig faces pass 0;
+     * envelope faces pass 1. Omitting the option must not silently open a furniture field.
+     */
+    const barrierOn = o.barrier !== 0 && o.barrier !== false;
+    this.barrier = new Uint8Array(n).fill(barrierOn ? 1 : 0);
     /**
      * 🚪 **1 WHERE THERE IS NO WALL AND NEVER WAS — A DOORWAY, A WINDOW, AN APERTURE.** `null`
      * until `setApertures()` is called, which is every face on every arm but the slab's. See
@@ -971,7 +978,9 @@ export class DamageField {
      * times finer than one blow's smallest increment.
      */
     this.data = new Uint8Array(n * 4);
-    for (let i = 0; i < n; i++) this.data[i * 4 + 1] = 255;   // barrier everywhere, initially
+    if (barrierOn) {
+      for (let i = 0; i < n; i++) this.data[i * 4 + 1] = 255;   // barrier everywhere, initially
+    }
     /**
      * 🚨 **THE B CHANNEL: THE SAME DEPTH, SMOOTHED, AND IT EXISTS ONLY FOR THE RENDERER.**
      *
