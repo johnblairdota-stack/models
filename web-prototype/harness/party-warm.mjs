@@ -54,7 +54,7 @@ import {
   footprintRect, openingFootprint, overlapsOpening, portalKeepout, portalKeepouts,
 } from '../src/game/portal-clearance.js';
 import { generatedTables } from '../src/world/genplan.js';
-import { RECAP_BACKSTOP_MS, missionEndsRun, recapAfterMs } from '../src/party/show.js';
+import { RECAP_BACKSTOP_MS, missionEndsRun, recapAfterMs, RUN_END } from '../src/party/show.js';
 import { ROOMS, hunterVisibleToGuide } from '../src/party/coverage.js';
 import { buildPlan } from './genspike.mjs';
 import { DROP_RATE, GRADES, STALE_MAX, gradeFor, intelFor, intelLine } from '../src/party/intel.js';
@@ -1436,6 +1436,27 @@ console.log('\nparty-warm — the lobby-warm night');
     /want\.cool\.pos\.set\(p\.x/.test(bedSrc)
     && (bedSrc.match(/new THREE\.PointLight/g) || []).length === 4);
 }
+
+
+// ---- W24 — RECAP OUTCOME IS A SERVER FACT (SMASHED / TIME; CAUGHT reserved) ----------------
+{
+  t('W24 · RUN_END names the three honest words and only those',
+    RUN_END.SMASHED === 'SMASHED' && RUN_END.CAUGHT === 'CAUGHT' && RUN_END.TIME === 'TIME'
+    && Object.keys(RUN_END).length === 3);
+  t('W24a · the show fanout may carry `end` — otherwise a recap reload loses the word',
+    FANOUT_KEYS.show.includes('end') && FANOUT_KEYS.show.includes('beat'));
+  const localSrc = await readFile(new URL('../net/party/local.mjs', import.meta.url), 'utf8');
+  t('W24b · mission done posts SMASHED; the backstop posts TIME',
+    /setShow\(room, 'recap', RUN_END\.SMASHED\)/.test(localSrc)
+    && /setShow\(room, 'recap', RUN_END\.TIME\)/.test(localSrc));
+  t('W24c · nothing posts CAUGHT yet — hunter take is still the next slice',
+    !/RUN_END\.CAUGHT/.test(localSrc));
+  const phoneSrc = await readFile(new URL('../src/views/party-phone.js', import.meta.url), 'utf8');
+  t('W24d · the phone paints the outcome word at recap, not a bare Phones-down heading',
+    /c\.runEnd \|\| 'TIME'/.test(phoneSrc)
+    && /THE OUTCOME WORD IS THE ONE FACT/.test(phoneSrc));
+}
+
 
 console.log(`\nparty-warm: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -46,6 +46,9 @@ export default async function partyHost({ params }) {
 
   const ui = {
     beat: 'lobby',
+    /** SMASHED / TIME from the server's `show` message — how the last live run ended. Never
+     *  guessed on the TV; see `recapBoard` and `RUN_END` in `src/party/show.js`. */
+    runEnd: null,
     err: '',
     locked: false,
     /** The mansion's own progress, straight off the slot. `''` until the iframe says anything. */
@@ -90,7 +93,9 @@ export default async function partyHost({ params }) {
     url: wsUrl,
     onMessage: (m) => {
       if (m.t === 'welcome') sessionStorage.setItem(tokenKey(code, 'tv'), m.token);
-      if (m.t === 'show' && m.beat) ui.beat = m.beat;
+      // `end` rides with `beat` and is cleared whenever a `show` message omits it (an expedition
+      // start never carries one) — the TV must not keep showing SMASHED/TIME from a past run.
+      if (m.t === 'show' && m.beat) { ui.beat = m.beat; ui.runEnd = m.end || null; }
       if (m.t === 'full') ui.err = 'The TV seat is taken. Close the other host tab, or pick a new room code.';
       /*
        * 🕹️ THE RUNNER'S THUMBS, ON THEIR WAY TO THE BODY. The server relays these to the TV alone
@@ -456,7 +461,7 @@ export default async function partyHost({ params }) {
         <button class="btn ghost" id="to-run">Watch the run</button>
       </div>`;
     } else if (show === 'recap') {
-      body += recapBoard(recap, names);
+      body += recapBoard(recap, names, ui.runEnd);
       body += `<div class="actions"><button class="btn ghost" id="to-cast">Ballots</button>
         <button class="btn ghost" id="to-run">Run</button></div>`;
       if (episode === 1 || phase === 'DEBRIEF' || phase === 'VERDICT') {
@@ -731,11 +736,18 @@ function ballotBoard(votes, names, pair, recap, episode) {
   return `${hero}<div class="ballot${huge ? ' huge' : ''}">${rows || '<p class="hint">No ballots yet — phones pick a runner and a guide.</p>'}</div>`;
 }
 
-function recapBoard(recap, names) {
+function recapBoard(recap, names, runEnd) {
   const taken = recap.taken?.length
     ? recap.taken.map((t) => joinedName(names, t.id, 'The runner')).join(', ')
     : 'CAME BACK';
+  // SMASHED/TIME straight off the server (`RUN_END` in `src/party/show.js`). `runEnd` is null
+  // until the room says otherwise, so a stale or missing message just omits the fact rather than
+  // guessing — CAUGHT is not wired yet and must never appear here on its own.
+  const outcome = runEnd
+    ? `<div class="fact"><div class="k">Outcome</div><div class="v ${runEnd === 'SMASHED' ? 'ok' : 'bad'}">${esc(runEnd)}</div></div>`
+    : '';
   return `<div class="recap">
+    ${outcome}
     <div class="fact"><div class="k">Camera</div><div class="v ${recap.cameraLit ? 'ok' : 'bad'}">${recap.cameraLit ? 'LIT' : 'STAYED DARK'}</div></div>
     <div class="fact"><div class="k">Runner</div><div class="v ${recap.taken?.length ? 'bad' : 'ok'}">${esc(taken)}</div></div>
     <div class="fact"><div class="k">Alarms</div><div class="v">${esc(String(recap.alarmCount ?? 0))}</div></div>

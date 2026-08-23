@@ -63,3 +63,13 @@ export const RUN_ENDING_MISSION_PHASES = ['done'];
 export function missionEndsRun(phase) {
   return RUN_ENDING_MISSION_PHASES.includes(String(phase || ''));
 }
+
+/**
+ * The recap outcome word — a fact about how the LIVE RUN ended, separate from `SHOW_BEATS`.
+ *
+ * CAUGHT is reserved and not yet set anywhere: nothing in this codebase ends a live run when the
+ * hunter catches the runner (`src/game/follow-bed.js` still calls `HunterAI` — the body, the
+ * chase, the take — "the next slice"). Wiring CAUGHT in before that exists would be a chrome word
+ * with no path to it, which is the same kind of lie this slice exists to remove.
+ */
+export const RUN_END = { SMASHED: 'SMASHED', CAUGHT: 'CAUGHT', TIME: 'TIME' };
