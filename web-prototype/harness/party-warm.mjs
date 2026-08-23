@@ -45,7 +45,12 @@ import {
   CATALOG_URL_PREFIX, spaceKind, placementsClearOfOpenings, walkHalf,
 } from '../src/game/furn-layout.js';
 import { FURN_SMASH_ASSETS } from '../src/game/furn-catalog.js';
-import { blockedByOpenings, overlapsOpening, openingFootprint } from '../src/game/portal-clearance.js';
+import {
+  PORTAL_SIDE_PAD, blockedBy, blockedByOpenings, clearOfPortals,
+  footprintRect, openingFootprint, overlapsOpening, portalKeepout, portalKeepouts,
+} from '../src/game/portal-clearance.js';
+import { generatedTables } from '../src/world/genplan.js';
+import { RECAP_BACKSTOP_MS, missionEndsRun, recapAfterMs } from '../src/party/show.js';
 import { ROOMS, hunterVisibleToGuide } from '../src/party/coverage.js';
 import { buildPlan } from './genspike.mjs';
 import { DROP_RATE, GRADES, STALE_MAX, gradeFor, intelFor, intelLine } from '../src/party/intel.js';
@@ -1019,6 +1024,165 @@ console.log('\nparty-warm — the lobby-warm night');
   t('W17c · the chrome around it gets out of the way on the run beat, or 90% does not fit',
     /\.night\.on-run \.night-main \{[^}]*overflow:hidden/.test(skin)
     && /\.night\.on-run \.night-top \{/.test(skin));
+}
+
+// ---- W18 · A DOORWAY IS NOT A PLACE TO PUT A TABLE ------------------------------------------
+//
+// John, playtesting `7838abb`: *"I couldn't walk into the gallery, a table was blocking the
+// doorway."* The gallery is the MISSION room, so a blocked door is not a scruffy room — it is a
+// night nobody can finish.
+//
+// 🚨 EVERY CLAIM HERE CARRIES ITS CONTROL, and the controls are the point: a clearance rule that
+// rejected nothing would satisfy "no placement blocks a door" completely and perfectly. So the
+// pre-fix table is run on the same 24 world seeds and has to come back DIRTY.
+{
+  const specOf = new Map(FURN_SMASH_ASSETS.map((a) => [a.id, a]));
+  const walkOf = (p) => walkHalf(specOf.get(p.catalogId));
+  const canBlock = (p) => walkOf(p) > 0;
+
+  /*
+   * ⚠️ THE AXIS. `genplan.js` writes `axis: widthAxisOf(run.axis)` and `room.js` reads it back as
+   * `axis === 'x' ? normal +Z : normal +X`, so `axis: 'x'` means the opening SPANS x. Read the
+   * other way round the keepout is a correct rectangle rotated ninety degrees — it still rejects
+   * placements, just never the ones in the doorway, and every test below would still pass.
+   */
+  const kx = portalKeepout({ id: 'k', x: 0, z: 0, w: 1.9, axis: 'x' });
+  const kz = portalKeepout({ id: 'k', x: 0, z: 0, w: 1.9, axis: 'z' });
+  const span = (k) => [+(k.x1 - k.x0).toFixed(3), +(k.z1 - k.z0).toFixed(3)];
+  const [kxW, kxD] = span(kx);
+  const [kzW, kzD] = span(kz);
+  t('W18 · the DOOR\'S OWN WIDTH lands on the axis it spans, and the stride depth across it',
+    kxW === +(1.9 + 2 * PORTAL_SIDE_PAD).toFixed(3) && kzD === kxW && kxD === kzW && kxW !== kxD,
+    `axis x -> ${kxW} x ${kxD} m · axis z -> ${kzW} x ${kzD} m`);
+  t('W18a · and it is wider than the opening, because a body does not arrive square-on',
+    kxW > 1.9, `${kxW} m of clear for a 1.90 m door`);
+
+  let placedTotal = 0, blockedBefore = 0, blockedAfter = 0, droppedTotal = 0;
+  let strayed = 0, movedMax = 0;
+  for (let ws = 0; ws < 24; ws++) {
+    const tables = generatedTables(pickPlanSeed(ws).seed, PLAN_OPTS);
+    const bySpace = new Map(tables.spaces.map((s) => [s.id, s]));
+    const before = catalogPlacements(tables.spaces);
+    const after = catalogPlacements(tables.spaces, { portals: tables.portals });
+
+    placedTotal += before.length;
+    droppedTotal += before.length - after.length;
+    blockedBefore += before.filter((p) => canBlock(p)
+      && blockedByOpenings(p.x, p.z, walkOf(p), walkOf(p), tables.portals)).length;
+    blockedAfter += after.filter((p) => canBlock(p)
+      && blockedByOpenings(p.x, p.z, walkOf(p), walkOf(p), tables.portals)).length;
+
+    // A prop cleared off a door must still be in its own room — otherwise the rule has
+    // traded a blocked door for a marooned piano. Walk footprint, not the smash AABB:
+    // a thin rug's maxSpan is not the thing a body walks into.
+    const wasAt = new Map(before.map((p) => [p.id, p]));
+    for (const p of after) {
+      const sp = bySpace.get(p.spaceId);
+      const half = walkOf(p);
+      const r = footprintRect(p.x, p.z, half * 2, half * 2, p.rotY);
+      if (sp && (r.x0 < sp.x0 || r.x1 > sp.x1 || r.z0 < sp.z0 || r.z1 > sp.z1)) strayed++;
+      const was = wasAt.get(p.id);
+      if (was) movedMax = Math.max(movedMax, Math.hypot(p.x - was.x, p.z - was.z));
+    }
+  }
+  t('W18b · NO catalog placement stands in a doorway, on any of 24 world seeds',
+    blockedAfter === 0, `${blockedAfter} of ${placedTotal} placements`);
+  t('W18c control · the table that shipped really did block doorways — the rule rejects something',
+    blockedBefore > 0,
+    `${blockedBefore} of ${placedTotal} blocked before the fix, ${droppedTotal} dropped rather than nudged`);
+  t('W18d · a cleared prop is still inside its own room',
+    strayed === 0, `${strayed} strayed · worst shift ${movedMax.toFixed(2)} m`);
+
+  /*
+   * 🖼️ **THE PROP JOHN ACTUALLY WALKED INTO**, asserted by its own formula rather than by a class
+   * of props. `furn-dress.js` `dressGallery` puts a 1.35 x 0.44 console at `x: sp.cx, z: sp.z1 -
+   * 0.52` — the middle of a long wall — and `genplan.js` `pushPortal` cuts a doorway at the middle
+   * of the overlap between two rooms, which on a shared long wall is the same place. Neither file
+   * was wrong on its own; what was missing is that neither knew the other existed.
+   */
+  let galleryBlockedBefore = 0, galleryBlockedAfter = 0, galleryDropped = 0;
+  for (let ws = 0; ws < 24; ws++) {
+    const tables = generatedTables(pickPlanSeed(ws).seed, PLAN_OPTS);
+    const gallery = tables.spaces.find((s) => s.roomType === MISSION_ROOM);
+    if (!gallery) continue;
+    const keepouts = portalKeepouts(tables.portals);
+    const authored = { x: (gallery.x0 + gallery.x1) / 2, z: gallery.z1 - 0.52 };
+    const shape = { w: 1.35, d: 0.44, rotY: Math.PI, baseY: 0 };
+    if (blockedBy(footprintRect(authored.x, authored.z, shape.w, shape.d, shape.rotY), keepouts)) {
+      galleryBlockedBefore++;
+    }
+    const clear = clearOfPortals({ ...authored, ...shape }, keepouts, gallery);
+    if (!clear) { galleryDropped++; continue; }
+    if (blockedBy(footprintRect(clear.x, clear.z, shape.w, shape.d, shape.rotY), keepouts)) {
+      galleryBlockedAfter++;
+    }
+  }
+  t('W18e · the gallery console clears the gallery\'s own doors on every seed',
+    galleryBlockedAfter === 0, `${galleryBlockedAfter} blocked · ${galleryDropped} dropped`);
+  t('W18f control · and the un-nudged placement really did shut the mission room',
+    galleryBlockedBefore > 0, `${galleryBlockedBefore}/24 world seeds had the gallery console on a door`);
+
+  // A fitting hung above head height cannot be in anyone's way, and must not be slid sideways for
+  // a door it floats a clear metre above. Both arms, because "never nudges" and "always nudges"
+  // are equally wrong and the constant is what separates them.
+  const onDoor = portalKeepouts([{ id: 'd', x: 0, z: 0, w: 1.9, axis: 'x' }]);
+  const hung = clearOfPortals({ x: 0, z: 0, w: 1.55, d: 1.55, rotY: 0, baseY: 2.85 }, onDoor);
+  const stood = clearOfPortals({ x: 0, z: 0, w: 1.55, d: 1.55, rotY: 0, baseY: 0 },
+    onDoor, { x0: -12, x1: 12, z0: -12, z1: 12 });
+  t('W18g · a chandelier at 2.85 m is left where it hangs',
+    hung && hung.moved === 0, `moved ${hung?.moved ?? '—'} m`);
+  t('W18h control · and the same footprint standing on the floor is moved off the door',
+    stood && stood.moved > 0.5, `moved ${stood ? stood.moved.toFixed(2) : '—'} m`);
+
+  /*
+   * The rule has to be consulted by the PLACERS, not merely exist. `registerGroup` is the one door
+   * every authored prop in `furn-dress.js` goes through, which is what makes a prop a later slice
+   * adds inherit the clearance instead of having to remember it — the defect here was a placer that
+   * had never been told doorways existed, and a rule restated at each call site is that again.
+   */
+  const dressSrc = await readFile(new URL('../src/game/furn-dress.js', import.meta.url), 'utf8');
+  const layoutSrc = await readFile(new URL('../src/game/furn-layout.js', import.meta.url), 'utf8');
+  t('W18i · registerGroup asks before it places, so every authored prop inherits the rule',
+    /function registerGroup\(room, \{[\s\S]{0,600}?clearOfPortals\(/.test(dressSrc)
+    && /placeCrateStack[\s\S]{0,600}?clearOfPortals\(/.test(dressSrc));
+  t('W18j · and the catalog loader hands the house\'s real doorways to the table',
+    /openingsFromRoom\(room\)/.test(layoutSrc)
+    && /catalogPlacements\(room\.spaces \?\? \[\], openings\)/.test(layoutSrc));
+}
+
+// ---- W19 · SMASHING A BOX IS NOT THE END OF AN EPISODE ---------------------------------------
+//
+// John: *"it randomly goes to the recap screen. I didn't go anywhere or do much. I just hit a
+// box."* Two mechanisms, and only one of them is the one he named:
+//
+//   · the 26 s stub clock in `show.js`, which ended every episode whatever anyone was doing
+//   · `follow-bed.js` `missionTick`, which counted ANY landed swing within 1.9 m of the mission
+//     painting as having broken it — and the gallery is dressed, so there are boxes to smash there
+{
+  t('W19 · the show clock is a backstop, not the beat — minutes, not seconds',
+    recapAfterMs() >= 120000, `${(recapAfterMs() / 1000 / 60).toFixed(1)} min`);
+  t('W19a control · and it is not infinite, so a dead TV cannot strand the room on expedition',
+    Number.isFinite(RECAP_BACKSTOP_MS) && RECAP_BACKSTOP_MS > 0, `${RECAP_BACKSTOP_MS} ms`);
+  t('W19b · only a FINISHED mission ends the run — the painting down AND the runner home',
+    missionEndsRun('done')
+    && !missionEndsRun('return') && !missionEndsRun('seek') && !missionEndsRun('none'),
+    MISSION_PHASES.filter(missionEndsRun).join(',') || 'none');
+
+  const localSrc = await readFile(new URL('../net/party/local.mjs', import.meta.url), 'utf8');
+  t('W19c · the server ends the run off the TV\'s world report, not off a timer',
+    /endRunOnMission\(room, msg\.mission\)/.test(localSrc)
+    && /function endRunOnMission/.test(localSrc));
+
+  /*
+   * 🔨 AND THE HIT IS A HIT. The radius test is gone: the mission painting is now struck by a ray
+   * down the runner's own aim, the same `eye` / `aimDir` pair `player.js` `_resolveSledgeHit` casts
+   * for the wall — so a swing at a crate beside it, facing the other way, does not finish a night.
+   */
+  const bedSrc = await readFile(new URL('../src/game/follow-bed.js', import.meta.url), 'utf8');
+  t('W19d · the painting is broken by a swing AIMED at it, not by one that landed nearby',
+    /function swingHitPainting/.test(bedSrc)
+    && /_paintRay\.set\(runner\.eye, runner\.aimDir\)/.test(bedSrc)
+    && !/d <= 1\.9/.test(bedSrc));
 }
 
 console.log(`\nparty-warm: ${pass} passed, ${fail} failed`);

@@ -22,6 +22,7 @@ import { FurnProp, furnBox, FURN_HP } from '../destruction/furnprop.js';
 import { FurnPart, FurnAssembly, FurnCladding, partBoxWorld } from '../destruction/furn-parts.js';
 import { makeFurnHandlers } from '../destruction/furn-fx.js';
 import { dressCatalogFurniture } from './furn-layout.js';
+import { clearOfPortals, openingsFromRoom, portalKeepouts } from './portal-clearance.js';
 
 /**
  * GeoBin kit dress (urns, candelabra, procedural desks, depot crates, kit cameras).
@@ -43,6 +44,29 @@ export function kitDressEnabled() {
 }
 
 const HIT_H = 1.25; // minimum collider height so a sledge ray from eye height can connect
+
+/**
+ * 🚪 **THE DOORWAYS THIS HOUSE MUST NOT HAVE FURNITURE IN, MEMOISED FOR THE DRESS PASS.**
+ *
+ * Read off `room.portals()` rather than threaded through eight dress functions. Every authored
+ * prop in this file already goes through `registerGroup`, so consulting the rule there covers the
+ * desk, the console, the urn, the crate stack, the pew and the camera in one place — and any prop
+ * a later slice adds gets it for free, which is the property that matters: the defect John played
+ * was a placer that had never been told doorways existed, and a rule that has to be remembered at
+ * each call site is that defect waiting to happen again.
+ *
+ * ⚠️ Computed once per room. `portals()` rebuilds breach edges on every call, and during the dress
+ * pass nothing is broken — so this is the OPEN doorway list, which is exactly what it should be.
+ */
+function keepoutsFor(room) {
+  if (!room) return [];
+  if (!room.__furnPortalKeepouts) {
+    // Same opening list the catalog loader reads (`openingsFromRoom`), so kit
+    // and smash dress refuse the same holes.
+    room.__furnPortalKeepouts = portalKeepouts(openingsFromRoom(room));
+  }
+  return room.__furnPortalKeepouts;
+}
 
 function furnMats(room) {
   const m = room.materials ?? {};
@@ -73,14 +97,31 @@ function bakeProp(fill, materials) {
   return { group, size };
 }
 
+/**
+ * ⚠️ **THE CLEARANCE CHECK LIVES HERE, BEFORE `group.position.set`, AND THE ORDER IS THE POINT.**
+ * A prop nudged after it had been positioned would render in one place and collide in another —
+ * the mesh sits where the author asked and the AABB where the rule allows. One position is
+ * computed and both are built from it.
+ */
 function registerGroup(room, {
   id, spaceId, group, cx, cy = 0, cz, w, d, h, kind, onBreak, onStage, rotY = 0,
   hideBandsOnBattered = null, health = null,
 }) {
-  group.position.set(cx, cy, cz);
-  if (rotY) group.rotation.y = rotY;
   const sp = room.spaces.find((s) => s.id === spaceId);
   if (!sp) return null;
+
+  const clear = clearOfPortals(
+    { x: cx, z: cz, w, d, rotY, baseY: cy },
+    keepoutsFor(room),
+    sp,
+  );
+  // A prop with nowhere in this room that is not a doorway is dropped rather than shoved into a
+  // wall. An empty corner is a worse room; a blocked gallery is an unplayable mission.
+  if (!clear) return null;
+  cx = clear.x; cz = clear.z;
+
+  group.position.set(cx, cy, cz);
+  if (rotY) group.rotation.y = rotY;
   sp.root.add(group);
   const boxH = Math.max(h ?? HIT_H, HIT_H);
   const c = Math.abs(Math.cos(rotY)), s = Math.abs(Math.sin(rotY));
@@ -262,7 +303,7 @@ function dressStudy(sp, room, materials, handlers, rng) {
 }
 
 function dressBallroomExtras(sp, room, materials, handlers, rng) {
-  const { onBreak, onStage, onPartBreak } = handlers;
+  const { onBreak, onStage } = handlers;
   const consoles = [
     { x: sp.x0 + 0.52, z: sp.cz - 3.2, rotY: Math.PI / 2 },
     { x: sp.x1 - 0.52, z: sp.cz + 3.2, rotY: -Math.PI / 2 },
@@ -285,7 +326,43 @@ function dressBallroomExtras(sp, room, materials, handlers, rng) {
   }
 
   // Parted packing-case stack — body vs battens smash differently.
-  const cratePos = clampInRoom(sp, sp.cx - 9.2, sp.cz - 5.4, 2.0);
+  dressBallroomCrate(sp, room, materials, handlers);
+
+  // Corner urns (order dressing skipped when furn is on).
+  const urns = sp.orderPlan?.urns ?? [];
+  let ui = 0;
+  for (const u of urns) {
+    const [ux, uz] = Array.isArray(u) ? u : [u.x, u.z];
+    const { group, size } = bakeProp((bin) => urnOnPedestal(bin, {
+      x: 0, y: 0, z: 0, h: 1.35, keys: { stone: 'stone', gilt: 'gilt' },
+    }), materials);
+    registerGroup(room, {
+      id: `${sp.id}.urn.${ui++}`, spaceId: sp.id, group,
+      cx: ux, cz: uz, rotY: 0,
+      w: 0.55, d: 0.55, h: size.h ?? 1.85,
+      kind: 'urn', onBreak, onStage,
+    });
+  }
+
+  dressBallroomStanding(sp, room, materials, handlers, rng);
+}
+
+/**
+ * The ballroom's own crate stack. Split out of `dressBallroomExtras` so the doorway rule can DROP
+ * it — a `FurnAssembly` builds its part boxes from the position, so the decision has to be made
+ * before any of them exist, and an early return inside the caller would have taken the urns and
+ * the candelabra with it.
+ */
+function dressBallroomCrate(sp, room, materials, handlers) {
+  const { onBreak, onStage, onPartBreak } = handlers;
+  const cratePlan = clampInRoom(sp, sp.cx - 9.2, sp.cz - 5.4, 2.0);
+  const crateClear = clearOfPortals(
+    { x: cratePlan.x, z: cratePlan.z, w: 1.35, d: 1.05, rotY: 0.4, baseY: 0 },
+    keepoutsFor(room),
+    sp,
+  );
+  if (!crateClear) return;
+  const cratePos = { ...cratePlan, x: crateClear.x, z: crateClear.z };
   const crateRoot = new THREE.Group();
   const crateParts = [];
   let y = 0;
@@ -334,23 +411,11 @@ function dressBallroomExtras(sp, room, materials, handlers, rng) {
     root: crateRoot, parts: crateParts,
     onBreak, onStage, onPartBreak, onHit: handlers.onHit, legsToCollapse: 99,
   }));
+}
 
-  // Corner urns (order dressing skipped when furn is on).
-  const urns = sp.orderPlan?.urns ?? [];
-  let ui = 0;
-  for (const u of urns) {
-    const [ux, uz] = Array.isArray(u) ? u : [u.x, u.z];
-    const { group, size } = bakeProp((bin) => urnOnPedestal(bin, {
-      x: 0, y: 0, z: 0, h: 1.35, keys: { stone: 'stone', gilt: 'gilt' },
-    }), materials);
-    registerGroup(room, {
-      id: `${sp.id}.urn.${ui++}`, spaceId: sp.id, group,
-      cx: ux, cz: uz, rotY: 0,
-      w: 0.55, d: 0.55, h: size.h ?? 1.85,
-      kind: 'urn', onBreak, onStage,
-    });
-  }
-
+/** Standing candelabra, the casket and the depot fill — the rest of the ballroom's loose dressing. */
+function dressBallroomStanding(sp, room, materials, handlers, rng) {
+  const { onBreak, onStage } = handlers;
   // Standing candelabra (rig skips when furn is on).
   const cds = sp.orderPlan?.furnCandelabra ?? [];
   let ci = 0;
@@ -442,9 +507,22 @@ function dressBallroomExtras(sp, room, materials, handlers, rng) {
   room.spaces.find((s) => s.id === sp.id)?.root.add(paper);
 }
 
-/** Shared parted crate stack helper. */
+/**
+ * Shared parted crate stack helper.
+ *
+ * A `FurnAssembly` does not go through `registerGroup`, so it needs the doorway rule stated here.
+ * A crate stack is the most likely thing in the house to end up in a service doorway: the passage
+ * is narrow, both ends of it are doors, and `dressService` deliberately parks these against a wall.
+ */
 function placeCrateStack(room, sp, materials, handlers, id, pos, nStack, rotY = 0.4) {
   const { onBreak, onStage, onPartBreak, onHit } = handlers;
+  const clear = clearOfPortals(
+    { x: pos.x, z: pos.z, w: 1.35, d: 1.05, rotY, baseY: 0 },
+    keepoutsFor(room),
+    sp,
+  );
+  if (!clear) return;
+  pos = { ...pos, x: clear.x, z: clear.z };
   const crateRoot = new THREE.Group();
   const crateParts = [];
   let y = 0;

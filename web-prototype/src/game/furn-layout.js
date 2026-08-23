@@ -280,11 +280,27 @@ function accept(space, spec, slot, openings, placed, recipe) {
 }
 
 /**
+ * Normalise the second argument of `catalogPlacements`.
+ *
+ * PR #13's catalog table takes an openings array. PR #14's W18 (and the old
+ * six-id table) passed `{ portals }`. One helper, both shapes — an object with
+ * a `portals` key is not itself an opening.
+ */
+export function openingsArg(openingsOrOpts) {
+  if (Array.isArray(openingsOrOpts)) return openingsOrOpts;
+  if (!openingsOrOpts) return [];
+  if (Array.isArray(openingsOrOpts.portals)) return openingsOrOpts.portals;
+  if (Array.isArray(openingsOrOpts.openings)) return openingsOrOpts.openings;
+  return [];
+}
+
+/**
  * @param {Array<{ id:string, roomType?:string, order?:string, x0:number, x1:number, z0:number, z1:number }>} spaces
- * @param {Array<{ x:number, z:number, w?:number, axis?:string }>} [openings]
+ * @param {Array<{ x:number, z:number, w?:number, axis?:string }>|{ portals?:Array, openings?:Array }} [openings]
  * @returns {{ id:string, catalogId:string, spaceId:string, x:number, z:number, rotY:number }[]}
  */
 export function catalogPlacements(spaces = [], openings = []) {
+  openings = openingsArg(openings);
   const out = [];
   const used = new Set();
 
