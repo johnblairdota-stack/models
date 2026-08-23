@@ -464,10 +464,12 @@ export default async function partyHost({ params }) {
        * that had not finished. `show.js`'s clock still walks to `recap` on its own and
        * `recapBoard` still draws it, so nothing was deleted from the wire — but nobody can reach
        * it by hand, which is what John was asking for.
+       *
+       * Overnight post-#23: the mid-expedition "Watch the run" button is gone too. Mid-run it only
+       * re-setBeat('expedition') — a no-op that still looked like the host should press it
+       * (playcritique residual). Casting keeps the button when a pair is already locked so a
+       * refreshed TV can jump back onto the run; recap keeps "Run" for the same recovery.
        */
-      body += `<div class="actions run-actions">
-        <button class="btn ghost" id="to-run">Watch the run</button>
-      </div>`;
     } else if (show === 'recap') {
       body += recapBoard(recap, names, ui.runEnd);
       body += `<div class="actions"><button class="btn ghost" id="to-cast">Ballots</button>
