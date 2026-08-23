@@ -1391,6 +1391,14 @@ console.log('\nparty-warm — the lobby-warm night');
     /ui\.beat === 'expedition' \|\| ui\.beat === 'recap'/.test(hostSrc)
     && /maybeIntros/.test(hostSrc));
 
+  t('W22 — live expedition does not paint a Watch the run button', (() => {
+    const chunk = hostSrc.match(/if \(onRun\) \{[\s\S]*?\n    \} else if \(show === 'recap'\)/);
+    return !!(chunk && !/<button[^>]*>Watch the run<\/button>/.test(chunk[0])
+      && !/id="to-run">Watch the run/.test(chunk[0]));
+  })());
+  t('W22a control — casting with a locked pair still offers Watch the run',
+    /if \(hasPair\) body \+= `[\s\S]*?Watch the run/.test(hostSrc));
+
 }
 
 // ---- W23 · YOU CAN SEE INTO THE NEXT ROOM THROUGH A DOOR ------------------------------------
