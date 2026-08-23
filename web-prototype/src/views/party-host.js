@@ -367,6 +367,13 @@ export default async function partyHost({ params }) {
     if (ui.introsSent) return;
     if (ui.warm !== 'ready') return;
     if (ui.beat === 'lobby') return;
+    /*
+     * Late bake used to fire cast intros AFTER Send-them-in. playcritique overnight
+     * post-#22: TV chrome already said EXPEDITION · episode 1, phones had the pad, and
+     * the follow layer stamped INTROS · WALK over the live run. Intros are a casting
+     * beat — once the pair is walking, the run cue owns the camera.
+     */
+    if (ui.beat === 'expedition' || ui.beat === 'recap') return;
     const cast = introCast();
     if (!cast.length) return;
     ui.introsSent = true;

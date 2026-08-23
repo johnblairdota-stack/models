@@ -1387,6 +1387,10 @@ console.log('\nparty-warm — the lobby-warm night');
     && /\.night\.on-intro/.test(skin));
   t('W21g control · the lobby warm layer is still the dim blurred backdrop',
     /filter: blur\(2px\)/.test(skin) && /\.run-cam-layer\.warm \{/.test(skin));
+  t('W21h — late bake must not fire cast intros once the expedition owns the TV',
+    /ui\.beat === 'expedition' \|\| ui\.beat === 'recap'/.test(hostSrc)
+    && /maybeIntros/.test(hostSrc));
+
 }
 
 // ---- W23 · YOU CAN SEE INTO THE NEXT ROOM THROUGH A DOOR ------------------------------------
