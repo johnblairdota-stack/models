@@ -7,8 +7,8 @@ John, 2026-08-23, locked the procedural mansion rules against his local inventor
 
 `C:\Users\John\Documents\models\web-prototype`
 
-This file owns the layout slice. **Cyan map-edge redesign is a follow-up (PR B)** — see
-§4. Corner, pillars, chairs, and catalog furniture land here.
+This file owns the layout slice. **Cyan map-edge redesign (PR B) is done** — see
+§4. Corner, pillars, chairs, and catalog furniture landed in PR A / #13.
 
 `docs/design/party-loop.md` still wins on any disagreement about the party game.
 
@@ -37,7 +37,7 @@ lock, and a fifth (cyan) is a dig/barrier redesign that must not ride along.
    players had joined. `intro-bed.js` already uses `cast.length` after warm.
 4. Catalog smashables (knight / lounges / piano / chandeliers) were not on the live
    placer. The hook is `dressLooseFurniture` in `furn-dress.js`.
-5. Map-designer "cyan" ≠ the live dig barrier. See §4. **Not this PR.**
+5. Map-designer "cyan" ≠ the live dig barrier. See §4. **PR B, done.**
 
 ---
 
@@ -54,8 +54,8 @@ This slice may edit these. Anything else is another owner's.
 | `src/party/mansion.js` | `PLAN_OPTS.homeCorner`; `planPasses` requires a corner |
 | `src/game/follow-bed.js` | catalog/loose dress through `dressLooseFurniture`; no chairs in the warm |
 | `src/game/intro-bed.js` | **read / keep.** `cast.length` is already the lock. Do not rewrite. |
-| `src/game/dig.js` | **owned for the cyan follow-up, not this PR.** Do not retune interconnect / G-channel. |
-| `src/game/room.js` | colonnade **reader** only (comment + consume `sp.columns` as it already does). No barrier policy. |
+| `src/game/dig.js` | **PR B (done):** envelope edges + inter-room no-cyan. PR A must not retune G. |
+| `src/game/room.js` | PR A: colonnade reader only. PR B: `setDigPlan` barrier policy. |
 | `src/views/game.js` | Phase A chairs after seating lock, not `count: 8`. Phase B calls `dressLooseFurniture` once. |
 | `src/game/furn-dress.js` | **the placer hook.** Catalog always; GeoBin kit only if `?kitdress=1`. |
 | `src/game/furn-catalog.js` | **read.** `FURN_SMASH_ASSETS` is the id list. Do not invent rows. |
@@ -116,29 +116,22 @@ The rest of the inventory matched the remote tree.
 | game.play used to bake eight chairs at dress | `src/views/game.js` Phase A `count: 8` |
 | smash gate assumed eight | `harness/scenarios/furn-sledge.mjs` F1 |
 
-### 2.4 Cyan — live vs map designer (follow-up, not this PR)
+### 2.4 Cyan — live vs map designer (PR B, done)
 
-John's map-designer "cyan" and the live dig barrier are **not the same layer**.
+John's map-designer "cyan" and the live dig barrier are **not the same layer**. The
+inventory below was measured on main before PR B; the **after** column is what shipped.
 
-| fact | where | meaning |
-|---|---|---|
-| Live cyan is the DamageField **G channel** | `damagefield.js` starts `barrier.fill(1)` | Coat → white → cyan is the smash stage on a **dig face**. |
-| Dig faces are **interior shared runs** | `dig.js` `generatedDigEdges` / authored `DIG_EDGES` | Room–room (and room–corridor) contacts. That is where the cyan barrier actually stands. |
-| Map designer "cyan" | genspike `L_DIG` / `freePanels` skip | Short **nodig** runs under 1.20 m. A label, not the G-channel barrier. |
-| Exterior / map envelope | `house-packing.md` envelope metres; `exterior.js` | Solid architecture / non-dig exits. You cannot leave the map because there is **no dig face**, not because of cyan. |
-| Party warm forbids `?plan=gen` | `follow.js` `FOLLOW_FORBIDDEN` | `GEN` is null in the warm iframe. `freePanels()` uses **authored** `DIG_EDGES` ids against generated space ids. A stated "generated house has generated dig edges" is wrong for that iframe. |
+| fact | where | before PR B | after PR B |
+|---|---|---|---|
+| Live cyan is the DamageField **G channel** | `damagefield.js` | `barrier.fill(1)` on every dig face | Constructor default still 1 (furniture). Inter-room dig faces pass `barrier: 0`. Envelope faces pass `barrier: 1`. |
+| Dig faces | `dig.js` | **Interior shared runs only** (`DIG_EDGES` / `generatedDigEdges`) | Those, **plus** leftover envelope runs (`envDigTable`). |
+| Map designer "cyan" | genspike `L_DIG` / `freePanels` skip | Short **nodig** runs under 1.20 m. A label, not the G-channel barrier. | **Unchanged.** Do not treat that colour as the barrier. |
+| Exterior / map envelope | `house-packing.md`; `exterior.js` | Solid architecture / non-dig exits. You could not leave because there was **no dig face**. | Envelope is now a one-sided dig face with G=1. Smash the white; cyan keeps you in. |
+| Party warm forbids `?plan=gen` | `follow.js` `FOLLOW_FORBIDDEN` | `GEN` is null; authored `DIG_EDGES` vs generated space ids. | **Confirmed.** Envelope edges are derived from `SPACES` / `CONNECTORS`, which are already GEN-conditional, so the warm iframe (authored house) and `?plan=gen` both get the right leftover. |
 
-Implementing "cyan only on the map envelope, none between rooms" is therefore:
-
-- **not** "move a colour to a different wall"
-- a `dig.js` / `room.js` / DamageField change: inter-room dig would open through (no cyan
-  stage); envelope walls would become (or stay) impassable cyan
-- a survival / interconnect change. `docs/design/dig.md` Act 1 is "sealed rooms, one
-  hidden interconnect." Removing inter-room cyan deletes that search unless a new rule
-  replaces it.
-
-**This PR does not implement that.** Soft spots, `setInterconnect`, and `game.play`
-survival stay as shipped. See §4.
+Soft spots / `setInterconnect` remain in the smash bed. `setDigPlan` no longer rasterises
+them onto G — that fill-to-1 was the inter-room cyan. `game.play` survival still exits
+through the live EXIT site; rooms connect by digging through.
 
 ### 2.5 Smashable furniture
 
@@ -292,27 +285,42 @@ Cyan / dig / `bed.glb` / `tato.glb` stay out of scope.
 
 ---
 
-## 4. Cyan follow-up (out of scope — do not implement here)
+## 4. Cyan follow-up (PR B — done)
 
-Locked rules 5–7, restated in the inventory's terms:
+Locked rules 5–7, implemented:
 
-5. All walls are destructible.
-6. Map-**envelope** walls keep an impassable cyan (cannot leave the map).
-7. Inter-room dig opens through — **no cyan stage** on room–room shared runs.
+5. All walls that were dig faces stay smashable. Envelope walls that were solid
+   architecture are now one-sided dig faces (white then cyan).
+6. Map-**envelope** faces keep G=1. `[B]` and `unlockBarrier` never lift them.
+7. Inter-room faces start at G=0. Digging through opens the next room.
 
-That is a `dig.js` / `room.js` / DamageField G-channel change. It must not land in this
-PR. Assumptions for whoever takes PR B:
+Inventory that was **correct** and is now history (say so rather than diverge):
 
-- Live cyan today is on **interior dig walls**, not the envelope. The envelope is
-  non-dig architecture.
-- Map-designer cyan is short nodig under 1.20 m. Do not treat that colour as the barrier.
-- Party warm does not set `GEN`; authored `DIG_EDGES` ids vs generated space ids is a
-  real mismatch (`task-prime-time-lobby-warm-night` / `FOLLOW_FORBIDDEN`).
-- `docs/design/dig.md` interconnect search is the Act 1 verb. Removing inter-room cyan
-  without a replacement search **breaks** `game.play` survival as shipped.
-- Soft spots / `setInterconnect` / support collapse stay owned by the smash bed.
+- Live cyan *was* on interior dig walls, not the envelope. PR B added envelope dig
+  faces; it did not "move a colour."
+- Map-designer cyan is still short nodig under 1.20 m.
+- Party warm still has no `GEN`. Envelope leftovers come off `SPACES`/`CONNECTORS`.
+- Act 1 interconnect search no longer gates room-to-room travel. That is the lock,
+  not a silent break of survival. The live EXIT site is still the way out of the
+  house. Support collapse and DamageField writers are unchanged except the
+  constructor's optional `barrier: 0`.
 
-Interior interconnect search on `game.play` stays as shipped until that follow-up.
+### How to verify
+
+```bash
+cd web-prototype
+node harness/party-warm.mjs          # W16 policy + source
+node harness/_cy1-edge.mjs           # grid: inter-room opens, envelope does not
+```
+
+Play:
+
+1. `game.play` — smash a wall between two rooms. White comes off; you walk through.
+   There is no cyan end-state.
+2. Smash an outer wall (yard / envelope). White comes off; cyan stays; you cannot
+   leave the map.
+3. `[B]` drops interior cyan only. Envelope stays shut.
+4. `?plan=gen` — same rule on generated leftover envelope runs.
 
 ---
 
@@ -328,7 +336,7 @@ Interior interconnect search on `game.play` stays as shipped until that follow-u
   `connectors.js`. Assert on `genspike` + `mansion.js` only. Do not import
   `furn-dress.js` from the gate either (THREE).
 - **Do not rewrite `intro-bed.js` chairs.** `cast.length` is already the lock.
-- **Do not touch `dig.js` / DamageField / support in this PR.** Cyan is §4.
+- **PR A must not touch `dig.js` / DamageField / support.** Cyan is §4 / PR B (done).
 - **Do not invent GLB filenames.** Catalog ids only; skip on 404.
 - **Do not call `dressCatalogFurniture` from `game.js` or `follow-bed.js`.** The hook
   is `dressLooseFurniture`.
@@ -374,4 +382,4 @@ Play:
    serving `public/`. Kit urns / depot crates / kit cameras stay off unless
    `?kitdress=1`.
 
-Cyan / dig-through-inter-room is **not** a test of this PR.
+Cyan / dig-through-inter-room is PR B — see §4. W16 + `harness/_cy1-edge.mjs`.

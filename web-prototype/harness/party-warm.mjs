@@ -62,6 +62,7 @@ import { GUIDE_MAP_CSS, guideMapSvg } from '../src/party/guidemap.js';
 import { ACCENTS, SHELLS, cleanLook } from '../src/party/look.js';
 import { COMPOSITION, dealCast } from '../src/party/cast.js';
 import { isNightToken } from '../src/party/palette.js';
+import { leftoverRuns, barrierFillForEdge } from '../src/game/dig-policy.js';
 import { MATRIX } from '../net/party/entitle.js';
 import { FANOUT_KEYS, fanoutViolations } from '../net/party/local.mjs';
 import { existsSync, openSync, readSync, closeSync, readFileSync, statSync } from 'node:fs';
@@ -1072,6 +1073,35 @@ console.log('\nparty-warm — the lobby-warm night');
   t('W15p · the phone nub and the bed both read the exported zone, not a restated 0.12',
     /STICK_DEADZONE/.test(phonePad) && !/> 0\.12/.test(phonePad)
     && /stickMag\(/.test(bedSrcFeel) && /STICK_TURN/.test(bedSrcFeel));
+}
+
+// ---- W16 · PR B cyan policy (THREE-free) — envelope keeps G, inter-room does not ------------
+//
+// Live cyan is the DamageField G channel. Map-designer "cyan" is short nodig < 1.20 m.
+// This gate cannot import `dig.js` (THREE). The arithmetic and the fill rule live in
+// `dig-policy.js`. The grid half is `harness/_cy1-edge.mjs`.
+{
+  t('W16 · leftoverRuns is how an envelope leftover is cut from a shared side',
+    leftoverRuns(0, 10, [[3, 7]]).length === 2
+    && leftoverRuns(0, 10, [[0, 10]]).length === 0
+    && leftoverRuns(0, 4, [[1, 2]], 1.2).every((r) => r[1] - r[0] >= 1.2));
+  t('W16a · barrier fill is 1 only on envelope edges',
+    barrierFillForEdge({ envelope: true }) === 1
+    && barrierFillForEdge({ envelope: false }) === 0
+    && barrierFillForEdge({}) === 0);
+  const here = dirname(fileURLToPath(import.meta.url));
+  const src = (rel) => readFileSync(join(here, '..', rel), 'utf8');
+  const digSrc = src('src/game/dig.js');
+  const roomSrc = src('src/game/room.js');
+  const dfSrc = src('src/destruction/damagefield.js');
+  t('W16b · digEdges appends envDigTable — interior ids are not rewritten',
+    /interiorEdges\(\)/.test(digSrc) && /envDigTable\(\)\.edges/.test(digSrc)
+    && /envelope:\s*true/.test(digSrc));
+  t('W16c · setDigPlan sets G from spec.envelope and does not call setInterconnect on free faces',
+    /p\.setBarrier\(!!p\.spec\.envelope\)/.test(roomSrc)
+    && !/p\.setInterconnect\(null\)/.test(roomSrc));
+  t('W16d · DamageField default remains G=1 so furniture smash does not silently open',
+    /o\.barrier !== 0 && o\.barrier !== false/.test(dfSrc));
 }
 
 // ---- W17 · THE PICTURE TAKES THE TELEVISION --------------------------------------------------
