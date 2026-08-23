@@ -273,9 +273,43 @@ t('N8 · episode ran: casting pair + expedition + recap phase',
   [...new Set(hostEvs.map((e) => e.type))].join(','));
 
 const card = recapFromEvents(hostEvs);
-t('N9 · TV can build a recap card from the vis log it actually received',
-  card.alarmCount >= 1 && (card.cameraLit === true || card.taken.length >= 0),
-  JSON.stringify(card));
+const tvFrame = last(host, 'state')?.frame;
+// Live night Send-them-in forces scaffold:false. The TV still builds a recap
+// card (pair + episode from the vis log) — it must not invent CAMERAS/ALARMS
+// before the mansion reports. N0 is the invent-stub recap parser; N9b/N9c are
+// the playEpisode arms.
+t('N9 · live Send-them-in vis log is honest zeros until the mansion reports',
+  card.runner && card.guide && card.episode === 1
+    && card.alarmCount === 0 && card.missCount === 0
+    && card.cameraLit === false && card.camera === null && card.taken.length === 0
+    && !hostEvs.some((e) => e.type === 'panel.alarm' || e.type === 'run.camera_lit' || e.type === 'task.miss')
+    && tvFrame?.incident?.alarms === 0
+    && tvFrame?.cameras?.unlocked === 1,
+  JSON.stringify({ card, alarms: tvFrame?.incident?.alarms, unlocked: tvFrame?.cameras?.unlocked }));
+
+{
+  const stub = createRoom({ count: 8, castSeed: 1, worldSeed: 1, send: () => {} });
+  stub.start();
+  const unlocked = stub.state.cameras.unlocked;
+  stub.playEpisode();
+  const stubCard = recapFromEvents(stub.log.all());
+  t('N9b · playEpisode default still scaffolds miss/alarm/camera_lit for gates',
+    stub.state.incident.alarms === 2
+      && stub.state.cameras.unlocked === unlocked + 1
+      && stubCard.alarmCount >= 1 && stubCard.cameraLit === true && stubCard.missCount >= 1,
+    JSON.stringify({ alarms: stub.state.incident.alarms, unlocked: stub.state.cameras.unlocked, stubCard }));
+
+  const raw = createRoom({ count: 8, castSeed: 1, worldSeed: 1, send: () => {} });
+  raw.start();
+  const rawUnlocked = raw.state.cameras.unlocked;
+  raw.playEpisode({ scaffold: false });
+  const rawCard = recapFromEvents(raw.log.all());
+  t('N9c · playEpisode({ scaffold: false }) does not invent alarms or cameras',
+    raw.state.incident.alarms === 0
+      && raw.state.cameras.unlocked === rawUnlocked
+      && rawCard.alarmCount === 0 && rawCard.cameraLit === false && rawCard.missCount === 0,
+    JSON.stringify({ alarms: raw.state.incident.alarms, unlocked: raw.state.cameras.unlocked, rawCard }));
+}
 
 t('N10 · TV never received a role card or a flyover',
   !hostEvs.some((e) => e.type === 'role.card')

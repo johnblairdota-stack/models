@@ -556,6 +556,8 @@ function handleClient(room, bound, self, msg) {
       ...(msg.opts || {}),
       ...(votes.length ? { ballots: votes } : {}),
       ...(seated.length ? { living: seated } : {}),
+      // Live night: mansion reports cameras/alarms — do not invent gate scaffold on the TV.
+      scaffold: false,
     });
     // Durable show: expedition now, recap when the mission says so. Do not pin CASTING.
     startShowClock(room);
