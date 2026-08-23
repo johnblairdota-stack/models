@@ -82,6 +82,15 @@ export const MATRIX = [
   ['you.intel.grade',          'self'],
   ['you.intel.age',            'self'],
 
+  /*
+   * ---- where THIS phone's body is standing right now.
+   *
+   * Not intel. Not the map. Not Word from the House. A person in a room knows which room
+   * they are in; the runner pad saying that one word makes the guide's shouted room name
+   * checkable. Audience is runner — seated phones and the TV never see it.
+   */
+  ['you.here',                 'runner'],
+
   // ---- the room
   ['players[].id',             'all'],
   ['players[].seat',           'all'],
