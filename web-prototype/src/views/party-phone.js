@@ -527,8 +527,18 @@ export default async function partyPhone({ params }) {
        * conversation. The beat and `recapFromEvents` survive on the wire — the affordance is
        * what was removed, not the data — so putting the card back is a paint, not a rebuild.
        */
-      body += `<h1>Phones down.</h1>
-        <p class="hint">Talk. The next ballot comes to this screen when the room is ready.</p>`;
+      /*
+       * ?? THE OUTCOME WORD IS THE ONE FACT THE RUNNER NEEDS AT RECAP.
+       * Playcritique F2: the pad said "Phones down." and never whether they smashed it, got
+       * caught, or ran out of time. `c.runEnd` is the server's `RUN_END` — SMASHED or TIME
+       * today; CAUGHT is reserved until the hunter actually takes (follow-bed still says next
+       * slice). Missing end falls back to TIME rather than inventing a smash.
+       */
+      {
+        const end = c.runEnd || 'TIME';
+        body += `<h1>${esc(end)}</h1>
+        <p class="hint">Phones down. Talk. The next ballot comes to this screen when the room is ready.</p>`;
+      }
     }
 
     // 🚨 §2.3: *"a persistent ROLE tab … reopens it in any phase"*. It used to be a static CLEAR

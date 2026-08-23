@@ -48,6 +48,8 @@ export class PartyNightClient {
     this.lobby = null;
     this.ballots = [];
     this.beat = 'lobby';
+    /** SMASHED/TIME from the server show message. */
+    this.runEnd = null;
     this.connected = false;
     this.full = false;
   }
@@ -93,7 +95,7 @@ export class PartyNightClient {
         }
         if (m.t === 'lobby') this.lobby = m;
         if (m.t === 'ballots') this.ballots = m.votes || [];
-        if (m.t === 'show') this.beat = m.beat;
+        if (m.t === 'show') { this.beat = m.beat; this.runEnd = m.end || null; }
         this.onMessage(m);
         if (m.t === 'welcome' || m.t === 'full') {
           clearTimeout(timer);

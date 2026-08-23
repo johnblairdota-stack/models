@@ -39,7 +39,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { createRoom } from '../../src/party/room.js';
 import { WARM_STAGES, moveViolations, warmPct, worldViolations } from '../../src/party/follow.js';
-import { isShowBeat, missionEndsRun, recapAfterMs } from '../../src/party/show.js';
+import { isShowBeat, missionEndsRun, recapAfterMs, RUN_END } from '../../src/party/show.js';
 
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 export const MAX_PHONES = 8;
@@ -116,7 +116,13 @@ function getRoom(code, opts) {
     send: (id, frame) => outbox(id, { t: 'state', frame }),
     emit: (id, ev) => outbox(id, { t: 'event', ev }),
   });
-  r = { code, game, conns, seatsTaken: new Set(), tvTaken: false, ballots: new Map(), show: 'lobby', showClock: null };
+  r = {
+    code, game, conns, seatsTaken: new Set(), tvTaken: false, ballots: new Map(),
+    show: 'lobby', showClock: null,
+    // How the LAST live run ended — SMASHED / TIME, never invented. Cleared when a fresh
+    // expedition starts; read by `recapBoard` so the recap card can post it. `show.js`'s `RUN_END`.
+    runEnd: null,
+  };
   rooms.set(code, r);
   return r;
 }
@@ -128,11 +134,19 @@ function clearShowClock(room) {
   }
 }
 
-/** Persist + fan the beat so a refreshed TV resumes here, not on host-tab RAM. */
-function setShow(room, beat) {
+/**
+ * Persist + fan the beat so a refreshed TV resumes here, not on host-tab RAM.
+ *
+ * `end` is the recap outcome (`RUN_END`), passed only by the two calls below that actually end a
+ * run. A fresh expedition clears whatever the last run's outcome was — the TV must not carry
+ * yesterday's SMASHED into a recap for a run that has not happened yet.
+ */
+function setShow(room, beat, end = null) {
   if (!isShowBeat(beat)) return;
   room.show = beat;
-  fanout(room, { t: 'show', beat: room.show });
+  if (beat === 'expedition') room.runEnd = null;
+  else if (end) room.runEnd = end;
+  fanout(room, { t: 'show', beat: room.show, ...(room.runEnd ? { end: room.runEnd } : {}) });
 }
 
 /**
@@ -149,7 +163,9 @@ function startShowClock(room) {
   const wait = recapAfterMs();
   room.showClock = setTimeout(() => {
     room.showClock = null;
-    if (room.show === 'expedition') setShow(room, 'recap');
+    // The backstop firing means the mission never reached `done` — nobody smashed anything, the
+    // clock ran out. That is TIME, not a made-up SMASHED.
+    if (room.show === 'expedition') setShow(room, 'recap', RUN_END.TIME);
   }, wait);
   room.showClock.unref?.();
 }
@@ -170,7 +186,7 @@ function endRunOnMission(room, mission) {
   if (!missionEndsRun(mission?.phase)) return;
   if (room.show !== 'expedition') return;
   clearShowClock(room);
-  setShow(room, 'recap');
+  setShow(room, 'recap', RUN_END.SMASHED);
 }
 
 /**
@@ -231,7 +247,7 @@ export const FANOUT_KEYS = {
   lobbySeat: ['id', 'playerId', 'isTV', 'name', 'seat', 'joined', 'connected', 'shell', 'accent'],
   ballots: ['t', 'votes'],
   ballotVote: ['voter', 'runner', 'guide'],
-  show: ['t', 'beat'],
+  show: ['t', 'beat', 'end'],
   /*
    * 🔥 How far along the TV's mansion bake is. Public, because it is the ROOM's wait, not the
    * TV's: `docs/slices/task-prime-time-lobby-warm-night.md` §3.4, and John's playtest note that
@@ -382,7 +398,9 @@ export function startServer({ port = 5181, count = 8, castSeed = null, worldSeed
       }
       room.game.syncOne(bound.id);
     }
-    push(room, bound.id, { t: 'show', beat: room.show });
+    // A refreshed or resuming TV gets the outcome along with the beat, not just the word "recap" —
+    // otherwise a reload during recap loses the SMASHED/TIME fact until the next run.
+    push(room, bound.id, { t: 'show', beat: room.show, ...(room.runEnd ? { end: room.runEnd } : {}) });
     fanout(room, lobbySnapshot(room));
 
     let buf = Buffer.alloc(0);
