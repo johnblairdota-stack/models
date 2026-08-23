@@ -453,6 +453,38 @@ try {
     }
   }
 
+  /*
+   * 🗺️ **E6d · AND THE GUIDE'S SHEET DOES NOT ANSWER THE MAP'S QUESTION UNDERNEATH IT.**
+   *
+   * John, playing the good guide: the map was drawing its static — that guide's blindness, working
+   * — and *"No word on the hunter"* was printed six pixels below it at the same time. This is the
+   * rendered half of `party-warm` W20: the source check cannot see which branch actually painted.
+   *
+   * ⚠️ **BOTH ALIGNMENTS ARE CLAIMS, AND ONLY ONE OF THEM CAN ARM ON A GIVEN NIGHT.** A Production
+   * guide KEEPS the strip — it is the exact simultaneous read that is the role — so the assertion
+   * is chosen by the deal rather than by hope, and says which one it made.
+   */
+  await holdRun();
+  if (!guide) skipped('E6d', 'no phone was elected guide');
+  else {
+    const sheet = await guide.page.evaluate(() => ({
+      intel: !!document.querySelector('[data-intel]'),
+      k: document.querySelector('[data-intel-k]')?.textContent?.trim() ?? '',
+      text: document.querySelector('.night.phone')?.textContent ?? '',
+      map: !!document.querySelector('.guide-map'),
+    }));
+    if (guide.alignment === 'evil') {
+      t('E6d · a PRODUCTION guide keeps the feed, and it is labelled as Production',
+        sheet.intel && /production feed/i.test(sheet.k) && !/word from the house/i.test(sheet.text),
+        sheet.k || 'no strip');
+    } else {
+      t('E6d · a GOOD guide has no WORD FROM THE HOUSE under the map',
+        !/word from the house/i.test(sheet.text) && !/no word on the hunter/i.test(sheet.text),
+        sheet.intel ? `strip still there: ${sheet.k}` : 'clean');
+    }
+    t('E6e · and the guide still has the thing their seat IS for', sheet.map);
+  }
+
   // ------------------------------------------------------------- E3 · the stick, left and right
   /*
    * 🕹️ DRIVEN THROUGH THE PHONE'S OWN STICK, over the socket, into the cue channel, into the

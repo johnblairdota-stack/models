@@ -1185,5 +1185,49 @@ console.log('\nparty-warm — the lobby-warm night');
     && !/d <= 1\.9/.test(bedSrc));
 }
 
+// ---- W20 · WORD FROM THE HOUSE IS FOR THE CHAIRS ---------------------------------------------
+//
+// John, playing the GOOD guide: the map was drawing its static — which is that guide's blindness,
+// working as designed — with *"No word on the hunter"* printed six pixels underneath it. Two
+// surfaces answering the same question by two different rules is the defect `mapfeed.js` exists to
+// close, arriving from the other side.
+//
+// #12 took the strip off the RUNNER on the same argument: that seat already has a channel — a human
+// being talking to them. The guide's channel is the map. The one seat the strip was ever for is the
+// CHAIR, where it is a watcher's whole contribution.
+//
+// ⚠️ Asserted from SOURCE, because `views/party-phone.js` is a DOM view and this gate runs in bare
+// node with no `npm install`. The rendered claim is `party-playtest-drive.mjs` E6d.
+{
+  const phone = await readFile(new URL('../src/views/party-phone.js', import.meta.url), 'utf8');
+  const guideBranch = phone.match(/\} else if \(iAmGuide\) \{[\s\S]*?\n {6}\} else \{/)?.[0] ?? '';
+  const seatedBranch = phone.match(/\n {6}\} else \{[\s\S]*?data-r="SHOCK"[\s\S]*?\n {6}\}/)?.[0] ?? '';
+  const runnerBranch = phone.match(/if \(iAmRunner\) \{[\s\S]*?\} else if \(iAmGuide\)/)?.[0] ?? '';
+
+  t('W20 arm · the three expedition sheets were all found in the source',
+    guideBranch.length > 200 && seatedBranch.length > 100 && runnerBranch.length > 200,
+    `guide ${guideBranch.length} · seated ${seatedBranch.length} · runner ${runnerBranch.length} chars`);
+  t('W20a · the guide\'s sheet asks for PRODUCTION\'S feed only, never the house word',
+    /intelBlock\(frame, \{ productionOnly: true \}\)/.test(guideBranch)
+    && !/intelBlock\(frame\)/.test(guideBranch));
+  t('W20b · the runner\'s pad still has no intel block at all',
+    !/intelBlock\(/.test(runnerBranch));
+  t('W20c control · a SEATED watcher keeps it — the strip was moved to one seat, not deleted',
+    /intelBlock\(frame\)/.test(seatedBranch));
+
+  /*
+   * 🚨 **AND IT IS KEYED TO THE ALIGNMENT, NOT TO THIS TICK'S GRADE.** `intelFor` returns null
+   * until the TV's first world report lands, so `grade === 'exact'` is false for the opening half
+   * second of every expedition. Keyed on the grade, a Production guide's strip would appear a
+   * moment after the sheet did — which is the *"flashing 'word from the house', which moves and
+   * resizes everything else"* that the reserved slot was built to stop, reintroduced.
+   */
+  t('W20d · a Production guide keeps their feed, decided by ALIGNMENT rather than by a grade',
+    /alignment === 'evil'/.test(phone)
+    && /data-intel-mode="\$\{exact \? 'production' : 'house'\}"/.test(phone));
+  t('W20e · and the patcher cannot relabel a Production strip back to the house word',
+    /slot\.dataset\.intelMode === 'production'/.test(phone));
+}
+
 console.log(`\nparty-warm: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
