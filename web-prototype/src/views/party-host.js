@@ -441,8 +441,16 @@ export default async function partyHost({ params }) {
         cameras: frame?.cameras,
         alarms: frame?.incident?.alarms,
       });
-      body += `<div class="actions">
-        <button class="btn ghost" id="to-recap">Recap</button>
+      /*
+       * 🗑️ **THE RECAP BUTTON IS GONE, AND IT IS THE AFFORDANCE RATHER THAN THE BEAT THAT WENT.**
+       * John: *"Drop Recap for now (host and phones). It doesn't make sense before a round and
+       * isn't useful yet."* It sat next to "Watch the run" all through the expedition, so the one
+       * button on the TV that could cut the show short was a card of three facts about an episode
+       * that had not finished. `show.js`'s clock still walks to `recap` on its own and
+       * `recapBoard` still draws it, so nothing was deleted from the wire — but nobody can reach
+       * it by hand, which is what John was asking for.
+       */
+      body += `<div class="actions run-actions">
         <button class="btn ghost" id="to-run">Watch the run</button>
       </div>`;
     } else if (show === 'recap') {
@@ -479,6 +487,9 @@ export default async function partyHost({ params }) {
         <p class="hint" data-live-hint style="margin-top:14px">${nLive} phone${nLive === 1 ? '' : 's'} live · need 2 to start · empty chairs stay empty</p>`;
     }
 
+    // 📺 `on-run` is what lets the night skin give the picture 90% of the television — see
+    // `TV_FRAME_PCT` and the `.night.on-run` block in `night-skin.js`.
+    root.className = `night${onRun ? ' on-run' : ''}`;
     root.innerHTML = `
       <div class="night-top">
         <div class="night-brand">Prime Time</div>
@@ -511,7 +522,6 @@ export default async function partyHost({ params }) {
     root.querySelector('#go')?.addEventListener('click', startNight);
     root.querySelector('#lock')?.addEventListener('click', sendThemIn);
     root.querySelector('#to-run')?.addEventListener('click', () => setBeat('expedition'));
-    root.querySelector('#to-recap')?.addEventListener('click', () => setBeat('recap'));
     root.querySelector('#to-cast')?.addEventListener('click', () => setBeat('casting'));
 
     /*
@@ -604,7 +614,7 @@ function runStage({ names, lobby, runnerId, guideId, cameras, alarms }) {
         </div>
       </div>
       <div class="pair-hero">${esc(runner)} walks. ${esc(guide)} talks.</div>
-      <p class="night-line" style="padding:0">The rest of us watch. Cameras live ${cams?.unlocked ?? '—'} / needed ${cams?.needed ?? '—'} · alarms ${alarms ?? 0}</p>
+      <div class="run-facts">Cameras ${cams?.unlocked ?? '—'} / ${cams?.needed ?? '—'} · alarms ${alarms ?? 0}</div>
     </div>`;
 }
 

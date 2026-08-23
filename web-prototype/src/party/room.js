@@ -29,6 +29,7 @@ import { PHASE, orderFor, EPISODE_CAP } from './phases.js';
 import { cleanLook } from './look.js';
 import { STALE_MAX, intelFor } from './intel.js';
 import { coverageRoomOf } from './mansion.js';
+import { mapFeed } from './mapfeed.js';
 
 export const PHASES = ['LOBBY', 'CASTING', 'EXPEDITION', 'DEBRIEF', 'VERDICT'];
 
@@ -193,11 +194,33 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
        * header for why a corridor is honestly uncovered rather than mapped to something.
        */
       const liveRoom = coverageRoomOf(state.world?.hunter?.room);
-      const seen = hunterVisibleToGuide({
+      /*
+       * 📡 **TWO GUIDES, TWO FEEDS, AND THE SPLIT IS THE SAME ONE `intel.js` ALREADY MAKES.**
+       *
+       * John, guiding as the Producer on `0349ef6`: *"Production Feed said the hunter moved
+       * Chapel → Gallery, but the red hunter dot on the guide map did not keep tracking."* Both
+       * halves of that sentence were this block. The Production Feed line is `you.intel`, which
+       * is exact and deliberately NOT gated on a camera (W7a); the map's mark was gated, so the
+       * dot blinked out every time the hunter walked into an uncovered room while the line above
+       * it kept naming rooms. One screen, two answers, and the wrong one was the picture.
+       *
+       * So the map now agrees with the feed rather than with the camera ladder:
+       *
+       *   evil  ·  continuous and exact, ungated. This adds NO information — the same position
+       *            is already on this socket's wire as `you.intel.hunter.at` — it stops the two
+       *            renderings of one fact from contradicting each other.
+       *   good  ·  the camera ladder, exactly as before, AND `mapfeed.js`'s peek/jam cycle on
+       *            top of it. A jammed frame carries no hunter mark at all, so the interference
+       *            the phone draws is honest rather than cosmetic.
+       */
+      const feed = mapFeed({ alignment: sock.alignment, seconds: state.worldTick * 0.5 });
+      const evilGuide = sock.alignment === EVIL;
+      const covered = hunterVisibleToGuide({
         worldSeed: state.worldSeed,
         unlocked: state.cameras.unlocked,
         hunterRoom: state.world ? liveRoom : state.hunterRoom,
       });
+      const seen = evilGuide ? true : (covered && !feed.jammed);
       /*
        * 🗺️ THE MARKS ARE THE REAL BODIES NOW, WHEN THE TV HAS REPORTED ANY — and they still travel
        * as `marks`, not as a richer `flyover.hunter`.
@@ -217,7 +240,13 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
           ? { x: w.hunter.x, z: w.hunter.z, kind: 'hunter' }
           : { x: 7.0, z: 3.0, kind: 'hunter' });
       }
-      base.flyover = { hunter: seen, marks };
+      /*
+       * ⚠️ `jam` IS ALWAYS PRESENT, INCLUDING AS `false`. `party-isolation` I7 asserts that no
+       * survivor's frame CHANGES SHAPE across a take, and a field that only appears while the
+       * feed is cut would change the guide's shape twice a cycle. A constant boolean says the
+       * same thing without announcing anything by its presence.
+       */
+      base.flyover = { hunter: seen, jam: feed.jammed, marks };
     }
     // ---- the four injected leaks. `harness/party-isolation.mjs` I9 requires each to turn
     // exactly one named assertion red; a control that stops failing means the gate is blind.

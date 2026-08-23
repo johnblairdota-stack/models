@@ -124,5 +124,99 @@ function honestErrorAt(unlocked, gated = true) {
     `hs.inScene && !!hp -> ${(ungated * 100).toFixed(1)}% honest error — a guide who is never wrong`);
 }
 
+// ---------------------------------------------------------------- C5 · TWO GUIDES, TWO FEEDS
+/**
+ * 🚨 **THE MAP HAS TO AGREE WITH THE PRODUCTION FEED, BECAUSE JOHN READ BOTH AT ONCE AND THEY
+ * DISAGREED.**
+ *
+ * Guiding as the Producer on `0349ef6`: *"Production Feed said the hunter moved Chapel → Gallery,
+ * but the red hunter dot on the guide map did not keep tracking."* Both readings were correct
+ * about their own rule and the rules were different — `you.intel` is exact and ungated for
+ * Production (`party-warm` W7a), while the MARK went through `hunterVisibleToGuide` and blinked
+ * out every time the hunter walked somewhere no camera watches.
+ *
+ * So this asserts the two feeds as a PAIR rather than each on its own, which is the only shape
+ * that could have caught it: the position the map draws and the room the feed names must be
+ * about the same body on the same tick.
+ *
+ * ⚠️ **C3 ABOVE DOES NOT COVER THIS AND CANNOT.** Its two episodes both happen to elect a GOOD
+ * guide at `castSeed: 4`, so the evil arm was never entered — a gate that measured only what the
+ * default seed happened to produce. This one searches for one guide of each alignment and says
+ * out loud which seeds it found them at.
+ */
+function driveGuide(castSeed, { worldSeed = 7, hunterRoom = 'r3.ballroom', ticks = 60 } = {}) {
+  const tape = new Map();
+  const room = createRoom({
+    count: 8, castSeed, worldSeed,
+    send: (id, f) => { if (!tape.has(id)) tape.set(id, []); tape.get(id).push(f); },
+  });
+  room.start();
+  room.playEpisode({});
+  const sock = room.sockets.find((s) => s.playerId === room.state.pair.guide);
+  tape.set(sock.id, []);                       // the run starts here; the episode's frames are not it
+  const world = [];
+  for (let i = 0; i < ticks; i++) {
+    const hunter = { room: hunterRoom, x: 9 + i * 0.1, z: 3 };
+    world.push(hunter);
+    room.setWorld({ runner: { room: 'r0.ballroom', x: 1, z: 1 }, hunter, mission: { phase: 'seek', room: 'r1.gallery' } });
+  }
+  const frames = (tape.get(sock.id) || []).filter((f) => f.flyover);
+  return { alignment: sock.alignment, frames, world };
+}
+
+{
+  const found = { evil: null, good: null };
+  for (let s = 1; s <= 24 && !(found.evil && found.good); s++) {
+    const run = driveGuide(s);
+    if (!found[run.alignment]) found[run.alignment] = { seed: s, ...run };
+  }
+  t('C5 arm · a real night was driven with an evil guide and with a good one',
+    !!found.evil && !!found.good && found.evil.frames.length > 20 && found.good.frames.length > 20,
+    `evil at castSeed ${found.evil?.seed}, good at castSeed ${found.good?.seed}`);
+
+  if (found.evil && found.good) {
+    const marksOf = (f) => (f.flyover.marks || []).filter((m) => m.kind === 'hunter');
+    const evilMarked = found.evil.frames.filter((f) => marksOf(f).length === 1).length;
+    t('C5 · Production\'s map never loses the hunter — the mark is on every single frame',
+      evilMarked === found.evil.frames.length,
+      `${evilMarked}/${found.evil.frames.length} frames marked`);
+
+    /*
+     * The half John actually saw: the mark has to BE the position, not a stale echo of one. If
+     * these ever drift apart the dot lags the feed, which is indistinguishable from the dot
+     * being wrong.
+     */
+    const drift = found.evil.frames.filter((f, i) => {
+      const m = marksOf(f)[0];
+      const w = found.evil.world[i];
+      return !m || !w || m.x !== w.x || m.z !== w.z;
+    }).length;
+    t('C5b · and the mark IS the reported position, tick for tick — the feed and the map agree',
+      drift === 0, `${drift} frames adrift`);
+
+    const jammed = found.good.frames.filter((f) => f.flyover.jam);
+    const clear = found.good.frames.filter((f) => !f.flyover.jam);
+    t('C5c · a GOOD guide gets a window and then loses it — both states really happen',
+      jammed.length > 0 && clear.length > 0,
+      `${clear.length} clear · ${jammed.length} jammed of ${found.good.frames.length}`);
+    t('C5d · a jammed frame carries NO hunter mark — the static is a filter, not a screensaver',
+      jammed.every((f) => marksOf(f).length === 0 && f.flyover.hunter === false));
+    t('C5e · and the good guide still sees the hunter when the feed is up and a camera has it',
+      clear.some((f) => marksOf(f).length === 1),
+      `${clear.filter((f) => marksOf(f).length === 1).length} of ${clear.length} clear frames marked`);
+
+    /*
+     * 🚨 THE CONTROL, AND IT IS THE ASYMMETRY RATHER THAN EITHER SIDE OF IT. Written as a
+     * difference so that deleting the jam — or handing Production the same gated feed — turns
+     * this red even though both halves would still be internally consistent.
+     */
+    t('C5f control · the two alignments are looking at DIFFERENT maps',
+      found.evil.frames.every((f) => f.flyover.jam === false)
+      && found.good.frames.some((f) => f.flyover.jam === true)
+      && evilMarked > found.good.frames.filter((f) => marksOf(f).length === 1).length,
+      `evil marked ${evilMarked}, good marked ${found.good.frames.filter((f) => marksOf(f).length === 1).length}`);
+  }
+}
+
 console.log(`\nguide-coverage: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

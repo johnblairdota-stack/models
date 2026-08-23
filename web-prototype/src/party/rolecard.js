@@ -132,8 +132,18 @@ export function esc(s) {
 export function roleCardFaceHtml(card, nameOf = (id) => id) {
   const mates = (card.teammates || []).map((m) =>
     `<div class="m"><b>${esc(nameOf(m.id))}</b><span class="r">${esc(roleName(m.role))}</span></div>`).join('');
-  return `<div class="align">You are ${esc(card.side || '—')}</div>
-    <div class="role">${esc(card.name)}</div>
+  /*
+   * 🔴 **EVIL LOOKS EVIL, AND THE COLOUR IS AN ADDITION TO THE WORD RATHER THAN A REPLACEMENT
+   * FOR IT.** John's playtest: the Producer's card read in the same ink as a Contestant's, so
+   * the one card that is supposed to land in your stomach landed as an admin screen.
+   *
+   * §6's accessibility rule is untouched: `sideLabel` still spells PRODUCTION out, and P3 still
+   * asserts it. The class only says WHICH ink, and `role-peek` P12 pins that a good card never
+   * gets it — a red GOOD card would be worse than no colour at all.
+   */
+  const ev = card.evil ? ' evil' : '';
+  return `<div class="align${ev}">You are ${esc(card.side || '—')}</div>
+    <div class="role${ev}">${esc(card.name)}</div>
     ${card.line ? `<div class="line">${esc(card.line)}</div>` : ''}
     <div class="sentence">${esc(card.sentence)}</div>
     ${mates ? `<div class="mates"><h3>Production</h3>${mates}</div>` : ''}`;
@@ -206,6 +216,10 @@ export const ROLE_CARD_CSS = `
     color:var(--night-dim); }
   /* §2.3: the role name at 34 px. */
   .card-view .role { font:800 34px/1.1 ui-sans-serif, system-ui, sans-serif; margin-top:8px; }
+  /* 🔴 The Production ink. Same token the PRODUCTION FEED strip and the REC dot already wear,
+     so the three surfaces that mean "this is the other side" are one colour rather than three. */
+  .card-view .align.evil, .card-view .role.evil { color:var(--night-bad); }
+  .card-view .role.evil { text-shadow:0 0 26px rgba(var(--night-bad-rgb), .35); }
   /* §2.3: one line of rule text at 24 px, the card's own words, above the team sentence. */
   .card-view .line { font:500 24px/1.35 ui-sans-serif, system-ui, sans-serif; color:var(--night-ink); margin-top:12px; }
   .card-view .sentence { color:var(--night-soft); font-size:16px; line-height:1.45; margin-top:14px; }

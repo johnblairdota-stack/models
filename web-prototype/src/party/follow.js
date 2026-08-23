@@ -235,6 +235,27 @@ export const FOLLOW_CHROME_CSS = `
 export const CAM_LABEL = 'RRR CAM 01';
 
 /**
+ * 📺 **HOW MUCH OF THE TELEVISION THE PICTURE TAKES, AS A PERCENTAGE OF THE SHORT SIDE.**
+ *
+ * John, on `0349ef6`: *"TV follow ~90%. Runner camera / follow frame should take about 90% of
+ * the TV screen — bigger broadcast picture, less chrome."*
+ *
+ * PR #7 set it to 58vh, and that was the right answer to the question it was asked: the frame had
+ * just stopped being a letterbox strip with four storeys of type under it, and 58 was a
+ * conservative first step that left the pair-hero and the camera line legible. Played on an
+ * actual television it reads as a video embedded in a web page rather than as a broadcast.
+ *
+ * It lives here rather than in `night-skin.js` for `FOLLOW_CHROME_CSS`'s reason — `injectNightSkin`
+ * builds its rules inside a function, so a bare-node gate cannot read them, and a number nobody
+ * can assert is a number that drifts. `night-skin.js` interpolates this; `party-warm` W14 pins it.
+ *
+ * ⚠️ **IT IS THE SHORT SIDE, NOT THE AREA.** At 16:9 a frame 90% of the height is also 90% of the
+ * width, so this is 81% of the pixels — which is what "about 90% of the screen" means to an eye
+ * and is as much as can be given away while the top strip and the pair line still fit.
+ */
+export const TV_FRAME_PCT = 90;
+
+/**
  * The `src` for the TV's follow iframe, or `null`.
  *
  * `room` is carried for the operator's log line only — the follow view opens no socket with it.
@@ -404,6 +425,41 @@ export function warmLabel(stage) {
  * the body ends up. A phone that could post a position could post any position.
  */
 export const MOVE_KEYS = ['t', 'x', 'y', 'run', 'swing', 'act'];
+
+/**
+ * 🧭 **THE STICK'S BEARING, AND THE MINUS SIGN IS THE WHOLE FUNCTION.**
+ *
+ * John, on `0349ef6`: *"Runner stick L/R inverted — drag left should aim and move left."* It did
+ * the opposite, and the reason is a sign that this codebase gets right everywhere else.
+ *
+ * The house's yaw convention is `forward = (sin y, cos y)`, so a body at yaw 0 faces **+Z** — a
+ * half turn from a default camera — and its RIGHT is therefore **−X**, which is what
+ * `follow-bed.js`'s `_solve` means by `rx = -Math.cos(f)`. Turning right is DECREASING yaw.
+ * `src/game/player.js` L887 already writes exactly this as `Math.atan2(-mv.x, mv.y) + aimYaw`;
+ * the follow bed wrote `Math.atan2(s.x, …)` and lost the minus, so a thumb pushed right turned
+ * the runner toward +X, which is the runner's left and the viewer's left as well — the chase
+ * camera sits behind the body, so screen-right is world-right and the mistake is visible rather
+ * than merely wrong.
+ *
+ * ⚠️ **THE FORWARD TERM IS NO LONGER CLAMPED POSITIVE EITHER, AND THAT WAS THE SECOND HALF.** The
+ * old line read `Math.atan2(s.x, Math.max(0.0001, s.y))`, which pins the answer inside ±90° — so
+ * pulling the stick straight back asked for the same heading as pushing it straight forward and
+ * the runner walked ON, away from the thing the player was backing away from. With the full range
+ * the stick's direction IS the direction, and a pull-back is a turn-and-go. The caller lerps
+ * toward this over about 9 rad/s and takes the short way round, so a 180° request reads as the
+ * body wheeling rather than snapping.
+ *
+ * Pure, and exported from here rather than living inline in the bed so `harness/party-warm.mjs`
+ * W15 can assert the sign in bare node — a control that must fail is the only thing that would
+ * have caught the original, since both signs produce a runner that moves.
+ *
+ * @param {number} x  stick right, −1..1
+ * @param {number} y  stick forward, −1..1
+ * @returns {number}  radians to ADD to the current heading
+ */
+export function stickHeading(x, y) {
+  return Math.atan2(-(Number(x) || 0), Number(y) || 0);
+}
 
 export function moveViolations(msg) {
   const bad = [];
