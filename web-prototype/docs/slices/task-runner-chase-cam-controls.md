@@ -112,6 +112,6 @@ The GUIDE sheet is unchanged: `guideMapSvg`, flyover marks, no chase layer.
 
 ## 4. Gates
 
-`npm run build` and `npm run gates:party`. New assertions: W25 (chase lock, camera-relative
+`npm run build` and `npm run gates:party`. New assertions: W26 (chase lock, camera-relative
 math against `player.js`'s own strafe, bed/phone source) and I10 (embed is the follow slot,
 guide map untouched, flyover still `guide`).
