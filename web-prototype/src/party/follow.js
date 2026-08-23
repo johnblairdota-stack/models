@@ -461,6 +461,50 @@ export function stickHeading(x, y) {
   return Math.atan2(-(Number(x) || 0), Number(y) || 0);
 }
 
+/** Below this the stick is centred. `views/party-phone.js` lights its nub on the same number. */
+export const STICK_DEADZONE = 0.12;
+
+/**
+ * 🧭 **THE FRAME THE STICK'S BEARING IS MEASURED FROM, AND WITHOUT IT THE RUNNER SPINS.**
+ *
+ * `stickHeading` alone is an OFFSET, and the shipped code added it to the live heading every
+ * frame:
+ *
+ *     want = heading + stickHeading(x, y);   heading += shortestTurn(want - heading) * k
+ *
+ * — where `want - heading` is `stickHeading(x, y)`, a CONSTANT. The target runs away from the
+ * body at exactly the speed the body chases it, so a thumb held left is a turn rate of about
+ * 14 rad/s rather than a direction: **two and a bit revolutions a second, forever.** Measured in
+ * Chromium, holding full left for nine seconds moved the runner 0.23 m — it walked a tight circle
+ * — while the same nine seconds of full forward covered 8.12 m. That is the other half of John's
+ * *"drag left aims/moves left (standard)"*: with the sign alone corrected, dragging left still
+ * would not have moved anyone left.
+ *
+ * A standard stick is a DIRECTION, so the bearing needs a frame that does not move under it. The
+ * frame is the heading the body had when the thumb went down, latched for as long as the thumb
+ * stays down and cleared when it comes back to centre:
+ *
+ *   · push left        → turn ninety degrees left, walk left, and STOP turning
+ *   · hold left        → keep walking left in a straight line
+ *   · roll the thumb   → the body follows the thumb
+ *   · pull back        → turn around and walk back
+ *
+ * ⚠️ **NOT CAMERA-RELATIVE, AND THAT IS THE OBVIOUS ALTERNATIVE.** A third-person stick is
+ * usually measured against the camera, and this camera is a produced one that CUTS: `lead` sits
+ * in front of the runner looking back, so screen-left is world-right in that shot and the
+ * controls would invert on an edit the player did not ask for. The body's own heading is the only
+ * frame here that a cut cannot move.
+ *
+ * @param {number|null} prevRef  the latch, or null when the stick was centred
+ * @param {number} x  stick right     @param {number} y  stick forward
+ * @param {number} heading  the body's heading right now
+ * @returns {number|null} the latch to carry into the next frame
+ */
+export function stickRef(prevRef, x, y, heading) {
+  if (Math.hypot(Number(x) || 0, Number(y) || 0) <= STICK_DEADZONE) return null;
+  return prevRef == null ? heading : prevRef;
+}
+
 export function moveViolations(msg) {
   const bad = [];
   if (!msg || typeof msg !== 'object') return ['<empty>'];

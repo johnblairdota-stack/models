@@ -27,9 +27,9 @@
 import { readFile } from 'node:fs/promises';
 import {
   CUE_CAST_KEYS, CUE_KEYS, CUE_KINDS, FOLLOW_FORBIDDEN, FOLLOW_KEYS, FOLLOW_VIEW,
-  IDENTITY_SECRETS, MISSION_PHASES, MOVE_KEYS, SPATIAL_WORDS, TV_FRAME_PCT, WARM_KEYS, WARM_STAGES,
-  WORLD_KEYS, cueViolations, followParams, followUrl, moveViolations, stickHeading, warmLabel,
-  warmPct, warmUrl, warmViolations, worldViolations,
+  IDENTITY_SECRETS, MISSION_PHASES, MOVE_KEYS, SPATIAL_WORDS, STICK_DEADZONE, TV_FRAME_PCT,
+  WARM_KEYS, WARM_STAGES, WORLD_KEYS, cueViolations, followParams, followUrl, moveViolations,
+  stickHeading, stickRef, warmLabel, warmPct, warmUrl, warmViolations, worldViolations,
 } from '../src/party/follow.js';
 import {
   FEED_CYCLE_SECONDS, FEED_PHASES, JAM_SECONDS, PEEK_SECONDS, mapFeed,
@@ -743,6 +743,49 @@ console.log('\nparty-warm — the lobby-warm night');
   t('W15f control · while a pull-back read as a push-forward — the clamp\'s own half of it',
     near(fwd(wasShipped(0, -1)), fwd(wasShipped(0, 1)))
     && !near(fwd(stickHeading(0, -1)), fwd(stickHeading(0, 1))));
+
+  /*
+   * 🌀 **THE FRAME, AND THE SPIN IT EXISTS TO STOP — the second half of the same bug, found in
+   * Chromium rather than reasoned about.**
+   *
+   * A bearing is only a direction if it is measured from something that does not move. Added to
+   * the LIVE heading every frame, `want - heading` is a constant, so the target runs away from
+   * the body at exactly the speed the body chases it: a thumb held left became a turn rate of
+   * about 14 rad/s. Measured — nine seconds of full left moved the runner 0.23 m round a tight
+   * circle while nine seconds of full forward covered 8.12 m.
+   *
+   * So the two arms are integrated here rather than argued about, over the SAME smoothing the bed
+   * uses, and the claim is convergence: one settles on a heading and the other never does.
+   */
+  const K = 1 - Math.exp(-9.0 * (1 / 60));
+  const spin = (latched) => {
+    let heading = 0, ref = null, turned = 0;
+    for (let i = 0; i < 600; i++) {                                   // ten seconds at 60 Hz
+      ref = stickRef(ref, -1, 0, heading);
+      const want = (latched ? ref : heading) + stickHeading(-1, 0);
+      const step = Math.atan2(Math.sin(want - heading), Math.cos(want - heading)) * K;
+      heading += step;
+      turned += Math.abs(step);
+    }
+    return { heading, turned, settled: Math.abs(heading - (Math.PI / 2)) < 1e-6 };
+  };
+  const now = spin(true);
+  const was = spin(false);
+  t('W15g · a held thumb SETTLES on a heading — left is a direction, not a turn rate',
+    now.settled && now.turned < Math.PI * 0.51,
+    `${(now.turned * 180 / Math.PI).toFixed(0)}° of turning in ten seconds, resting at 90°`);
+  t('W15h control · measured from the live heading it never settles — this is the observed spin',
+    was.turned > 20 * Math.PI && !was.settled,
+    `${(was.turned / (2 * Math.PI) / 10).toFixed(1)} revolutions per second, forever`);
+
+  t('W15i · the latch is per PUSH — it arms on contact, holds while held, clears at centre',
+    stickRef(null, -1, 0, 1.25) === 1.25
+    && stickRef(1.25, -1, 0, 2.5) === 1.25
+    && stickRef(1.25, 0, 0, 2.5) === null
+    && stickRef(1.25, 0.05, 0.05, 2.5) === null,
+    `deadzone ${STICK_DEADZONE}`);
+  t('W15j · and the phone\'s own nub lights on the same deadzone the bed steers on',
+    STICK_DEADZONE > 0 && STICK_DEADZONE < 0.3);
 }
 
 // ---- W16 · THE PICTURE TAKES THE TELEVISION --------------------------------------------------

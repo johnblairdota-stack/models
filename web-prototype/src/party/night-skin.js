@@ -97,7 +97,10 @@ export function injectNightSkin() {
     .night.on-run .night-phase { font-size:11px; }
     .night.on-run .night-main { padding:0 12px 4px; overflow:hidden;
       display:flex; flex-direction:column; justify-content:center; }
-    .night.on-run .run-actions { position:fixed; top:10px; right:22px; z-index:6; margin:0; }
+    /* Bottom-right, not top-right: the top strip already ends in the phase readout and the two
+       collided on a 1920x1080 capture. Down here it is beside the facts line and out of the
+       picture, which is the only thing on this screen anyone is looking at. */
+    .night.on-run .run-actions { position:fixed; bottom:6px; right:22px; z-index:6; margin:0; }
     .night.on-run .run-actions .btn { padding:7px 12px; font-size:11px; letter-spacing:.14em; }
     /* D13. The frame is a MOUNT for the follow camera with the PR #5 still behind it as the
        slate: the mansion takes seconds to bake, and a TV with no WebGL degrades to exactly the

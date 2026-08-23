@@ -5,7 +5,7 @@ import { generatedTablesFor } from './spaces.js';
 import { Player } from './player.js';
 import { MOVE } from './rules.js';
 import { CONTACT_PHASE, SWING_DUR } from './sledge.js';
-import { SHOT_NAMES, stickHeading } from '../party/follow.js';
+import { SHOT_NAMES, STICK_DEADZONE, stickHeading, stickRef } from '../party/follow.js';
 import { HOME_ROOM, MISSION_ROOM, PLAN_OPTS } from '../party/mansion.js';
 import { createMeshAvatar } from '../characters/mesh-avatar.js';
 import { unit4hMaterials } from '../materials/surfaces/robot.js';
@@ -674,6 +674,8 @@ export async function buildFollowBed(engine, opts = {}) {
      */
     driven: false,
     stick: { x: 0, y: 0 },
+    /** The heading this push is measured from. `src/party/follow.js` `stickRef`. */
+    stickRef: null,
     run: false,
     /** Set when a swing lands; read once by `missionTick`. `sledge.swingHit` is consumed by Player. */
     contactAt: -1,
@@ -850,16 +852,19 @@ export async function buildFollowBed(engine, opts = {}) {
      * `move.x` is kept as the strafe it already is, so a player who wants to sidestep a doorway
      * can, which is the "freedom" half of the brief.
      *
-     * 🧭 **THE BEARING IS `stickHeading` AND IT USED TO BE THE SAME EXPRESSION WITHOUT THE MINUS
-     * SIGN, WHICH IS JOHN'S "L/R inverted".** The argument and the convention it turns on are in
-     * that function's header in `src/party/follow.js`; it is exported so a bare-node gate can
-     * hold the sign down, because a wrong sign here still produces a runner that walks.
+     * 🧭 **TWO THINGS WERE WRONG WITH THE OLD ONE LINE AND ONLY THE FIRST IS THE ONE JOHN NAMED.**
+     * The bearing had lost `player.js` L887's minus sign, so left was right; and it was measured
+     * from the LIVE heading, which makes the target run away from the body and turns a held thumb
+     * into a 14 rad/s spin. `stickHeading` and `stickRef` in `src/party/follow.js` carry both
+     * arguments and the measurements; they are exported so a bare-node gate can hold them down,
+     * because a wrong sign and a runaway frame both still produce a runner that moves.
      */
     if (perf.driven) {
       const s = perf.stick;
       const mag = Math.hypot(s.x, s.y);
-      if (mag > 0.12) {
-        const want = perf.heading + stickHeading(s.x, s.y);
+      perf.stickRef = stickRef(perf.stickRef, s.x, s.y, perf.heading);
+      if (mag > STICK_DEADZONE) {
+        const want = perf.stickRef + stickHeading(s.x, s.y);
         const turn = Math.atan2(Math.sin(want - perf.heading), Math.cos(want - perf.heading));
         perf.heading += turn * (1 - Math.exp(-9.0 * dt));
       }
