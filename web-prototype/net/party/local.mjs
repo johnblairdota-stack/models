@@ -494,6 +494,7 @@ function handleClient(room, bound, self, msg) {
     if (moveViolations(msg).length) return;
     const out = {
       t: 'move', x: +msg.x || 0, y: +msg.y || 0,
+      lookX: +msg.lookX || 0, lookY: +msg.lookY || 0,
       run: !!msg.run, swing: !!msg.swing, act: msg.act ?? 0,
     };
     for (const s of room.game.sockets) if (s.isTV) push(room, s.id, out);

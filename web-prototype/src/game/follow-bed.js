@@ -5,7 +5,10 @@ import { generatedTablesFor } from './spaces.js';
 import { Player } from './player.js';
 import { MOVE, WEAPON_RANGE } from './rules.js';
 import { CONTACT_PHASE, SWING_DUR } from './sledge.js';
-import { SHOT_NAMES, liveRunShot, lookYaw, stickCamMove, stickMag } from '../party/follow.js';
+import {
+  CHASE_LOOK_Y, SHOT_NAMES, chaseOrbitOffset, liveRunShot, lookYaw, stepLookOrbit,
+  stickCamMove, stickMag,
+} from '../party/follow.js';
 import { bleedCoolPos, bleedKeyAngle, facingPortal } from '../lighting/door-bleed.js';
 import { HOME_ROOM, MISSION_ROOM, PLAN_OPTS } from '../party/mansion.js';
 import { createMeshAvatar } from '../characters/mesh-avatar.js';
@@ -241,8 +244,9 @@ class RunnerRoute {
  *
  * Warm / intros / a typed `?shot=` instrument may still cut or pin. Once the expedition is on
  * the air (`liveRunShot('run')`) the lens stays on `chase`: auto-cuts to shoulder / lead /
- * doorway invert a camera-relative stick and take the runner's eyes off the frame their thumb
- * is steering. Between moves the eye still lags the body rather than being welded to it.
+ * doorway invert a camera-relative stick. The right look stick orbits that chase (yaw/pitch);
+ * the left stick walks in its horizontal basis. Between moves the eye still lags the body
+ * rather than being welded to it.
  */
 // Named in `src/party/follow.js` so `?shot=` can be validated at the door without loading THREE.
 // One list, so a shot the bed does not have cannot be advertised on the URL.
@@ -261,12 +265,12 @@ class FollowOperator {
     this._aim = new THREE.Vector3();
     this._seeded = false;
     /**
-     * Chase yaw of the LENS, not of the body. Welded to `runner.facing`, a camera-relative
-     * hold-left orbits as the camera follows the new facing — the same class of bug as adding
-     * `stickHeading` to a live heading. Held while the thumb is strafing; recenters when the
-     * stick is released or the player pushes into the shot.
+     * Chase yaw/pitch of the LENS, not of the body. The look stick integrates into these;
+     * release holds. #29 recentered onto `runner.facing` when the (only) stick pushed into
+     * the shot — that fights a dedicated look pad, so it is gone.
      */
     this._lockYaw = null;
+    this._lockPitch = 0;
   }
 
   /** Seeded, and never the same shot twice running. */
@@ -289,8 +293,10 @@ class FollowOperator {
       case 'doorway':
         return out.copy(this.park);
       case 'chase':
-      default:
-        return out.set(p.x - fx * 2.90 + rx * 0.35, 1.62, p.z - fz * 2.90 + rz * 0.35);
+      default: {
+        const off = chaseOrbitOffset(f, this._lockYaw != null ? this._lockPitch : 0);
+        return out.set(p.x + off.x, off.y, p.z + off.z);
+      }
     }
   }
 
@@ -356,8 +362,9 @@ class FollowOperator {
    * @param speed01  the runner's speed as a fraction of `MOVE.run` — the handheld scales with it,
    *                 so the lens is calm on a creep and alive on a sprint.
    * @param [opts.lockShot]  pin the operator (`chase` on a live run). Null keeps the old cuts.
-   * @param [opts.stickMag]  current pad magnitude — holds chase yaw while the thumb is strafing.
-   * @param [opts.stickY]    stick forward, for "into the shot" recentering.
+   * @param [opts.lookX]     right-stick yaw, −1..1.
+   * @param [opts.lookY]     right-stick pitch, −1..1 (up = look up).
+   * @param [opts.followFacing]  scripted fallback: stay behind the body. Driven look holds.
    */
   update(dt, t, runner, camera, lastPortal, speed01, opts = {}) {
     const lock = opts.lockShot && SHOTS.includes(opts.lockShot) ? opts.lockShot : null;
@@ -368,25 +375,30 @@ class FollowOperator {
       if (lock === 'chase') {
         if (this._lockYaw == null) {
           this._lockYaw = runner.facing;
-          this.look.set(runner.pos.x, 1.30, runner.pos.z);
+          this._lockPitch = 0;
+          this.look.set(runner.pos.x, CHASE_LOOK_Y, runner.pos.z);
           this._solve('chase', runner, this.eye);
         }
-        const mag = opts.stickMag ?? 0;
-        const stickY = opts.stickY ?? 0;
-        // Released, or pushing into the shot: swing the lens back behind the body. A pure
-        // strafe holds the yaw so "left" stays a straight line across the current picture.
-        if (mag <= 0 || stickY > 0.20) {
+        const orbit = stepLookOrbit(this._lockYaw, this._lockPitch, opts.lookX, opts.lookY, dt);
+        this._lockYaw = orbit.yaw;
+        this._lockPitch = orbit.pitch;
+        // Standalone / undriven schedule: no look stick, so keep the lens behind the body.
+        // A driven pad that released look HOLDS — recentering would fight the aim.
+        if (opts.followFacing && stickMag(opts.lookX, opts.lookY) <= 0) {
           const turn = Math.atan2(
             Math.sin(runner.facing - this._lockYaw),
             Math.cos(runner.facing - this._lockYaw));
-          const rate = mag <= 0 ? 4.2 : 2.2;
-          this._lockYaw += turn * (1 - Math.exp(-rate * dt));
+          const k = 1 - Math.exp(-4.2 * dt);
+          this._lockYaw += turn * k;
+          this._lockPitch += (0 - this._lockPitch) * k;
         }
       } else {
         this._lockYaw = null;
+        this._lockPitch = 0;
       }
     } else {
       this._lockYaw = null;
+      this._lockPitch = 0;
       if (!this._seeded) { this._seeded = true; this.cut(runner, lastPortal); }
       this.until -= dt;
       if (this.until <= 0) this.cut(runner, lastPortal);
@@ -409,7 +421,7 @@ class FollowOperator {
       this.eye.z + (Math.cos(t * 1.09) + Math.cos(t * 2.53) * 0.5) * sway);
 
     // Frame the chest, not the feet, and lag the look too so a corner is a whip rather than a snap.
-    this.look.lerp(this._aim.set(runner.pos.x, 1.30, runner.pos.z), 1 - Math.exp(-8.0 * dt));
+    this.look.lerp(this._aim.set(runner.pos.x, CHASE_LOOK_Y, runner.pos.z), 1 - Math.exp(-8.0 * dt));
     camera.up.set(0, 1, 0);
     camera.lookAt(this.look);
     // The breath in the wrist. Applied after `lookAt` so it is a lens rotation, not a target move.
@@ -758,6 +770,7 @@ export async function buildFollowBed(engine, opts = {}) {
      */
     driven: false,
     stick: { x: 0, y: 0 },
+    look: { x: 0, y: 0 },
     run: false,
     /** Set when a swing lands; read once by `missionTick`. `sledge.swingHit` is consumed by Player. */
     contactAt: -1,
@@ -1041,8 +1054,9 @@ export async function buildFollowBed(engine, opts = {}) {
     const speed01 = Math.min(1, runner.speed / MOVE.run);
     operator.update(dt, t, runner, engine.camera, perf.lastPortal, speed01, {
       lockShot: liveRunShot(mode, opts.pinShot),
-      stickMag: stickMag(perf.stick.x, perf.stick.y),
-      stickY: perf.stick.y,
+      lookX: perf.look.x,
+      lookY: perf.look.y,
+      followFacing: !perf.driven,
     });
 
     // The cam light rides just under and ahead of the lens, so it throws onto the runner rather
@@ -1150,6 +1164,8 @@ export async function buildFollowBed(engine, opts = {}) {
         perf.driven = true;
         perf.stick.x = Math.max(-1, Math.min(1, +c.x || 0));
         perf.stick.y = Math.max(-1, Math.min(1, +c.y || 0));
+        perf.look.x = Math.max(-1, Math.min(1, +c.lookX || 0));
+        perf.look.y = Math.max(-1, Math.min(1, +c.lookY || 0));
         perf.run = !!c.run;
         if (c.swing) {
           const res = runner.attack(engine.elapsed ?? 0);

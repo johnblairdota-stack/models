@@ -29,8 +29,9 @@ import {
   CUE_CAST_KEYS, CUE_KEYS, CUE_KINDS, FOLLOW_FORBIDDEN, FOLLOW_KEYS, FOLLOW_VIEW,
   IDENTITY_SECRETS, INTRO_FOV, INTRO_FRAME_PCT, MISSION_PHASES, MOVE_KEYS, SPATIAL_WORDS,
   STICK_DEADZONE, STICK_RELEASE, STICK_TURN, TV_FRAME_PCT,
-  WARM_KEYS, WARM_STAGES, WORLD_KEYS, cueViolations, followParams, followUrl, liveRunShot,
-  lookYaw, moveViolations, stickCamMove, stickHeading, stickMag, stickRef, warmLabel, warmPct,
+  WARM_KEYS, WARM_STAGES, WORLD_KEYS, chaseOrbitOffset, cueViolations, followParams, followUrl,
+  liveRunShot, LOOK_PITCH_MAX, LOOK_PITCH_MIN, lookYaw, moveViolations, stepLookOrbit,
+  stickCamMove, stickHeading, stickMag, stickRef, warmLabel, warmPct,
   warmUrl, warmViolations, worldViolations,
 } from '../src/party/follow.js';
 import {
@@ -206,6 +207,11 @@ console.log('\nparty-warm — the lobby-warm night');
   t('W4c · the pad cannot smuggle a position — there is no x/z, only a stick',
     moveViolations({ t: 'move', x: 0, y: 0, z: 4.2 }).length > 0
     && !MOVE_KEYS.includes('z'));
+  t('W4c2 · lookX/lookY ride the same move door, clamped like the walk stick',
+    MOVE_KEYS.includes('lookX') && MOVE_KEYS.includes('lookY')
+    && CUE_KEYS.move.includes('lookX') && CUE_KEYS.move.includes('lookY')
+    && moveViolations({ t: 'move', x: 0, y: 0, lookX: 0.4, lookY: -0.2 }).length === 0
+    && moveViolations({ t: 'move', x: 0, y: 0, lookX: 9 }).length === 1);
 
   const world = {
     t: 'world', seq: 4,
@@ -1492,12 +1498,11 @@ console.log('\nparty-warm — the lobby-warm night');
     && /same honesty as TV/.test(phoneSrc));
 }
 
-// ---- W26 · CHASE-ONLY + CAMERA-RELATIVE STICK DURING A LIVE RUN -----------------------------
+// ---- W26 · DUAL-STICK TV CHASE — no phone embed; look cue + camera-relative move ------------
 //
-// John locked Spine A: during an expedition both the TV follow and the runner phone use a
-// continuous chase camera, and the stick is camera-relative (up = into the shot). The old
-// body-heading latch + `move:{x:0,y:mag}` was the right answer while the operator cut to
-// `lead`; it is the wrong answer now that the cut is gone.
+// Playtest pivot: the phone is a pad (two sticks). The TV is the chase. #29's embed
+// assertions are inverted on purpose — a later "helpfully put the mansion back on the
+// phone" fails here.
 {
   t('W26 · a live run locks the operator on chase',
     liveRunShot('run') === 'chase'
@@ -1548,6 +1553,8 @@ console.log('\nparty-warm — the lobby-warm night');
   const bedSrc = await readFile(new URL('../src/game/follow-bed.js', import.meta.url), 'utf8');
   const phoneSrc = await readFile(new URL('../src/views/party-phone.js', import.meta.url), 'utf8');
   const followSrc = await readFile(new URL('../src/party/follow.js', import.meta.url), 'utf8');
+  const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
+  const localSrc = await readFile(new URL('../net/party/local.mjs', import.meta.url), 'utf8');
   t('W26g · the bed drives with stickCamMove + the operator basis, not heading+forward-only',
     /stickCamMove\(/.test(bedSrc)
     && /operator\.basisYaw\(/.test(bedSrc)
@@ -1558,17 +1565,51 @@ console.log('\nparty-warm — the lobby-warm night');
     /liveRunShot\(mode, opts\.pinShot\) === 'chase'\) return/.test(bedSrc)
     && /lockShot: liveRunShot\(mode, opts\.pinShot\)/.test(bedSrc)
     && /until = 1e9/.test(bedSrc));
-  t('W26i · the runner phone embeds the follow slot and dropped the eyes-on-TV copy',
-    /warmUrl\(/.test(phoneSrc)
-    && /runner-chase-layer/.test(phoneSrc)
-    && /sendChaseCue/.test(phoneSrc)
-    && !/Eyes on the TV/.test(phoneSrc)
-    && /Walk into the shot/.test(phoneSrc));
+  t('W26i · the runner phone is a pad — two sticks, no chase embed, eyes on the TV',
+    !/warmUrl\(/.test(phoneSrc)
+    && !/runner-chase-layer/.test(phoneSrc)
+    && !/sendChaseCue/.test(phoneSrc)
+    && /id="stick"/.test(phoneSrc)
+    && /id="stick-look"/.test(phoneSrc)
+    && /Eyes on the TV/.test(phoneSrc));
   t('W26j · the guide path is still the map — chase is not mounted on that sheet',
     /guideMapSvg\(/.test(phoneSrc)
     && /iAmGuide/.test(phoneSrc)
     && /The map is yours/.test(phoneSrc)
     && !/guideMapSvg/.test(followSrc));
+
+  const rest = stepLookOrbit(0, 0, 0, 0, 0.16);
+  const lookRight = stepLookOrbit(0, 0, 1, 0, 1);
+  const lookUp = stepLookOrbit(0, 0, 0, 1, 1);
+  const held = stepLookOrbit(0.4, 0.1, 0, 0, 0.5);
+  t('W26k · a centred look stick does not drift the orbit',
+    Math.abs(rest.yaw) < 1e-12 && Math.abs(rest.pitch) < 1e-12);
+  t('W26l · look right decreases house yaw; look up raises pitch',
+    lookRight.yaw < 0 && lookUp.pitch > 0);
+  t('W26m · releasing the look stick holds the orbit — no auto-recenter',
+    Math.abs(held.yaw - 0.4) < 1e-12 && Math.abs(held.pitch - 0.1) < 1e-12);
+  t('W26n · pitch is clamped',
+    stepLookOrbit(0, LOOK_PITCH_MAX, 0, 1, 1).pitch === LOOK_PITCH_MAX
+    && stepLookOrbit(0, LOOK_PITCH_MIN, 0, -1, 1).pitch === LOOK_PITCH_MIN);
+
+  const behind = chaseOrbitOffset(0, 0);
+  t('W26o · pitch 0 is the shipped chase — behind on −Z, 1.62 high, 0.35 right',
+    Math.abs(behind.z + 2.90) < 1e-9
+    && Math.abs(behind.y - 1.62) < 1e-9
+    && Math.abs(behind.x + 0.35) < 1e-9);
+  t('W26p · the bed applies look via stepLookOrbit / chaseOrbitOffset, not a heading latch',
+    /stepLookOrbit\(/.test(bedSrc)
+    && /chaseOrbitOffset\(/.test(bedSrc)
+    && /lookX: perf\.look\.x/.test(bedSrc)
+    && /lookY: perf\.look\.y/.test(bedSrc)
+    && !/stickY > 0\.20/.test(bedSrc));
+  t('W26q · lookX/lookY survive the phone → TV → cue path, not a second kind',
+    /lookX: Math\.round\(p\.lookX/.test(phoneSrc)
+    && /lookX: \+m\.lookX/.test(hostSrc)
+    && /lookX: \+msg\.lookX/.test(localSrc)
+    && !/kind: 'look'/.test(followSrc));
+  t('W26r · a driven look release holds — followFacing is only the undriven fallback',
+    /followFacing: !perf\.driven/.test(bedSrc));
 }
 
 

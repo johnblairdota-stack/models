@@ -375,7 +375,7 @@ export const CUE_KINDS = ['intros', 'run', 'move', 'shot', 'idle'];
 export const CUE_KEYS = {
   intros: ['kind', 'cast'],
   run: ['kind', 'runner', 'name', 'shell', 'accent'],
-  move: ['kind', 'x', 'y', 'run', 'swing', 'act'],
+  move: ['kind', 'x', 'y', 'lookX', 'lookY', 'run', 'swing', 'act'],
   shot: ['kind', 'shot'],
   idle: ['kind'],
 };
@@ -444,7 +444,7 @@ export function warmLabel(stage) {
  * is deliberately a STICK and not a POSITION: the phone says where its thumb is, the TV owns where
  * the body ends up. A phone that could post a position could post any position.
  */
-export const MOVE_KEYS = ['t', 'x', 'y', 'run', 'swing', 'act'];
+export const MOVE_KEYS = ['t', 'x', 'y', 'lookX', 'lookY', 'run', 'swing', 'act'];
 
 /**
  * 🧭 **THE STICK'S BEARING, AND THE MINUS SIGN IS THE WHOLE FUNCTION.**
@@ -568,7 +568,7 @@ export function stickMag(x, y) {
  * `Player._stepGround` is already aim-relative (`sin/cos aimYaw` × `move.y/x`). So "up = into
  * the shot" is one product: flatten the chase lens onto Y, put that yaw on `aimYaw`, and hand
  * the deadzoned stick through as real strafe+forward (`move.x` + `move.y`). The body faces the
- * travel via `_targetFacing`. Genshin / Roblox with one stick and no look pad.
+ * travel via `_targetFacing`. Left stick. The right stick orbits the same lens.
  *
  * Direction is the thumb's; magnitude is `stickMag` (radial deadzone + smootherstep). A raw
  * hypot would reintroduce the rim lurch W15k holds down.
@@ -615,11 +615,64 @@ export function liveRunShot(mode, pinShot = null) {
   return mode === 'run' ? 'chase' : null;
 }
 
+/**
+ * 🎥 **RIGHT-STICK ORBIT — yaw/pitch of the TV chase, not of the body.**
+ *
+ * #29 welded chase yaw to a one-stick Genshin reading (hold while strafing, recenter when
+ * the thumb pushed into the shot). The playtest pivot gives the runner a look stick, so
+ * that recenter would fight the person aiming the TV. Look owns the orbit; release holds.
+ *
+ * Yaw sign is the house's: look right DECREASES yaw (`stickHeading`, `_solve`'s right).
+ * Pitch is look-up radians: positive = camera drops, still framed on the chest.
+ * Magnitude is `stickCamMove` so a resting thumb does not drift the lens.
+ */
+export const LOOK_YAW_RATE = 2.2;
+export const LOOK_PITCH_RATE = 1.4;
+export const LOOK_PITCH_MIN = -0.52;
+export const LOOK_PITCH_MAX = 0.28;
+export const CHASE_DIST = 2.90;
+export const CHASE_HEIGHT = 1.62;
+export const CHASE_LATERAL = 0.35;
+export const CHASE_LOOK_Y = 1.30;
+export const CHASE_EYE_Y_MIN = 0.78;
+export const CHASE_EYE_Y_MAX = 2.85;
+
+export function stepLookOrbit(yaw, pitch, lookX, lookY, dt) {
+  const stick = stickCamMove(lookX, lookY);
+  const t = Number(dt) || 0;
+  const nextYaw = (Number(yaw) || 0) - stick.x * LOOK_YAW_RATE * t;
+  const nextPitch = (Number(pitch) || 0) + stick.y * LOOK_PITCH_RATE * t;
+  return {
+    yaw: Math.atan2(Math.sin(nextYaw), Math.cos(nextYaw)),
+    pitch: Math.max(LOOK_PITCH_MIN, Math.min(LOOK_PITCH_MAX, nextPitch)),
+  };
+}
+
+/**
+ * Chase eye offset from the runner, in the house's horizontal basis. Pitch 0 is the
+ * shipped chase (2.90 behind, 1.62 high, 0.35 to the right). Soft follow — the bed
+ * still lerps the operator's eye onto this point.
+ */
+export function chaseOrbitOffset(yaw, pitch = 0) {
+  const f = Number(yaw) || 0;
+  const p = Number(pitch) || 0;
+  const horiz = CHASE_DIST * Math.cos(p);
+  const y = CHASE_HEIGHT + CHASE_DIST * Math.sin(-p);
+  const fx = Math.sin(f), fz = Math.cos(f);
+  const rx = -Math.cos(f), rz = Math.sin(f);
+  return {
+    x: -fx * horiz + rx * CHASE_LATERAL,
+    y: Math.max(CHASE_EYE_Y_MIN, Math.min(CHASE_EYE_Y_MAX, y)),
+    z: -fz * horiz + rz * CHASE_LATERAL,
+  };
+}
+
 export function moveViolations(msg) {
   const bad = [];
   if (!msg || typeof msg !== 'object') return ['<empty>'];
   scanKeys(msg, MOVE_KEYS, 'move', bad);
-  for (const k of ['x', 'y']) {
+  for (const k of ['x', 'y', 'lookX', 'lookY']) {
+    if (msg[k] == null && (k === 'lookX' || k === 'lookY')) continue;
     const v = Number(msg[k]);
     if (!Number.isFinite(v) || v < -1.001 || v > 1.001) bad.push(`move.${k}=${msg[k]}`);
   }
