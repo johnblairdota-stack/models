@@ -3520,16 +3520,16 @@ export default async function view(args = {}) {
     })());
   }
   /**
-   * 🪑 Phase B — desks / consoles / crates into study, ballroom and gallery.
-   * `dressLooseFurniture` places per-space without mirroring study_e from study_w.
+   * 🪑 Phase B — desks / consoles / crates into study, ballroom and gallery, plus the
+   * smash catalog (armor / lounges / piano / chandeliers). `dressLooseFurniture` is the
+   * one placer; catalog ids are not dressed from a second call site.
    */
   if (_estate?.port && new URLSearchParams(location.search).get('furn') !== '0') {
     await engine.work((async () => {
       const { dressLooseFurniture } = await import('../game/furn-dress.js');
-      engine.__furnDress = dressLooseFurniture(room, { debris, dust, rng: engine.rng });
+      engine.__furnDress = await dressLooseFurniture(room, { debris, dust, rng: engine.rng });
       engine.__rrrCams = engine.__furnDress?.cams ?? [];
-      const { dressCatalogFurniture } = await import('../game/furn-layout.js');
-      engine.__furnLayout = await dressCatalogFurniture(room, { debris, dust });
+      engine.__furnLayout = engine.__furnDress?.catalog ?? { placed: 0, missing: [], props: [] };
     })());
   }
   /** Meshy smash lineup — `?furnline=1` (see docs/slices/task-meshy-furn-lineup.md). */

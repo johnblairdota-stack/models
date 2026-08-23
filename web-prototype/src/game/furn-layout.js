@@ -13,6 +13,9 @@
  *
  * The placement table is pure (no THREE) so `party-warm` can assert the ids. The loader is
  * optional and only runs in a browser that already has a room.
+ *
+ * ⚠️ **THE LIVE HOOK IS `dressLooseFurniture` IN `furn-dress.js`.** Callers (game.js Phase B,
+ * follow-bed warm) go through that function. This file is the table + GLB loader it calls.
  */
 
 import { FURN_SMASH_ASSETS } from './furn-catalog.js';

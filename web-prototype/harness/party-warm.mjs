@@ -47,6 +47,9 @@ import { COMPOSITION, dealCast } from '../src/party/cast.js';
 import { isNightToken } from '../src/party/palette.js';
 import { MATRIX } from '../net/party/entitle.js';
 import { FANOUT_KEYS, fanoutViolations } from '../net/party/local.mjs';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 let pass = 0, fail = 0;
 const t = (n, c, d = '') => {
@@ -624,7 +627,7 @@ console.log('\nparty-warm — the lobby-warm night');
 
 // ---- W14 · PR A mansion layout: corner ballroom, deferred seats, catalog ids only ------------
 //
-// John 2026-08-23. Cyan map-edge is PR B and is not asserted here.
+// John 2026-08-23. Cyan map-edge is a follow-up (slice §4) and is not asserted here.
 {
   t('W14 · the night asks the packer for a corner ballroom',
     PLAN_OPTS.homeCorner === true, JSON.stringify(PLAN_OPTS));
@@ -674,6 +677,25 @@ console.log('\nparty-warm — the lobby-warm night');
     used.every((id) => LAYOUT_CATALOG_IDS.includes(id))
     && used.includes('armor') && used.includes('grand-piano') && used.includes('chandelier')
     && used.includes('wingback'), used.join(','));
+
+  /*
+   * The live hook is `dressLooseFurniture`. Callers must not import `dressCatalogFurniture`
+   * themselves — that was the second dresser this slice deleted. Read source, do not import
+   * `furn-dress.js` (it pulls THREE).
+   */
+  const here = dirname(fileURLToPath(import.meta.url));
+  const src = (rel) => readFileSync(join(here, '..', rel), 'utf8');
+  const dress = src('src/game/furn-dress.js');
+  const follow = src('src/game/follow-bed.js');
+  const game = src('src/views/game.js');
+  t('W14i · dressLooseFurniture is the catalog placer hook',
+    /export async function dressLooseFurniture/.test(dress)
+    && /dressCatalogFurniture/.test(dress));
+  t('W14j · follow-bed and game.js go through that hook, not furn-layout',
+    follow.includes("from './furn-dress.js'")
+    && !follow.includes('furn-layout.js')
+    && game.includes("from '../game/furn-dress.js'")
+    && !game.includes('furn-layout.js'));
 }
 
 console.log(`\nparty-warm: ${pass} passed, ${fail} failed`);

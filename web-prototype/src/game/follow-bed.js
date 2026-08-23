@@ -505,14 +505,16 @@ export async function buildFollowBed(engine, opts = {}) {
     }))
     : null;
   /*
-   * Catalog smashables (armor / lounges / piano / chandelier) — not chairs. Chairs wait for
-   * the intros cue so the count is the joined cast (`intro-bed.js`). Missing GLBs skip.
+   * Loose + catalog smashables through the one placer (`dressLooseFurniture`) — not chairs.
+   * Chairs wait for the intros cue so the count is the joined cast (`intro-bed.js`).
+   * Missing catalog GLBs skip (`__furnLayout.missing`).
    */
   try {
-    const { dressCatalogFurniture } = await import('./furn-layout.js');
-    engine.__furnLayout = await dressCatalogFurniture(room, {});
+    const { dressLooseFurniture } = await import('./furn-dress.js');
+    engine.__furnDress = await dressLooseFurniture(room, {});
+    engine.__furnLayout = engine.__furnDress?.catalog ?? { placed: 0, missing: [], props: [] };
   } catch (e) {
-    console.warn('[follow-bed] catalog furniture skipped —', e?.message ?? e);
+    console.warn('[follow-bed] furniture dress skipped —', e?.message ?? e);
   }
   stage('dress');
 
