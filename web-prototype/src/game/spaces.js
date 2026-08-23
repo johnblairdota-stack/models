@@ -1824,6 +1824,36 @@ export const ANCHORS = {
 // Tiny helpers — data queries only
 // ---------------------------------------------------------------------------
 
+/**
+ * 🏚️ **A GENERATED FLOOR PLAN, DRESSED, FOR A CALLER WITH NO URL — `buildTestRoom`'s `o.tables`.**
+ *
+ * `docs/slices/task-prime-time-lobby-warm-night.md` §3.3. Everything above is computed ONCE at
+ * import time from `location.search`, which is right for `views/game.js` and impossible for the
+ * party night: its mansion renders inside a follow slot whose URL schema forbids `plan` on
+ * purpose, and its plan comes from the public `worldSeed` instead (`src/party/mansion.js`).
+ *
+ * ⚠️ **IT LIVES HERE BECAUSE `dressGenerated` AND `generatedPatrol` DO.** Both are private to this
+ * file, and both have to run for a generated row to be a room rather than a box: `dressGenerated`
+ * is what attaches `ROOMS[roomType]`'s order, pilasters and columns — *"a run generates a
+ * different mansion each time, built from John's art rooms, and it looks like his art from
+ * inside"* — and `generatedPatrol` is what gives the house a hunter route. Exporting the two
+ * privates instead would put the obligation to call both on every caller, and the first one to
+ * forget gets an undressed mansion that still renders.
+ *
+ * The four tables are exactly the five `buildTestRoom` reads, so nothing here can be half-applied.
+ */
+export function generatedTablesFor(seed, opts = {}) {
+  const gen = generatedTables(String(seed), opts);
+  const spaces = dressGenerated(gen.spaces);
+  return {
+    spaces,
+    portals: gen.portals,
+    panels: gen.panels,
+    spawn: gen.spawn,
+    patrol: generatedPatrol(spaces),
+  };
+}
+
 export function spaceById(id) { return SPACES.find((s) => s.id === id) ?? null; }
 
 /** AABB test against the clear extents, expanded by `pad`. Null in a doorway is normal. */

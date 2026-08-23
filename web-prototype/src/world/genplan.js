@@ -311,8 +311,21 @@ export function generatedTables(seed, opts = {}) {
    * and is the place that would have to say it is safe. Uniform breachable is the version whose
    * failure mode is "too easy", not "unfinishable".
    */
-  const SHUT_DOORS = (typeof location !== 'undefined'
-    ? new URLSearchParams(location.search).get('gendoors') : null) !== 'open';
+  /*
+   * ⚠️ `opts.doors` OVERRIDES THE URL, AND IT EXISTS BECAUSE THE PARTY NIGHT HAS NO URL TO READ.
+   *
+   * The follow slot (`src/party/follow.js`) mounts on a CLOSED schema and `plan` is on its
+   * forbidden list, so the mansion the TV renders cannot be steered from the address bar by
+   * design. It still has to choose an arm, and for the party night that arm is `open`: the first
+   * playable mission is "walk to the gallery and break a painting", not a dig test, and a seeded
+   * mix of breachable leaves is exactly the shape that can strand the mission room (the note below
+   * says so already). Same three-valued meaning as `?gendoors`, resolved from the call when the
+   * caller states one. `views/game.js` passes nothing and keeps the URL behaviour byte for byte.
+   */
+  const SHUT_DOORS = opts.doors != null
+    ? String(opts.doors) !== 'open'
+    : (typeof location !== 'undefined'
+      ? new URLSearchParams(location.search).get('gendoors') : null) !== 'open';
   const MIN_PASSABLE = 0.42;
 
   /**

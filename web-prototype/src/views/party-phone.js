@@ -11,6 +11,10 @@ import { ACCENTS, DEFAULT_LOOK, SHELLS, cleanLook, robotFaceSvg } from '../party
 import { applyCastLock, applyCastTap, ballotFromCast, castPrompt, freshCast, mergePublicNames, nominationPlayers, padlockSvg } from '../party/cast-ui.js';
 import { cardFor, faceDownHtml, mountRoleCard, premiereHtml } from '../party/rolecard.js';
 import { EVIL } from '../party/cast.js';
+import { guideMapSvg } from '../party/guidemap.js';
+import { MISSION_ROOM, pickPlanSeed, roomLabel } from '../party/mansion.js';
+import { intelLine } from '../party/intel.js';
+import { warmLabel } from '../party/follow.js';
 
 export default async function partyPhone({ params }) {
   injectNightSkin();
@@ -37,6 +41,15 @@ export default async function partyPhone({ params }) {
     castEpisode: null,
     /** null · 'deal' while the backs are flying · 'premiere' while the card is first up. */
     stage: null,
+    /**
+     * 🕹️ The pad's own state. `x`/`y` is the stick as a clamped unit vector; `sent` is the last
+     * thing put on the wire, which is what makes the 20 Hz tick change-gated rather than a
+     * metronome. See `startPad`.
+     */
+    pad: { x: 0, y: 0, run: false, swing: false, sent: '', timer: 0 },
+    /** How far along the TV's mansion bake is — fanned to every phone, not just the host. */
+    warm: '',
+    warmPct: 0,
     /** The deal is one moment. A reconnect replays the card; it does not re-deal it. */
     dealSeen: false,
     /** Dealt to, but the face picker still owns the screen. See `maybeRunDeal`. */
@@ -81,6 +94,13 @@ export default async function partyPhone({ params }) {
       onMessage: (m) => {
         if (m.t === 'welcome') sessionStorage.setItem(tokenKey(code, 'phone'), m.token);
         if (m.t === 'full') state.err = 'Room is full (8 phones + TV).';
+        if (m.t === 'warm') {
+          // The wait belongs to the room, not to the host tab. A phone that has just typed its
+          // name should be able to see the night loading rather than wonder if anyone is there.
+          state.warm = m.stage; state.warmPct = m.pct ?? 0;
+          const el = root.querySelector('[data-warm-line]');
+          if (el) { el.textContent = warmSummary(); return; }
+        }
         if (m.t === 'event' && m.ev?.type === 'role.card') dealt(!!m.replay);
         if (m.t === 'lobby' && !state.lookLocked) {
           const me = (m.seats || []).find((s) => s.id === client.welcome?.id);
@@ -315,6 +335,33 @@ export default async function partyPhone({ params }) {
     }
     state.lastBeat = beat;
 
+    /**
+     * 🚨 **THE STRUCTURAL STAMP — WITHOUT IT THIS SHEET REBUILT ITSELF TWICE A SECOND.**
+     *
+     * `src/party/room.js` `setWorld` broadcasts on every world report, which the TV sends at 2 Hz
+     * for the whole expedition. Every one of those arrives here as a `state` message and used to
+     * reach `root.innerHTML = ...`. The visible symptom was John's — the intel line flashing and
+     * shoving the pad around — but the invisible one is worse: the stick element is destroyed and
+     * rebuilt under the player's thumb, taking its `setPointerCapture` with it, so a drag stops
+     * being delivered and the runner walks on after the thumb has lifted.
+     *
+     * Same instrument `paintCasting` already uses one sheet over. The stamp is everything that
+     * changes the SHAPE of the screen; the intel text and the guide's two marks are deliberately
+     * NOT in it, because those are exactly what `patchLive` writes in place.
+     */
+    const missionPhase = (() => {
+      const last = [...(c.events ?? [])].reverse().find((e) => String(e.type ?? '').startsWith('mission.'));
+      return last ? String(last.type) : 'mission.seek';
+    })();
+    const liveStamp = beat === 'expedition' && !state.stage
+      ? `${beat}:${iAmRunner ? 'run' : iAmGuide ? 'guide' : 'watch'}:${missionPhase}`
+        + `:${hasCard() ? 'card' : 'nocard'}:${!!frame?.flyover?.marks?.some((m) => m.kind === 'hunter')}`
+      : null;
+    if (liveStamp && root.dataset.liveUi === liveStamp && patchLive(frame)) {
+      window.__rrrPhone = { frame, beat, seat: me.seat, iAmRunner, iAmGuide };
+      return;
+    }
+
     let body = '';
     if (state.err) body += `<div class="err">${esc(state.err)}</div>`;
 
@@ -333,6 +380,7 @@ export default async function partyPhone({ params }) {
     } else if (beat === 'lobby' || phase === 'LOBBY') {
       body += `<h1>${esc(myName)}</h1>
         <p class="hint">Seat ${me.seat != null ? me.seat + 1 : '—'} · waiting for the host. The TV is the show — this is a pad.</p>
+        <p class="hint" data-warm-line>${esc(warmSummary())}</p>
         ${nameField()}
         ${roster(c.lobby)}`;
     } else if (beat === 'casting' && (pair.runner || recap.runner)) {
@@ -340,16 +388,66 @@ export default async function partyPhone({ params }) {
         <p class="hint">${esc(playerName(players, pair.runner || recap.runner))} walks · ${esc(playerName(players, pair.guide || recap.guide))} talks.</p>`;
     } else if (beat === 'expedition') {
       if (iAmRunner) {
+        /*
+         * 🕹️ **FULL CONTROL, NOT FOUR SPEEDS.** John: *"replace STILL/CREEP/WALK/RUN with full
+         * movement control and freedom. Runner spawns equipped with the sledge."*
+         *
+         * ⚠️ THE OLD PAD DID NOT EVEN SEND. `state.throttle` was set on tap and repainted, and
+         * nothing ever put it on the wire — the TV's follow ran on a scripted schedule with the
+         * URL's default `throttle=WALK` for the whole expedition. So this is not "a nicer control
+         * for the existing thing", it is the first time this screen has moved anything.
+         */
         body += `<h1>You walk.</h1>
-          <p class="hint">Eyes on the TV. Thumbs on this pad. RUN is loud.</p>
-          <div class="pad" id="thr">
-            ${['STILL', 'CREEP', 'WALK', 'RUN'].map((t) =>
-              `<button data-t="${t}" class="${state.throttle === t ? 'on' : ''}">${t}</button>`).join('')}
-          </div>`;
+          <p class="hint">Eyes on the TV. Drag to move, hold RUN, tap SWING. Running is loud.</p>
+          ${missionLine(frame)}
+          <div class="stick-wrap">
+            <div class="stick" id="stick"><div class="nub" data-nub></div></div>
+            <div class="stick-side">
+              <button class="stick-btn" id="run-btn" type="button">Run</button>
+              <button class="stick-btn swing" id="swing-btn" type="button">Swing</button>
+            </div>
+          </div>
+          ${intelBlock(frame)}`;
       } else if (iAmGuide) {
+        /*
+         * 🗺️ **THE GUIDE FINALLY HAS THE MAP THEY HAVE BEEN TOLD THEY HAVE.** D13 shipped the
+         * sentence *"The map is yours"* over an empty screen.
+         *
+         * It is built from `worldSeed` — public, `all` audience — through the same
+         * `pickPlanSeed` the mansion is built from, so this is the house the runner is standing
+         * in rather than a diagram of a different one. The marks come from `frame.flyover`, which
+         * `net/party/entitle.js` L81-84 restricts to the `guide` audience and gates on a lit
+         * camera, so a blind guide gets a floor plan and knows they are blind.
+         *
+         * 🚨 The TV still gets none of this. `party-loop.md`'s "Do not" list, first item.
+         */
+        /*
+         * ⚠️ `client.worldSeed`, NEVER `frame?.worldSeed ?? 0`. The TV mounts its mansion from the
+         * same accessor; a local default on either side is how the two ends end up drawing
+         * different houses, which `src/party/mansion.js` exists to forbid. `null` means the socket
+         * does not know yet, and a map of the wrong house is worse than a map that is one message
+         * late.
+         */
+        const seed = c.worldSeed == null ? null : pickPlanSeed(c.worldSeed).seed;
+        const marks = frame?.flyover?.marks ?? [];
+        const meMark = marks.find((k) => k.kind === 'you') ?? null;
+        const hunterMark = marks.find((k) => k.kind === 'hunter') ?? null;
         body += `<h1>You talk.</h1>
-          <p class="hint">The map is yours. The TV does not get it. Call rooms. Do not read a debug overlay that is not here.</p>
-          <p class="hint">Cameras live ${frame?.cameras?.unlocked ?? '—'}.</p>`;
+          <p class="hint">The map is yours. The TV does not get it — call the rooms out loud.</p>
+          ${seed == null
+            ? '<p class="hint gm-blind">Waiting for the house…</p>'
+            : guideMapSvg({
+              seed,
+              goal: MISSION_ROOM,
+              runner: meMark,
+              flyover: hunterMark ? { hunter: hunterMark } : null,
+            })}
+          <p class="hint ${hunterMark ? '' : 'gm-blind'}">${hunterMark
+            ? 'A camera has the hunter. The red mark is live.'
+            : 'No camera has the hunter. You are calling this one blind.'}</p>
+          ${missionLine(frame)}
+          <p class="hint">Cameras live ${frame?.cameras?.unlocked ?? '—'}.</p>
+          ${intelBlock(frame)}`;
       } else {
         body += `<h1>Watch.</h1>
           <p class="hint">Reaction only. Dead air is the metric.</p>
@@ -359,6 +457,7 @@ export default async function partyPhone({ params }) {
             <button data-r="SUS">❓ Sus</button>
             <button data-r="SHOCK">‼ Shock</button>
           </div>
+          ${intelBlock(frame)}
           ${state.flash ? `<p class="hint">${esc(state.flash)}</p>` : ''}`;
       }
     } else {
@@ -381,6 +480,15 @@ export default async function partyPhone({ params }) {
     root.innerHTML = `
       <div class="phone-top"><span>${esc(state.code.toUpperCase())}</span><span>${esc(beat)} · ${esc(myName)}</span></div>
       ${body}`;
+    if (liveStamp) root.dataset.liveUi = liveStamp; else delete root.dataset.liveUi;
+
+    /*
+     * A read-only handle for the drive, and DELIBERATELY THIS PHONE'S OWN PROJECTED FRAME rather
+     * than the client — the same reasoning as `window.__rrrHost` in `views/party-host.js`. It is
+     * what the entitlement matrix already decided this socket may see, so exposing it cannot leak
+     * anything a screenshot of this screen would not.
+     */
+    window.__rrrPhone = { frame, beat, seat: me.seat, iAmRunner, iAmGuide };
 
     root.querySelector('#save-name')?.addEventListener('click', () => {
       const v = root.querySelector('#name')?.value || '';
@@ -388,12 +496,7 @@ export default async function partyPhone({ params }) {
       localStorage.setItem('rrr.party.name', v);
       c.send({ t: 'name', name: v });
     });
-    root.querySelector('#thr')?.addEventListener('click', (e) => {
-      const t = e.target?.dataset?.t;
-      if (!t) return;
-      state.throttle = t;
-      paint();
-    });
+    bindPad();
     root.querySelector('#react')?.addEventListener('click', (e) => {
       const r = e.target?.dataset?.r;
       if (!r) return;
@@ -403,7 +506,208 @@ export default async function partyPhone({ params }) {
     bindCardTab();
   }
 
+  /**
+   * 🕹️ **THE STICK — a pointer drag, clamped to a unit disc, posted at 20 Hz WHEN IT CHANGES.**
+   *
+   * Three decisions, all of which cost something if they go the other way:
+   *
+   * · **`setPointerCapture`.** Without it a thumb that slides off the 230 px circle stops
+   *   delivering `pointermove` and the runner keeps walking into a wall until the player lifts.
+   *   With it the drag belongs to the stick until `pointerup`, wherever the thumb goes.
+   * · **`touch-action:none` in the CSS**, not `preventDefault` here. The browser decides whether a
+   *   gesture is a scroll before the first `pointermove` fires, so a JS-side cancel is too late.
+   * · **CHANGE-GATED.** A phone posting an unchanged stick twenty times a second costs battery and
+   *   wire for nothing. The timer runs at 20 Hz and only sends when the rounded value moved — but
+   *   it always sends the zero, so releasing the stick reliably stops the body.
+   *
+   * A swing is an EDGE, sent immediately rather than waiting for the tick: a hammer that fires up
+   * to 50 ms after the tap reads as an unresponsive game rather than a lagged one.
+   */
+  function bindPad() {
+    const stick = root.querySelector('#stick');
+    const nub = root.querySelector('[data-nub]');
+    const runBtn = root.querySelector('#run-btn');
+    const swingBtn = root.querySelector('#swing-btn');
+    if (!stick) { stopPad(); return; }
+
+    const set = (x, y) => {
+      const mag = Math.hypot(x, y);
+      const k = mag > 1 ? 1 / mag : 1;
+      state.pad.x = x * k;
+      state.pad.y = y * k;
+      if (nub) nub.style.transform = `translate(calc(-50% + ${state.pad.x * 78}%), calc(-50% + ${-state.pad.y * 78}%))`;
+      stick.classList.toggle('on', Math.hypot(state.pad.x, state.pad.y) > 0.12);
+    };
+
+    const fromEvent = (e) => {
+      const r = stick.getBoundingClientRect();
+      // +y is FORWARD, so the screen's downward axis is negated once, here, rather than at the
+      // three places downstream that would each have to remember to.
+      set((e.clientX - (r.left + r.width / 2)) / (r.width / 2),
+        -((e.clientY - (r.top + r.height / 2)) / (r.height / 2)));
+    };
+
+    stick.addEventListener('pointerdown', (e) => {
+      stick.setPointerCapture(e.pointerId);
+      fromEvent(e);
+      sendPad();
+    });
+    stick.addEventListener('pointermove', (e) => {
+      if (!stick.hasPointerCapture(e.pointerId)) return;
+      fromEvent(e);
+    });
+    const release = (e) => {
+      try { stick.releasePointerCapture(e.pointerId); } catch { /* already gone */ }
+      set(0, 0);
+      sendPad();
+    };
+    stick.addEventListener('pointerup', release);
+    stick.addEventListener('pointercancel', release);
+
+    const hold = (btn, on) => {
+      btn.addEventListener('pointerdown', () => { state.pad.run = on; btn.classList.toggle('on', on); sendPad(); });
+      btn.addEventListener('pointerup', () => { state.pad.run = false; btn.classList.remove('on'); sendPad(); });
+      btn.addEventListener('pointercancel', () => { state.pad.run = false; btn.classList.remove('on'); sendPad(); });
+    };
+    if (runBtn) hold(runBtn, true);
+    if (swingBtn) {
+      swingBtn.addEventListener('pointerdown', () => {
+        swingBtn.classList.add('on');
+        sendPad(true);
+        setTimeout(() => swingBtn.classList.remove('on'), 220);
+      });
+    }
+    startPad();
+  }
+
+  function sendPad(swing = false) {
+    const p = state.pad;
+    const msg = {
+      t: 'move',
+      x: Math.round(p.x * 100) / 100,
+      y: Math.round(p.y * 100) / 100,
+      run: !!p.run,
+      swing: !!swing,
+    };
+    const key = `${msg.x}|${msg.y}|${msg.run}`;
+    if (!swing && key === p.sent) return;
+    p.sent = key;
+    state.client?.send(msg);
+  }
+
+  function startPad() {
+    if (state.pad.timer) return;
+    state.pad.timer = setInterval(() => sendPad(), 50);      // 20 Hz, and change-gated inside
+  }
+
+  function stopPad() {
+    if (!state.pad.timer) return;
+    clearInterval(state.pad.timer);
+    state.pad.timer = 0;
+  }
+
+  /** What the mansion is doing, for the lobby. Identical wording to the TV's bar, deliberately. */
+  function warmSummary() {
+    if (!state.warm) return 'The TV is warming the mansion…';
+    if (state.warm === 'ready') return 'The mansion is ready.';
+    return `${warmLabel(state.warm).replace(/^./, (c) => c.toUpperCase())} · ${state.warmPct}%`;
+  }
+
+  /**
+   * 🖼️ The mission, in the runner's and the guide's own words. Driven by the `mission.*` events
+   * `src/party/room.js` appends off the TV's world report — PUBLIC, and carrying a room and
+   * nothing else, so a spectator can follow the beat without being told who is where.
+   */
+  function missionLine(frame) {
+    const evs = state.client?.events ?? [];
+    const last = [...evs].reverse().find((e) => String(e.type ?? '').startsWith('mission.'));
+    const phase = last ? String(last.type).slice('mission.'.length) : 'seek';
+    if (phase === 'done') return `<p class="goal">Home. That is the run.</p>`;
+    if (phase === 'return') return `<p class="goal">The painting is down. Get back to the ballroom.</p>`;
+    return `<p class="goal">Find the ${esc(roomLabel(MISSION_ROOM).toLowerCase())}. Break the painting.</p>`;
+  }
+
+  /**
+   * 🔎 What this phone has been told about where the bodies are.
+   *
+   * ⚠️ **IT RENDERS `you.intel` AND COMPUTES NOTHING.** The good/evil asymmetry is applied
+   * server-side in `src/party/room.js` before projection — a good player's frame does not contain
+   * an exact coordinate for this to round off. If this function ever starts doing arithmetic on a
+   * position, the filter has moved to the client and stopped being a filter.
+   */
+  /**
+   * 🚨 **A RESERVED SLOT, ALWAYS PRESENT, NEVER RE-CREATED — AND IT USED TO BE NONE OF THOSE
+   * THINGS.**
+   *
+   * John, playing this branch: *"Guide and Runner screens are flashing 'word from the house',
+   * which moves and resizes everything else on the phone."*
+   *
+   * Two separate faults produced that, and both are fixed here and in `patchLive` below:
+   *
+   *   · The block RETURNED `''` when there was no intel. A good player's read is deliberately
+   *     sporadic — `intel.js` drops one in three — so the element appeared and vanished twice a
+   *     second and everything under it, the stick included, jumped by its height each time.
+   *     It is now always emitted and its text is swapped; `min-height` in `night-skin.js` holds
+   *     the space whether it is speaking or not.
+   *   · It was rebuilt by a FULL `root.innerHTML` write on every world report. That does not just
+   *     look bad, it breaks the pad: the stick's element is destroyed mid-drag, so the
+   *     `setPointerCapture` goes with it and the runner keeps walking after the thumb lifts.
+   */
+  function intelBlock(frame) {
+    const intel = frame?.you?.intel;
+    const exact = intel?.grade === 'exact';
+    return `<div class="intel${exact ? ' exact' : ''}" data-intel>
+      <span class="k" data-intel-k>${exact ? 'Production feed' : 'Word from the house'}</span>
+      <span data-intel-v>${esc(intelLine(intel))}</span>
+    </div>`;
+  }
+
+  /**
+   * The live half of the expedition sheet, patched in place: the intel line, and the guide's two
+   * marks. Everything structural — the stick, the map's rooms and doors, the card tab — is left
+   * exactly where it is.
+   *
+   * Returns false when the sheet is the wrong shape for patching, which sends `paint()` down the
+   * full rebuild it would have done anyway.
+   */
+  function patchLive(frame) {
+    const slot = root.querySelector('[data-intel]');
+    if (!slot) return false;
+    const intel = frame?.you?.intel;
+    const exact = intel?.grade === 'exact';
+    slot.classList.toggle('exact', exact);
+    const k = slot.querySelector('[data-intel-k]');
+    const v = slot.querySelector('[data-intel-v]');
+    if (k) k.textContent = exact ? 'Production feed' : 'Word from the house';
+    if (v) v.textContent = intelLine(intel);
+
+    const map = root.querySelector('.guide-map');
+    if (map) {
+      // The plan is a pure function of the seed and never moves; only the two marks do. Rewriting
+      // the whole SVG at 2 Hz would re-lay-out the map under the guide's thumb.
+      const marks = frame?.flyover?.marks ?? [];
+      const put = (cls, m, r) => {
+        let el = map.querySelector(`.${cls}`);
+        if (!m) { el?.remove(); return; }
+        if (!el) {
+          el = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          el.setAttribute('class', cls);
+          el.setAttribute('r', String(r));
+          map.appendChild(el);
+        }
+        el.setAttribute('cx', String(Math.round(m.x * 100) / 100));
+        el.setAttribute('cy', String(Math.round(m.z * 100) / 100));
+      };
+      put('gm-runner', marks.find((m) => m.kind === 'you'), 1.15);
+      put('gm-hunter', marks.find((m) => m.kind === 'hunter'), 1.3);
+    }
+    return true;
+  }
+
   function paintCasting(players, me, episode) {
+    // This sheet returns before `paint()` reaches `bindPad`, so the 20 Hz tick has to be stopped
+    // here or a phone that ran last episode keeps posting a stick into the casting beat.
+    stopPad();
     const ep = Number(episode) || 1;
     if (state.castEpisode !== ep) {
       state.castEpisode = ep;

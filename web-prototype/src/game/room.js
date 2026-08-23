@@ -57,6 +57,41 @@ export async function buildTestRoom(engine, o = {}) {
   root.name = 'room';
 
   /**
+   * 🏚️ **`o.tables` — THE FLOOR PLAN, HANDED IN RATHER THAN IMPORTED.**
+   *
+   * `docs/slices/task-prime-time-lobby-warm-night.md` §3.3. Everything below used to read
+   * `spaces.js`'s module-level tables directly, and those tables are computed from
+   * `location.search` **at import time** (`spaces.js` L85-96's `GEN`). That is fine for
+   * `views/game.js`, which is a page a person types a URL into. It does not work for the party
+   * night, whose mansion renders inside a follow slot with a CLOSED URL schema that has `plan` on
+   * its forbidden list — and rightly so: a TV showing a different house from the one the guide's
+   * map draws is the leak that entry was written for.
+   *
+   * The resolution is that the party night does not get to choose either. `src/party/mansion.js`
+   * derives one plan from the public `worldSeed` and hands it in here, so the TV and the phones
+   * cannot disagree because neither is asked.
+   *
+   * ⚠️ **ALL FIVE OR NONE, AND `basePanels`'s OWN HEADER BELOW SAYS WHY.** The panel table is read
+   * in three places that must agree, and the space/portal/spawn tables are what the connectors are
+   * resolved against. A half-applied override gives a panel embedded in a solid wall, or a hole in
+   * the building with nothing in it.
+   *
+   * ⚠️ **`ANCHORS` AND `INNER_WALLS` ARE DELIBERATELY NOT OVERRIDDEN.** `INNER_WALLS` is `[]` and
+   * a generated plan has no authored anchors, so `room.anchor(name)` returning `null` under
+   * `tables` is the correct answer rather than a missing feature — `views/game.js`'s sledge spawn
+   * already falls back to `room.spawn.player[0]` for exactly that case.
+   *
+   * With no `o.tables` every local below IS the import it replaced, so `game.play` is byte for
+   * byte the house it was.
+   */
+  const _T = o.tables ?? null;
+  const _SPACES = _T?.spaces ?? SPACES;
+  const _PORTALS = _T?.portals ?? PORTALS;
+  const _PANELS = _T?.panels ?? PANELS;
+  const _SPAWN = _T?.spawn ?? SPAWN;
+  const _PATROL = _T?.patrol ?? PATROL_ROUTE;
+
+  /**
    * THE PANEL TABLE THIS BUILD USES — `PANELS` unless the caller narrows it.
    *
    * ⚠️ IT IS READ IN THREE PLACES AND ALL THREE HAVE TO AGREE, WHICH IS THE ONLY REASON IT IS
@@ -126,7 +161,7 @@ export async function buildTestRoom(engine, o = {}) {
   const DIG = DIG_MODE !== 'off';
   const FREE = DIG_MODE === 'free';
 
-  const basePanels = o.panels ?? PANELS;
+  const basePanels = o.panels ?? _PANELS;
   /**
    * ⚠️ APPENDED, NEVER INSERTED, AND `PANELS` IS NOT TOUCHED AT ALL. The ids in `PANELS` are a
    * network protocol surface and `run.js`'s `chooseExit()` derives the live exit from
@@ -265,7 +300,7 @@ export async function buildTestRoom(engine, o = {}) {
    * `PORTALS` first, then whatever panel table this build is using — see `o.panels`, which is
    * what makes `?exits=4` an honest ablation rather than a run-plan filter.
    */
-  const connectorDefs = [...PORTALS, ...panelDefs];
+  const connectorDefs = [..._PORTALS, ...panelDefs];
 
   const panels = [];
   const panelsByWall = new Map();
@@ -281,7 +316,7 @@ export async function buildTestRoom(engine, o = {}) {
   const lintelOf = new Map();
 
   // ------------------------------------------------------------------ spaces
-  for (const def of SPACES) {
+  for (const def of _SPACES) {
     const sp = {
       ...def,
       root: new THREE.Group(),
@@ -2009,7 +2044,7 @@ export async function buildTestRoom(engine, o = {}) {
      * shape of the house. It asks the room where to go next exactly as it asks it what it can
      * see through, so changing the floor plan is a `spaces.js` edit and nothing else.
      */
-    patrolRoute() { return PATROL_ROUTE; },
+    patrolRoute() { return _PATROL; },
     /** Named test/spawn points, so no scenario ever hardcodes a coordinate again. */
     anchor(name) {
       const a = ANCHORS[name];
@@ -2018,9 +2053,9 @@ export async function buildTestRoom(engine, o = {}) {
     },
     anchorNames() { return Object.keys(ANCHORS); },
     spawn: {
-      player: SPAWN.player.map((p) => new THREE.Vector3(p[0], 0, p[1])),
-      hunter: new THREE.Vector3(SPAWN.hunter[0], 0, SPAWN.hunter[1]),
-      capture: new THREE.Vector3(SPAWN.capture[0], 0, SPAWN.capture[1]),
+      player: _SPAWN.player.map((p) => new THREE.Vector3(p[0], 0, p[1])),
+      hunter: new THREE.Vector3(_SPAWN.hunter[0], 0, _SPAWN.hunter[1]),
+      capture: new THREE.Vector3(_SPAWN.capture[0], 0, _SPAWN.capture[1]),
       // where a panel breach lands you, for the AI's route reasoning
       breaches: panels.map((p) => new THREE.Vector3(p.root.position.x, 0, p.root.position.z)),
     },

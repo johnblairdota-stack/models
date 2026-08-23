@@ -12,6 +12,7 @@
 
 import { NIGHT_TOKENS } from './palette.js';
 import { ROLE_CARD_CSS } from './rolecard.js';
+import { GUIDE_MAP_CSS } from './guidemap.js';
 
 export function playerName(players, id) {
   const p = (players || []).find((x) => x.id === id);
@@ -26,7 +27,10 @@ export function injectNightSkin() {
     ${NIGHT_TOKENS}
     html, body { width:100%; height:100%; overflow:hidden; background:#0c0a08; }
     #boot.gone { display:none; }
-    .night { position:fixed; inset:0; color:#f3ece3; font-family: ui-sans-serif, system-ui, sans-serif;
+    /* z-index 1 so the warming mansion (a fixed layer at z-index 0, see '.run-cam-layer.warm')
+       sits BEHIND the lobby. Both are fixed and the layer is appended to <body> later, so without
+       an explicit stack order DOM order would put the house in front of the join code. */
+    .night { position:fixed; inset:0; z-index:1; color:#f3ece3; font-family: ui-sans-serif, system-ui, sans-serif;
       background:
         radial-gradient(900px 520px at 50% -8%, rgba(245,161,74,.10), transparent 58%),
         #0c0a08;
@@ -112,6 +116,32 @@ export function injectNightSkin() {
     .run-cam-layer[hidden] { display:none; }
     .run-cam-layer iframe.run-cam { width:100%; height:100%; border:0; display:block;
       background:var(--night-deep); }
+    /* 🔥 THE WARM PLACEMENT — full-bleed, BEHIND the lobby, and dimmed rather than hidden.
+       'display:none' and 'visibility:hidden' both let a browser throttle rAF in a same-origin
+       iframe, which would pause the bake the whole slice exists to start early. So the mansion is
+       always composited and simply turned down by the scrim below: if the join code is not the
+       most legible thing on this screen, that scrim is wrong. */
+    .run-cam-layer.warm { z-index:0; border-radius:0; box-shadow:none;
+      opacity:0; filter: blur(2px) saturate(.85); }
+    .run-cam-layer.warm.live { opacity:1; }
+    /* '.night' is opaque by design — it is the show's own black. While the mansion is warming
+       behind it, it becomes a scrim instead, and 'party-host.js' sets 'rrr-warming' on <body> only
+       once the layer is live so the lobby never fades toward a frame that has not rendered. */
+    body.rrr-warming .night { background:
+      radial-gradient(900px 520px at 50% -8%, rgba(var(--night-accent-rgb), .10), transparent 58%),
+      linear-gradient(180deg, rgba(12,10,8,.86) 0%, rgba(12,10,8,.46) 46%, rgba(12,10,8,.88) 100%); }
+    body.rrr-warming .night-main { text-shadow: 0 2px 18px rgba(0,0,0,.85); }
+    /* 📊 The indicator itself. 'warm-fill' is the only thing that moves, and party-host.js patches
+       its width in place rather than repainting the lobby for a percentage. */
+    .warm { margin-top:22px; max-width:520px; }
+    .warm-text { color:var(--night-dim); font-size:12px; letter-spacing:.2em;
+      text-transform:uppercase; margin-bottom:8px; }
+    .warm-track { height:6px; border-radius:3px; overflow:hidden;
+      background:rgba(var(--night-accent-rgb), .14); }
+    .warm-fill { height:100%; width:0; border-radius:3px; background:var(--night-accent);
+      transition: width .6s cubic-bezier(.22,.61,.36,1); }
+    .warm.ready .warm-text { color:var(--night-live); }
+    .warm.ready .warm-fill { background:var(--night-live); }
     .run-slate { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
       transition: opacity .8s ease; pointer-events:none; }
     .run-frame.live .run-slate { opacity:0; }
@@ -163,11 +193,55 @@ export function injectNightSkin() {
       padding:12px 0 8px; animation: night-rise .45s ease; }
     .look-stage .bot-face { width:min(42vw, 168px); height:auto; filter: drop-shadow(0 10px 24px rgba(245,161,74,.18)); }
     .look-stage.connecting .bot-face { animation: night-breathe 1.6s ease-in-out infinite; }
-    .swatch-row { display:flex; gap:10px; flex-wrap:wrap; margin:4px 0 14px; }
-    .swatch { width:36px; height:36px; border-radius:50%; border:2px solid transparent; padding:0;
+    /* 🎨 TWELVE COLOURS IN THE HEIGHT SIX USED TO TAKE. John asked for more colours AND a phone UI
+       that does not eat the screen, and 'flex-wrap:wrap' cannot do both — twelve 36 px swatches
+       wrap onto a second line and the picker grows by 46 px per row, twice. One scrolling line
+       instead: 30 px swatches, 7 px gaps, snap points so a flick lands on a colour rather than
+       between two. 12 x 37 = 444 px of strip, which scrolls on a 390 pt phone and fits outright
+       on anything wider. The row is 40 px tall at both six colours and twelve. */
+    .swatch-row { display:flex; gap:7px; margin:4px 0 12px; padding:2px 2px 6px;
+      overflow-x:auto; overflow-y:hidden; scroll-snap-type: x proximity;
+      -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+    .swatch-row::-webkit-scrollbar { display:none; }
+    .swatch { width:30px; height:30px; flex:0 0 auto; scroll-snap-align:center;
+      border-radius:50%; border:2px solid transparent; padding:0;
       cursor:pointer; background: var(--swatch); box-shadow: inset 0 0 0 1px rgba(0,0,0,.35);
       transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease; }
-    .swatch.on { transform: scale(1.08); border-color:#f3ece3; box-shadow: 0 0 0 3px rgba(245,161,74,.35); }
+    .swatch.on { transform: scale(1.12); border-color:#f3ece3; box-shadow: 0 0 0 3px rgba(245,161,74,.35); }
+
+    /* 🕹️ THE RUNNER'S PAD. A stick, a run hold and a swing tap — 'party-loop.md' line 21's
+       first-person body, finally driven by a thumb instead of four labelled speeds.
+       'touch-action:none' is not optional: without it the browser claims the drag as a scroll and
+       the stick receives one pointermove and then nothing. */
+    .stick-wrap { display:grid; grid-template-columns: 1fr auto; gap:12px; align-items:end;
+      margin-top:14px; }
+    .stick { position:relative; width:100%; aspect-ratio:1/1; max-width:230px; border-radius:50%;
+      background: radial-gradient(circle at 50% 50%, var(--night-panel) 0%, var(--night-well) 72%);
+      border:1px solid rgba(var(--night-accent-rgb), .28); touch-action:none; user-select:none; }
+    .stick .nub { position:absolute; left:50%; top:50%; width:38%; height:38%; border-radius:50%;
+      transform: translate(-50%, -50%); background:var(--night-accent);
+      box-shadow: 0 6px 18px rgba(0,0,0,.55); transition: background .2s ease; }
+    .stick.on .nub { background:var(--night-ink); }
+    .stick-side { display:flex; flex-direction:column; gap:10px; }
+    .stick-btn { appearance:none; border:0; font:inherit; font-weight:700; letter-spacing:.12em;
+      text-transform:uppercase; border-radius:12px; padding:0 18px; min-height:74px; min-width:104px;
+      background:var(--night-panel); color:var(--night-ink); touch-action:none;
+      border:1px solid rgba(var(--night-accent-rgb), .28); }
+    .stick-btn.on { background:var(--night-accent); color:var(--night-deep); }
+    .stick-btn.swing.on { background:var(--night-bad); }
+    /* The slot is ALWAYS present and always this tall, whether it is speaking or not. A good
+       player's read is sporadic by design (intel.js drops one in three), and an element that
+       comes and goes twice a second moves the stick under the player's thumb. Reserving the
+       height is what makes 'sporadic information' a property of the TEXT rather than of the
+       layout. */
+    .intel { margin-top:12px; padding:12px 14px; border-radius:10px; background:var(--night-panel);
+      border:1px solid rgba(var(--night-accent-rgb), .2); font-size:16px; line-height:1.35;
+      min-height:66px; transition: border-color .3s ease; }
+    .intel.exact { border-color:var(--night-bad); color:var(--night-ink); }
+    .intel .k { display:block; color:var(--night-dim); font-size:11px; letter-spacing:.2em;
+      text-transform:uppercase; margin-bottom:5px; }
+    .goal { margin-top:10px; color:var(--night-live); font-size:16px; font-weight:700; }
+    ${GUIDE_MAP_CSS}
     @keyframes night-rise { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform:none; } }
     @keyframes night-breathe { 0%,100% { opacity:.55; } 50% { opacity:1; } }
     @media (max-width:720px) {

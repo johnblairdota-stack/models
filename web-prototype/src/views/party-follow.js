@@ -1,7 +1,10 @@
 import { estate } from './_studio.js';
 import { buildFollowBed } from '../game/follow-bed.js';
-import { CAM_LABEL, FOLLOW_CHROME_CSS, followViolations, cleanThrottle } from '../party/follow.js';
+import {
+  CAM_LABEL, FOLLOW_CHROME_CSS, cleanThrottle, cueViolations, followViolations, warmViolations,
+} from '../party/follow.js';
 import { DEFAULT_LOOK, cleanLook, robotFaceSvg } from '../party/look.js';
+import { pickPlanSeed } from '../party/mansion.js';
 import { NIGHT_TOKENS } from '../party/palette.js';
 
 /**
@@ -44,7 +47,17 @@ export default async function partyFollow({ params }) {
    * follow slot that silently swallowed a `flyover=1` would be a silent guide-map leak on the
    * one screen everybody is looking at.
    */
-  const bad = followViolations(params);
+  /*
+   * 🔥 THE WARM SLOT IS THE STRICTER DOOR, AND IT IS CHECKED SEPARATELY.
+   *
+   * `?warm=1` is the night-long slot `views/party-host.js` mounts at LOBBY
+   * (`docs/slices/task-prime-time-lobby-warm-night.md` §3.1). It carries no cast at all — that
+   * arrives later on the cue channel — so a `runner=` or a `name=` on a warm URL is a sign
+   * something is building the wrong slot, and it fails here rather than rendering a night whose
+   * URL will need reassigning (which is a reload, which is the whole defect).
+   */
+  const warm = params.get('warm') === '1';
+  const bad = warm ? warmViolations(params) : followViolations(params);
   if (bad.length) throw new Error(`follow slot: forbidden or unknown params — ${bad.join(', ')}`);
 
   const runnerId = params.get('runner') || '';
@@ -53,7 +66,26 @@ export default async function partyFollow({ params }) {
   const seed = Number(params.get('seed'));
   const throttle = cleanThrottle(params.get('throttle'));
 
-  const chrome = buildChrome({ name, look });
+  /*
+   * 📊 **THE PROGRESS REPORT, AND IT IS THE FIRST THING THIS VIEW DOES.**
+   *
+   * John's note on `bb7cf6a` was three complaints and one of them was *"no loading indicator"*.
+   * The other two — loading late, loading slowly — are answered by mounting at lobby; this is the
+   * answer to the third, and it has to fire BEFORE `estate()` because the several seconds between
+   * the iframe existing and the engine existing were previously indistinguishable from a dead
+   * frame.
+   *
+   * `warmPct` lives in `src/party/follow.js` so `harness/party-warm.mjs` W5 can assert the ladder
+   * is monotonic without a browser. Nothing here interpolates: a bar that eases on a timer is a
+   * lie that gets found out on the slow TV where the bar is the only thing that matters.
+   */
+  const report = (stage) => {
+    document.body.dataset.rrrWarm = stage;
+    try { parent.postMessage({ t: 'follow', warm: stage }, '*'); } catch { /* standalone */ }
+  };
+  report('boot');
+
+  const chrome = buildChrome({ name, look, warm });
 
   // `game.js` L84-98's numbers, including the envIntensity argument. Read that block before
   // moving 3.20 — it is the answer to a measured "the mid-tones were missing", not a taste call.
@@ -66,13 +98,30 @@ export default async function partyFollow({ params }) {
     envIntensity: 3.20,
     seed: Number.isFinite(seed) ? (0x5eed ^ (seed | 0)) : 0x5eed,
   });
+  report('engine');
+
+  /*
+   * 🏚️ THE PLAN IS DERIVED, NEVER TYPED. `plan` is on `FOLLOW_FORBIDDEN` and stays there; the
+   * party night is always procedural and always keyed to the public `worldSeed`, so the guide's
+   * phone can derive the identical house from the identical number. A standalone camera opened
+   * with no `seed` gets `pickPlanSeed(0)` — a real generated house rather than the authored bed,
+   * because "always different each night" should be true of the developer's window too.
+   */
+  const plan = pickPlanSeed(Number.isFinite(seed) ? seed | 0 : 0);
+  if (!plan.ok) {
+    console.warn(`[follow] no candidate plan near seed ${seed} had a reachable gallery and ballroom; `
+      + `falling back to ${plan.seed}. The mission may be unplayable on this seed.`);
+  }
 
   const bed = await buildFollowBed(engine, {
     seed: Number.isFinite(seed) ? seed | 0 : 0,
+    planSeed: plan.seed,
+    warm,
     throttle,
     accent: parseInt(look.accent.slice(1), 16),
     still: params.get('still') === '1',
     pinShot: params.get('shot') || null,
+    onStage: report,
   });
 
   /*
@@ -86,18 +135,59 @@ export default async function partyFollow({ params }) {
   engine.finalizeScene();
   bed.step(0, 0);
 
+  /*
+   * 🔁 **THE CUE LISTENER — the second door into this renderer, with the same lock on it.**
+   *
+   * The view still has NO SOCKET, and that is still the safety argument. What it now has is a
+   * message channel from its own parent — which is `views/party-host.js`, same origin, and the
+   * only window that can reach it — carrying five known shapes. Everything a socket would have
+   * given it (a frame to mis-project, an event log to over-replay) is still absent.
+   *
+   * ⚠️ **`cueViolations` IS CHECKED HERE AS WELL AS AT THE SENDER, AND THAT IS NOT BELT AND
+   * BRACES.** The host is one sender today. A closed schema that is only enforced by the caller is
+   * a convention; enforced at the door it is a property of this view, and it stays true for
+   * whatever mounts this iframe next.
+   */
+  window.addEventListener('message', (e) => {
+    if (e.source !== parent) return;
+    const cue = e.data;
+    if (!cue || cue.t !== 'cue') return;
+    const violations = cueViolations(cue.cue);
+    if (violations.length) {
+      console.error(`[follow] refused a cue: ${violations.join(', ')}`);
+      return;
+    }
+    bed.cue(cue.cue);
+  });
+
   let first = true;
+  let told = 0;
   engine.onUpdate((dt, t) => {
     // `Engine._liveLoop` already clamps dt to 0.1. Do not clamp harder: on a slow TV (or a
     // software rasteriser) a tighter clamp does not protect anything, it just makes the runner
     // crawl — the simulation falls behind the wall clock in proportion to the clamp.
     bed.step(dt, t);
-    chrome.tick(bed.readout(), t);
+    chrome.tick(bed.readout(), t, bed);
     if (first) {
       first = false;
+      report('ready');
       // The host cross-fades its slate off this, and `harness/party-follow-drive.mjs` waits on it.
       document.body.dataset.rrrFollow = 'live';
       try { parent.postMessage({ t: 'follow', ready: true, shot: bed.readout().shot }, '*'); } catch { /* standalone */ }
+    }
+    /*
+     * 🌍 TWICE A SECOND, AND ONLY DURING THE RUN. `src/party/room.js` `setWorld` broadcasts on
+     * every report, so this rate is the intel's refresh rate as well as its cost; 2 Hz is fast
+     * enough for a guide to call a room and far too slow to be a position feed anyone could aim
+     * with. Nothing is reported during `warm` or `intros` — there is no expedition to report on,
+     * and a hunter mark on a lobby screen would be a leak with no game behind it.
+     */
+    if (bed.mode === 'run' && t - told >= 0.5) {
+      told = t;
+      try { parent.postMessage({ t: 'follow', world: bed.world() }, '*'); } catch { /* standalone */ }
+    }
+    if (bed.mode === 'intros' && bed.introsDone()) {
+      try { parent.postMessage({ t: 'follow', intros: 'done' }, '*'); } catch { /* standalone */ }
     }
   });
 
@@ -111,6 +201,8 @@ export default async function partyFollow({ params }) {
     readout: () => bed.readout(),
     spaceOfCamera: () => bed.room.spaceAt(engine.camera.position)?.id ?? null,
     cameraY: () => engine.camera.position.y,
+    mode: () => bed.mode,
+    world: () => bed.world(),
     storeyOfCamera: () => bed.room.spaceAt(engine.camera.position)?.storey ?? null,
   };
 
@@ -125,7 +217,7 @@ export default async function partyFollow({ params }) {
  * the bloom. Palette is `src/party/night-skin.js`'s, so the follow and the TV around it are one
  * picture rather than two.
  */
-function buildChrome({ name, look }) {
+function buildChrome({ name, look, warm }) {
   /*
    * 🎨 THE PALETTE IS IMPORTED, NOT INHERITED, AND THIS SURFACE IS THE REASON IT HAS TO BE.
    *
@@ -158,16 +250,38 @@ function buildChrome({ name, look }) {
     <div class="slug"><b data-shot>chase</b> · <span data-thr>walk</span></div>`;
   document.body.appendChild(el);
 
+  /*
+   * 🔥 **THE BROADCAST FURNITURE IS OFF DURING THE WARM AND THE INTROS, AND IT COMES ON WITH THE
+   * RUN.** A REC dot and a lower-third naming a runner, over a slow drift through an empty
+   * ballroom behind a lobby's QR code, would be the TV claiming to be broadcasting a show that has
+   * not been cast yet. `#fl.pre` keeps the letterbox and the wash — the frame is still a frame —
+   * and hides the production graphics until there is a production.
+   */
+  if (warm) el.classList.add('pre');
+
   const shotEl = el.querySelector('[data-shot]');
   const thrEl = el.querySelector('[data-thr]');
+  const whoEl = el.querySelector('.who');
+  const subEl = el.querySelector('.sub');
   let last = '';
   return {
-    tick(read) {
-      const key = `${read.shot}|${read.throttle}`;
+    tick(read, t, bed) {
+      const mode = bed?.mode ?? 'run';
+      el.classList.toggle('pre', mode !== 'run');
+      /*
+       * The lower-third names whoever the picture is actually on: the arriving robot during the
+       * intros, the runner during the run. It is the ONE place a name reaches the shared screen,
+       * and a name is a published nameplate — not a role. `party-follow` F8d's rule still holds:
+       * the overlay never names a ROOM.
+       */
+      const who = mode === 'intros' ? 'the cast' : (bed?.runnerName ?? name);
+      const key = `${mode}|${read.shot}|${read.throttle}|${who}`;
       if (key === last) return;                 // a DOM write a frame is a DOM write too many
       last = key;
       shotEl.textContent = read.shot;
       thrEl.textContent = String(read.throttle).toLowerCase();
+      whoEl.textContent = who;
+      subEl.textContent = mode === 'run' ? 'live · expedition' : `live · ${mode}`;
     },
   };
 }

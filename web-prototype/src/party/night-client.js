@@ -52,6 +52,28 @@ export class PartyNightClient {
     this.full = false;
   }
 
+  /**
+   * 🌍 **THE ONE ANSWER TO "WHICH HOUSE IS TONIGHT", AND THE ONLY PLACE ANYTHING MAY ASK.**
+   *
+   * `null` until the socket actually knows — and callers **must** treat `null` as "not yet",
+   * never as a seed. `src/party/mansion.js` derives the whole floor plan from this number and its
+   * header says the TV and the phones must not be able to disagree; a `?? 0` at any call site is
+   * that disagreement, written as a default.
+   *
+   * 🚨 IT READS THE WELCOME AS WELL AS THE FRAME, AND THAT ORDER IS THE FIX. `connect()` resolves
+   * on `welcome`, and `views/party-host.js` paints on every message — so the first paint runs with
+   * `frame` still null. That paint mounts the night-long mansion slot, whose `src` is assigned
+   * exactly once, so a wrong seed there is wrong for the whole night. The frame is preferred
+   * because it is the durable channel; the welcome is what makes the first paint correct.
+   */
+  get worldSeed() {
+    for (const v of [this.frame?.worldSeed, this.welcome?.worldSeed]) {
+      const n = Number(v);
+      if (Number.isFinite(n)) return n | 0;
+    }
+    return null;
+  }
+
   connect() {
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(this.url);

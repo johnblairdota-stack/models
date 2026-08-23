@@ -59,6 +59,25 @@ export const ROLES = {
  * pressure off six rather than changing the evil count.
  */
 export const COMPOSITION = {
+  /**
+   * 🚨 **2 AND 3 ARE BELOW THE BIBLE'S FLOOR AND ARE HERE ANYWAY, BECAUSE THAT IS WHAT A PLAYTEST
+   * ACTUALLY IS.** John played this branch with two phones and every card he turned over said
+   * Continuity. Three things were wrong at once and this is the first:
+   * `net/party/local.mjs` deals for the room's CAPACITY (8) rather than for whoever joined, so a
+   * two-player table was being handed the first two cards of an eight-player bag.
+   *
+   * These two rows are deliberately austere rather than a scaled-down eight. At this size there is
+   * no room for an outsider or a contestant — with one Producer already in, a third alignment-
+   * neutral card would make the good side a coin toss. One informed good against one Producer at
+   * two, two against one at three. The evil count stays at 1, which is the bible's own number for
+   * 4-5 and the only sane one below it.
+   *
+   * ⚠️ THEY ARE NOT A CLAIM THAT THE GAME IS GOOD AT TWO. `round-loop` and `party-sim` are not
+   * measured here and the win machine is untouched. They exist so a two-phone table gets a REAL
+   * deal instead of the same card every night.
+   */
+  2: { informed: 1, contestant: 0, outsider: 0, minion: 0, producer: 1, cameras: 1 },
+  3: { informed: 2, contestant: 0, outsider: 0, minion: 0, producer: 1, cameras: 2 },
   4: { informed: 2, contestant: 1, outsider: 0, minion: 0, producer: 1, cameras: 2 },
   5: { informed: 3, contestant: 0, outsider: 1, minion: 0, producer: 1, cameras: 2 },
   6: { informed: 3, contestant: 0, outsider: 1, minion: 1, producer: 1, cameras: 2 },
@@ -68,6 +87,13 @@ export const COMPOSITION = {
 
 /** Roles the table guarantees at a count, so a script's spine is stable game to game. */
 const GUARANTEED = {
+  /*
+   * ⚠️ NOTHING IS GUARANTEED AT 2 OR 3, AND THE EMPTINESS IS THE POINT. A guaranteed role at a
+   * tiny count is a role that is present EVERY game, which at two players means one of the two
+   * cards never changes — which is exactly the complaint ("the role cards are only giving me
+   * continuity"). With no guarantee the informed slot is drawn from the whole informed bag, so a
+   * two-player table sees a different card most nights.
+   */
   4: ['cameraOp'],
   5: ['cameraOp', 'glitched'],
   6: ['continuity', 'stuntDouble', 'glitched', 'fixer'],

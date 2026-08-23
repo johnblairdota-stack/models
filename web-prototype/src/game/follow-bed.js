@@ -1,9 +1,15 @@
 import * as THREE from 'three';
 import { WallField } from '../destruction/wall.js';
 import { buildTestRoom } from './room.js';
+import { generatedTablesFor } from './spaces.js';
 import { Player } from './player.js';
 import { MOVE } from './rules.js';
+import { CONTACT_PHASE, SWING_DUR } from './sledge.js';
 import { SHOT_NAMES } from '../party/follow.js';
+import { HOME_ROOM, MISSION_ROOM, PLAN_OPTS } from '../party/mansion.js';
+import { createMeshAvatar } from '../characters/mesh-avatar.js';
+import { unit4hMaterials } from '../materials/surfaces/robot.js';
+import { buildIntroBed, ballroomOf } from './intro-bed.js';
 
 /**
  * 🎥 **THE FOLLOW BED — the mansion, a runner walking it, and a camera operator following.**
@@ -18,20 +24,43 @@ import { SHOT_NAMES } from '../party/follow.js';
  * It is `game.play`'s bed, recomposed for a camera with no player behind it. Same house
  * (`buildTestRoom`), same body (`Player`, i.e. unit4h + `Gait`), same collision, same grade.
  *
- * It is **not** `game.play` and it must never become it: no HUD, no sledge, no gadgets, no
- * hunter, no dig, no input. `views/game.js` stays the art/physics bed and is not edited by this
- * slice — see the slice's §2.0 for why nothing was exported from it. What is private in there
- * and genuinely wanted is `makeLightRig` (L4028), and `followRig` below **carries the
- * technique** rather than importing it: importing `game.js` for 140 lines of light positioning
- * would drag `audio.js`, `gadgets/index.js`, `hud.js` and `hunter-ai.js` onto the TV's critical
- * path.
+ * It is **not** `game.play` and it must never become it: no HUD, no gadgets, no dig, no keyboard.
+ * `views/game.js` stays the art/physics bed and is not edited by this slice — see the slice's
+ * §2.0 for why nothing was exported from it. What is private in there and genuinely wanted is
+ * `makeLightRig` (L4028), and `followRig` below **carries the technique** rather than importing
+ * it: importing `game.js` for 140 lines of light positioning would drag `audio.js`,
+ * `gadgets/index.js`, `hud.js` and `hunter-ai.js` onto the TV's critical path.
  *
- * 🚨 **THE TV NEVER GETS THE GUIDE'S VIEW.** `party-loop.md`'s "Do not" list, first item. Three
- * things are refused here structurally rather than by convention, and `harness/
- * party-follow-drive.mjs` D5 asserts all three from outside:
+ * ---------------------------------------------------------------------------------------------
+ * 🔥 **WHAT `task-prime-time-lobby-warm-night` CHANGED, AND WHAT IT DELIBERATELY DID NOT**
+ * ---------------------------------------------------------------------------------------------
+ * The bed now lives for a whole NIGHT instead of an episode, and has three modes rather than one:
+ *
+ *   `warm`    the house is standing and the camera drifts through the ballroom. This is what is
+ *             behind the lobby's QR code while the bake finishes. No performance, no runner.
+ *   `intros`  `intro-bed.js` drives — the joined cast walking to their chairs.
+ *   `run`     the expedition. The runner is a body with a hammer, driven by a phone.
+ *
+ * Three of the header's old refusals are now out of date and are corrected rather than left to
+ * contradict the code below:
+ *
+ *   · **"no sledge"** — the runner spawns EQUIPPED. There is no pickup beat in a party night; the
+ *     pair is sent in with the hammer, which is what `party-loop.md` line 21's task list assumes.
+ *   · **"no hunter"** — there is a hunter TOKEN walking `room.patrolRoute()`. It has a position
+ *     and nothing else: no body, no chase, no take. It exists because §3.8's intel is about a real
+ *     position or it is theatre. `HunterAI` is the next slice and this is labelled as a stub.
+ *   · **"no input"** — the runner is driven by its owner's thumbs over the cue channel. The
+ *     scripted schedule below survives as the FALLBACK, which is the important half: see
+ *     `perf.driven`.
+ *
+ * 🚨 **THE TV STILL NEVER GETS THE GUIDE'S VIEW**, and that has not moved an inch.
+ * `party-loop.md`'s "Do not" list, first item. Three things are refused here structurally rather
+ * than by convention, and `harness/party-follow-drive.mjs` D5 asserts all three from outside:
  *   · `room.setLid()` is never called. The ceilings stay on.
  *   · every shot's eye is clamped under the space's storey (`EYE_CEIL_MARGIN`).
- *   · there is no hunter, no marker, no plan and no minimap in this file at all.
+ *   · there is no marker, no plan and no minimap in this file at all — and the hunter token has
+ *     no mesh, so it cannot appear on the shared screen even by accident.
+ *
  */
 
 /** The four the phone pad already sends (`views/party-phone.js`). */
@@ -319,50 +348,192 @@ class FollowOperator {
 }
 
 /**
+ * 🖼️ **THE PAINTING — the night's first test mission, as one framed plane on a gallery wall.**
+ *
+ * John: *"First test mission: destroy a painting in the gallery wherever that room spawns."*
+ * "Wherever that room spawns" is the load-bearing half — the plan is generated per night, so the
+ * painting is placed by finding the gallery's longest wall at build time rather than by a
+ * coordinate anybody typed.
+ *
+ * ⚠️ **IT IS NOT A `FurnProp`, AND THAT IS A STATED SHORTCUT RATHER THAN AN OVERSIGHT.**
+ * `destruction/furnprop.js` is the real destructible-object channel and `_resolveSledgeHit` routes
+ * to it automatically — but a `FurnProp` wants a GLB in `furn-catalog.js` and a voxel body, and
+ * there is no painting asset in the repo. Inventing one is a different slice. So the painting is a
+ * plain mesh with a proximity test (`missionTick` below), it breaks in one blow, and the swap to a
+ * real `FurnProp` is a local change to this function and its hit test when the asset exists.
+ */
+function buildPainting(space, floorY) {
+  if (!space) return null;
+  const w = space.x1 - space.x0, d = space.z1 - space.z0;
+  const alongX = w >= d;
+  // The long wall, on the side furthest from the room's own centre, at gallery hanging height.
+  const cx = (space.x0 + space.x1) / 2, cz = (space.z0 + space.z1) / 2;
+  const pos = alongX
+    ? new THREE.Vector3(cx, floorY + 1.85, space.z0 + 0.22)
+    : new THREE.Vector3(space.x0 + 0.22, floorY + 1.85, cz);
+  const rotY = alongX ? 0 : Math.PI / 2;
+
+  const group = new THREE.Group();
+  group.name = 'mission-painting';
+  const frame = new THREE.Mesh(
+    new THREE.BoxGeometry(1.46, 1.86, 0.09),
+    new THREE.MeshStandardMaterial({ color: 0x6b4a22, roughness: 0.42, metalness: 0.55 }));
+  const canvas = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.22, 1.62),
+    new THREE.MeshStandardMaterial({ color: 0x2b2118, roughness: 0.86, metalness: 0.0 }));
+  canvas.position.z = 0.052;
+  frame.castShadow = true; frame.receiveShadow = true;
+  group.add(frame, canvas);
+  group.position.copy(pos);
+  group.rotation.y = rotY;
+  return { group, pos, intact: true };
+}
+
+/**
+ * 👁️ **THE HUNTER TOKEN — a position on the patrol route, and nothing else.**
+ *
+ * §3.8's intel is *"good players get sporadic/vague information about hunter location"*, and that
+ * is only worth building if the location is real. This walks `room.patrolRoute()` — the same table
+ * `HunterAI` walks in `game.play` — at a steady pace, so the room the guide is told about is a
+ * room the hunter is genuinely in.
+ *
+ * 🚨 **IT HAS NO MESH, NO CHASE AND NO TAKE, AND THE ABSENCE OF THE MESH IS LOAD-BEARING.** A
+ * hunter the TV could render is a hunter the TV could put on the shared screen, which is the
+ * second item on `party-loop.md`'s "Do not" list. The token cannot leak because there is nothing
+ * to see. Wiring `HunterAI` in — with a body, a chase and `taken.js` — is the next slice.
+ */
+function buildHunterToken(room) {
+  const route = (room.patrolRoute?.() ?? []).filter((p) => Number.isFinite(p.x));
+  const pos = new THREE.Vector3(
+    route[0]?.x ?? 0, room.floorY ?? 0, route[0]?.z ?? 0);
+  let leg = 0, dwell = 0;
+  const SPEED = 1.6;                      // slower than a walking robot; it is stalking, not racing
+  return {
+    pos,
+    step(dt) {
+      if (!route.length) return;
+      if (dwell > 0) { dwell -= dt; return; }
+      const target = route[leg % route.length];
+      const dx = target.x - pos.x, dz = target.z - pos.z;
+      const d = Math.hypot(dx, dz);
+      if (d < 0.4) { dwell = target.dwell ?? 1.5; leg += 1; return; }
+      pos.x += (dx / d) * SPEED * dt;
+      pos.z += (dz / d) * SPEED * dt;
+    },
+  };
+}
+
+/**
  * Build the bed. Caller owns `estate()` and `engine.start()`; this owns everything between.
  *
  * @param {object} engine            an `estate()` engine
  * @param {object} opts
  * @param {number} [opts.seed]       the house/performance seed — `frame.worldSeed` on the TV
- * @param {string} [opts.throttle]   STILL / CREEP / WALK / RUN
+ * @param {string} [opts.planSeed]   a generated plan seed — `pickPlanSeed(worldSeed).seed`
+ * @param {boolean} [opts.warm]      start in `warm` mode: the house standing, nobody in it
+ * @param {boolean} [opts.mesh]      fetch the Meshy body for the runner (default true when warm)
+ * @param {string} [opts.throttle]   STILL / CREEP / WALK / RUN — the fallback schedule's speed
  * @param {number} [opts.accent]     the runner's accent colour, as a hex number, for the cam light
  * @param {boolean} [opts.still]     freeze the runner — `?still=1`, for a deterministic shot
  * @param {string} [opts.pinShot]    pin one shot — `?shot=lead`, an instrument
+ * @param {(stage:string)=>void} [opts.onStage]  warm-progress milestones, for the TV's bar
  */
 export async function buildFollowBed(engine, opts = {}) {
   const scene = engine.scene;
   const rng = engine.rng;
+  const stage = opts.onStage ?? (() => {});
 
   // ---------------------------------------------------------------- the house
-  // No `panels`, no `dig`, no `estate`, no `plan`. The TV shows the house the game ships or it
-  // is not the house — and `plan` is on `follow.js`'s forbidden list for exactly that reason.
+  /*
+   * 🏚️ **PROCEDURAL, ALWAYS, AND CHOSEN BY NOBODY.** John: *"Use the procedural map so the layout
+   * is always different each night."* `plan` stays on `follow.js`'s forbidden list — a TV that
+   * could be handed a different plan from the one the phones are told about is the leak that entry
+   * exists for — so the plan is not a URL param, it is a pure function of the public `worldSeed`
+   * (`src/party/mansion.js`), handed in through `buildTestRoom`'s `o.tables`.
+   *
+   * With no `planSeed` this falls through to the authored house, which is what `?view=party.follow`
+   * on its own still gives a developer.
+   */
+  const tables = opts.planSeed != null
+    ? generatedTablesFor(opts.planSeed, PLAN_OPTS)
+    : null;
   const wallField = new WallField({ authority: true });
-  const room = await engine.work(buildTestRoom(engine, { wallField }));
+  const room = await engine.work(buildTestRoom(engine, { wallField, tables }));
   scene.add(room.root);
+  stage('house');
 
-  const start = room.spawn.player[0];
+  const ballroom = ballroomOf(room);
+  const gallery = room.spaces.find((s) => s.roomType === MISSION_ROOM)
+    ?? room.spaces.find((s) => s.id === MISSION_ROOM) ?? null;
+
+  /*
+   * ⚠️ THE NIGHT STARTS IN THE BALLROOM, NOT AT THE PLAN'S SPAWN. John: *"Always start seated in
+   * the ballroom."* `spawn.player[0]` is wherever the generator's packer put the first study, which
+   * is the right answer for `game.play` and the wrong one for a show whose first beat is eight
+   * robots in a circle. Falls back to the plan's spawn when there is no ballroom to stand in.
+   */
+  const start = ballroom
+    ? new THREE.Vector3((ballroom.x0 + ballroom.x1) / 2, room.floorY ?? 0, (ballroom.z0 + ballroom.z1) / 2)
+    : room.spawn.player[0];
   engine.camera.position.set(start.x, 1.6, start.z + 3.2);
   engine.camera.lookAt(start.x, 1.2, start.z - 2.0);
 
   // ---------------------------------------------------------------- the runner
   /*
-   * PROCEDURAL `unit4h`, NOT THE GENERATED MESH. `game.play` defaults to `?mesh=1`, which is four
-   * GLB fetches; `Player` builds the procedural body itself when `avatar` is absent. The TV must
-   * come up without a network round trip it can fail on, and a follow slot that silently fell
-   * back to no character at all would be a black frame with a caption — which is the thing this
-   * whole slice exists to delete.
+   * 🤖 **THE MESHY BODY, AND THE REASON THIS FILE USED TO REFUSE IT NO LONGER HOLDS.**
    *
-   * `field` is omitted deliberately: `LimbRig` takes `field: null`, and nothing here detaches a
-   * limb. No sledge is equipped, so `SledgeRig` stays inert.
+   * The old note here read: *"The TV must come up without a network round trip it can fail on, and
+   * a follow slot that silently fell back to no character at all would be a black frame with a
+   * caption."* That was correct when the slot was created at "Send them in" — a 9.0 MB fetch
+   * starting at the moment the room stops looking at anything else is exactly the defect John
+   * reported. This slice moves the whole build into the LOBBY, behind a progress bar, so the fetch
+   * is paid during dead air that already existed.
+   *
+   * The refusal survives as the `.catch`: a failed or slow fetch falls back to the procedural
+   * `unit4h` body and the night runs anyway. What is no longer true is that the fetch must not be
+   * attempted at all.
+   *
+   * `friendly_all38.glb` — `mesh-avatar.js` `PLAYER_BODY`, 38 clips, the newest Meshy humanoid in
+   * the repo (shipped 2026-08-19). `?player=` still overrides it for an A/B.
    */
-  const runner = new Player({ scene, world: room, rng, id: 'runner' });
+  const botMats = unit4hMaterials();
+  const wantMesh = opts.mesh ?? true;
+  const avatar = wantMesh
+    ? await engine.work(createMeshAvatar({ materials: botMats }).catch((e) => {
+      console.warn('[follow-bed] the Meshy body did not load; falling back to unit4h —', e?.message ?? e);
+      return null;
+    }))
+    : null;
+  stage('dress');
+
+  /*
+   * `field` is omitted deliberately: `LimbRig` takes `field: null`, and nothing here detaches a
+   * limb.
+   */
+  const runner = new Player({ scene, world: room, rng, id: 'runner', materials: botMats, avatar });
   runner.pos.set(start.x, room.floorY, start.z);
   runner.facing = 0;
   runner.aimYaw = 0;
 
+  /*
+   * 🔨 **THE RUNNER SPAWNS EQUIPPED, AND THAT IS A RULE RATHER THAN A CONVENIENCE.** John: *"Runner
+   * spawns equipped with the sledge."* There is no pickup beat in a party night — `game.play`'s
+   * world sledge and `Player.interact` exist for the survival slice, and staging a hunt for a
+   * hammer in front of eight people waiting for a show would be the wrong first thirty seconds.
+   *
+   * `owned` before `equip()`: `_toggleSledge` refuses to draw a hammer the body does not own, and
+   * `equip()` itself needs `caps.arms === 2`, which a fresh body has.
+   */
+  runner.sledge.owned = true;
+  runner.sledge.equip();
+
   const route = new RunnerRoute(room, rng);
   route.replan(runner.pos);
   const operator = new FollowOperator(room, rng);
+  const hunter = buildHunterToken(room);
+
+  const painting = buildPainting(gallery, room.floorY ?? 0);
+  if (painting) scene.add(painting.group);
 
   // ---------------------------------------------------------------- lighting
   // Same five as `game.play`, same constructor values, and read `followRig`'s header before
@@ -422,16 +593,214 @@ export async function buildFollowBed(engine, opts = {}) {
     glance: 0,
     heading: 0,
     lastPortal: null,
+    /**
+     * 🕹️ **FALSE UNTIL THE FIRST `move` CUE, AND THE SCRIPTED SCHEDULE ABOVE IS WHAT RUNS UNTIL
+     * THEN. THAT FALLBACK IS NOT DEAD CODE.**
+     *
+     * `RunnerRoute` and the hesitation terms were D13's whole runner and are easy to mistake for
+     * something this slice replaced. Three things still need them:
+     *   · `?view=party.follow` opened standalone, which is how this view is developed.
+     *   · `?still=1`, which has to stay deterministic for a screenshot.
+     *   · `harness/party-follow-drive.mjs` **D3** — *consecutive grabs differ* — which would go
+     *     red on a camera pointed at a robot whose owner has not picked their phone up yet.
+     * Once a phone drives, the schedule never runs again that night.
+     */
+    driven: false,
+    stick: { x: 0, y: 0 },
+    run: false,
+    /** Set when a swing lands; read once by `missionTick`. `sledge.swingHit` is consumed by Player. */
+    contactAt: -1,
   };
   if (opts.pinShot && SHOTS.includes(opts.pinShot)) {
     operator.shot = opts.pinShot;
     operator.cut = () => { operator.until = 1e9; };
   }
 
+  // ---------------------------------------------------------------- the night's modes
+  /** `warm` · `intros` · `run`. See the header. */
+  let mode = opts.warm ? 'warm' : 'run';
+  let intro = null;
+  let introCast = null;
+  let runnerName = null;
+  const mission = { phase: painting ? 'seek' : 'none', room: gallery?.id ?? null };
+  runner.root.visible = mode === 'run';
+
   const _dir = new THREE.Vector3();
   const _views = [{ pos: engine.camera.position, dir: _dir }];
+  const _warmEye = new THREE.Vector3();
+  const _warmAt = new THREE.Vector3();
+  const _reel = new THREE.Vector3();
+
+  /**
+   * 👁️ **PULL AN EYE IN UNTIL IT CAN SEE WHAT IT IS POINTED AT.**
+   *
+   * `FollowOperator._reel` does this for the run camera and the warm and intro cameras need it for
+   * the same reason, discovered the same way: **the generated ballroom has a COLONNADE.**
+   * `dressGenerated` attaches `ROOMS.ballroom`'s `columns` to a generated row, so a camera placed
+   * on a circle inside the ballroom spends part of every revolution with a pillar 40 cm from the
+   * lens. The first drive photographed exactly that — a flat lit slab filling the middle third of
+   * frame, on the screen this slice exists to make people look at.
+   *
+   * Reeling in along the eye->target ray rather than sliding sideways keeps the composition: the
+   * shot gets tighter, never crooked.
+   */
+  function reelToSight(eye, at) {
+    if (!room.blocksSight(eye, at)) return eye;
+    for (let k = 0.72; k >= 0.16; k -= 0.14) {
+      _reel.copy(at).lerp(eye, k);
+      _reel.y = eye.y;
+      if (!room.blocksSight(_reel, at)) { eye.copy(_reel); return eye; }
+    }
+    // Nothing on the ray is clear — sit just off the target rather than inside a wall.
+    eye.copy(at);
+    eye.y += 0.30;
+    return eye;
+  }
+
+  /**
+   * 🔥 The warm camera — a slow arc of the ballroom, and nothing else moving.
+   *
+   * This is the picture behind the lobby's QR code while the bake finishes, so it has two jobs and
+   * they pull in opposite directions: it has to be alive enough to prove the mansion is really
+   * loading, and dull enough that the room reads the join code rather than the wallpaper. An arc
+   * at 0.09 rad/s takes 70 s to go round, which is slower than anyone consciously notices and fast
+   * enough that two glances a minute apart are different pictures.
+   */
+  /*
+   * 🔥 THE WARM SHOT IS A DOLLY DOWN THE ROOM, **NOT AN ORBIT OF ITS CENTRE**, AND THAT IS A
+   * MEASURED CORRECTION RATHER THAN A PREFERENCE.
+   *
+   * The orbit was built first and the drive photographed the problem: `dressGenerated` attaches
+   * `ROOMS.ballroom`'s COLONNADE to a generated row, so a camera circling the room and looking at
+   * its centre spends a good part of every revolution with a pillar filling the middle third of
+   * frame. `room.blocksSight` does not save it — that query answers a question about wall panels,
+   * and a column is neither a panel nor a space boundary, so the reel below cannot see one.
+   *
+   * A dolly along the LONG axis, offset to one side of the centre line, points down the room
+   * instead of across it. The colonnade then runs past the lens as parallax — which is what a
+   * colonnade is for — rather than standing in front of it, and the shot picks up the windows and
+   * the mezzanine, which are the best thing in the room to have behind a join code.
+   */
+  const warmBox = (() => {
+    const s = ballroom;
+    if (!s) return null;
+    const alongX = (s.x1 - s.x0) >= (s.z1 - s.z0);
+    const long = alongX ? [s.x0, s.x1] : [s.z0, s.z1];
+    const cross = alongX ? (s.z0 + s.z1) / 2 : (s.x0 + s.x1) / 2;
+    const crossHalf = (alongX ? (s.z1 - s.z0) : (s.x1 - s.x0)) / 2;
+    return { alongX, long, cross, off: Math.min(3.4, crossHalf * 0.52) };
+  })();
+
+  function warmStep(dt, t) {
+    if (!warmBox) {
+      _warmEye.set(start.x, 1.62, start.z + 4.5);
+      _warmAt.set(start.x, 1.30, start.z);
+    } else {
+      const { alongX, long, cross, off } = warmBox;
+      // A 44 s round trip, eased at the ends so the reverse is a settle rather than a bounce.
+      const u = 0.5 - Math.cos(t * (Math.PI * 2 / 44)) * 0.5;
+      const a = long[0] + 2.6 + u * Math.max(0.5, (long[1] - long[0]) - 5.2);
+      const ahead = a + (Math.sin(t * (Math.PI * 2 / 44)) >= 0 ? 9.0 : -9.0);
+      const y = 1.66 + Math.sin(t * 0.19) * 0.09;
+      if (alongX) {
+        _warmEye.set(a, y, cross + off);
+        _warmAt.set(ahead, 1.34, cross - off * 0.35);
+      } else {
+        _warmEye.set(cross + off, y, a);
+        _warmAt.set(cross - off * 0.35, 1.34, ahead);
+      }
+    }
+    reelToSight(_warmEye, _warmAt);
+    engine.camera.position.lerp(_warmEye, 1 - Math.exp(-2.0 * dt));
+    engine.camera.up.set(0, 1, 0);
+    engine.camera.lookAt(_warmAt);
+    engine.camera.rotateZ(Math.sin(t * 0.61) * 0.005);
+  }
+
+  /**
+   * 🖼️ The mission, in three states and one distance test.
+   *
+   * `seek` -> the painting is up. A landed swing within reach of it breaks it.
+   * `return` -> the painting is down and the runner is told to go home.
+   * `done` -> the runner is inside the ballroom. `src/party/room.js` `setWorld` turns that into
+   *           the DEBRIEF phase, which is John's *"next step after return"*.
+   */
+  function missionTick(t) {
+    if (mission.phase === 'seek' && painting?.intact && perf.contactAt >= 0 && t >= perf.contactAt) {
+      perf.contactAt = -1;
+      const d = Math.hypot(runner.pos.x - painting.pos.x, runner.pos.z - painting.pos.z);
+      // 1.9 m: `WEAPON_RANGE.sledge` is 1.55 from the eye, and the painting hangs 0.22 m proud of
+      // a wall the body cannot stand inside. Generous on purpose — a mission that needs pixel
+      // alignment to complete is a mission that reads as broken.
+      if (d <= 1.9) {
+        painting.intact = false;
+        painting.group.visible = false;
+        mission.phase = 'return';
+        mission.room = ballroom?.id ?? null;
+      }
+    }
+    if (mission.phase === 'return' && ballroom) {
+      const inside = runner.pos.x > ballroom.x0 && runner.pos.x < ballroom.x1
+        && runner.pos.z > ballroom.z0 && runner.pos.z < ballroom.z1;
+      if (inside) mission.phase = 'done';
+    }
+  }
 
   function step(dt, t) {
+    if (mode === 'warm') {
+      warmStep(dt, t);
+      hunter.step(dt);
+      engine.camera.getWorldDirection(_dir);
+      room.setViewpoints(_views, dt);
+      room.update?.(dt);
+      return;
+    }
+    if (mode === 'intros') {
+      intro?.step(dt, t);
+      hunter.step(dt);
+      const space = room.spaceAt(engine.camera.position);
+      if (space) rig.follow(space, dt);
+      camLight.position.copy(engine.camera.position);
+      camLight.position.y -= 0.18;
+      engine.camera.getWorldDirection(_dir);
+      room.setViewpoints(_views, dt);
+      room.update?.(dt);
+      return;
+    }
+
+    /*
+     * 🕹️ **THE PHONE IS THE BODY.** John: *"replace STILL/CREEP/WALK/RUN with full movement
+     * control and freedom."*
+     *
+     * This is one branch and about six lines, and that is the whole point of building the follow
+     * on `Player` rather than animating a capsule: `Player.update`'s `move` is AIM-RELATIVE
+     * (`player.js` `_stepGround`), so a thumb stick IS the input the body already takes. Collision,
+     * sliding, the doorway squeeze, the sill step, the foot plant and the arm swing all come free,
+     * and there is no second movement model to keep in sync with the first.
+     *
+     * ⚠️ The heading integrates the stick's own bearing rather than being set from it, so pushing
+     * the stick left turns the runner rather than making it moonwalk sideways down a corridor.
+     * `move.x` is kept as the strafe it already is, so a player who wants to sidestep a doorway
+     * can, which is the "freedom" half of the brief.
+     */
+    if (perf.driven) {
+      const s = perf.stick;
+      const mag = Math.hypot(s.x, s.y);
+      if (mag > 0.12) {
+        const want = perf.heading + Math.atan2(s.x, Math.max(0.0001, s.y));
+        const turn = Math.atan2(Math.sin(want - perf.heading), Math.cos(want - perf.heading));
+        perf.heading += turn * (1 - Math.exp(-9.0 * dt));
+      }
+      runner.update(dt, t, {
+        move: { x: 0, y: Math.min(1, mag) },
+        run: perf.run,
+        aimYaw: perf.heading,
+      });
+      missionTick(t);
+      afterBody(dt, t);
+      return;
+    }
+
     let drive = THROTTLE_DRIVE[perf.throttle];
 
     // A body walking a dark house it is frightened of does not hold a constant speed. Three
@@ -466,11 +835,19 @@ export async function buildFollowBed(engine, opts = {}) {
       aimYaw: perf.heading + perf.glance,
     });
 
+    missionTick(t);
+    afterBody(dt, t);
+  }
+
+  /** Everything the camera and the house do after the body has moved, on either drive. */
+  function afterBody(dt, t) {
     // The last doorway the runner came through is where the `doorway` shot parks.
     if (route.legs.length) {
       const head = route.legs[0];
       if (head.distanceTo(runner.pos) < 3.2) perf.lastPortal = head;
     }
+
+    hunter.step(dt);
 
     const speed01 = Math.min(1, runner.speed / MOVE.run);
     operator.update(dt, t, runner, engine.camera, perf.lastPortal, speed01);
@@ -488,17 +865,110 @@ export async function buildFollowBed(engine, opts = {}) {
     room.update?.(dt);
   }
 
+  /** The id of the space a world point is in, or null. What the intel and the map are keyed on. */
+  function roomIdAt(v) {
+    return room.spaceAt(v)?.id ?? null;
+  }
+
   return {
     room,
     runner,
     /** What the overlay prints, and what the drive asserts on. Never a room name — §3.3.5. */
     readout: () => ({
-      shot: operator.shot,
-      throttle: perf.hesitateFor > 0 ? 'CREEP' : perf.throttle,
+      shot: mode === 'run' ? operator.shot : mode,
+      throttle: perf.driven
+        ? (perf.run ? 'RUN' : (Math.hypot(perf.stick.x, perf.stick.y) > 0.12 ? 'WALK' : 'STILL'))
+        : (perf.hesitateFor > 0 ? 'CREEP' : perf.throttle),
       speed: +runner.speed.toFixed(2),
     }),
     setThrottle(name) { if (THROTTLE_DRIVE[name]) perf.throttle = name; },
     step,
     lights: { key, warmA, warmB, cool, fill, camLight },
+
+    // ------------------------------------------------------------ the night
+    get mode() { return mode; },
+    /** Who the lower-third is naming, once a `run` cue has said. */
+    get runnerName() { return runnerName; },
+    /** True once the intro sequence has played itself out. */
+    introsDone: () => !!intro?.done,
+
+    /**
+     * 🔁 **THE CUE CHANNEL'S LANDING POINT.** `src/party/follow.js` `cueViolations` has already
+     * refused anything with a role, an alignment or the guide's map in it — by the time a cue
+     * reaches this switch it is one of five known shapes carrying only public fields.
+     */
+    cue(c) {
+      if (!c || typeof c !== 'object') return;
+      if (c.kind === 'idle') {
+        mode = 'warm';
+        runner.root.visible = false;
+        return;
+      }
+      if (c.kind === 'intros') {
+        introCast = (c.cast || []).slice(0, 8);
+        if (!introCast.length) return;
+        intro?.dispose();
+        intro = buildIntroBed(engine, { room, cast: introCast, materials: botMats, reelSight: reelToSight });
+        mode = 'intros';
+        runner.root.visible = false;
+        return;
+      }
+      if (c.kind === 'run') {
+        /*
+         * ⚠️ THE INTRO BODIES ARE TORN DOWN HERE AND NOT BEFORE. Disposing them when the intros
+         * merely FINISH would leave the ballroom empty for however long the room spends on
+         * ballots, which is the beat the seated circle exists to fill.
+         */
+        intro?.dispose();
+        intro = null;
+        mode = 'run';
+        runnerName = c.name ?? null;
+        runner.root.visible = true;
+        if (c.accent) {
+          const hex = parseInt(String(c.accent).slice(1), 16);
+          if (Number.isFinite(hex)) camLight.color.setHex(hex);
+        }
+        // Put the runner back on its feet in the ballroom — the pair is sent in from the circle.
+        runner.pos.set(start.x, room.floorY ?? 0, start.z);
+        runner.vel.set(0, 0, 0);
+        return;
+      }
+      if (c.kind === 'shot' && SHOTS.includes(c.shot)) {
+        operator.shot = c.shot;
+        operator.until = 5.5;
+        return;
+      }
+      if (c.kind === 'move') {
+        /*
+         * The first stick that arrives retires the scripted schedule for the rest of the night.
+         * See `perf.driven` — the schedule is the fallback, not the dead predecessor.
+         */
+        perf.driven = true;
+        perf.stick.x = Math.max(-1, Math.min(1, +c.x || 0));
+        perf.stick.y = Math.max(-1, Math.min(1, +c.y || 0));
+        perf.run = !!c.run;
+        if (c.swing) {
+          const res = runner.attack(engine.elapsed ?? 0);
+          /*
+           * ⚠️ THE CONTACT IS SCHEDULED, NOT SAMPLED. `Player.update` consumes
+           * `sledge.swingHit()` itself — it is a one-shot latch — so a second reader here would
+           * always see null. `attack()` returning `{ pending: true }` plus the clip's own two
+           * published constants is the honest way to know when the head arrives.
+           */
+          if (res?.pending) perf.contactAt = (engine.elapsed ?? 0) + SWING_DUR * CONTACT_PHASE;
+        }
+      }
+    },
+
+    /**
+     * 🌍 What the TV reports back to the server, twice a second. Rooms and coordinates only —
+     * `worldViolations` refuses anything else at the door, and `src/party/room.js` decides who is
+     * told what. See `src/party/intel.js`.
+     */
+    world: () => ({
+      runner: { room: roomIdAt(runner.pos), x: +runner.pos.x.toFixed(2), z: +runner.pos.z.toFixed(2) },
+      hunter: { room: roomIdAt(hunter.pos), x: +hunter.pos.x.toFixed(2), z: +hunter.pos.z.toFixed(2) },
+      mission: { phase: mission.phase, room: mission.room },
+    }),
   };
 }

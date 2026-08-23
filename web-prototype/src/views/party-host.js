@@ -16,7 +16,7 @@ import { injectNightSkin, markPartyReady, playerName } from '../party/night-skin
 import { qrSvg } from '../party/qr.js';
 import { DEFAULT_LOOK, cleanLook, robotFaceSvg } from '../party/look.js';
 import { mergePublicNames } from '../party/cast-ui.js';
-import { followUrl } from '../party/follow.js';
+import { cueViolations, warmLabel, warmPct, warmUrl } from '../party/follow.js';
 
 const LINE = 'Two of you go in. One walks, one talks. The rest of us watch. Someone in this room is lying.';
 
@@ -48,6 +48,16 @@ export default async function partyHost({ params }) {
     beat: 'lobby',
     err: '',
     locked: false,
+    /** The mansion's own progress, straight off the slot. `''` until the iframe says anything. */
+    warm: '',
+    warmPct: 0,
+    /** Set once the intro cue has gone out, so a repaint cannot fire it twice. */
+    introsSent: false,
+    introsDone: false,
+    /** The runner the run cue named, so a repaint cannot re-cue the same runner. */
+    cuedRunner: null,
+    /** How many world reports have been relayed. Read by the drive, never by the UI. */
+    worldSent: 0,
   };
 
   /**
@@ -57,7 +67,24 @@ export default async function partyHost({ params }) {
    * zone at that moment — measured: `ReferenceError: Cannot access 'follow' before
    * initialization`, thrown out of the first three paints, on a TV that otherwise looked fine.
    */
-  const follow = { layer: null, el: null, src: null, live: false, raf: 0 };
+  const follow = { layer: null, el: null, src: null, live: false, raf: 0, mode: 'warm' };
+
+  /** The latest pad message, and the frame that will deliver it. See `onMessage`'s `t:'move'`. */
+  const pad = { pending: null, raf: 0 };
+  function flushMove() {
+    pad.raf = 0;
+    const m = pad.pending;
+    if (!m) return;
+    pad.pending = null;
+    sendCue({ kind: 'move', x: +m.x || 0, y: +m.y || 0, run: !!m.run, swing: !!m.swing });
+  }
+  function queueMove(m) {
+    // A swing is an EDGE and must not be swallowed by a later stick sample that has no swing on
+    // it — coalescing the stick is free, coalescing a tap loses the blow the player asked for.
+    if (pad.pending?.swing) m = { ...m, swing: true };
+    pad.pending = m;
+    if (!pad.raf) pad.raf = requestAnimationFrame(flushMove);
+  }
 
   const client = new PartyNightClient({
     url: wsUrl,
@@ -65,6 +92,21 @@ export default async function partyHost({ params }) {
       if (m.t === 'welcome') sessionStorage.setItem(tokenKey(code, 'tv'), m.token);
       if (m.t === 'show' && m.beat) ui.beat = m.beat;
       if (m.t === 'full') ui.err = 'The TV seat is taken. Close the other host tab, or pick a new room code.';
+      /*
+       * 🕹️ THE RUNNER'S THUMBS, ON THEIR WAY TO THE BODY. The server relays these to the TV alone
+       * (`net/party/local.mjs`), because the TV is the only socket with a mansion in it.
+       *
+       * ⚠️ **COALESCED TO ONE CUE PER ANIMATION FRAME.** The phone posts at 20 Hz and the mansion
+       * renders at up to 60; forwarding each message the instant it lands would post into the
+       * iframe from a socket callback, several times between frames, for a value the bed only
+       * reads once per `step`. `pending` holds the latest and the rAF delivers it.
+       */
+      if (m.t === 'move') { queueMove(m); return; }
+      if (m.t === 'warm' && !follow.el) {
+        // A second TV, or a host that reloaded mid-night: adopt the reported progress rather than
+        // showing a bar at zero next to a mansion somebody else already baked.
+        ui.warm = m.stage; ui.warmPct = m.pct ?? warmPct(m.stage);
+      }
       if (m.t === 'lobby' && patchLobby(root, client, ui, m)) return;
       paint();
     },
@@ -133,7 +175,6 @@ export default async function partyHost({ params }) {
     if (follow.layer) return;
     const layer = document.createElement('div');
     layer.className = 'run-cam-layer';
-    layer.hidden = true;
     const f = document.createElement('iframe');
     f.className = 'run-cam';
     f.title = 'Follow camera';
@@ -156,57 +197,180 @@ export default async function partyHost({ params }) {
     follow.live = false;
   }
 
-  /** Keep the layer registered with the frame it is pretending to be inside. */
+  /**
+   * 🔥 **THE LAYER HAS TWO PLACEMENTS, AND NEITHER OF THEM IS `display:none`.**
+   *
+   * `run` — sized to `.run-frame`'s client rect, over the show, exactly as D13 shipped it.
+   * `warm` — full-bleed, BEHIND the lobby, opacity ramping with the bake.
+   *
+   * ⚠️ **THE WARM LAYER IS DIMMED, NEVER HIDDEN, AND THAT IS A BROWSER CONSTRAINT RATHER THAN A
+   * TASTE CALL.** `display:none` and `visibility:hidden` both let a browser throttle or stop
+   * `requestAnimationFrame` in a same-origin iframe — which would pause the bake this whole slice
+   * exists to run early. So the mansion is always composited; during the lobby it is simply turned
+   * down to a backdrop under a scrim.
+   *
+   * That turns out to be the better indicator anyway. A spinner tells you something is happening;
+   * a mansion fading up behind the join code tells you WHAT is happening, and it is the thing they
+   * are about to be inside.
+   */
   function placeFollow() {
-    if (!follow.layer || follow.layer.hidden) return;
+    if (!follow.layer) return;
     const frame = root.querySelector('.run-frame');
-    if (!frame) { follow.layer.hidden = true; return; }
-    const r = frame.getBoundingClientRect();
     const s = follow.layer.style;
-    s.left = `${r.left}px`;
-    s.top = `${r.top}px`;
-    s.width = `${r.width}px`;
-    s.height = `${r.height}px`;
+    const runMode = follow.mode === 'run' && !!frame;
+    follow.layer.classList.toggle('warm', !runMode);
+    if (runMode) {
+      const r = frame.getBoundingClientRect();
+      s.left = `${r.left}px`;
+      s.top = `${r.top}px`;
+      s.width = `${r.width}px`;
+      s.height = `${r.height}px`;
+    } else {
+      s.left = '0px'; s.top = '0px'; s.width = '100vw'; s.height = '100vh';
+    }
     // The camera fades UP over the slate rather than the slate fading out from under a black
     // rectangle — during the bake the layer is fully transparent and the still is the picture.
     follow.layer.classList.toggle('live', follow.live);
-    frame.classList.toggle('live', follow.live);
+    frame?.classList.toggle('live', follow.live && runMode);
+    // The lobby only becomes a scrim once there is a rendered frame to be a scrim over.
+    document.body.classList.toggle('rrr-warming', !runMode && follow.live);
   }
 
   function followLoop() {
-    follow.raf = follow.layer && !follow.layer.hidden ? requestAnimationFrame(followLoop) : 0;
+    follow.raf = follow.layer ? requestAnimationFrame(followLoop) : 0;
     placeFollow();
   }
 
-  function syncFollow(src) {
-    if (!src) {
-      if (follow.layer) follow.layer.hidden = true;
-      if (follow.raf) { cancelAnimationFrame(follow.raf); follow.raf = 0; }
-      return;
-    }
+  /**
+   * 🚨 **MOUNTED ONCE PER NIGHT. THE `src` IS ASSIGNED EXACTLY ONCE AND NEVER AGAIN.**
+   *
+   * `ensureFollow`'s header already records what a reassignment costs: the HTML spec discards a
+   * nested browsing context when its iframe is removed or its `src` re-set, so a fresh WebGL
+   * context and a fresh multi-second bake. This slice makes that worse — a reload now also
+   * re-fetches a 9.0 MB character — and it makes it avoidable, because `warmUrl` is a function of
+   * (room, worldSeed) and neither of those changes after the TV has connected.
+   *
+   * Everything that DOES change during a night — who is running, what their thumbs are doing —
+   * goes over `sendCue` instead. That is the whole reason the cue channel exists.
+   */
+  function mountFollow() {
     ensureFollow();
-    if (follow.src !== src) {
-      follow.src = src;
-      follow.live = false;
-      follow.el.src = src;
-    }
-    follow.layer.hidden = false;
-    placeFollow();
+    if (follow.src) return;
+    /*
+     * 🚨 **NOT ONE BYTE OF `src` UNTIL THE SEED IS REAL. THIS GUARD IS THE SECOND HALF OF A FIX
+     * FOR A NIGHT-BREAKING RACE, AND IT USED TO READ `client.frame?.worldSeed ?? 0`.**
+     *
+     * `connect()` resolves on `welcome` and this view paints on every message, so the first paint
+     * ran with `client.frame` still null. The `?? 0` then baked seed 0 into a URL that is
+     * ASSIGNED EXACTLY ONCE PER NIGHT — while every phone derived its guide map from
+     * `frame.worldSeed`, which the server defaults to 1. The TV rendered one mansion and the
+     * guide called rooms off the plan of another, all night, silently.
+     *
+     * `worldSeed` now rides the welcome (`net/party/local.mjs`), so in practice this never has to
+     * wait. The guard stays anyway: a default seed is a silent wrong house, and a late mount is a
+     * bar that sits at 0% for one message. Those failures are not close to equally bad.
+     */
+    const seed = client.worldSeed;
+    if (seed == null) return;
+    follow.src = warmUrl({ room: code, worldSeed: seed });
+    follow.el.src = follow.src;
     if (!follow.raf) follow.raf = requestAnimationFrame(followLoop);
   }
 
-  // The follow reports its first rendered frame. Until then the slate is the picture.
+  /**
+   * 🔁 Hand the mansion a cue. Refused at BOTH ends — see `views/party-follow.js`'s listener.
+   *
+   * A throw here would take out the paint that raised it, so a violation is logged and dropped on
+   * this side and refused on the other. The gate (`harness/party-warm.mjs` W3) is what makes sure
+   * a violation is a bug in the caller rather than a leak in the channel.
+   */
+  function sendCue(cue) {
+    if (!follow.el?.contentWindow) return;
+    const bad = cueViolations(cue);
+    if (bad.length) { console.error(`[host] refusing to send a cue: ${bad.join(', ')}`); return; }
+    follow.el.contentWindow.postMessage({ t: 'cue', cue }, location.origin);
+  }
+
+  /** The joined phones, as the closed public subset the `intros` cue may carry. */
+  function introCast() {
+    return phones().map((s) => {
+      const look = cleanLook(s) || DEFAULT_LOOK;
+      return {
+        id: s.playerId ?? s.id, seat: s.seat ?? 0,
+        name: s.name ?? null, shell: look.shell, accent: look.accent,
+      };
+    });
+  }
+
+  /**
+   * Everything the mansion reports back: its bake progress, its first frame, the end of the
+   * intros, and — during the run only — where the bodies are.
+   */
   window.addEventListener('message', (e) => {
     if (!follow.el || e.source !== follow.el.contentWindow) return;
-    if (e.data?.t !== 'follow' || !e.data.ready) return;
-    follow.live = true;
-    root.querySelector('.run-frame')?.classList.add('live');
+    const m = e.data;
+    if (m?.t !== 'follow') return;
+
+    if (m.warm) {
+      ui.warm = m.warm;
+      ui.warmPct = warmPct(m.warm);
+      paintWarm();
+      // The room's wait, not the host's: a phone that has just typed its name should be able to
+      // see that the night is loading rather than wonder whether anyone is there.
+      client.send({ t: 'warm', stage: m.warm, pct: ui.warmPct });
+      // The house being ready is what the intros were waiting for, if Start already happened.
+      if (m.warm === 'ready') maybeIntros();
+      return;
+    }
+    if (m.ready) {
+      follow.live = true;
+      root.querySelector('.run-frame')?.classList.add('live');
+      return;
+    }
+    if (m.intros === 'done' && !ui.introsDone) {
+      ui.introsDone = true;
+      return;
+    }
+    if (m.world) {
+      /*
+       * 🌍 THE TV IS THE WORLD AUTHORITY AND THE SERVER IS THE FILTER. See
+       * `src/party/follow.js`'s `WORLD_KEYS` header for why the arrow points this way, and
+       * `src/party/intel.js` for what the server does with it. The host does not read this — it
+       * relays it. A TV that interpreted the report would be a TV that knew where the hunter was,
+       * which is the second item on `party-loop.md`'s "Do not" list.
+       */
+      ui.worldSent = (ui.worldSent || 0) + 1;
+      client.send({ t: 'world', ...m.world });
+    }
   });
+
+  /**
+   * 🎬 **THE INTROS RUN WHEN THE NIGHT HAS STARTED *AND* THE HOUSE IS READY — in either order.**
+   *
+   * Those two events race, and which one wins is the whole point of this slice. If the bake
+   * finishes first (the normal case now, because it began when the first phone was still typing
+   * its name) the intros fire the instant Start is pressed. If the room starts early, the warm bar
+   * stays up and this fires later, off the `ready` report.
+   *
+   * ⚠️ **START IS NEVER BLOCKED ON THE BAKE.** A host button greyed out because a shader is
+   * compiling is a worse failure than a wait with a visible cause — the room cannot tell those
+   * apart from a broken TV, and John's note was about not knowing what was happening.
+   */
+  function maybeIntros() {
+    if (ui.introsSent) return;
+    if (ui.warm !== 'ready') return;
+    if (ui.beat === 'lobby') return;
+    const cast = introCast();
+    if (!cast.length) return;
+    ui.introsSent = true;
+    sendCue({ kind: 'intros', cast });
+  }
 
   function startNight() {
     client.send({ t: 'start' });
     client.send({ t: 'casting' });
     ui.beat = 'casting';
+    maybeIntros();
     paint();
   }
 
@@ -217,6 +381,33 @@ export default async function partyHost({ params }) {
     // Optimistic — the server fans expedition to every socket including this TV.
     ui.beat = 'expedition';
     paint();
+  }
+
+  /**
+   * 📊 The warm bar, patched in place rather than repainted.
+   *
+   * `paint()` rebuilds `root.innerHTML`, and the bake reports five times over twenty-odd seconds
+   * during which the lobby is also fanning a snapshot on every join. Repainting the whole screen
+   * for a percentage would throw away the seat grid's in-place animation for no reason — this is
+   * the same reasoning `patchLobby` exists for, one element over.
+   */
+  function paintWarm() {
+    const bar = root.querySelector('[data-warm-fill]');
+    const txt = root.querySelector('[data-warm-text]');
+    if (!bar || !txt) { paint(); return; }
+    bar.style.width = `${ui.warmPct}%`;
+    txt.textContent = `${warmLabel(ui.warm)} · ${ui.warmPct}%`;
+    root.querySelector('.warm')?.classList.toggle('ready', ui.warm === 'ready');
+  }
+
+  /** The indicator itself. Present from the first lobby paint, because the bake starts there. */
+  function warmBar() {
+    const pct = ui.warmPct;
+    const label = ui.warm ? `${warmLabel(ui.warm)} · ${pct}%` : 'warming the mansion · 0%';
+    return `<div class="warm${ui.warm === 'ready' ? ' ready' : ''}">
+      <div class="warm-text" data-warm-text>${esc(label)}</div>
+      <div class="warm-track"><div class="warm-fill" data-warm-fill style="width:${pct}%"></div></div>
+    </div>`;
   }
 
   function paint() {
@@ -281,6 +472,7 @@ export default async function partyHost({ params }) {
           <div class="night-qr" aria-label="QR join">${qrSvg(joinPath, { dim: 200 })}</div>
         </div>
         ${seatGrid(client.lobby)}
+        ${warmBar()}
         <div class="actions">
           <button class="btn" id="go" ${canStart ? '' : 'disabled'}>Start the night</button>
         </div>
@@ -308,6 +500,12 @@ export default async function partyHost({ params }) {
       runnerName: joinedName(names, pair.runner || recap.runner, null),
       followSrc: follow.src,
       followLive: follow.live,
+      // The three the warm slice added, so `party-follow-drive` can assert the lobby really is
+      // baking rather than the TV merely claiming to.
+      warm: ui.warm,
+      warmPct: ui.warmPct,
+      followMode: follow.mode,
+      worldSent: ui.worldSent,
     };
 
     root.querySelector('#go')?.addEventListener('click', startNight);
@@ -316,19 +514,38 @@ export default async function partyHost({ params }) {
     root.querySelector('#to-recap')?.addEventListener('click', () => setBeat('recap'));
     root.querySelector('#to-cast')?.addEventListener('click', () => setBeat('casting'));
 
-    // Last, because it measures the frame this paint just wrote in order to sit over it. Off the
-    // run beat it hides the layer rather than destroying it — see `syncFollow`.
+    /*
+     * 🔥 **LAST, AND UNCONDITIONAL. THE MANSION IS MOUNTED FROM THE FIRST PAINT.**
+     *
+     * This used to be gated on `onRun && runnerId`, and that gate WAS the bug John played: the
+     * iframe came into existence at the instant the room finished nominating, and then spent
+     * twenty-odd seconds loading in front of everybody. It is now mounted whenever the TV has a
+     * room, which is immediately, and the same context lives all night.
+     *
+     * `placeFollow` reads `.run-frame` on every animation frame, so switching between the
+     * behind-the-lobby placement and the over-the-show one is a class and a rect, not a remount.
+     */
     const runnerId = pair.runner || recap.runner;
-    syncFollow(onRun && runnerId
-      ? followUrl({
-        beat: 'expedition',
-        room: code,
-        runnerId,
+    follow.mode = onRun && runnerId ? 'run' : 'warm';
+    mountFollow();
+    placeFollow();
+
+    /*
+     * The run cue, sent once per runner. `cuedRunner` is what stops a lobby snapshot — which
+     * arrives several times a second — from re-cueing the same person and resetting them to the
+     * ballroom mid-corridor.
+     */
+    if (follow.mode === 'run' && ui.cuedRunner !== runnerId) {
+      ui.cuedRunner = runnerId;
+      const look = seatLook(client.lobby, runnerId) || DEFAULT_LOOK;
+      sendCue({
+        kind: 'run',
+        runner: String(runnerId),
         name: joinedName(names, runnerId, 'The runner'),
-        look: seatLook(client.lobby, runnerId) || DEFAULT_LOOK,
-        worldSeed: frame?.worldSeed,
-      })
-      : null);
+        shell: look.shell,
+        accent: look.accent,
+      });
+    }
   }
 
   paint();
