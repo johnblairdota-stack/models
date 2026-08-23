@@ -164,6 +164,17 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       if (intel) base.you = { ...base.you, intel };
     }
     /*
+     * THE RUNNER'S OWN ROOM — proprioception, not intel.
+     *
+     * Playcritique feel28: the guide shouts room names into a pad that never names the room
+     * the runner is standing in, so co-op has no receiving end. This is the one word a body
+     * already knows. It is NOT Word from the House (still stripped from this seat) and it is
+     * NOT the map. you.here is runner-audience in entitle.js; everyone else is unchanged.
+     */
+    if (!sock.isTV && sock.seatRole === 'runner' && base.you && state.world?.runner?.room) {
+      base.you = { ...base.you, here: state.world.runner.room };
+    }
+    /*
      * 🗺️ **`|| state.world` — AND WITHOUT IT THE GUIDE'S NEW MAP IS A FLOOR PLAN WITH NO MARKS ON
      * IT, WHICH THE FIRST BROWSER PASS PHOTOGRAPHED.**
      *

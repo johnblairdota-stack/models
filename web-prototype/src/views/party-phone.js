@@ -452,6 +452,7 @@ export default async function partyPhone({ params }) {
           <p class="hint">Eyes on the TV. Drag to move, hold RUN, tap SWING. Running is loud.</p>
           <p class="hint">Listen to your guide — they have the map, you have the hammer.</p>
           ${missionLine(frame)}
+          ${hereLine(frame)}
           <div class="stick-wrap">
             <div class="stick" id="stick"><div class="nub" data-nub></div></div>
             <div class="stick-side">
@@ -752,6 +753,23 @@ export default async function partyPhone({ params }) {
    * `src/party/room.js` appends off the TV's world report — PUBLIC, and carrying a room and
    * nothing else, so a spectator can follow the beat without being told who is where.
    */
+  /**
+   * Where the runner is standing — one word, same dictionary as the guide map.
+   * Not intel. Not a map. Proprioception so a shouted room name is checkable.
+   */
+  function hereLabel(roomId) {
+    if (!roomId) return '—';
+    const labels = nightLabels();
+    if (labels?.has?.(roomId)) return labels.get(roomId);
+    const type = String(roomId).includes('.') ? String(roomId).split('.')[1] : String(roomId);
+    if (/^\d+$/.test(type) || String(roomId).startsWith('c')) return 'a passage';
+    return roomLabel(type);
+  }
+
+  function hereLine(frame) {
+    return '<p class="here">You are in <strong data-here>' + esc(hereLabel(frame?.you?.here)) + '</strong></p>';
+  }
+
   function missionLine(frame) {
     const evs = state.client?.events ?? [];
     const last = [...evs].reverse().find((e) => String(e.type ?? '').startsWith('mission.'));
@@ -856,6 +874,9 @@ export default async function partyPhone({ params }) {
     const slot = root.querySelector('[data-intel]');
     const map = root.querySelector('.guide-map');
     if (!slot && !map && !root.querySelector('#stick')) return false;
+
+    const hereEl = root.querySelector('[data-here]');
+    if (hereEl) hereEl.textContent = hereLabel(frame?.you?.here);
 
     if (slot) {
       const intel = frame?.you?.intel;

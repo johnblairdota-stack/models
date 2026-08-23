@@ -298,6 +298,8 @@ export function injectNightSkin() {
        'rolecard.js' takes the same token, so the two Production surfaces are one colour. */
     .intel.exact .k { color:var(--night-bad); }
     .goal { margin-top:10px; color:var(--night-live); font-size:16px; font-weight:700; }
+    .here { margin: 8px 0 2px; color: var(--night-ink); font-size: 18px; font-weight: 700; letter-spacing: .02em; }
+    .here strong[data-here] { color: var(--night-live); }
     ${GUIDE_MAP_CSS}
     @keyframes night-rise { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform:none; } }
     @keyframes night-breathe { 0%,100% { opacity:.55; } 50% { opacity:1; } }
