@@ -32,8 +32,12 @@ import {
 } from '../src/party/follow.js';
 import {
   HOME_ROOM, MISSION_ROOM, PLAN_OPTS, PLAN_TRIES,
-  coverageRoomOf, pickPlanSeed, planFor, planOptsFor, planPasses, planRegions, roomLabel, spaceLabel,
+  coverageRoomOf, homeIsCorner, pickPlanSeed, planFor, planOptsFor, planPasses, planRegions,
+  roomLabel, spaceLabel,
 } from '../src/party/mansion.js';
+import { lockedSeatCount } from '../src/game/chair-seats.js';
+import { LAYOUT_CATALOG_IDS, catalogPlacements } from '../src/game/furn-layout.js';
+import { FURN_SMASH_ASSETS } from '../src/game/furn-catalog.js';
 import { ROOMS, hunterVisibleToGuide } from '../src/party/coverage.js';
 import { buildPlan } from './genspike.mjs';
 import { DROP_RATE, GRADES, STALE_MAX, gradeFor, intelFor, intelLine } from '../src/party/intel.js';
@@ -616,6 +620,60 @@ console.log('\nparty-warm — the lobby-warm night');
     .some((id) => hunterVisibleToGuide({ ...cams, hunterRoom: coverageRoomOf(id) }));
   t('W13c control · the raw id is invisible at FULL coverage; the mapped one is not',
     !anyRaw && anyMapped, `raw ${anyRaw} · mapped ${anyMapped}`);
+}
+
+// ---- W14 · PR A mansion layout: corner ballroom, deferred seats, catalog ids only ------------
+//
+// John 2026-08-23. Cyan map-edge is PR B and is not asserted here.
+{
+  t('W14 · the night asks the packer for a corner ballroom',
+    PLAN_OPTS.homeCorner === true, JSON.stringify(PLAN_OPTS));
+
+  let corners = 0, firstTry = 0;
+  for (let ws = 0; ws < 24; ws++) {
+    const picked = pickPlanSeed(ws);
+    const plan = planFor(picked.seed);
+    if (homeIsCorner(plan)) corners++;
+    if (picked.tries === 1 && picked.ok) firstTry++;
+  }
+  t('W14b · every world seed 0..23 puts the ballroom in an env corner',
+    corners === 24, `${corners}/24`);
+  t('W14c · and homeCorner does that on the first candidate, not by retry luck',
+    firstTry === 24, `${firstTry}/24 first-try`);
+
+  let rejectedCorner = 0;
+  for (let s = 0; s < 48; s++) {
+    const loose = buildPlan(String(s), { ...PLAN_OPTS, homeCorner: false });
+    const hasRooms = loose.regions.some((R) => R.kind === 'room' && R.type === MISSION_ROOM)
+      && loose.regions.some((R) => R.kind === 'room' && R.type === HOME_ROOM);
+    if (hasRooms && !homeIsCorner(loose) && !planPasses(loose)) rejectedCorner++;
+  }
+  t('W14d control · planPasses refuses a playable house whose ballroom is not in a corner',
+    rejectedCorner > 0, `${rejectedCorner}/48 unconstrained plans caught`);
+
+  t('W14e · locked seats follow joined players, not an eight-chair bake',
+    lockedSeatCount({ players: 4 }) === 4
+    && lockedSeatCount({ players: 1 }) === 1
+    && lockedSeatCount({ players: 0 }) === 1);
+  t('W14f · `?chairs=` is the seating lock a developer typed',
+    lockedSeatCount({ players: 1, chairsQuery: '8' }) === 8
+    && lockedSeatCount({ players: 4, chairsQuery: '2' }) === 2);
+
+  const catalogIds = new Set(FURN_SMASH_ASSETS.map((a) => a.id));
+  const unknown = LAYOUT_CATALOG_IDS.filter((id) => !catalogIds.has(id));
+  t('W14g · layout ids are all real furn-catalog rows',
+    unknown.length === 0 && LAYOUT_CATALOG_IDS.length === 6, unknown.join(',') || LAYOUT_CATALOG_IDS.join(','));
+
+  const fake = catalogPlacements([
+    { id: 'r0.ballroom', roomType: 'ballroom', x0: 0, x1: 27.2, z0: 0, z1: 15.3 },
+    { id: 'r1.study', roomType: 'study', x0: 28, x1: 39.6, z0: 0, z1: 15.4 },
+    { id: 'c0.0', x0: 13, x1: 16, z0: 16, z1: 22 },
+  ]);
+  const used = [...new Set(fake.map((p) => p.catalogId))];
+  t('W14h · placements only emit catalog ids this slice named',
+    used.every((id) => LAYOUT_CATALOG_IDS.includes(id))
+    && used.includes('armor') && used.includes('grand-piano') && used.includes('chandelier')
+    && used.includes('wingback'), used.join(','));
 }
 
 console.log(`\nparty-warm: ${pass} passed, ${fail} failed`);

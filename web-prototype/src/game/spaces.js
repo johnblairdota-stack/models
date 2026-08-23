@@ -112,6 +112,12 @@ export const GEN = PLAN_URL ? generatedTables(PLAN_SEED, {
    * 12, 14) are no longer the known bad seeds.
    */
   rooms: numOr('planrooms', 3),
+  /**
+   * 🏠 **John 2026-08-23 — the ballroom sits in a plan corner by construction.** Off in
+   * `genspike.mjs` so the 512-seed corpus does not move; on here so `?plan=gen` is the playable
+   * arm. `src/party/mansion.js` `PLAN_OPTS` says the same thing for the night.
+   */
+  homeCorner: true,
 }) : null;
 
 export const WALL_T = 0.30;
@@ -292,7 +298,12 @@ export function placeRoom(slot) {
   const pilasters = slot.pilasters ?? def.pilasters;
   if (pilasters !== undefined) row.pilasters = pilasters;
   if (def.order !== undefined) row.order = def.order;
-  const columns = placeColumns(f, def.columns);
+  /**
+   * 🏛️ **NO CENTRE PILLARS IN THE BALLROOM** (John 2026-08-23). `placeColumns` stays; the
+   * policy is here and in `dressGenerated`. A columns field added back to `ROOMS.ballroom`
+   * must not silently rebuild the colonnade.
+   */
+  const columns = slot.room === 'ballroom' ? null : placeColumns(f, def.columns);
   if (columns) row.columns = columns;
   const lights = placeLights(f, slot.lights ?? def.lights);
   if (lights) row.lights = lights;
@@ -658,10 +669,13 @@ export const ROOMS = {
      * ⚠️ 1:1 with no rotation is exactly why it cannot yet be TURNED — see `study.order`.
      */
     order: 'ballroom',
-    /** Six piers across the middle. Emitted into the `mould` GeoBin key, so they cost no draw
-     *  call. ⚠️ Local: the row is on the room's centre line (`z: 0`). See `placeColumns` for why
-     *  a rotated room cannot emit this shape. */
-    columns: { z: 0.00, xs: [-11.00, -6.60, -2.20, 2.20, 6.60, 11.00], w: 0.95 },
+    /**
+     * 🏛️ **NO CENTRE COLONNADE** (John 2026-08-23). The six piers used to sit on `z: 0` at
+     * `xs: [-11, -6.6, -2.2, 2.2, 6.6, 11]`. They landed in the chair circle and the warm
+     * camera spent every revolution dodging them. The field is gone; `placeRoom` /
+     * `dressGenerated` also refuse to attach columns to a ballroom so this cannot come back
+     * through a merge.
+     */
     lights: {
       /**
        * 🔦 **RE-AIMED FOR A 9.6 m STOREY, AND THE KEY'S JOB IS UNCHANGED ON PURPOSE**
@@ -1061,7 +1075,7 @@ function dressGenerated(rows) {
     }
     if (def.order !== undefined) row.order = def.order;
     if (def.pilasters !== undefined) row.pilasters = def.pilasters;
-    const columns = placeColumns(f, def.columns);
+    const columns = row.roomType === 'ballroom' ? null : placeColumns(f, def.columns);
     if (columns) row.columns = columns;
     /** DIAGNOSTIC, read by `_gendress1-fit.mjs`. `room.js` ignores anything it does not name. */
     row.genDress = { dressed: true, type: row.roomType, turns,

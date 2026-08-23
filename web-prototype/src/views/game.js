@@ -3474,9 +3474,11 @@ export default async function view(args = {}) {
     })());
   }
   /**
-   * 🪑 Phase A — eight ornate chairs in a circle at ballroom centre.
-   * `docs/slices/task-furn-destruct.md`. One InstancedMesh + 8 AABBs; sledge prefers them
-   * over a dig face behind. `?furn=0` ablates the whole dress for a same-station call A/B.
+   * 🪑 Phase A — ornate chairs in a circle at ballroom centre, AFTER the seating lock.
+   * `docs/slices/task-procedural-mansion-layout.md` Change 4. John, 2026-08-23: count =
+   * joined players, not eight empty Robot N seats, and not baked into the house dress.
+   * `run.addPlayer('p1')` has already run above; `?chairs=N` is the smash/capture lock.
+   * `?furn=0` still ablates the whole dress.
    */
   if (_estate?.port && _estate.ballroom && room.estate?.ballroom
       && new URLSearchParams(location.search).get('furn') !== '0') {
@@ -3484,14 +3486,20 @@ export default async function view(args = {}) {
       const { chairCircleParts } = await import('../world/props.js');
       const { FurnPart, FurnAssembly, partBoxWorld } = await import('../destruction/furn-parts.js');
       const { makeFurnHandlers } = await import('../destruction/furn-fx.js');
+      const { lockedSeatCount, seatCircleRadius } = await import('../game/chair-seats.js');
       const sp = room.spaces.find((s) => s.order === 'ballroom' && s.orderPlan);
       if (!sp || !room.materials) return;
       const mat = (room.materials.gilt ?? room.materials.wall)?.clone?.()
         ?? room.materials.gilt ?? room.materials.wall;
       if (!mat) return;
+      const count = lockedSeatCount({
+        players: run.players.size,
+        chairsQuery: new URLSearchParams(location.search).get('chairs'),
+      });
+      const radius = seatCircleRadius(count, Math.min(sp.x1 - sp.x0, sp.z1 - sp.z0));
       const { onBreak, onStage, onPartBreak, onHit } = makeFurnHandlers({ debris, dust });
       const { seats } = chairCircleParts({
-        count: 8, radius: 3.4, cx: sp.cx, cz: sp.cz, y: 0,
+        count, radius, cx: sp.cx, cz: sp.cz, y: 0,
         material: mat, rng: engine.rng, idPrefix: `${sp.id}.chair`,
       });
       for (const seat of seats) {
@@ -3505,7 +3513,10 @@ export default async function view(args = {}) {
           onBreak, onStage, onPartBreak, onHit, legsToCollapse: 3,
         }));
       }
-      engine.__chairCircle = { space: sp.id, count: seats.length, radius: 3.4, parted: true };
+      engine.__chairCircle = {
+        space: sp.id, count: seats.length, radius, parted: true,
+        deferred: true, baked: false,
+      };
     })());
   }
   /**
@@ -3517,6 +3528,8 @@ export default async function view(args = {}) {
       const { dressLooseFurniture } = await import('../game/furn-dress.js');
       engine.__furnDress = dressLooseFurniture(room, { debris, dust, rng: engine.rng });
       engine.__rrrCams = engine.__furnDress?.cams ?? [];
+      const { dressCatalogFurniture } = await import('../game/furn-layout.js');
+      engine.__furnLayout = await dressCatalogFurniture(room, { debris, dust });
     })());
   }
   /** Meshy smash lineup — `?furnline=1` (see docs/slices/task-meshy-furn-lineup.md). */

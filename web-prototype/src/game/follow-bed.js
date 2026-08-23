@@ -504,6 +504,16 @@ export async function buildFollowBed(engine, opts = {}) {
       return null;
     }))
     : null;
+  /*
+   * Catalog smashables (armor / lounges / piano / chandelier) — not chairs. Chairs wait for
+   * the intros cue so the count is the joined cast (`intro-bed.js`). Missing GLBs skip.
+   */
+  try {
+    const { dressCatalogFurniture } = await import('./furn-layout.js');
+    engine.__furnLayout = await dressCatalogFurniture(room, {});
+  } catch (e) {
+    console.warn('[follow-bed] catalog furniture skipped —', e?.message ?? e);
+  }
   stage('dress');
 
   /*
@@ -634,12 +644,9 @@ export async function buildFollowBed(engine, opts = {}) {
   /**
    * 👁️ **PULL AN EYE IN UNTIL IT CAN SEE WHAT IT IS POINTED AT.**
    *
-   * `FollowOperator._reel` does this for the run camera and the warm and intro cameras need it for
-   * the same reason, discovered the same way: **the generated ballroom has a COLONNADE.**
-   * `dressGenerated` attaches `ROOMS.ballroom`'s `columns` to a generated row, so a camera placed
-   * on a circle inside the ballroom spends part of every revolution with a pillar 40 cm from the
-   * lens. The first drive photographed exactly that — a flat lit slab filling the middle third of
-   * frame, on the screen this slice exists to make people look at.
+   * `FollowOperator._reel` does this for the run camera and the warm and intro cameras need it
+   * for the same reason. PR A removed the generated ballroom colonnade; the reel stays because
+   * a piano, a wall, or any other occluder still has to tighten the shot rather than go crooked.
    *
    * Reeling in along the eye->target ray rather than sliding sideways keeps the composition: the
    * shot gets tighter, never crooked.
