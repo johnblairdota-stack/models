@@ -91,10 +91,15 @@ echo   mechanical, like a metronome, say that instead - that is a
 echo   different fix, in the swing rather than the sound.
 echo   ------------------------------------------------------------
 echo.
+echo   THE MESHY HUNTER is opt-in and unfinished. Double-click
+echo   PLAYHUNTER.bat, or add ^&hunterm=1 to the address bar.
+echo   Default play here stays the procedural hunter on purpose.
+echo.
 echo   Other seeds - copy into the address bar:
 echo.
 echo     http://localhost:5179/?view=game.play^&seed=s7^&quality=medium
 echo     http://localhost:5179/?view=game.play^&seed=s4^&black=1^&quality=medium
+echo     http://localhost:5179/?view=game.play^&hunterm=1^&quality=medium
 echo.
 echo   Close this window when you have finished playing.
 echo.

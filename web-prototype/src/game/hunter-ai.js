@@ -220,6 +220,24 @@ export class HunterAI {
       this.gaits[s] = new Gait(h.unit);
     }
 
+    /*
+     * 🤖 `?hunterm=1` — THE MESHY STAGE-3 HUNTER. Opt-in, unfinished art path.
+     *
+     * `o.meshAvatar` is a `createHunterMeshAvatar()` result. When present it becomes the
+     * VISIBLE body and the procedural stages stay built (grow / absorb / eye-drive still
+     * reach into them) but hidden. Arm 0 without the flag is bit-identical: this field
+     * is null and `_animate` never leaves the gait path.
+     *
+     * ⚠️ THIS BODY IS ALWAYS THE STAGE-3 SILHOUETTE. Stage 1/2 Meshy variants are out of
+     * scope. `syncVisuals()` keeps the procedural row hidden for the whole round, including
+     * after a reset that puts `stage` back to 1. Speed / radius / reach still follow stage.
+     */
+    this.meshAvatar = o.meshAvatar ?? null;
+    if (this.meshAvatar) {
+      this.model.add(this.meshAvatar.root);
+      this.syncVisuals();
+    }
+
     // the eye flare: one small light, so a transition is an event you see from across the
     // room even when the hunter itself is in shadow
     this.flare = new THREE.PointLight(0xff3a24, 0, 9, 2);
@@ -267,6 +285,21 @@ export class HunterAI {
   }
 
   get rig() { return this.rigs[this.stage]; }
+  /** Procedural stages hidden when the Meshy body is driving the picture. */
+  get meshMode() { return !!this.meshAvatar; }
+
+  /**
+   * One place that decides which body is on screen. `resetRound` used to flip procedural
+   * visibility by stage and would have re-shown stage 1 on top of the mesh after a retry.
+   */
+  syncVisuals() {
+    if (this.meshAvatar) {
+      for (const s of [1, 2, 3]) this.rigs[s].root.visible = false;
+      this.meshAvatar.root.visible = true;
+      return;
+    }
+    for (const s of [1, 2, 3]) this.rigs[s].root.visible = s === this.stage;
+  }
   /** Has it stopped considering and started coming? The HUD's chase channel reads this. */
   get committed() { return this._committed; }
   get height() { return 1.7 * (HUNTER_STAGES[this.stage]?.scale ?? 1); }
@@ -426,6 +459,7 @@ export class HunterAI {
       this.state = 'BANG';
       this._bangT = BANG_WINDUP;
       this._bangIdx = 0;
+      this.meshAvatar?.playStrike(BANG_WINDUP);
       return;
     }
     this._steerTo(this._waypoint(d.stand), dt, HUNTER_SPEED[this.stage] * 0.66);
@@ -461,6 +495,7 @@ export class HunterAI {
     this._bangT -= dt;
     if (this._bangT <= 0) {
       this._bangT = BANG_CADENCE;
+      this.meshAvatar?.playStrike(BANG_CADENCE);
       const hit = p.hitPoint(this.root.position, this.rng, _v2).clone();
       const dir = p.normal.multiplyScalar(-p.sideOf(this.root.position));
       if (this.weapons) this.weapons.hitWall(p, hit, dir, 'hunterSlam');
@@ -530,6 +565,8 @@ export class HunterAI {
   precompileStages(engine) {
     const was = {};
     for (const s of [1, 2, 3]) { was[s] = this.rigs[s].root.visible; this.rigs[s].root.visible = true; }
+    const meshWas = this.meshAvatar?.root.visible;
+    if (this.meshAvatar) this.meshAvatar.root.visible = true;
     const flareWas = this._flareOn;
     if (!flareWas) { this.root.add(this.flare); this._flareOn = true; }
     engine.renderer.compile(engine.scene, engine.camera);
@@ -537,6 +574,9 @@ export class HunterAI {
     engine.renderer.compile(engine.scene, engine.camera);
     if (flareWas) { this.root.add(this.flare); this._flareOn = true; }
     for (const s of [1, 2, 3]) this.rigs[s].root.visible = was[s];
+    if (this.meshAvatar) this.meshAvatar.root.visible = meshWas;
+    // Mesh mode: the compile pass just un-hid the procedural row. Put it away again.
+    if (this.meshAvatar) this.syncVisuals();
   }
 
   update(dt, t) {
@@ -1033,6 +1073,7 @@ export class HunterAI {
     this._swing = (this._swing ?? 0) - dt;
     if (this._swing <= 0) {
       this._swing = 0.85;
+      this.meshAvatar?.playStrike(0.85);
       // THE PANEL'S OWN FRAME, NOT THE WORLD'S. Both of these lines used to assume every
       // panel lay on the z = 0 plane — the slam direction was `(0, 0, hunterZ > 0 ? -1 : 1)`
       // and the impact point pinned z to 0. That was true of the single divider and is false
@@ -1093,12 +1134,17 @@ export class HunterAI {
     // OPENING an encounter, or continuing one? A fresh windup every time would be exploitable
     // by stutter-stepping across the reach boundary; inheriting one is what caused the coin
     // flip. `_atkGap` is the only input to that decision and it is measured, not remembered.
-    if (this._wind == null || this._atkGap > ATTACK_REGRIP) this._wind = ATTACK_WINDUP;
+    if (this._wind == null || this._atkGap > ATTACK_REGRIP) {
+      this._wind = ATTACK_WINDUP;
+      // Picture starts with the windup, not the hit. Damage still fires when `_wind` hits 0.
+      this.meshAvatar?.playStrike(ATTACK_WINDUP);
+    }
     this._atkGap = 0;
 
     this._wind -= dt;
     if (this._wind > 0) return;
     this._wind = ATTACK_CADENCE;
+    this.meshAvatar?.playStrike(ATTACK_CADENCE);
     const c = this.target;
     if (!c?.rig) return;
     // it takes a LIMB, not hit points
@@ -1211,6 +1257,27 @@ export class HunterAI {
     this.growT += dt;
     const T = this.growT, DUR = 1.40;
     const p = Math.min(1, T / DUR);
+
+    /*
+     * Mesh hunter skips the crush-and-unfold. The Meshy body is already the stage-3
+     * silhouette; swapping it for a procedural crush would flash a different creature
+     * at the exact moment the round changes character. Stage / radius / reach still
+     * advance. The absorbed limb still pulls in. The eye flare and a debris burst stay
+     * so the event is locatable.
+     */
+    if (this.meshAvatar) {
+      this.flare.intensity = (1 - p) * 22;
+      if (p > 0.42 && !this._burst) {
+        this._burst = true;
+        this.debris?.burst('timber', this.root.position.clone().setY(this.height * 0.4), 24, { speed: 4.0, spread: 1.0 });
+        this.dust?.burst(this.root.position.clone().setY(this.height * 0.35), 22, { radius: 1.1 });
+      }
+      if (this._pull) this._pullStep(dt);
+      this.meshAvatar.update(dt, { speed: 0, runAt: HUNTER_SPEED[this.stage] });
+      if (p >= 1) this._finishGrow();
+      return;
+    }
+
     const from = this.rigs[this.growFrom], to = this.rigs[this.growTo];
 
     if (p < 0.46) {
@@ -1241,19 +1308,21 @@ export class HunterAI {
 
     if (this._pull) this._pullStep(dt);
 
-    if (p >= 1) {
-      const was = this.stage;
-      this.stage = this.growTo;
-      for (const s of [1, 2, 3]) this.rigs[s].root.visible = s === this.stage;
-      this.rigs[this.stage].root.scale.setScalar(1);
-      this.rigs[this.stage].root.position.y = 0;
-      this.flare.intensity = 0;
-      this.flare.position.y = this.height * 0.86;
-      this.radius = 0.30 + this.stage * 0.12;
-      this._burst = false;
-      this.state = this.target ? 'PURSUE' : 'PATROL';
-      this.onStage?.(was, this.stage, this);
-    }
+    if (p >= 1) this._finishGrow();
+  }
+
+  _finishGrow() {
+    const was = this.stage;
+    this.stage = this.growTo;
+    this.rigs[this.stage].root.scale.setScalar(1);
+    this.rigs[this.stage].root.position.y = 0;
+    this.flare.intensity = 0;
+    this.flare.position.y = this.height * 0.86;
+    this.radius = 0.30 + this.stage * 0.12;
+    this._burst = false;
+    this.state = this.target ? 'PURSUE' : 'PATROL';
+    this.syncVisuals();
+    this.onStage?.(was, this.stage, this);
   }
 
   _pullStep(dt) {
@@ -1437,6 +1506,15 @@ export class HunterAI {
   }
 
   _animate(dt, t) {
+    if (this.meshAvatar) {
+      this.meshAvatar.update(dt, {
+        speed: this.speed,
+        runAt: HUNTER_SPEED[this.stage],
+      });
+      if (this._pull) this._pullStep(dt);
+      return;
+    }
+
     const rig = this.rig;
     const g = this.gaits[this.stage];
     const def = HUNTER_STAGES[this.stage];
@@ -1515,7 +1593,10 @@ export class HunterAI {
     this.flare.removeFromParent();
   }
 
-  dispose() { for (const s of [1, 2, 3]) this.rigs[s].dispose(); }
+  dispose() {
+    for (const s of [1, 2, 3]) this.rigs[s].dispose();
+    this.meshAvatar?.dispose?.();
+  }
 }
 
 /** The authored posture from hunter.js, reconstructed so the gait can be added to it. */
