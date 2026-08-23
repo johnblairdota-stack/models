@@ -5,7 +5,7 @@ import { generatedTablesFor } from './spaces.js';
 import { Player } from './player.js';
 import { MOVE, WEAPON_RANGE } from './rules.js';
 import { CONTACT_PHASE, SWING_DUR } from './sledge.js';
-import { SHOT_NAMES, STICK_TURN, stickHeading, stickMag, stickRef } from '../party/follow.js';
+import { SHOT_NAMES, liveRunShot, lookYaw, stickCamMove, stickMag } from '../party/follow.js';
 import { bleedCoolPos, bleedKeyAngle, facingPortal } from '../lighting/door-bleed.js';
 import { HOME_ROOM, MISSION_ROOM, PLAN_OPTS } from '../party/mansion.js';
 import { createMeshAvatar } from '../characters/mesh-avatar.js';
@@ -237,12 +237,12 @@ class RunnerRoute {
 }
 
 /**
- * 🎬 **THE OPERATOR — four shots, a hard cut, and a rule that every cut has to see the runner.**
+ * 🎬 **THE OPERATOR — four shots still exist; a live run is chase-only.**
  *
- * This is the difference between "produced" and "a chase cam", and it is the part a fast
- * implementation skips. All four shots are at human height and pointed at the runner; none of
- * them is ever above the storey. A cut is a CUT — an edit, not a drone move — and between cuts
- * the eye lags the body rather than being welded to it.
+ * Warm / intros / a typed `?shot=` instrument may still cut or pin. Once the expedition is on
+ * the air (`liveRunShot('run')`) the lens stays on `chase`: auto-cuts to shoulder / lead /
+ * doorway invert a camera-relative stick and take the runner's eyes off the frame their thumb
+ * is steering. Between moves the eye still lags the body rather than being welded to it.
  */
 // Named in `src/party/follow.js` so `?shot=` can be validated at the door without loading THREE.
 // One list, so a shot the bed does not have cannot be advertised on the URL.
@@ -260,6 +260,13 @@ class FollowOperator {
     this._want = new THREE.Vector3();
     this._aim = new THREE.Vector3();
     this._seeded = false;
+    /**
+     * Chase yaw of the LENS, not of the body. Welded to `runner.facing`, a camera-relative
+     * hold-left orbits as the camera follows the new facing — the same class of bug as adding
+     * `stickHeading` to a live heading. Held while the thumb is strafing; recenters when the
+     * stick is released or the player pushes into the shot.
+     */
+    this._lockYaw = null;
   }
 
   /** Seeded, and never the same shot twice running. */
@@ -270,7 +277,7 @@ class FollowOperator {
 
   /** Where a given shot wants its eye, in world space. */
   _solve(shot, runner, out) {
-    const f = runner.facing;
+    const f = (shot === 'chase' && this._lockYaw != null) ? this._lockYaw : runner.facing;
     const fx = Math.sin(f), fz = Math.cos(f);
     const rx = -Math.cos(f), rz = Math.sin(f);   // the right-hand perpendicular, `player.js` L899
     const p = runner.pos;
@@ -285,6 +292,14 @@ class FollowOperator {
       default:
         return out.set(p.x - fx * 2.90 + rx * 0.35, 1.62, p.z - fz * 2.90 + rz * 0.35);
     }
+  }
+
+  /** Horizontal yaw of the chase lens (eye → look, Y flattened). The stick's frame. */
+  basisYaw() {
+    const dx = this.look.x - this.eye.x;
+    const dz = this.look.z - this.eye.z;
+    if (dx * dx + dz * dz < 1e-8) return this._lockYaw ?? 0;
+    return lookYaw(dx, dz);
   }
 
   /**
@@ -325,6 +340,7 @@ class FollowOperator {
       if (!this._valid(this._want, runner)) continue;
       this.shot = shot;
       this.eye.copy(this._want);
+      this.look.set(runner.pos.x, 1.30, runner.pos.z);
       this.until = 5.5 + this.rng() * 3.5;
       return;
     }
@@ -332,17 +348,49 @@ class FollowOperator {
     this._solve('chase', runner, this._want);
     this._reel(this._want, runner);
     this.eye.copy(this._want);
+    this.look.set(runner.pos.x, 1.30, runner.pos.z);
     this.until = 5.5 + this.rng() * 3.5;
   }
 
   /**
    * @param speed01  the runner's speed as a fraction of `MOVE.run` — the handheld scales with it,
    *                 so the lens is calm on a creep and alive on a sprint.
+   * @param [opts.lockShot]  pin the operator (`chase` on a live run). Null keeps the old cuts.
+   * @param [opts.stickMag]  current pad magnitude — holds chase yaw while the thumb is strafing.
+   * @param [opts.stickY]    stick forward, for "into the shot" recentering.
    */
-  update(dt, t, runner, camera, lastPortal, speed01) {
-    if (!this._seeded) { this._seeded = true; this.cut(runner, lastPortal); }
-    this.until -= dt;
-    if (this.until <= 0) this.cut(runner, lastPortal);
+  update(dt, t, runner, camera, lastPortal, speed01, opts = {}) {
+    const lock = opts.lockShot && SHOTS.includes(opts.lockShot) ? opts.lockShot : null;
+    if (lock) {
+      this.shot = lock;
+      this.until = 1e9;
+      this._seeded = true;
+      if (lock === 'chase') {
+        if (this._lockYaw == null) {
+          this._lockYaw = runner.facing;
+          this.look.set(runner.pos.x, 1.30, runner.pos.z);
+          this._solve('chase', runner, this.eye);
+        }
+        const mag = opts.stickMag ?? 0;
+        const stickY = opts.stickY ?? 0;
+        // Released, or pushing into the shot: swing the lens back behind the body. A pure
+        // strafe holds the yaw so "left" stays a straight line across the current picture.
+        if (mag <= 0 || stickY > 0.20) {
+          const turn = Math.atan2(
+            Math.sin(runner.facing - this._lockYaw),
+            Math.cos(runner.facing - this._lockYaw));
+          const rate = mag <= 0 ? 4.2 : 2.2;
+          this._lockYaw += turn * (1 - Math.exp(-rate * dt));
+        }
+      } else {
+        this._lockYaw = null;
+      }
+    } else {
+      this._lockYaw = null;
+      if (!this._seeded) { this._seeded = true; this.cut(runner, lastPortal); }
+      this.until -= dt;
+      if (this.until <= 0) this.cut(runner, lastPortal);
+    }
 
     this._solve(this.shot, runner, this._want);
     if (!this._valid(this._want, runner)) this._reel(this._want, runner);
@@ -710,8 +758,6 @@ export async function buildFollowBed(engine, opts = {}) {
      */
     driven: false,
     stick: { x: 0, y: 0 },
-    /** The heading this push is measured from. `src/party/follow.js` `stickRef`. */
-    stickRef: null,
     run: false,
     /** Set when a swing lands; read once by `missionTick`. `sledge.swingHit` is consumed by Player. */
     contactAt: -1,
@@ -925,31 +971,19 @@ export async function buildFollowBed(engine, opts = {}) {
      * sliding, the doorway squeeze, the sill step, the foot plant and the arm swing all come free,
      * and there is no second movement model to keep in sync with the first.
      *
-     * ⚠️ The heading integrates the stick's own bearing rather than being set from it, so pushing
-     * the stick left turns the runner rather than making it moonwalk sideways down a corridor.
-     * `move.x` is kept as the strafe it already is, so a player who wants to sidestep a doorway
-     * can, which is the "freedom" half of the brief.
-     *
-     * 🧭 **TWO THINGS WERE WRONG WITH THE OLD ONE LINE AND ONLY THE FIRST IS THE ONE JOHN NAMED.**
-     * The bearing had lost `player.js` L887's minus sign, so left was right; and it was measured
-     * from the LIVE heading, which makes the target run away from the body and turns a held thumb
-     * into a 14 rad/s spin. `stickHeading` and `stickRef` in `src/party/follow.js` carry both
-     * arguments and the measurements; they are exported so a bare-node gate can hold them down,
-     * because a wrong sign and a runaway frame both still produce a runner that moves.
+     * 🎥 **CAMERA-RELATIVE, NOT A BODY-HEADING LATCH.** The latch was the right answer while the
+     * operator cut to `lead` (screen-left became world-right). The live run is chase-only, so
+     * the frame that cannot move under the thumb is the chase lens. `stickCamMove` is the
+     * deadzoned stick as real strafe+forward; `aimYaw` is that lens' horizontal yaw; `_stepGround`
+     * already walks aim-relative. Push up = into the shot.
      */
     if (perf.driven) {
       const s = perf.stick;
-      const mag = stickMag(s.x, s.y);
-      perf.stickRef = stickRef(perf.stickRef, s.x, s.y, perf.heading);
-      if (mag > 0 && perf.stickRef != null) {
-        const want = perf.stickRef + stickHeading(s.x, s.y);
-        const turn = Math.atan2(Math.sin(want - perf.heading), Math.cos(want - perf.heading));
-        perf.heading += turn * (1 - Math.exp(-STICK_TURN * dt));
-      }
+      const move = stickCamMove(s.x, s.y);
       runner.update(dt, t, {
-        move: { x: 0, y: mag },
+        move,
         run: perf.run,
-        aimYaw: perf.heading,
+        aimYaw: operator.basisYaw(),
       });
       missionTick(t);
       afterBody(dt, t);
@@ -1005,7 +1039,11 @@ export async function buildFollowBed(engine, opts = {}) {
     hunter.step(dt);
 
     const speed01 = Math.min(1, runner.speed / MOVE.run);
-    operator.update(dt, t, runner, engine.camera, perf.lastPortal, speed01);
+    operator.update(dt, t, runner, engine.camera, perf.lastPortal, speed01, {
+      lockShot: liveRunShot(mode, opts.pinShot),
+      stickMag: stickMag(perf.stick.x, perf.stick.y),
+      stickY: perf.stick.y,
+    });
 
     // The cam light rides just under and ahead of the lens, so it throws onto the runner rather
     // than flaring the lens it is attached to.
@@ -1097,6 +1135,9 @@ export async function buildFollowBed(engine, opts = {}) {
         return;
       }
       if (c.kind === 'shot' && SHOTS.includes(c.shot)) {
+        // A live run is chase-only. A typed `?shot=` instrument still pins; a mid-run
+        // production cue does not cut to shoulder / lead / doorway.
+        if (liveRunShot(mode, opts.pinShot) === 'chase') return;
         operator.shot = c.shot;
         operator.until = 5.5;
         return;
