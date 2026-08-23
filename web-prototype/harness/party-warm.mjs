@@ -1367,6 +1367,7 @@ console.log('\nparty-warm — the lobby-warm night');
   const introSrc = await readFile(new URL('../src/game/intro-bed.js', import.meta.url), 'utf8');
   const bedSrc = await readFile(new URL('../src/game/follow-bed.js', import.meta.url), 'utf8');
   const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
+  const followSrc = await readFile(new URL('../src/party/follow.js', import.meta.url), 'utf8');
   const skin = await readFile(new URL('../src/party/night-skin.js', import.meta.url), 'utf8');
 
   t('W21b · intros clone the already-loaded Meshy body rather than baking eight new ones',
@@ -1404,7 +1405,14 @@ console.log('\nparty-warm — the lobby-warm night');
     && !/ui\.cuedRunner = runnerId;\s*\n\s*const look = seatLook/.test(hostSrc));
   t('W25a — follow ready retries the run cue for the locked pair',
     /if \(m\.ready\)/.test(hostSrc)
-    && /if \(runnerId\) cueRun\(runnerId/.test(hostSrc));
+    && /cueRun\(runnerId/.test(hostSrc));
+  t('W25b — follow ready clears cuedRunner so a premature postMessage cannot stick WARM · WALK',
+    /if \(m\.ready\)/.test(hostSrc)
+    && /ui\.cuedRunner = null/.test(hostSrc)
+    && /cueRun\(runnerId/.test(hostSrc));
+  t('W25c — warm/intros hide the follow slug (no dim WARM · WALK on air)',
+    /#fl\.pre \.slug \{ opacity:0; \}/.test(followSrc)
+    && !/#fl\.pre \.slug \{ opacity:\.35; \}/.test(followSrc));
 
 
 }

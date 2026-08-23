@@ -227,7 +227,8 @@ export const FOLLOW_CHROME_CSS = `
     #fl .slug b { color:var(--night-ink); font-weight:700; }
     /* Warming and intros: the frame is a frame, but there is no production to graphic yet. */
     #fl.pre .rec, #fl.pre .third { opacity:0; }
-    #fl.pre .slug { opacity:.35; }
+    /* No production graphic during warm/intros — a dim WARM · WALK lied on air. */
+    #fl.pre .slug { opacity:0; }
     #fl .rec, #fl .third { transition: opacity .5s ease; }
     @keyframes fl-rec { 0%,100% { opacity:.25; } 50% { opacity:1; } }`;
 

@@ -355,12 +355,18 @@ export default async function partyHost({ params }) {
       follow.live = true;
       root.querySelector('.run-frame')?.classList.add('live');
       /*
-       * Overnight post-#23: if Send-them-in painted before this ready, the run cue was
-       * dropped on a null contentWindow and never retried. The bed kept drifting warm.
+       * Overnight post-#25: sendCue can "succeed" (contentWindow exists) before the
+       * iframe has installed its message listener — cuedRunner latches and the bed
+       * stays in warm, stamping WARM · WALK over a live ready expedition. Clear and
+       * retry once the follow view is actually listening (this ready message).
        */
       const pair = client.frame?.pair || {};
-      const runnerId = pair.runner || null;
-      if (runnerId) cueRun(runnerId, players());
+      const recap = recapFromEvents(client.events);
+      const runnerId = pair.runner || recap.runner || null;
+      if (runnerId) {
+        ui.cuedRunner = null;
+        cueRun(runnerId, players());
+      }
       return;
     }
     if (m.intros === 'done' && !ui.introsDone) {
@@ -579,6 +585,7 @@ export default async function partyHost({ params }) {
       warm: ui.warm,
       warmPct: ui.warmPct,
       followMode: follow.mode,
+      cuedRunner: ui.cuedRunner,
       worldSent: ui.worldSent,
     };
 
