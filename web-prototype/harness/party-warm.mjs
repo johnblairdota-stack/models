@@ -1398,6 +1398,14 @@ console.log('\nparty-warm — the lobby-warm night');
   })());
   t('W22a control — casting with a locked pair still offers Watch the run',
     /if \(hasPair\) body \+= `[\s\S]*?Watch the run/.test(hostSrc));
+  t('W25 — run cue is only marked cued after a successful postMessage',
+    /function cueRun\(/.test(hostSrc)
+    && /if \(ok\) ui\.cuedRunner = runnerId/.test(hostSrc)
+    && !/ui\.cuedRunner = runnerId;\s*\n\s*const look = seatLook/.test(hostSrc));
+  t('W25a — follow ready retries the run cue for the locked pair',
+    /if \(m\.ready\)/.test(hostSrc)
+    && /if \(runnerId\) cueRun\(runnerId/.test(hostSrc));
+
 
 }
 
