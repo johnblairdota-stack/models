@@ -692,9 +692,9 @@ console.log('\nparty-warm — the lobby-warm night');
     /export async function dressLooseFurniture/.test(dress)
     && /dressCatalogFurniture/.test(dress));
   t('W14j · follow-bed and game.js go through that hook, not furn-layout',
-    follow.includes("from './furn-dress.js'")
+    follow.includes("import('./furn-dress.js')")
     && !follow.includes('furn-layout.js')
-    && game.includes("from '../game/furn-dress.js'")
+    && game.includes("import('../game/furn-dress.js')")
     && !game.includes('furn-layout.js'));
 }
 
