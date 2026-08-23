@@ -1452,9 +1452,11 @@ console.log('\nparty-warm — the lobby-warm night');
   t('W24c · nothing posts CAUGHT yet — hunter take is still the next slice',
     !/RUN_END\.CAUGHT/.test(localSrc));
   const phoneSrc = await readFile(new URL('../src/views/party-phone.js', import.meta.url), 'utf8');
-  t('W24d · the phone paints the outcome word at recap, not a bare Phones-down heading',
-    /c\.runEnd \|\| 'TIME'/.test(phoneSrc)
-    && /THE OUTCOME WORD IS THE ONE FACT/.test(phoneSrc));
+  t('W24d · phone paints runEnd when present and never invents TIME when end is missing',
+    /if \(c\.runEnd\) body \+=/.test(phoneSrc)
+    && !/c\.runEnd \|\| 'TIME'/.test(phoneSrc)
+    && /THE OUTCOME WORD IS THE ONE FACT/.test(phoneSrc)
+    && /same honesty as TV/.test(phoneSrc));
 }
 
 

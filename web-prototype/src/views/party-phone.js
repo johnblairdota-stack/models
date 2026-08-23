@@ -532,12 +532,12 @@ export default async function partyPhone({ params }) {
        * Playcritique F2: the pad said "Phones down." and never whether they smashed it, got
        * caught, or ran out of time. `c.runEnd` is the server's `RUN_END` — SMASHED or TIME
        * today; CAUGHT is reserved until the hunter actually takes (follow-bed still says next
-       * slice). Missing end falls back to TIME rather than inventing a smash.
+       * slice). Missing end omits the word — same honesty as TV `recapBoard` — rather than
+       * inventing TIME before the room has said so.
        */
       {
-        const end = c.runEnd || 'TIME';
-        body += `<h1>${esc(end)}</h1>
-        <p class="hint">Phones down. Talk. The next ballot comes to this screen when the room is ready.</p>`;
+        if (c.runEnd) body += `<h1>${esc(c.runEnd)}</h1>`;
+        body += `<p class="hint">Phones down. Talk. The next ballot comes to this screen when the room is ready.</p>`;
       }
     }
 
