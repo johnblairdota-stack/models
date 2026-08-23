@@ -32,8 +32,12 @@ import {
 } from '../src/party/follow.js';
 import {
   HOME_ROOM, MISSION_ROOM, PLAN_OPTS, PLAN_TRIES,
-  coverageRoomOf, pickPlanSeed, planFor, planOptsFor, planPasses, planRegions, roomLabel, spaceLabel,
+  coverageRoomOf, homeIsCorner, pickPlanSeed, planFor, planOptsFor, planPasses, planRegions,
+  roomLabel, spaceLabel,
 } from '../src/party/mansion.js';
+import { lockedSeatCount } from '../src/game/chair-seats.js';
+import { LAYOUT_CATALOG_IDS, catalogPlacements, catalogUrl, CATALOG_URL_PREFIX, spaceKind } from '../src/game/furn-layout.js';
+import { FURN_SMASH_ASSETS } from '../src/game/furn-catalog.js';
 import { ROOMS, hunterVisibleToGuide } from '../src/party/coverage.js';
 import { buildPlan } from './genspike.mjs';
 import { DROP_RATE, GRADES, STALE_MAX, gradeFor, intelFor, intelLine } from '../src/party/intel.js';
@@ -43,6 +47,9 @@ import { COMPOSITION, dealCast } from '../src/party/cast.js';
 import { isNightToken } from '../src/party/palette.js';
 import { MATRIX } from '../net/party/entitle.js';
 import { FANOUT_KEYS, fanoutViolations } from '../net/party/local.mjs';
+import { existsSync, openSync, readSync, closeSync, readFileSync, statSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 let pass = 0, fail = 0;
 const t = (n, c, d = '') => {
@@ -616,6 +623,129 @@ console.log('\nparty-warm — the lobby-warm night');
     .some((id) => hunterVisibleToGuide({ ...cams, hunterRoom: coverageRoomOf(id) }));
   t('W13c control · the raw id is invisible at FULL coverage; the mapped one is not',
     !anyRaw && anyMapped, `raw ${anyRaw} · mapped ${anyMapped}`);
+}
+
+// ---- W14 · PR A mansion layout: corner ballroom, deferred seats, catalog ids only ------------
+//
+// John 2026-08-23. Cyan map-edge is a follow-up (slice §4) and is not asserted here.
+{
+  t('W14 · the night asks the packer for a corner ballroom',
+    PLAN_OPTS.homeCorner === true, JSON.stringify(PLAN_OPTS));
+
+  let corners = 0, firstTry = 0;
+  for (let ws = 0; ws < 24; ws++) {
+    const picked = pickPlanSeed(ws);
+    const plan = planFor(picked.seed);
+    if (homeIsCorner(plan)) corners++;
+    if (picked.tries === 1 && picked.ok) firstTry++;
+  }
+  t('W14b · every world seed 0..23 puts the ballroom in an env corner',
+    corners === 24, `${corners}/24`);
+  t('W14c · and homeCorner does that on the first candidate, not by retry luck',
+    firstTry === 24, `${firstTry}/24 first-try`);
+
+  let rejectedCorner = 0;
+  for (let s = 0; s < 48; s++) {
+    const loose = buildPlan(String(s), { ...PLAN_OPTS, homeCorner: false });
+    const hasRooms = loose.regions.some((R) => R.kind === 'room' && R.type === MISSION_ROOM)
+      && loose.regions.some((R) => R.kind === 'room' && R.type === HOME_ROOM);
+    if (hasRooms && !homeIsCorner(loose) && !planPasses(loose)) rejectedCorner++;
+  }
+  t('W14d control · planPasses refuses a playable house whose ballroom is not in a corner',
+    rejectedCorner > 0, `${rejectedCorner}/48 unconstrained plans caught`);
+
+  t('W14e · locked seats follow joined players, not an eight-chair bake',
+    lockedSeatCount({ players: 4 }) === 4
+    && lockedSeatCount({ players: 1 }) === 1
+    && lockedSeatCount({ players: 0 }) === 1);
+  t('W14f · `?chairs=` is the seating lock a developer typed',
+    lockedSeatCount({ players: 1, chairsQuery: '8' }) === 8
+    && lockedSeatCount({ players: 4, chairsQuery: '2' }) === 2);
+
+  const catalogIds = new Set(FURN_SMASH_ASSETS.map((a) => a.id));
+  const unknown = LAYOUT_CATALOG_IDS.filter((id) => !catalogIds.has(id));
+  t('W14g · layout ids are all real furn-catalog rows',
+    unknown.length === 0 && LAYOUT_CATALOG_IDS.length === 6, unknown.join(',') || LAYOUT_CATALOG_IDS.join(','));
+
+  const fake = catalogPlacements([
+    { id: 'r0.ballroom', roomType: 'ballroom', x0: 0, x1: 27.2, z0: 0, z1: 15.3 },
+    { id: 'r1.study', roomType: 'study', x0: 28, x1: 39.6, z0: 0, z1: 15.4 },
+    { id: 'c0.0', x0: 13, x1: 16, z0: 16, z1: 22 },
+  ]);
+  const used = [...new Set(fake.map((p) => p.catalogId))];
+  t('W14h · placements only emit catalog ids this slice named',
+    used.every((id) => LAYOUT_CATALOG_IDS.includes(id))
+    && used.includes('armor') && used.includes('grand-piano') && used.includes('chandelier')
+    && used.includes('wingback'), used.join(','));
+
+  /*
+   * The live hook is `dressLooseFurniture`. Callers must not import `dressCatalogFurniture`
+   * themselves — that was the second dresser this slice deleted. Read source, do not import
+   * `furn-dress.js` (it pulls THREE).
+   */
+  const here = dirname(fileURLToPath(import.meta.url));
+  const src = (rel) => readFileSync(join(here, '..', rel), 'utf8');
+  const dress = src('src/game/furn-dress.js');
+  const follow = src('src/game/follow-bed.js');
+  const game = src('src/views/game.js');
+  t('W14i · dressLooseFurniture is the catalog placer hook',
+    /export async function dressLooseFurniture/.test(dress)
+    && /dressCatalogFurniture/.test(dress));
+  t('W14j · follow-bed and game.js go through that hook, not furn-layout',
+    follow.includes("import('./furn-dress.js')")
+    && !follow.includes('furn-layout.js')
+    && game.includes("import('../game/furn-dress.js')")
+    && !game.includes('furn-layout.js'));
+
+  /*
+   * The 24 smash GLBs are in git as normal blobs under public/models/furn/. A previous
+   * note that this folder was empty was wrong (the agent glob missed binaries). `bed.glb`
+   * / `tato.glb` are local-only and are not required.
+   */
+  const furnDir = join(here, '..', 'public', 'models', 'furn');
+  const onDisk = [];
+  let pointer = 0, tiny = 0, notGltf = 0;
+  for (const spec of FURN_SMASH_ASSETS) {
+    const p = join(furnDir, spec.file);
+    if (!existsSync(p)) { tiny++; continue; }
+    const bytes = statSync(p).size;
+    const fd = openSync(p, 'r');
+    const head = Buffer.alloc(12);
+    readSync(fd, head, 0, 12, 0);
+    closeSync(fd);
+    const magic = head.subarray(0, 4).toString('ascii');
+    if (head.toString('utf8').startsWith('version https://git-lfs')) pointer++;
+    if (bytes < 1_000_000) tiny++;
+    if (magic !== 'glTF') notGltf++;
+    onDisk.push({ id: spec.id, file: spec.file, bytes, magic, url: catalogUrl(spec.id) });
+  }
+  t('W14k · all 24 catalog GLBs are real glTF blobs on disk, not LFS pointers',
+    onDisk.length === 24 && pointer === 0 && tiny === 0 && notGltf === 0,
+    `${onDisk.length}/24 · ptr ${pointer} · tiny ${tiny} · magic-fail ${notGltf}`);
+
+  const layoutDisk = LAYOUT_CATALOG_IDS.map((id) => onDisk.find((r) => r.id === id));
+  t('W14l · layout URLs are /models/furn/<file> and resolve to those blobs',
+    layoutDisk.every((r) => r && r.url === `${CATALOG_URL_PREFIX}${r.file}` && r.bytes > 1_000_000)
+    && /catalogUrl\(slot\.catalogId\)/.test(src('src/game/furn-layout.js')),
+    layoutDisk.map((r) => r && `${r.id}:${r.bytes}`).join(','));
+
+  const authored = catalogPlacements([
+    { id: 'ballroom', order: 'ballroom', x0: 0, x1: 27.2, z0: 0, z1: 15.3 },
+    { id: 'study_w', order: 'study', x0: -13.6, x1: -2.0, z0: -24, z1: -8.6 },
+    { id: 'chapel', x0: 4.2, x1: 11.0, z0: -37.8, z1: -31.3 },
+    { id: 'service', x0: -1.7, x1: 1.7, z0: -24, z1: -8.6 },
+  ]);
+  const byAuth = (id) => authored.filter((p) => p.catalogId === id);
+  t('W14m · authored HOUSE_PLAN shape (order, no roomType) still places the lock',
+    spaceKind({ id: 'ballroom', order: 'ballroom' }) === 'ballroom'
+    && spaceKind({ id: 'study_w', order: 'study' }) === 'study'
+    && spaceKind({ id: 'c0.3' }) === null
+    && byAuth('grand-piano').every((p) => p.spaceId === 'ballroom')
+    && byAuth('chandelier').length === 2 && byAuth('chandelier').every((p) => p.spaceId === 'ballroom')
+    && ['wingback', 'settee', 'chaise'].every((id) => byAuth(id).every((p) => p.spaceId === 'study_w'))
+    && byAuth('armor').length >= 1 && byAuth('armor').every((p) => p.spaceId === 'service')
+    && !authored.some((p) => p.spaceId === 'chapel'),
+    authored.map((p) => `${p.catalogId}@${p.spaceId}`).join(','));
 }
 
 console.log(`\nparty-warm: ${pass} passed, ${fail} failed`);

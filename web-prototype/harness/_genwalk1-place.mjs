@@ -95,8 +95,8 @@ ok('P3 §9.4b item 3', ys.every((y) => y === 0), `HOUSE_PLAN at[1] = [${ys}] —
 
 // ---- P4: which types carry a colonnade at all ------------------------------------------------
 const withCols = TYPES.filter((t) => ROOMS[t].columns);
-ok('P4 the blocker is ONE room', withCols.length === 1 && withCols[0] === 'ballroom',
-  `types with sp.columns: [${withCols}] — arm B's colonnade work is scoped to one library entry`);
+ok('P4 no library room carries a colonnade', withCols.length === 0,
+  `types with sp.columns: [${withCols}] — John 2026-08-23 removed the ballroom piers`);
 
 console.log(`\n  ${pass} pass, ${fail} fail\n`);
 process.exit(fail ? 1 : 0);

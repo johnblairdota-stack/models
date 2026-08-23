@@ -316,11 +316,9 @@ export function buildIntroBed(engine, { room, cast, materials, reelSight } = {})
         _look.set(r.body.pos.x, 1.15, r.body.pos.z);
         _eye.copy(r.eye);
         /*
-         * ⚠️ THE GENERATED BALLROOM HAS A COLONNADE, AND A CHAIR CIRCLE DOES NOT KNOW WHERE THE
-         * PILLARS ARE. `dressGenerated` attaches `ROOMS.ballroom`'s `columns` to a generated row,
-         * so a camera parked 2.6 m inside the ring on some bearings is looking at a pillar rather
-         * than at the robot the whole beat exists to show. Same reel `follow-bed.js` uses for the
-         * run camera — the shot tightens rather than going crooked.
+         * ⚠️ THE REEL STAYS EVEN THOUGH PR A REMOVED THE BALLROOM COLONNADE. A chair circle still
+         * does not know what else is in the room (catalog piano, a wall). Same reel
+         * `follow-bed.js` uses for the run camera — the shot tightens rather than going crooked.
          */
         reelSight?.(_eye, _look);
         engine.camera.position.lerp(_eye, 1 - Math.exp(-2.6 * dt));

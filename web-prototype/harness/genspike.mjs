@@ -292,13 +292,36 @@ const ALIGN_BONUS = 6.0;        // metres-equivalent bonus for a coincident edge
  * house with almost no corridor — nowhere for the hunter to live. gap > 0 buys the warren.
  * The sweep runs the dial because the trade is the answer, not a number on it.
  */
-function placeRooms(rng, rooms, align, gap = 0, lambdaWaste = 0.10) {
+/**
+ * 🏠 **`homeCorner` — John 2026-08-23: the ballroom is the starting room and sits in one of
+ * the four corners of the plan.** Off by default so `--sweep` / the map designer keep the
+ * measured arm. When on: pin the ballroom first (do not rely on biggest-first), pick a seeded
+ * pair of growth signs, and refuse any later rect that would grow past the ballroom on those
+ * axes. The ballroom then shares a corner with the room bbox by construction, not by luck.
+ */
+function placeRooms(rng, rooms, align, gap = 0, lambdaWaste = 0.10, homeCorner = false) {
+  let queue = rooms;
+  if (homeCorner) {
+    const i = rooms.findIndex((r) => r.type === 'ballroom');
+    if (i > 0) queue = [rooms[i], ...rooms.filter((_, k) => k !== i)];
+  }
   const placed = [];
-  const first = rooms[0];
+  const first = queue[0];
   placed.push({ ...first, x0: 0, x1: first.w, z0: 0, z1: first.d });
+  const home = placed[0];
+  const growX = homeCorner ? (rng() < 0.5 ? 1 : -1) : 0;
+  const growZ = homeCorner ? (rng() < 0.5 ? 1 : -1) : 0;
+  const keepsCorner = (r) => {
+    if (!homeCorner) return true;
+    if (growX > 0 && r.x0 < home.x0 - EPS) return false;
+    if (growX < 0 && r.x1 > home.x1 + EPS) return false;
+    if (growZ > 0 && r.z0 < home.z0 - EPS) return false;
+    if (growZ < 0 && r.z1 > home.z1 + EPS) return false;
+    return true;
+  };
 
-  for (let k = 1; k < rooms.length; k++) {
-    const R = rooms[k];
+  for (let k = 1; k < queue.length; k++) {
+    const R = queue[k];
     const coords = { x: new Set(), z: new Set() };
     for (const p of placed) { coords.x.add(p.x0); coords.x.add(p.x1); coords.z.add(p.z0); coords.z.add(p.z1); }
     const bb0 = bboxOf(placed);
@@ -340,6 +363,7 @@ function placeRooms(rng, rooms, align, gap = 0, lambdaWaste = 0.10) {
               r = { x0: t, x1: t + R.w, z0, z1: z0 + R.d };
             }
             if (placed.some((q) => rectsOverlap(r, q))) continue;
+            if (!keepsCorner(r)) continue;
 
             let contact = 0;
             for (const q of placed) {
@@ -368,8 +392,15 @@ function placeRooms(rng, rooms, align, gap = 0, lambdaWaste = 0.10) {
       }
     }
     if (!cands.length) {
-      // fallback: hang it off the east face of the bbox, flush at the north edge
-      placed.push({ ...R, x0: bb0.x1, x1: bb0.x1 + R.w, z0: bb0.z0, z1: bb0.z0 + R.d });
+      // fallback: hang it off the east face of the bbox, flush at the north edge.
+      // Under `homeCorner` hang on the two allowed growth faces so the pin is not undone.
+      if (homeCorner) {
+        const x0 = growX > 0 ? bb0.x1 : bb0.x0 - R.w;
+        const z0 = growZ > 0 ? bb0.z0 : bb0.z1 - R.d;
+        placed.push({ ...R, x0, x1: x0 + R.w, z0, z1: z0 + R.d });
+      } else {
+        placed.push({ ...R, x0: bb0.x1, x1: bb0.x1 + R.w, z0: bb0.z0, z1: bb0.z0 + R.d });
+      }
       continue;
     }
     cands.sort((a, b) => b.score - a.score);
@@ -525,7 +556,7 @@ function buildPlan(seed, opts = {}) {
   const waste = opts.waste ?? 0.04;
   const rng = mkRng(`rrr/genspike/${seed}`);
   const sel = selectRooms(rng, opts.rooms ?? null);
-  const rooms = placeRooms(rng, sel, align, gap, waste);
+  const rooms = placeRooms(rng, sel, align, gap, waste, !!opts.homeCorner);
   return planFromRooms(seed, rooms, { ...opts, align, gap, waste });
 }
 
@@ -1802,10 +1833,27 @@ if (IS_MAIN) {
   }
 }
 
+/**
+ * Does room `type` share a corner with `plan.env`? The PR A predicate for "sits in one of
+ * the four corners of the plan." Corridors fill inside the room bbox, so env and the room
+ * bbox agree on the corner `homeCorner` reserved.
+ */
+function roomAtEnvCorner(plan, type, eps = 1e-4) {
+  const env = plan.env;
+  const R = plan.regions.find((r) => r.kind === 'room' && r.type === type);
+  if (!R || !env) return false;
+  const bb = bboxOf(R.rects);
+  const west = Math.abs(bb.x0 - env.x0) <= eps;
+  const east = Math.abs(bb.x1 - env.x1) <= eps;
+  const south = Math.abs(bb.z0 - env.z0) <= eps;
+  const north = Math.abs(bb.z1 - env.z1) <= eps;
+  return (west || east) && (south || north);
+}
+
 export {
   authoredMansion, AUTHORED_DIG, planSpanLayout,
   buildPlan, planFromRooms, measure, ascii, toJSON, selftest, sweep, flatReport,
   flatness, planSpans, boundarySegments, edgeKey, wallRuns, slabLayout, interconnectOn,
   LIBRARY, MANDATORY, W_MIN, W_MIN_S, L_DIG, L_DOOR, WALL_T, DIG_H, AUTHORED_SPANS,
-  SLAB_MAX, IC_W, CONNECTOR_W, CONNECTOR_H,
+  SLAB_MAX, IC_W, CONNECTOR_W, CONNECTOR_H, roomAtEnvCorner,
 };

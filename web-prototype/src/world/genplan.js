@@ -445,15 +445,22 @@ export function generatedTables(seed, opts = {}) {
   // tables above are what say where those are. See `lightRigFor`.
   attachLights(rows, portals, panels);
 
-  // ---- spawn: task-plangen-1 §3 Change 5 ------------------------------------------------------
+  // ---- spawn: task-plangen-1 §3 Change 5, then John 2026-08-23 --------------------------------
   const m = measure(plan);
   const rectCentre = (R) => {
     const r = R.rects[0];
     return [(r.x0 + r.x1) / 2, (r.z0 + r.z1) / 2];
   };
-  const spawnRegion = regions[m.spawn];
+  /**
+   * 🕺 **THE BALLROOM IS THE STARTING ROOM.** `measure().spawn` stays the seeded pick — it is
+   * what `--sweep` quotes as spawn→exit — but play spawn is the ballroom whenever the plan
+   * has one. A 3-room subset that rolled no ballroom falls back to the metric spawn.
+   */
   const rooms = regions.map((R, i) => ({ R, i })).filter((x) => x.R.kind === 'room');
-  const hunterPick = rooms.find((x) => x.i !== m.spawn) ?? rooms[0];
+  const ballI = rooms.find((x) => x.R.type === 'ballroom')?.i;
+  const spawnI = ballI ?? m.spawn;
+  const spawnRegion = regions[spawnI];
+  const hunterPick = rooms.find((x) => x.i !== spawnI) ?? rooms[0];
   const spawnXZ = rectCentre(spawnRegion);
   const hunterXZ = rectCentre(hunterPick.R);
 
