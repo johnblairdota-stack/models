@@ -1413,6 +1413,10 @@ console.log('\nparty-warm — the lobby-warm night');
   t('W25c — warm/intros hide the follow slug (no dim WARM · WALK on air)',
     /#fl\.pre \.slug \{ opacity:0; \}/.test(followSrc)
     && !/#fl\.pre \.slug \{ opacity:\.35; \}/.test(followSrc));
+  t('W25d — host clears CAMERA WARMING underlay once follow is live/run',
+    /followLive: follow\.live/.test(hostSrc)
+    && /warmSlot\.textContent = ''/.test(hostSrc)
+    && /followLive \? '' : 'camera warming'/.test(hostSrc));
 
 
 }
