@@ -41,7 +41,7 @@ import {
 import {
   HOME_ROOM, MISSION_ROOM, PLAN_OPTS, PLAN_TRIES,
   coverageRoomOf, homeIsCorner, pickPlanSeed, planFor, planOptsFor, planPasses, planRegions,
-  roomLabel, spaceLabel,
+  planRoomLabels, roomLabel, spaceLabel,
 } from '../src/party/mansion.js';
 import { lockedSeatCount } from '../src/game/chair-seats.js';
 import {
@@ -384,6 +384,38 @@ console.log('\nparty-warm — the lobby-warm night');
   t('W7n · and a corridor stays vague — there are nine of them and none has a name',
     spaceLabel('c0.3') === 'a passage' && spaceLabel('c12.0') === 'a passage'
     && spaceLabel(null) === 'somewhere');
+
+  /*
+   * 🗣️ **TWO STUDIES, TWO NAMES — ON EVERY SEED, NOT ON A LUCKY ONE.** `PLAN_OPTS` takes the whole
+   * mandatory list and that list holds `study` twice, so "go to the study" was an instruction with
+   * two answers EVERY night. Walked across many seeds rather than one, because the disambiguator
+   * picks its axis from the geometry and a single seed would only ever exercise one branch.
+   */
+  const dupSeeds = [];
+  for (let i = 1; i <= 24; i += 1) {
+    const seed = pickPlanSeed(i).seed;
+    const labels = planRoomLabels(seed);
+    const said = [...labels.values()];
+    const types = [...labels.keys()].map((id) => String(id).split('.')[1]);
+    const dup = types.length !== new Set(types).size;
+    if (dup) dupSeeds.push(i);
+    if (said.length !== new Set(said).size) { dupSeeds.push(`clash@${i}`); break; }
+  }
+  t('W7p · every room on the night has a name no other room shares',
+    dupSeeds.length > 0 && !dupSeeds.some((s) => String(s).startsWith('clash')),
+    `${dupSeeds.length} seeds carry a repeated type; none produced a repeated NAME`);
+
+  const twin = planRoomLabels(pickPlanSeed(1).seed);
+  const studies = [...twin.entries()].filter(([id]) => id.endsWith('.study')).map(([, v]) => v);
+  t('W7q · and the second of a pair is called by direction, not by number',
+    studies.length === 2 && studies.every((s) => /^(North|South|East|West) Study$/.test(s)),
+    studies.join(' / '));
+  t('W7r · the guide\'s map and the phone\'s feed speak the same word',
+    spaceLabel('r2.study', twin) === `the ${twin.get('r2.study')}`
+    && spaceLabel('r2.study') === 'the Study',
+    spaceLabel('r2.study', twin));
+  t('W7s · and a passage is still a passage, labels or not',
+    spaceLabel('c0.3', twin) === 'a passage' && spaceLabel(null, twin) === 'somewhere');
   const spoken = [
     intelLine(intelFor({ alignment: 'good', world, cameras: lit, roll: 1 })),
     intelLine(intelFor({ alignment: 'evil', world, cameras: lit, roll: 1 })),
@@ -426,6 +458,20 @@ console.log('\nparty-warm — the lobby-warm night');
     guideMapSvg({ seed, flyover: { hunter: { x: 1, z: 1 } } }).includes('gm-hunter'));
   t('W8e · it names rooms — which is the guide\'s job and never the TV\'s',
     svg.includes(roomLabel('gallery')));
+  /*
+   * 🗣️ THE PLAYCRITIQUE SHOT. The map drew STUDY twice and the guide could not call either one.
+   * Asserted on the RENDERED SVG rather than on the label map, because the defect was that the
+   * drawing never asked for the unique name — a passing helper with a map that ignores it is the
+   * same bug with a green test next to it.
+   */
+  const drawn = [...guideMapSvg({ seed: pickPlanSeed(1).seed })
+    .matchAll(/<text class="gm-label"[^>]*>(.*?)<\/text>/g)]
+    .map((m) => m[1].replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim());
+  t('W8h · no two rooms on the map carry the same printed name',
+    drawn.length >= 4 && drawn.length === new Set(drawn).size, drawn.join(' / '));
+  t('W8i · and the pair is told apart by direction, so the guide can say which',
+    drawn.filter((d) => /Study/.test(d)).every((d) => /^(NORTH|SOUTH|EAST|WEST) Study$/i.test(d)),
+    drawn.filter((d) => /Study/.test(d)).join(' / '));
 
   const hex = GUIDE_MAP_CSS.match(/#[0-9a-f]{3,8}\b/gi) || [];
   t('W8f · the map CSS holds no hex of its own', hex.length === 0, hex.join(',') || 'no literals');

@@ -238,6 +238,88 @@ export function roomLabel(type) {
 }
 
 /**
+ * 🗣️ **TWO ROOMS OF ONE TYPE, TWO NAMES THE GUIDE CAN ACTUALLY CALL.**
+ *
+ * A playcritique pass photographed the guide's map with the word **STUDY** printed twice, and the
+ * guide has exactly one job: say a room name out loud so the runner can walk to it. `PLAN_OPTS`
+ * takes the whole `MANDATORY` list, which contains `study` twice, so this is not a rare seed —
+ * it is EVERY night. "Go to the study" was an instruction with two answers, and a runner picking
+ * the wrong one costs the run.
+ *
+ * The disambiguator is a COMPASS WORD rather than a number, and that is the point. The runner has
+ * no map and no legend, so "Study 2" is a name only one of the two people in the conversation can
+ * resolve. A direction is a name both of them can.
+ *
+ * ⚠️ **KEYED ON REGION ID, DERIVED FROM THE PLAN, SHARED BY BOTH SURFACES.** `guidemap.js` draws
+ * these and `intel.js` speaks them through `spaceLabel`; if the two ever computed their own, the
+ * guide would be reading a word off the map that the phone's own feed never uses — the same class
+ * of disagreement this file exists to forbid, in copy instead of geometry.
+ *
+ * Corridors are not in here at all. They stay `'a passage'`, for `spaceLabel`'s stated reason.
+ */
+const COMPASS = {
+  x: { 2: ['West', 'East'], 3: ['West', 'Middle', 'East'] },
+  z: { 2: ['North', 'South'], 3: ['North', 'Middle', 'South'] },
+};
+
+/**
+ * `Map<regionId, label>` for one plan's ROOM rects — `planRegions(...).rooms`, as delivered.
+ *
+ * A region arrives as several rects (the decomposition), so they are unioned back into one box
+ * before a centre is taken; naming off a single rect would put "North" on whichever sliver the
+ * decomposition happened to emit first.
+ */
+export function roomLabelsFor(rooms) {
+  const boxes = new Map();
+  for (const r of rooms ?? []) {
+    const b = boxes.get(r.id)
+      ?? { id: r.id, type: r.type, x0: Infinity, x1: -Infinity, z0: Infinity, z1: -Infinity };
+    b.x0 = Math.min(b.x0, r.x0); b.x1 = Math.max(b.x1, r.x1);
+    b.z0 = Math.min(b.z0, r.z0); b.z1 = Math.max(b.z1, r.z1);
+    boxes.set(r.id, b);
+  }
+  const byType = new Map();
+  for (const b of boxes.values()) {
+    b.cx = (b.x0 + b.x1) / 2;
+    b.cz = (b.z0 + b.z1) / 2;
+    if (!byType.has(b.type)) byType.set(b.type, []);
+    byType.get(b.type).push(b);
+  }
+
+  const out = new Map();
+  for (const group of byType.values()) {
+    const base = roomLabel(group[0].type);
+    if (group.length < 2) { out.set(group[0].id, base); continue; }
+    /*
+     * The axis the rooms are actually separated along, not a fixed one. Seed 1 stacks its two
+     * studies in z and seed 2 puts them side by side in x; calling both pairs "North/South" would
+     * be a name that is wrong on half the nights, which is worse than a name that is repeated.
+     */
+    const spread = (k) => Math.max(...group.map((g) => g[k])) - Math.min(...group.map((g) => g[k]));
+    const axis = spread('cx') >= spread('cz') ? 'cx' : 'cz';
+    const words = COMPASS[axis === 'cx' ? 'x' : 'z'][group.length];
+    const sorted = [...group].sort((a, b) => (a[axis] - b[axis])
+      || String(a.id).localeCompare(String(b.id)));
+    // Past three of a type there is no compass word left that stays honest, so the fallback is a
+    // number. It is still unique and still speakable, which is the property that matters.
+    sorted.forEach((g, i) => out.set(g.id, words ? `${words[i]} ${base}` : `${base} ${i + 1}`));
+  }
+  return out;
+}
+
+/** Last-seed cache — `patchLive` asks for these at 2 Hz and `planRegions` rebuilds the plan. */
+let labelCache = { seed: null, labels: null };
+
+/** The same map, from a seed, for callers that hold a seed rather than a built plan. */
+export function planRoomLabels(seedish) {
+  const key = String(seedish ?? '');
+  if (labelCache.seed !== key) {
+    labelCache = { seed: key, labels: roomLabelsFor(planRegions(key).rooms) };
+  }
+  return labelCache.labels;
+}
+
+/**
  * 🗣️ **A SPACE ID AS SOMETHING A PERSON CAN SAY OUT LOUD.**
  *
  * `genplan.js` ids rooms `r1.gallery` and corridor rects `c0.3`, which is right for a table and
@@ -268,11 +350,13 @@ export function coverageRoomOf(id) {
   return /^\d+$/.test(type) ? null : type;
 }
 
-export function spaceLabel(id) {
+export function spaceLabel(id, labels) {
   const s = String(id ?? '');
   if (!s) return 'somewhere';
   const type = s.includes('.') ? s.split('.')[1] : s;
   if (/^\d+$/.test(type) || s.startsWith('c')) return 'a passage';
-  const label = roomLabel(type);
+  // `labels` is optional on purpose: a caller that does not hold the seed yet still gets a
+  // pronounceable name, just not a distinguishing one. Printing an id instead is never better.
+  const label = labels?.get?.(s) ?? roomLabel(type);
   return label === 'Passage' ? 'a passage' : `the ${label}`;
 }
