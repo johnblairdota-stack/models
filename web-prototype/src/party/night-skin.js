@@ -271,6 +271,17 @@ export function injectNightSkin() {
       border:1px solid rgba(var(--night-accent-rgb), .28); }
     .stick-btn.on { background:var(--night-accent); color:var(--night-deep); }
     .stick-btn.swing.on { background:var(--night-bad); }
+    /* 🔨 THE PAD'S OWN ANSWER TO A SWING. The button's `.on` flash is under the thumb that is
+       covering it, so it confirms nothing to the person who tapped it — this line sits clear of
+       both the stick and the buttons.
+       ⚠️ The height is RESERVED, exactly as `.intel` below reserves its own and for the same
+       reason: a line that appears and vanishes twice a swing would shove the stick under the
+       player's thumb mid-drag. It fades, it never takes or gives back layout. */
+    .pad-fx { min-height:24px; margin-top:10px; text-align:center; font-weight:800;
+      letter-spacing:.22em; text-transform:uppercase; font-size:15px; line-height:24px;
+      color:var(--night-accent); opacity:0; transition: opacity .14s ease; }
+    .pad-fx.on { opacity:1; }
+    .pad-fx.smash { color:var(--night-bad); }
     /* The slot is ALWAYS present and always this tall, whether it is speaking or not. A good
        player's read is sporadic by design (intel.js drops one in three), and an element that
        comes and goes twice a second moves the stick under the player's thumb. Reserving the

@@ -27,6 +27,7 @@
  *   E5  the picture is about 90% of the screen, measured against the viewport
  *   E6  the runner's pad has no house-word block, and the seated chairs still do
  *   E7  the guide's map does what this guide's ALIGNMENT says it should
+ *   E8  a tapped SWING buzzes the phone and writes a word, and the word does not move the stick
  *
  * ⚠️ **A SKIP IS NEVER A PASS.** Two of these can legitimately fail to arm — E7 depends on which
  * alignment the deal hands the elected guide, and E3 needs a runner with room to walk. Both say
@@ -483,6 +484,45 @@ try {
         sheet.intel ? `strip still there: ${sheet.k}` : 'clean');
     }
     t('E6e · and the guide still has the thing their seat IS for', sheet.map);
+  }
+
+  // ------------------------------------------------------------- E8 · the swing has a receipt
+  /*
+   * 📳 **THE PAD ANSWERS THE TAP.** Before this, the only feedback a swing produced on the phone
+   * was a 220 ms tint on the button the thumb was covering, so a tap that went out and a tap the
+   * browser ate as a scroll gesture looked the same in the hand.
+   *
+   * ⚠️ **BOTH HALVES ARE ASSERTED, BECAUSE EITHER ONE CAN BE THE WHOLE FEEDBACK.** Desktop
+   * Chromium and iOS Safari have no vibrate motor, so the WORD is the fallback there and the
+   * buzz is the fallback for a player whose eyes are correctly on the television. `vibrate` is
+   * stubbed rather than watched — headless has no motor either, and the claim under test is that
+   * the call is made, not that hardware moved.
+   */
+  await holdRun();
+  if (!runner || !(await runner.page.$('#swing-btn'))) skipped('E8', 'no runner pad to tap');
+  else {
+    await runner.page.evaluate(() => {
+      window.__buzz = [];
+      navigator.vibrate = (p) => { window.__buzz.push(p); return true; };
+    });
+    await runner.page.locator('#swing-btn').click();
+    await sleep(160);
+    const fx = await runner.page.evaluate(() => ({
+      buzz: window.__buzz ?? [],
+      label: document.querySelector('[data-pad-fx]')?.textContent?.trim() ?? '',
+      lit: !!document.querySelector('[data-pad-fx].on'),
+    }));
+    t('E8 · TAPPING SWING BUZZES THE PHONE', fx.buzz.length > 0, `vibrate(${JSON.stringify(fx.buzz)})`);
+    t('E8b · and puts a word under the stick', !!fx.label && fx.lit, fx.label || 'the slot stayed empty');
+    // The slot is reserved height, so it must exist and be silent before it is ever spoken into —
+    // a label that CREATES its line would shove the stick under a thumb that is mid-drag.
+    await sleep(700);
+    const gone = await runner.page.evaluate(() => ({
+      present: !!document.querySelector('[data-pad-fx]'),
+      lit: !!document.querySelector('[data-pad-fx].on'),
+    }));
+    t('E8c · the word fades but the line it sat on stays, so the stick never moves',
+      gone.present && !gone.lit, gone.lit ? 'still lit after 850 ms' : 'reserved and quiet');
   }
 
   // ------------------------------------------------------------- E3 · the stick, left and right
