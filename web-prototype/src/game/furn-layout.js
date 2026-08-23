@@ -6,10 +6,10 @@
  *   chaise / settee / wingback → study
  *   grand-piano + chandelier → ballroom
  *
- * ⚠️ **NO INVENTED GLBs.** Every `id` is a row in `FURN_SMASH_ASSETS`. A file that 404s is a
- * skip (`missing`), not a procedural fake wearing that id. `public/models/furn/` is empty in
- * the checkout this slice inventoried — the dress is written so the night picks the assets
- * up the moment they land, and is honest when they have not.
+ * ⚠️ **NO INVENTED GLBs.** Every `id` is a row in `FURN_SMASH_ASSETS`. The 24
+ * `public/models/furn/rrr_prop_*.glb` files are in git as normal blobs. A 404 is still a
+ * skip (`missing`), not a procedural fake — but a 404 now means a bad URL, not a missing
+ * checkout. `bed.glb` / `tato.glb` are local-only and are not required.
  *
  * The placement table is pure (no THREE) so `party-warm` can assert the ids. The loader is
  * optional and only runs in a browser that already has a room.
@@ -31,14 +31,44 @@ for (const id of LAYOUT_CATALOG_IDS) {
   if (!BY_ID.has(id)) throw new Error(`[furn-layout] ${id} is not in FURN_SMASH_ASSETS`);
 }
 
+/** Vite serves `public/` at `/`. Same prefix `furn-smash-lab.js` already loads. */
+export const CATALOG_URL_PREFIX = '/models/furn/';
+
+export function catalogUrl(catalogId) {
+  const spec = BY_ID.get(catalogId);
+  return spec ? `${CATALOG_URL_PREFIX}${spec.file}` : null;
+}
+
 /**
- * @param {Array<{ id:string, roomType?:string, x0:number, x1:number, z0:number, z1:number }>} spaces
+ * Generated rows carry `roomType`. Authored `HOUSE_PLAN` rows from `placeRoom` carry `order`
+ * (ballroom / study / gallery) and no `roomType`. Chapel / service have neither — chapel is
+ * still a room (id), service is the authored passage a knight can stand in.
+ */
+export function spaceKind(s) {
+  if (s?.roomType) return s.roomType;
+  if (s?.order) return s.order;
+  const id = s?.id ?? '';
+  if (id === 'study_w' || id === 'study_e' || id.endsWith('.study')) return 'study';
+  if (id === 'ballroom' || id.endsWith('.ballroom')) return 'ballroom';
+  if (id === 'gallery' || id.endsWith('.gallery')) return 'gallery';
+  if (id === 'chapel' || id.endsWith('.chapel')) return 'chapel';
+  if (id === 'service' || id.endsWith('.service')) return 'service';
+  return null;
+}
+
+function isCorridor(s) {
+  const k = spaceKind(s);
+  return !k || k === 'service';
+}
+
+/**
+ * @param {Array<{ id:string, roomType?:string, order?:string, x0:number, x1:number, z0:number, z1:number }>} spaces
  * @returns {{ id:string, catalogId:string, spaceId:string, x:number, z:number, rotY:number }[]}
  */
 export function catalogPlacements(spaces = []) {
   const out = [];
-  const rooms = spaces.filter((s) => s.roomType);
-  const corridors = spaces.filter((s) => !s.roomType);
+  const rooms = spaces.filter((s) => !isCorridor(s));
+  const corridors = spaces.filter(isCorridor);
   const mid = (s) => ({ x: (s.x0 + s.x1) / 2, z: (s.z0 + s.z1) / 2 });
 
   let armorN = 0;
@@ -61,7 +91,7 @@ export function catalogPlacements(spaces = []) {
 
   const lounge = ['wingback', 'settee', 'chaise'];
   let li = 0;
-  for (const s of rooms.filter((r) => r.roomType === 'study')) {
+  for (const s of rooms.filter((r) => spaceKind(r) === 'study')) {
     const c = mid(s);
     const ids = lounge.slice(0, 2);
     ids.forEach((catalogId, i) => {
@@ -78,7 +108,7 @@ export function catalogPlacements(spaces = []) {
     });
   }
   // A house with one study still gets the third lounge piece in that study.
-  const firstStudy = rooms.find((r) => r.roomType === 'study');
+  const firstStudy = rooms.find((r) => spaceKind(r) === 'study');
   if (firstStudy && li < 3) {
     const c = mid(firstStudy);
     out.push({
@@ -91,7 +121,7 @@ export function catalogPlacements(spaces = []) {
     });
   }
 
-  for (const s of rooms.filter((r) => r.roomType === 'ballroom')) {
+  for (const s of rooms.filter((r) => spaceKind(r) === 'ballroom')) {
     const c = mid(s);
     const short = Math.min(s.x1 - s.x0, s.z1 - s.z0);
     out.push({
@@ -145,7 +175,7 @@ export async function dressCatalogFurniture(room, { debris, dust } = {}) {
   for (const slot of placements) {
     const spec = BY_ID.get(slot.catalogId);
     if (!spec) { missing.push(slot.catalogId); continue; }
-    const url = `/models/furn/${spec.file}`;
+    const url = catalogUrl(slot.catalogId);
     let gltf;
     try {
       gltf = await loader.loadAsync(url);

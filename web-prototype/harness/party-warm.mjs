@@ -36,7 +36,7 @@ import {
   roomLabel, spaceLabel,
 } from '../src/party/mansion.js';
 import { lockedSeatCount } from '../src/game/chair-seats.js';
-import { LAYOUT_CATALOG_IDS, catalogPlacements } from '../src/game/furn-layout.js';
+import { LAYOUT_CATALOG_IDS, catalogPlacements, catalogUrl, CATALOG_URL_PREFIX, spaceKind } from '../src/game/furn-layout.js';
 import { FURN_SMASH_ASSETS } from '../src/game/furn-catalog.js';
 import { ROOMS, hunterVisibleToGuide } from '../src/party/coverage.js';
 import { buildPlan } from './genspike.mjs';
@@ -47,7 +47,7 @@ import { COMPOSITION, dealCast } from '../src/party/cast.js';
 import { isNightToken } from '../src/party/palette.js';
 import { MATRIX } from '../net/party/entitle.js';
 import { FANOUT_KEYS, fanoutViolations } from '../net/party/local.mjs';
-import { readFileSync } from 'node:fs';
+import { existsSync, openSync, readSync, closeSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -696,6 +696,56 @@ console.log('\nparty-warm — the lobby-warm night');
     && !follow.includes('furn-layout.js')
     && game.includes("import('../game/furn-dress.js')")
     && !game.includes('furn-layout.js'));
+
+  /*
+   * The 24 smash GLBs are in git as normal blobs under public/models/furn/. A previous
+   * note that this folder was empty was wrong (the agent glob missed binaries). `bed.glb`
+   * / `tato.glb` are local-only and are not required.
+   */
+  const furnDir = join(here, '..', 'public', 'models', 'furn');
+  const onDisk = [];
+  let pointer = 0, tiny = 0, notGltf = 0;
+  for (const spec of FURN_SMASH_ASSETS) {
+    const p = join(furnDir, spec.file);
+    if (!existsSync(p)) { tiny++; continue; }
+    const bytes = statSync(p).size;
+    const fd = openSync(p, 'r');
+    const head = Buffer.alloc(12);
+    readSync(fd, head, 0, 12, 0);
+    closeSync(fd);
+    const magic = head.subarray(0, 4).toString('ascii');
+    if (head.toString('utf8').startsWith('version https://git-lfs')) pointer++;
+    if (bytes < 1_000_000) tiny++;
+    if (magic !== 'glTF') notGltf++;
+    onDisk.push({ id: spec.id, file: spec.file, bytes, magic, url: catalogUrl(spec.id) });
+  }
+  t('W14k · all 24 catalog GLBs are real glTF blobs on disk, not LFS pointers',
+    onDisk.length === 24 && pointer === 0 && tiny === 0 && notGltf === 0,
+    `${onDisk.length}/24 · ptr ${pointer} · tiny ${tiny} · magic-fail ${notGltf}`);
+
+  const layoutDisk = LAYOUT_CATALOG_IDS.map((id) => onDisk.find((r) => r.id === id));
+  t('W14l · layout URLs are /models/furn/<file> and resolve to those blobs',
+    layoutDisk.every((r) => r && r.url === `${CATALOG_URL_PREFIX}${r.file}` && r.bytes > 1_000_000)
+    && /catalogUrl\(slot\.catalogId\)/.test(src('src/game/furn-layout.js')),
+    layoutDisk.map((r) => r && `${r.id}:${r.bytes}`).join(','));
+
+  const authored = catalogPlacements([
+    { id: 'ballroom', order: 'ballroom', x0: 0, x1: 27.2, z0: 0, z1: 15.3 },
+    { id: 'study_w', order: 'study', x0: -13.6, x1: -2.0, z0: -24, z1: -8.6 },
+    { id: 'chapel', x0: 4.2, x1: 11.0, z0: -37.8, z1: -31.3 },
+    { id: 'service', x0: -1.7, x1: 1.7, z0: -24, z1: -8.6 },
+  ]);
+  const byAuth = (id) => authored.filter((p) => p.catalogId === id);
+  t('W14m · authored HOUSE_PLAN shape (order, no roomType) still places the lock',
+    spaceKind({ id: 'ballroom', order: 'ballroom' }) === 'ballroom'
+    && spaceKind({ id: 'study_w', order: 'study' }) === 'study'
+    && spaceKind({ id: 'c0.3' }) === null
+    && byAuth('grand-piano').every((p) => p.spaceId === 'ballroom')
+    && byAuth('chandelier').length === 2 && byAuth('chandelier').every((p) => p.spaceId === 'ballroom')
+    && ['wingback', 'settee', 'chaise'].every((id) => byAuth(id).every((p) => p.spaceId === 'study_w'))
+    && byAuth('armor').length >= 1 && byAuth('armor').every((p) => p.spaceId === 'service')
+    && !authored.some((p) => p.spaceId === 'chapel'),
+    authored.map((p) => `${p.catalogId}@${p.spaceId}`).join(','));
 }
 
 console.log(`\nparty-warm: ${pass} passed, ${fail} failed`);

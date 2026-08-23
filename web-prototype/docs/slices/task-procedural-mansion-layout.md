@@ -76,11 +76,13 @@ This slice may edit these. Anything else is another owner's.
 
 Cited local tree: `C:\Users\John\Documents\models\web-prototype`.
 
-**Remote checkout differs in one material way:** `public/models/furn/` is **empty here
-and not in git**. John's machine has the smash GLBs. The placer is written against the
-catalog ids so the files load the moment they land; a 404 is a skip, not a fake prop.
+**Correction (project lead, 2026-08-23):** `public/models/furn/` is **not empty**. Main
+and this branch both carry the 24 `rrr_prop_*.glb` files as normal git blobs (multi-MB,
+`glTF` magic, not LFS pointers). An earlier agent note that the folder was empty was
+wrong — the inventory glob missed binaries. `bed.glb` and `tato.glb` are local-only
+untracked on John's machine and are **not** required.
 
-The rest of the inventory matched the remote tree on `0349ef6` / this branch.
+The rest of the inventory matched the remote tree.
 
 ### 2.1 Ballroom placement
 
@@ -139,7 +141,8 @@ survival stay as shipped. See §4.
 ### 2.5 Smashable furniture
 
 Catalog: `src/game/furn-catalog.js` `FURN_SMASH_ASSETS`. Assets under
-`public/models/furn/` **on John's machine**; empty in this remote checkout.
+`public/models/furn/` — 24 `rrr_prop_*.glb` blobs in git. Vite serves them at
+`/models/furn/<file>`, the same prefix `furn-smash-lab.js` already loads.
 
 | id | file | kind | room (John) |
 |---|---|---|---|
@@ -221,9 +224,10 @@ throw.
 call that function once. They do not import `furn-layout.js`. Early-return paths of the
 hook (no wood / no materials) still attempt the catalog if `registerFurn` exists.
 
-If the GLBs are still absent on disk, the function returns
-`{ placed: 0, missing: [...] }` and the PR says so. That is not a silent invention of
-props.
+The loader URL is `catalogUrl(id)` → `/models/furn/<file>`. A 404 is a skip
+(`missing`), not a fake prop — but with the blobs in git that now means a bad path,
+not an empty checkout. Authored `HOUSE_PLAN` rows carry `order` (not `roomType`);
+`spaceKind` reads both so `game.play` still gets piano / lounges / knights.
 
 ---
 
@@ -286,6 +290,9 @@ W14 must say:
 - `lockedSeatCount({ players: 4 }) === 4` and `lockedSeatCount({ players: 1, chairsQuery: '8' }) === 8`
 - catalog placement table names only real `furn-catalog.js` ids
 - `dressLooseFurniture` is the catalog placer hook
+- all 24 catalog GLBs are real glTF blobs on disk; layout URLs resolve to them
+- authored `order` rows (no `roomType`) still place piano/chandeliers in the ballroom,
+  lounges in the study, and armor in the service passage — not the chapel
 
 Play:
 
@@ -294,8 +301,8 @@ Play:
    ballroom centre.
 3. `?plan=gen` → ballroom in a corner, no centre piers, spawn in the ballroom.
 4. `game.play` → one chair unless `?chairs=N`.
-5. Catalog GLBs: if `public/models/furn/` is populated, knights in corridors, lounges in
-   studies, piano + two chandeliers in the ballroom. If empty, `__furnLayout.missing`
-   lists the ids and the house still plays.
+5. Catalog GLBs: knights in corridors / service, lounges in studies, piano + two
+   chandeliers in the ballroom. `__furnLayout.missing` should be empty when Vite is
+   serving `public/`.
 
 Cyan / dig-through-inter-room is **not** a test of this PR.
