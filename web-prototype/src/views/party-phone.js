@@ -2,12 +2,11 @@
  * Phone — a controller (bible D13). Join by code, claim a seat, reconnect by token.
  * Hold the role card; vote; tap a pad.
  *
- * During an expedition the RUNNER's sheet embeds the same chase follow the TV is showing
- * (no socket, closed warm URL, stick over the picture). The GUIDE still gets the map /
- * flyover and never this camera. Seated phones stay a reaction pad.
+ * During an expedition the RUNNER's sheet is a pad: two sticks, RUN, SWING, a room
+ * label. Eyes on the TV — this screen does not mount a chase iframe. The GUIDE still
+ * gets the map / flyover and never a camera. Seated phones stay a reaction pad.
  *
  * 🚨 This screen still never gets a lid-off house, a hunter mesh, or the guide's pins.
- * The embed is `party.follow`, which cannot be handed those words.
  */
 import { PartyNightClient, defaultWsUrl, tokenKey, normalizeCodeDisplay, normalizeCodeWire } from '../party/night-client.js';
 import { recapFromEvents } from '../party/recap.js';
@@ -19,7 +18,7 @@ import { EVIL } from '../party/cast.js';
 import { guideMapSvg } from '../party/guidemap.js';
 import { MISSION_ROOM, pickPlanSeed, planRoomLabels, roomLabel } from '../party/mansion.js';
 import { intelLine } from '../party/intel.js';
-import { STICK_DEADZONE, cueViolations, warmLabel, warmUrl } from '../party/follow.js';
+import { STICK_DEADZONE, warmLabel } from '../party/follow.js';
 
 export default async function partyPhone({ params }) {
   injectNightSkin();
@@ -51,7 +50,7 @@ export default async function partyPhone({ params }) {
      * thing put on the wire, which is what makes the 20 Hz tick change-gated rather than a
      * metronome. See `startPad`.
      */
-    pad: { x: 0, y: 0, run: false, swing: false, sent: '', timer: 0 },
+    pad: { x: 0, y: 0, lookX: 0, lookY: 0, run: false, swing: false, sent: '', timer: 0 },
     /**
      * 📳 The pad's answer to the last thing the thumb did. `label` is the word under the stick,
      * `kind` is the CSS modifier, `timer` wipes it. See `padFx`.
@@ -79,106 +78,6 @@ export default async function partyPhone({ params }) {
     nameOf: (id) => playerName(mergePublicNames(state.client?.frame?.players, state.client?.lobby), id),
     onClose: () => { state.stage = null; paint(); },
   });
-
-  /**
-   * 🎥 THE RUNNER'S CHASE SLOT — one iframe, a LAYER, never inside `root`.
-   *
-   * Same lesson as `party-host.js` `ensureFollow`: `paint()` rewrites `root.innerHTML`, and
-   * moving an iframe between parents reloads it. The TV already owns the world; this embed is
-   * the runner's eyes, driven by the same pad the TV hears, so the thumb and the picture share
-   * a frame. It has no socket. Guide phones never mount it.
-   */
-  const chase = { layer: null, el: null, src: null, live: false, cued: false, wanted: false };
-
-  function onChaseMessage(e) {
-    if (e.source !== chase.el?.contentWindow) return;
-    if (e.data?.t !== 'follow') return;
-    // Ready retries the run cue. World reports stay here — this parent is not the TV.
-    if (e.data.ready) {
-      chase.live = true;
-      tryChaseRun();
-    }
-  }
-
-  function ensureChase() {
-    if (chase.layer) return;
-    const layer = document.createElement('div');
-    layer.className = 'runner-chase-layer';
-    layer.setAttribute('aria-hidden', 'true');
-    const f = document.createElement('iframe');
-    f.className = 'runner-chase';
-    f.title = 'Chase camera';
-    f.setAttribute('sandbox', 'allow-scripts allow-same-origin');
-    f.setAttribute('allow', 'autoplay');
-    layer.appendChild(f);
-    document.body.appendChild(layer);
-    chase.layer = layer;
-    chase.el = f;
-    window.addEventListener('message', onChaseMessage);
-  }
-
-  function teardownChase() {
-    if (!chase.layer) return;
-    window.removeEventListener('message', onChaseMessage);
-    chase.layer.remove();
-    chase.layer = null;
-    chase.el = null;
-    chase.src = null;
-    chase.live = false;
-    chase.cued = false;
-    chase.wanted = false;
-    root.classList.remove('chase-live');
-  }
-
-  function sendChaseCue(cue) {
-    if (!chase.el?.contentWindow) return false;
-    const bad = cueViolations(cue);
-    if (bad.length) {
-      console.error(`[phone] refusing to send a cue: ${bad.join(', ')}`);
-      return false;
-    }
-    chase.el.contentWindow.postMessage({ t: 'cue', cue }, location.origin);
-    return true;
-  }
-
-  function tryChaseRun() {
-    if (!chase.wanted || chase.cued) return false;
-    const me = state.client?.welcome;
-    if (!me) return false;
-    const look = state.look || DEFAULT_LOOK;
-    const name = String(state.name || 'The runner').trim().slice(0, 12).trim() || 'The runner';
-    const ok = sendChaseCue({
-      kind: 'run',
-      runner: String(me.playerId),
-      name,
-      shell: look.shell,
-      accent: look.accent,
-    });
-    if (ok) chase.cued = true;
-    return ok;
-  }
-
-  function syncChaseCam({ iAmRunner, beat }) {
-    const warm = !!(iAmRunner && (beat === 'expedition' || beat === 'casting'));
-    const show = !!(iAmRunner && beat === 'expedition');
-    chase.wanted = show;
-    if (!warm) {
-      if (chase.layer) teardownChase();
-      else root.classList.remove('chase-live');
-      return;
-    }
-    const seed = state.client?.worldSeed;
-    if (seed == null) return;
-    ensureChase();
-    if (!chase.src) {
-      chase.src = warmUrl({ room: state.code, worldSeed: seed });
-      chase.el.src = chase.src;
-    }
-    root.classList.toggle('chase-live', show);
-    chase.layer.classList.toggle('on', show);
-    if (show) tryChaseRun();
-    else chase.cued = false;
-  }
 
   if (!state.code) {
     paintJoin();
@@ -260,7 +159,6 @@ export default async function partyPhone({ params }) {
   }
 
   function paintJoin() {
-    teardownChase();
     root.innerHTML = `
       <div class="phone-top"><span>Prime Time</span><span>join</span></div>
       <h1>Sit down.</h1>
@@ -502,12 +400,8 @@ export default async function partyPhone({ params }) {
       ? `${beat}:${iAmRunner ? 'run' : iAmGuide ? 'guide' : 'watch'}:${missionPhase}`
         + `:${hasCard() ? 'card' : 'nocard'}`
       : null;
-    syncChaseCam({ iAmRunner, beat });
     if (liveStamp && root.dataset.liveUi === liveStamp && patchLive(frame)) {
-      window.__rrrPhone = {
-        frame, beat, seat: me.seat, iAmRunner, iAmGuide,
-        chase: !!(chase.wanted && chase.live),
-      };
+      window.__rrrPhone = { frame, beat, seat: me.seat, iAmRunner, iAmGuide };
       return;
     }
 
@@ -559,15 +453,22 @@ export default async function partyPhone({ params }) {
          * contribution from a chair.
          */
         body += `<h1>You walk.</h1>
-          <p class="hint">Walk into the shot. Hold RUN, tap SWING. Running is loud.</p>
+          <p class="hint">Eyes on the TV. Left stick walks into the shot. Right stick looks. Hold RUN, tap SWING.</p>
           <p class="hint">Listen to your guide — they have the map, you have the hammer.</p>
           ${missionLine(frame)}
           ${hereLine(frame)}
           <div class="stick-wrap">
-            <div class="stick" id="stick"><div class="nub" data-nub></div></div>
+            <div class="stick-col">
+              <div class="stick" id="stick"><div class="nub" data-nub></div></div>
+              <div class="stick-cap">Move</div>
+            </div>
             <div class="stick-side">
               <button class="stick-btn" id="run-btn" type="button">Run</button>
               <button class="stick-btn swing" id="swing-btn" type="button">Swing</button>
+            </div>
+            <div class="stick-col">
+              <div class="stick stick-look" id="stick-look"><div class="nub" data-nub-look></div></div>
+              <div class="stick-cap">Look</div>
             </div>
           </div>
           ${padFxHtml()}`;
@@ -670,10 +571,7 @@ export default async function partyPhone({ params }) {
      * what the entitlement matrix already decided this socket may see, so exposing it cannot leak
      * anything a screenshot of this screen would not.
      */
-    window.__rrrPhone = {
-      frame, beat, seat: me.seat, iAmRunner, iAmGuide,
-      chase: !!(chase.wanted && chase.live),
-    };
+    window.__rrrPhone = { frame, beat, seat: me.seat, iAmRunner, iAmGuide };
 
     root.querySelector('#save-name')?.addEventListener('click', () => {
       const v = root.querySelector('#name')?.value || '';
@@ -710,44 +608,54 @@ export default async function partyPhone({ params }) {
    */
   function bindPad() {
     const stick = root.querySelector('#stick');
-    const nub = root.querySelector('[data-nub]');
+    const look = root.querySelector('#stick-look');
     const runBtn = root.querySelector('#run-btn');
     const swingBtn = root.querySelector('#swing-btn');
     if (!stick) { stopPad(); return; }
 
-    const set = (x, y) => {
-      const mag = Math.hypot(x, y);
-      const k = mag > 1 ? 1 / mag : 1;
-      state.pad.x = x * k;
-      state.pad.y = y * k;
-      if (nub) nub.style.transform = `translate(calc(-50% + ${state.pad.x * 78}%), calc(-50% + ${-state.pad.y * 78}%))`;
-      stick.classList.toggle('on', Math.hypot(state.pad.x, state.pad.y) > STICK_DEADZONE);
+    const bindStick = (el, nub, apply) => {
+      if (!el) return;
+      const set = (x, y) => {
+        const mag = Math.hypot(x, y);
+        const k = mag > 1 ? 1 / mag : 1;
+        const sx = x * k;
+        const sy = y * k;
+        apply(sx, sy);
+        if (nub) nub.style.transform = `translate(calc(-50% + ${sx * 78}%), calc(-50% + ${-sy * 78}%))`;
+        el.classList.toggle('on', Math.hypot(sx, sy) > STICK_DEADZONE);
+      };
+      const fromEvent = (e) => {
+        const r = el.getBoundingClientRect();
+        // +y is FORWARD / look-up, so the screen's downward axis is negated once, here.
+        set((e.clientX - (r.left + r.width / 2)) / (r.width / 2),
+          -((e.clientY - (r.top + r.height / 2)) / (r.height / 2)));
+      };
+      el.addEventListener('pointerdown', (e) => {
+        el.setPointerCapture(e.pointerId);
+        fromEvent(e);
+        sendPad();
+      });
+      el.addEventListener('pointermove', (e) => {
+        if (!el.hasPointerCapture(e.pointerId)) return;
+        fromEvent(e);
+      });
+      const release = (e) => {
+        try { el.releasePointerCapture(e.pointerId); } catch { /* already gone */ }
+        set(0, 0);
+        sendPad();
+      };
+      el.addEventListener('pointerup', release);
+      el.addEventListener('pointercancel', release);
     };
 
-    const fromEvent = (e) => {
-      const r = stick.getBoundingClientRect();
-      // +y is FORWARD, so the screen's downward axis is negated once, here, rather than at the
-      // three places downstream that would each have to remember to.
-      set((e.clientX - (r.left + r.width / 2)) / (r.width / 2),
-        -((e.clientY - (r.top + r.height / 2)) / (r.height / 2)));
-    };
-
-    stick.addEventListener('pointerdown', (e) => {
-      stick.setPointerCapture(e.pointerId);
-      fromEvent(e);
-      sendPad();
+    bindStick(stick, root.querySelector('[data-nub]'), (x, y) => {
+      state.pad.x = x;
+      state.pad.y = y;
     });
-    stick.addEventListener('pointermove', (e) => {
-      if (!stick.hasPointerCapture(e.pointerId)) return;
-      fromEvent(e);
+    bindStick(look, root.querySelector('[data-nub-look]'), (x, y) => {
+      state.pad.lookX = x;
+      state.pad.lookY = y;
     });
-    const release = (e) => {
-      try { stick.releasePointerCapture(e.pointerId); } catch { /* already gone */ }
-      set(0, 0);
-      sendPad();
-    };
-    stick.addEventListener('pointerup', release);
-    stick.addEventListener('pointercancel', release);
 
     const hold = (btn, on) => {
       btn.addEventListener('pointerdown', () => { state.pad.run = on; btn.classList.toggle('on', on); sendPad(); });
@@ -829,22 +737,15 @@ export default async function partyPhone({ params }) {
       t: 'move',
       x: Math.round(p.x * 100) / 100,
       y: Math.round(p.y * 100) / 100,
+      lookX: Math.round(p.lookX * 100) / 100,
+      lookY: Math.round(p.lookY * 100) / 100,
       run: !!p.run,
       swing: !!swing,
     };
-    const key = `${msg.x}|${msg.y}|${msg.run}`;
+    const key = `${msg.x}|${msg.y}|${msg.lookX}|${msg.lookY}|${msg.run}`;
     if (!swing && key === p.sent) return;
     p.sent = key;
     state.client?.send(msg);
-    if (chase.wanted) {
-      sendChaseCue({
-        kind: 'move',
-        x: msg.x,
-        y: msg.y,
-        run: msg.run,
-        swing: msg.swing,
-      });
-    }
   }
 
   function startPad() {

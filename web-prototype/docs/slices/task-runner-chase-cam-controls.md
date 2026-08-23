@@ -1,7 +1,8 @@
-# task-runner-chase-cam-controls — chase-only lens, camera-relative stick
+# task-runner-chase-cam-controls — dual-stick pad, TV chase view
 
-Locked rework (John / Spine A). Decisions below are made. If a stated fact in the brief
-was wrong, it is named here rather than silently diverged from.
+Playtest pivot (John). Supersedes the #29 phone chase-embed (`43ea598`). Decisions below
+are made. If a stated fact in the brief was wrong, it is named here rather than silently
+diverged from.
 
 `docs/design/party-loop.md` still wins on any disagreement about the party game.
 
@@ -9,16 +10,14 @@ was wrong, it is named here rather than silently diverged from.
 
 ## 0. Why
 
-The runner's thumb and the runner's eyes were in two different frames.
+John playtested #29. The runner phone embedded the TV follow slot (`warmUrl` iframe). The
+embed was slow and did not work. The lock is now:
 
-- The pad posted a stick. `follow-bed.js` latched the body's heading on press and drove
-  `move: { x: 0, y: mag }` — body-relative, forward-only.
-- The TV `FollowOperator` auto-cut `chase` / `shoulder` / `lead` / `doorway` every 5.5–9 s.
-- The runner phone was pad-only ("Eyes on the TV"). The person steering watched a cutting
-  picture their stick was not measured against.
+- **Phone = controls only.** No 3D view. Two virtual sticks + RUN + SWING.
+- **TV = the playable view.** Continuous 3rd-person chase of the runner. The person
+  steering watches the TV.
 
-That is Genshin with the camera yanked every few seconds and the move stick glued to the
-body. It feels broken.
+#29's chase-only TV lock and camera-relative move math stay. The phone picture goes.
 
 ---
 
@@ -26,10 +25,12 @@ body. It feels broken.
 
 | claim | verdict |
 |---|---|
-| Stick is body-heading latch + `move: {x:0,y:mag}` | **True.** `perf.stickRef` + `stickHeading` + forward-only magnitude in `follow-bed.js`. |
-| TV `FollowOperator` auto-cuts chase/shoulder/lead/doorway every ~5.5–9s | **True.** `until = 5.5 + rng()*3.5`, then `_pick()` from the other three. |
-| Phone is pad-only; runner watches the cutting TV | **True.** `party-phone.js` expedition runner sheet was a stick and the sentence "Eyes on the TV." |
-| `Player._stepGround` is already aim-relative | **True.** `player.js` — `sin/cos aimYaw` × `move.y/x`. Not edited. |
+| `main` includes #29 at `43ea598` | **True.** |
+| #29 mounted a runner phone chase embed (`party-phone.js` warm-slot iframe) | **True.** `ensureChase` / `runner-chase-layer` / `warmUrl` / `sendChaseCue`. |
+| Live TV `FollowOperator` is already chase-only (no auto-cuts) | **True.** `liveRunShot('run')` → `'chase'`. Kept. |
+| `stickCamMove` already maps a deadzoned stick onto strafe+forward | **True.** Reused. Not rewritten. |
+| `Player._stepGround` is already aim-relative | **True.** `player.js` — not edited. |
+| Pre-#29 runner copy said "Eyes on the TV." | **True.** #29 deleted it. This pivot puts eyes-on-the-TV back. |
 
 No silent divergence.
 
@@ -37,61 +38,59 @@ No silent divergence.
 
 ## 2. Decisions
 
-### 2.1 Chase-only during the live run
+### 2.1 Phone is a pad again — no chase iframe
 
-`liveRunShot('run')` returns `'chase'`. `FollowOperator.update` takes that as `lockShot`,
-stops the cut timer, and stays on chase. A `shot` cue that would cut to shoulder / lead /
-doorway is dropped while the lock is chase.
+Remove the runner chase layer entirely: no `warmUrl` iframe, no `postMessage` cue into a
+phone WebGL context, no `chase-live` overlay. The runner sheet is room label + dual
+sticks + RUN/SWING. Copy may say eyes on the TV.
 
-Warm and intros keep their own cameras. `?shot=` (`FOLLOW_INSTRUMENTS`) still pins — a
-host-built slot never emits it (F9d).
+The GUIDE sheet is unchanged: `guideMapSvg`, flyover marks, no chase layer. A later
+"helpfully give the phone its own mansion socket" still fails I10.
 
-The four shot solvers stay. They are how `?shot=lead` and the pre-lock fallback exist.
-They do not fire mid-expedition.
+### 2.2 Dual sticks on one move cue
 
-### 2.2 Camera-relative stick
+Left `#stick` = move. Right `#stick-look` = look / orbit.
 
-Investigated both options the brief named. The clean path is the one `Player` already
-implements:
+Both ride the existing `t:'move'` path (phone → TV socket → host `queueMove` →
+`kind:'move'` cue). Payload grows by `lookX` / `lookY` (−1..1, same clamp as `x`/`y`).
+No second cue kind. Coalesced like move: latest sample wins; a swing is still an edge.
 
-1. Flatten the chase lens onto Y (`lookYaw(eye→look)`).
+`CUE_KEYS.move` and `MOVE_KEYS` list the new keys. `local.mjs` relays them. A missing
+look pair is still a valid pad (zeros). A `lookX: 9` is refused at the door.
+
+### 2.3 TV chase is continuous; right stick orbits it
+
+`liveRunShot('run')` still returns `'chase'`. Auto-cuts to shoulder / lead / doorway stay
+dropped. Warm / intros / `?shot=` unchanged.
+
+Right stick drives camera **yaw / pitch** around the runner:
+
+- Look right decreases house yaw (same convention as `stickHeading` / `_solve`'s right).
+- Look up raises pitch (camera drops, still framed on the chest).
+- Clamps: `LOOK_PITCH_MIN` / `LOOK_PITCH_MAX`. Soft follow distance stays `CHASE_DIST`
+  (2.90) with the existing lateral offset and eye lerp.
+- Look stick is deadzoned with `stickCamMove` so a resting thumb does not drift the lens.
+- **No auto-recenter** onto body facing while the pad is driving. That was the one-stick
+  #29 reading. The look stick owns the orbit; releasing it holds the angle. The
+  undriven/scripted fallback (`?view=party.follow` with no phone) still recenters behind
+  the body so a developer window is not a locked south chase.
+
+### 2.4 Left stick is camera-relative to that TV chase
+
+Same product as #29:
+
+1. Flatten the chase lens onto Y (`lookYaw` / `operator.basisYaw()`).
 2. Put that yaw on `aimYaw`.
-3. Hand the deadzoned stick through as real strafe+forward (`stickCamMove` → `move.x` +
-   `move.y`).
-4. `_targetFacing` turns the body toward travel.
+3. Hand the deadzoned left stick through as real strafe+forward (`stickCamMove`).
+4. `_stepGround` + `_targetFacing` already walk aim-relative.
 
-Push up = into the shot. Radial deadzone + smootherstep stay (`stickMag` inside
-`stickCamMove`). RUN and SWING are untouched.
-
-The body-heading latch (`stickRef` / `stickHeading` / `STICK_TURN`) stays exported. It is
-still the right diagnosis of a heading measured from itself, and the warm gate still holds
-the sign and the spin. The driven bed no longer uses it.
-
-### 2.3 Chase yaw is the lens, not the body
-
-If chase stayed welded to `runner.facing`, a camera-relative hold-left would orbit: the
-body faces the strafe, the camera follows the new facing, "left" rotates, repeat. Same
-*class* of bug as adding `stickHeading` to a live heading, slower.
-
-During a locked chase the operator keeps `_lockYaw`. It holds while the thumb is strafing
-and recenters behind the body when the stick is released or the player pushes into the
-shot. That is the one-stick Genshin/Roblox reading: up stays the current picture; a held
-left is a straight line across it.
-
-### 2.4 Runner phone shows the chase
-
-Same follow slot the TV mounts: `warmUrl` in an iframe layered on `document.body` (never
-inside `paint()`'s `innerHTML` — the host's own reload lesson). No socket. Run + move cues
-go to that iframe from the pad; world reports from it are ignored (this parent is not the
-TV). Stick overlays the picture. Copy that said "Eyes on the TV" is gone.
-
-The GUIDE sheet is unchanged: `guideMapSvg`, flyover marks, no chase layer.
+Push up = into the shot. RUN and SWING untouched.
 
 ### 2.5 Out of scope, on purpose
 
 - No CAUGHT / Producer chair / smash→recap end.
 - No chrome-honesty thrash (#18–#27).
-- `:5184` and overnight harnesses left alone.
+- No phone WebGL / follow iframe for the runner.
 - `player.js` not edited.
 
 ---
@@ -100,18 +99,20 @@ The GUIDE sheet is unchanged: `guideMapSvg`, flyover marks, no chase layer.
 
 | file | change |
 |---|---|
-| `src/party/follow.js` | `stickCamMove`, `lookYaw`, `liveRunShot` |
-| `src/game/follow-bed.js` | chase lock, camera-relative drive |
-| `src/views/party-phone.js` | runner chase embed, copy |
-| `src/party/night-skin.js` | chase layer + pad-over-picture |
-| `harness/party-warm.mjs` | W25 |
-| `harness/party-isolation.mjs` | I10 |
-| this file | decisions |
+| `src/party/follow.js` | `lookX`/`lookY` on move, `stepLookOrbit`, `chaseOrbitOffset`, rates/clamps |
+| `src/game/follow-bed.js` | look-driven chase orbit; keep chase lock + `stickCamMove` drive |
+| `src/views/party-phone.js` | remove chase embed; dual sticks; eyes-on-the-TV copy |
+| `src/party/night-skin.js` | dual-stick pad; drop chase-layer CSS |
+| `src/views/party-host.js` | forward `lookX`/`lookY` on the move cue |
+| `net/party/local.mjs` | relay `lookX`/`lookY` |
+| `harness/party-warm.mjs` | W26 — no embed; look cue + camera-relative math |
+| `harness/party-isolation.mjs` | I10 — no runner chase embed |
+| this file | this lock |
 
 ---
 
 ## 4. Gates
 
-`npm run build` and `npm run gates:party`. New assertions: W26 (chase lock, camera-relative
-math against `player.js`'s own strafe, bed/phone source) and I10 (embed is the follow slot,
-guide map untouched, flyover still `guide`).
+`npm run build` and `npm run gates:party`. W26 / I10 replace the #29 embed assertions:
+no runner chase iframe; look cue + orbit math; camera-relative move against
+`player.js`'s own strafe; guide map / flyover untouched.

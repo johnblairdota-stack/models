@@ -79,7 +79,15 @@ export default async function partyHost({ params }) {
     const m = pad.pending;
     if (!m) return;
     pad.pending = null;
-    sendCue({ kind: 'move', x: +m.x || 0, y: +m.y || 0, run: !!m.run, swing: !!m.swing });
+    sendCue({
+      kind: 'move',
+      x: +m.x || 0,
+      y: +m.y || 0,
+      lookX: +m.lookX || 0,
+      lookY: +m.lookY || 0,
+      run: !!m.run,
+      swing: !!m.swing,
+    });
   }
   function queueMove(m) {
     // A swing is an EDGE and must not be swallowed by a later stick sample that has no swing on

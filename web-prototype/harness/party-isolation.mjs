@@ -335,21 +335,21 @@ t('I7 · a take reveals nothing, and no survivor frame changes shape across it',
   R.detail.I7 || 'alignment absent, role absent, shape unchanged');
 t('I8 · the flyover reaches one phone and never the TV', R.I8, R.detail.I8 || 'party-loop.md "Do not" holds');
 
-// ---- I10 · chase-only / camera-relative does not punch a new hole in the matrix --------------
+// ---- I10 · dual-stick TV chase does not punch a new hole in the matrix -----------------------
 //
-// The runner phone now embeds the follow slot. That slot has no socket and cannot be handed
-// flyover / lid / plan. This block holds the policy and the source so a later "helpfully
-// give the phone its own mansion socket" fails here, not in a lounge.
+// The runner phone is a pad. It must not grow a mansion socket or a chase iframe. Look
+// rides the existing move cue. Guide map / flyover stay where I8 put them.
 {
   const phoneSrc = readFileSync(new URL('../src/views/party-phone.js', import.meta.url), 'utf8');
   t('I10 · a live run is chase-only — the operator lock is a follow-slot policy, not a new frame field',
     liveRunShot('run') === 'chase' && liveRunShot('warm') === null);
-  t('I10a · the runner chase embed is the warm follow URL, not a second party socket',
-    /warmUrl\(/.test(phoneSrc)
-    && /sandbox/.test(phoneSrc)
-    && /allow-scripts allow-same-origin/.test(phoneSrc)
+  t('I10a · the runner phone has no chase embed and still one party socket',
+    !/warmUrl\(/.test(phoneSrc)
+    && !/runner-chase-layer/.test(phoneSrc)
+    && !/sendChaseCue/.test(phoneSrc)
+    && /id="stick-look"/.test(phoneSrc)
     && (phoneSrc.match(/new PartyNightClient/g) || []).length === 1);
-  t('I10b · the guide sheet still paints the map and never mounts that chase layer',
+  t('I10b · the guide sheet still paints the map and never mounts a chase layer',
     /guideMapSvg\(/.test(phoneSrc)
     && /The map is yours/.test(phoneSrc)
     && /iAmGuide/.test(phoneSrc));

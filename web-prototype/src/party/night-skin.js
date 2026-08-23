@@ -251,40 +251,29 @@ export function injectNightSkin() {
       transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease; }
     .swatch.on { transform: scale(1.12); border-color:#f3ece3; box-shadow: 0 0 0 3px rgba(245,161,74,.35); }
 
-    /* 🕹️ THE RUNNER'S PAD. A stick, a run hold and a swing tap — 'party-loop.md' line 21's
-       first-person body, finally driven by a thumb instead of four labelled speeds.
-       'touch-action:none' is not optional: without it the browser claims the drag as a scroll and
-       the stick receives one pointermove and then nothing. */
-    .stick-wrap { display:grid; grid-template-columns: 1fr auto; gap:12px; align-items:end;
-      margin-top:14px; }
-    .stick { position:relative; width:100%; aspect-ratio:1/1; max-width:230px; border-radius:50%;
+    /* 🕹️ THE RUNNER'S PAD. Two sticks — left walks into the TV chase, right orbits it —
+       plus RUN and SWING. 'touch-action:none' is not optional: without it the browser claims
+       the drag as a scroll and the stick receives one pointermove and then nothing. */
+    .stick-wrap { display:grid; grid-template-columns: minmax(96px,1fr) auto minmax(96px,1fr);
+      gap:10px; align-items:end; margin-top:14px; }
+    .stick-col { display:flex; flex-direction:column; align-items:center; gap:6px; min-width:0; }
+    .stick { position:relative; width:100%; aspect-ratio:1/1; max-width:168px; border-radius:50%;
       background: radial-gradient(circle at 50% 50%, var(--night-panel) 0%, var(--night-well) 72%);
       border:1px solid rgba(var(--night-accent-rgb), .28); touch-action:none; user-select:none; }
+    .stick-look { border-color: rgba(var(--night-accent-rgb), .55); }
     .stick .nub { position:absolute; left:50%; top:50%; width:38%; height:38%; border-radius:50%;
       transform: translate(-50%, -50%); background:var(--night-accent);
       box-shadow: 0 6px 18px rgba(0,0,0,.55); transition: background .2s ease; }
     .stick.on .nub { background:var(--night-ink); }
+    .stick-cap { font-size:11px; letter-spacing:.2em; text-transform:uppercase;
+      color:var(--night-dim); font-weight:700; }
     .stick-side { display:flex; flex-direction:column; gap:10px; }
     .stick-btn { appearance:none; border:0; font:inherit; font-weight:700; letter-spacing:.12em;
-      text-transform:uppercase; border-radius:12px; padding:0 18px; min-height:74px; min-width:104px;
+      text-transform:uppercase; border-radius:12px; padding:0 12px; min-height:62px; min-width:76px;
       background:var(--night-panel); color:var(--night-ink); touch-action:none;
       border:1px solid rgba(var(--night-accent-rgb), .28); }
     .stick-btn.on { background:var(--night-accent); color:var(--night-deep); }
     .stick-btn.swing.on { background:var(--night-bad); }
-    /* 🎥 RUNNER CHASE — the follow slot sits behind the pad, never inside it.
-       opacity, not display:none: a hidden iframe is a paused bake (party-host warm note). */
-    .runner-chase-layer { position:fixed; inset:0; z-index:0; pointer-events:none;
-      background:var(--night-deep); opacity:0; }
-    .runner-chase-layer.on { opacity:1; }
-    .runner-chase-layer iframe.runner-chase { width:100%; height:100%; border:0; display:block; }
-    .night.phone.chase-live { background:transparent; }
-    .night.phone.chase-live .phone-top,
-    .night.phone.chase-live h1,
-    .night.phone.chase-live .hint,
-    .night.phone.chase-live .here,
-    .night.phone.chase-live .goal { text-shadow:0 2px 12px rgba(0,0,0,.92); }
-    .night.phone.chase-live .stick-wrap { margin-top:auto; }
-    .night.phone.chase-live .stick { box-shadow:0 10px 28px rgba(0,0,0,.45); }
     /* 🔨 THE PAD'S OWN ANSWER TO A SWING. The button's .on flash is under the thumb that is
        covering it, so it confirms nothing to the person who tapped it — this line sits clear of
        both the stick and the buttons.
