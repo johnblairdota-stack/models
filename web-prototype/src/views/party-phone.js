@@ -353,9 +353,17 @@ export default async function partyPhone({ params }) {
       const last = [...(c.events ?? [])].reverse().find((e) => String(e.type ?? '').startsWith('mission.'));
       return last ? String(last.type) : 'mission.seek';
     })();
+    /*
+     * ⚠️ **THE HUNTER'S PRESENCE CAME OFF THIS STAMP AND THAT IS A FIX, NOT A LOOSENING.** It was
+     * here because the mark appearing changed the sentence under the map, and `patchLive` only
+     * wrote the marks. `patchLive` writes the sentence now — and it has to, because the peek/jam
+     * cycle makes the mark come and go every few seconds, so leaving it in the stamp meant the
+     * whole SVG was rebuilt on that rhythm and the interference animation restarted from frame
+     * one each time. The stamp is the sheet's SHAPE; a circle is not a shape.
+     */
     const liveStamp = beat === 'expedition' && !state.stage
       ? `${beat}:${iAmRunner ? 'run' : iAmGuide ? 'guide' : 'watch'}:${missionPhase}`
-        + `:${hasCard() ? 'card' : 'nocard'}:${!!frame?.flyover?.marks?.some((m) => m.kind === 'hunter')}`
+        + `:${hasCard() ? 'card' : 'nocard'}`
       : null;
     if (liveStamp && root.dataset.liveUi === liveStamp && patchLive(frame)) {
       window.__rrrPhone = { frame, beat, seat: me.seat, iAmRunner, iAmGuide };
@@ -397,8 +405,17 @@ export default async function partyPhone({ params }) {
          * URL's default `throttle=WALK` for the whole expedition. So this is not "a nicer control
          * for the existing thing", it is the first time this screen has moved anything.
          */
+        /*
+         * 🚫 **NO INTEL BLOCK ON THIS PAD, AND ITS ABSENCE IS THE FEATURE.** John: *"Remove WORD
+         * FROM THE HOUSE from the runner. Runner gets info from the guide verbally."* The runner
+         * is the one seat that is supposed to be looking at the television and listening to a
+         * human being, and a second information channel on the thing in their hands competes
+         * with both. Seated good players keep it (below) — it is their whole contribution from a
+         * chair — and so does the guide, whose job is to read.
+         */
         body += `<h1>You walk.</h1>
           <p class="hint">Eyes on the TV. Drag to move, hold RUN, tap SWING. Running is loud.</p>
+          <p class="hint">Listen to your guide — they have the map, you have the hammer.</p>
           ${missionLine(frame)}
           <div class="stick-wrap">
             <div class="stick" id="stick"><div class="nub" data-nub></div></div>
@@ -406,8 +423,7 @@ export default async function partyPhone({ params }) {
               <button class="stick-btn" id="run-btn" type="button">Run</button>
               <button class="stick-btn swing" id="swing-btn" type="button">Swing</button>
             </div>
-          </div>
-          ${intelBlock(frame)}`;
+          </div>`;
       } else if (iAmGuide) {
         /*
          * 🗺️ **THE GUIDE FINALLY HAS THE MAP THEY HAVE BEEN TOLD THEY HAVE.** D13 shipped the
@@ -432,6 +448,13 @@ export default async function partyPhone({ params }) {
         const marks = frame?.flyover?.marks ?? [];
         const meMark = marks.find((k) => k.kind === 'you') ?? null;
         const hunterMark = marks.find((k) => k.kind === 'hunter') ?? null;
+        /*
+         * 📡 **THE FEED CAN BE CUT, AND THE PHONE IS TOLD SO RATHER THAN LEFT TO INFER IT.**
+         * `src/party/mapfeed.js` decides; a jammed frame arrives with no hunter mark at all, so
+         * without this flag a jam would be indistinguishable from an uncovered room and the
+         * guide would call it as "no camera" — the wrong sentence for a screen full of static.
+         */
+        const jam = !!frame?.flyover?.jam;
         body += `<h1>You talk.</h1>
           <p class="hint">The map is yours. The TV does not get it — call the rooms out loud.</p>
           ${seed == null
@@ -441,10 +464,9 @@ export default async function partyPhone({ params }) {
               goal: MISSION_ROOM,
               runner: meMark,
               flyover: hunterMark ? { hunter: hunterMark } : null,
+              jam,
             })}
-          <p class="hint ${hunterMark ? '' : 'gm-blind'}">${hunterMark
-            ? 'A camera has the hunter. The red mark is live.'
-            : 'No camera has the hunter. You are calling this one blind.'}</p>
+          <p class="hint ${hunterMark ? '' : 'gm-blind'}" data-gm-note>${esc(mapNote(jam, hunterMark))}</p>
           ${missionLine(frame)}
           <p class="hint">Cameras live ${frame?.cameras?.unlocked ?? '—'}.</p>
           ${intelBlock(frame)}`;
@@ -461,13 +483,16 @@ export default async function partyPhone({ params }) {
           ${state.flash ? `<p class="hint">${esc(state.flash)}</p>` : ''}`;
       }
     } else {
-      body += `<h1>Recap</h1>
-        <p class="hint">Phones down — talk.</p>
-        <div class="role-card">
-          <div class="rule">Camera ${recap.cameraLit ? 'LIT' : 'STAYED DARK'}</div>
-          <div class="rule">Runner ${recap.taken?.length ? 'TAKEN' : 'CAME BACK'}</div>
-          <div class="rule">${recap.alarmCount} alarm${recap.alarmCount === 1 ? '' : 's'}</div>
-        </div>`;
+      /*
+       * 🗑️ **THE RECAP CARD IS GONE FROM THIS SHEET, DELIBERATELY AND FOR NOW.** John: *"Drop
+       * Recap for the moment (host and phones). It doesn't make sense before a round and isn't
+       * useful yet."* Three facts about an episode that may not have happened is worse than no
+       * card at all, and this screen's only job between beats is to get out of the way of the
+       * conversation. The beat and `recapFromEvents` survive on the wire — the affordance is
+       * what was removed, not the data — so putting the card back is a paint, not a rebuild.
+       */
+      body += `<h1>Phones down.</h1>
+        <p class="hint">Talk. The next ballot comes to this screen when the room is ready.</p>`;
     }
 
     // 🚨 §2.3: *"a persistent ROLE tab … reopens it in any phase"*. It used to be a static CLEAR
@@ -671,17 +696,31 @@ export default async function partyPhone({ params }) {
    * full rebuild it would have done anyway.
    */
   function patchLive(frame) {
+    /*
+     * ⚠️ **THE INTEL SLOT IS NO LONGER PROOF THAT THIS SHEET IS PATCHABLE, AND TREATING IT AS
+     * PROOF WOULD REINTRODUCE THE PAD BUG.** This used to bail on a missing `[data-intel]`,
+     * which was safe while every expedition sheet had one. The runner's pad has none now, so
+     * that bail would send every world report — twice a second, all run — down a full
+     * `root.innerHTML` rebuild, destroying the stick under the player's thumb along with its
+     * `setPointerCapture`. That is the exact failure the structural stamp exists to prevent.
+     *
+     * The caller has already matched `root.dataset.liveUi`, so the sheet's SHAPE is known good.
+     * All this needs is one live element to write into.
+     */
     const slot = root.querySelector('[data-intel]');
-    if (!slot) return false;
-    const intel = frame?.you?.intel;
-    const exact = intel?.grade === 'exact';
-    slot.classList.toggle('exact', exact);
-    const k = slot.querySelector('[data-intel-k]');
-    const v = slot.querySelector('[data-intel-v]');
-    if (k) k.textContent = exact ? 'Production feed' : 'Word from the house';
-    if (v) v.textContent = intelLine(intel);
-
     const map = root.querySelector('.guide-map');
+    if (!slot && !map && !root.querySelector('#stick')) return false;
+
+    if (slot) {
+      const intel = frame?.you?.intel;
+      const exact = intel?.grade === 'exact';
+      slot.classList.toggle('exact', exact);
+      const k = slot.querySelector('[data-intel-k]');
+      const v = slot.querySelector('[data-intel-v]');
+      if (k) k.textContent = exact ? 'Production feed' : 'Word from the house';
+      if (v) v.textContent = intelLine(intel);
+    }
+
     if (map) {
       // The plan is a pure function of the seed and never moves; only the two marks do. Rewriting
       // the whole SVG at 2 Hz would re-lay-out the map under the guide's thumb.
@@ -700,8 +739,39 @@ export default async function partyPhone({ params }) {
       };
       put('gm-runner', marks.find((m) => m.kind === 'you'), 1.15);
       put('gm-hunter', marks.find((m) => m.kind === 'hunter'), 1.3);
+      /*
+       * 📡 The jam is a CLASS, not a rebuild. The glyph layer is already in the SVG and its
+       * animation is CSS, so cutting the feed costs one `classList` write at 2 Hz. Appending
+       * the marks after the jam group would put them ON TOP of the static — the SVG paints in
+       * document order — so the two marks are re-parented behind it whenever they are created.
+       */
+      const jam = root.querySelector('.gm-jam');
+      if (jam) for (const cls of ['gm-runner', 'gm-hunter']) {
+        const el = map.querySelector(`.${cls}`);
+        if (el && el.compareDocumentPosition(jam) & Node.DOCUMENT_POSITION_PRECEDING) {
+          map.insertBefore(el, jam);
+        }
+      }
+      map.classList.toggle('jam', !!frame?.flyover?.jam);
+      const note = root.querySelector('[data-gm-note]');
+      if (note) {
+        note.textContent = mapNote(!!frame?.flyover?.jam, marks.find((m) => m.kind === 'hunter'));
+        note.classList.toggle('gm-blind', !marks.some((m) => m.kind === 'hunter'));
+      }
     }
     return true;
+  }
+
+  /**
+   * What the line under the map says, and the three states are genuinely different problems:
+   * the feed is being chewed up, no camera covers the room the hunter is in, or the mark is
+   * live. Collapsing the first two into "you are blind" is what would have the guide announce a
+   * clear house while an evil robot eats their screen.
+   */
+  function mapNote(jam, hunterMark) {
+    if (jam) return 'The feed is being eaten. Call what you remember, not what you can see.';
+    if (hunterMark) return 'A camera has the hunter. The red mark is live.';
+    return 'No camera has the hunter. You are calling this one blind.';
   }
 
   function paintCasting(players, me, episode) {

@@ -89,6 +89,35 @@ const ROSTER = [
 
   t('P5b · the face escapes a player name rather than trusting it',
     roleCardFaceHtml(pair, () => '<script>x</script>').includes('&lt;script&gt;'));
+
+  /*
+   * 🔴 **P12 — EVIL LOOKS EVIL.** John, on `0349ef6`: the Producer's card read in exactly the ink
+   * a Contestant's does, so the one screen in the night that is supposed to land in your stomach
+   * landed as an admin panel. Both §2.3 lines take the Production colour — the side strip and the
+   * 34 px name — and `roleCardFaceHtml` is where that is decided, so it is asserted on the HTML
+   * rather than by looking at it.
+   *
+   * ⚠️ **THE CONTROL IS THE GOOD CARD, AND IT IS THE ONE THAT MATTERS.** A rule that painted
+   * every card red would satisfy "the evil card is red" completely and would tell the whole table
+   * nothing — worse, it would train a player to read red as "a card" rather than as "the other
+   * side". §6's spelled-out rule is untouched either way: P3 still owns it, and P12c re-checks
+   * that the WORD survives, because a colour that replaced the word would be a regression
+   * dressed as this fix.
+   */
+  const evilCard = cardFor({ role: 'producer', alignment: 'evil' });
+  const goodCard = cardFor({ role: 'cameraOp', alignment: 'good' });
+  const evilHtml = roleCardFaceHtml(evilCard);
+  const goodHtml = roleCardFaceHtml(goodCard);
+  t('P12 · a Production card marks BOTH §2.3 lines — the side strip and the role name',
+    /class="align evil"/.test(evilHtml) && /class="role evil"/.test(evilHtml), 'producer');
+  t('P12b control · a good card marks NEITHER — the colour means Production, not "a card"',
+    !/evil/.test(goodHtml), goodHtml.slice(0, 60));
+  t('P12c · and the word is still spelled out — the colour is an addition, never a replacement',
+    evilHtml.includes('You are PRODUCTION') && goodHtml.includes('You are GOOD'));
+
+  const css = ROLE_CARD_CSS.replace(/\s+/g, ' ');
+  t('P12d · the ink is the night\'s Production token, the one the PRODUCTION FEED strip wears',
+    /\.card-view \.align\.evil, \.card-view \.role\.evil \{ color:var\(--night-bad\)/.test(css));
 }
 
 {

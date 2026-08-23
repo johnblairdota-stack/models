@@ -49,8 +49,9 @@ const n2 = (v) => (Math.round(Number(v) * 100) / 100);
  * @param {object} [o.runner]        `{ x, z }` where the runner is, if the guide may know
  * @param {object} [o.flyover]       `frame.flyover` as delivered: `{ hunter, marks:[{x,z,kind}] }`
  * @param {string} [o.goal]          a room TYPE to ring as the objective, e.g. `'gallery'`
+ * @param {boolean} [o.jam]          draw the interference layer — `frame.flyover.jam`
  */
-export function guideMapSvg({ seed, runner, flyover, goal } = {}) {
+export function guideMapSvg({ seed, runner, flyover, goal, jam = false } = {}) {
   const plan = planRegions(seed);
   const env = plan.env ?? { x0: 0, x1: 1, z0: 0, z1: 1 };
   const x0 = env.x0 - PAD, z0 = env.z0 - PAD;
@@ -100,8 +101,69 @@ export function guideMapSvg({ seed, runner, flyover, goal } = {}) {
     body.push(`<circle class="gm-hunter" cx="${n2(flyover.hunter.x)}" cy="${n2(flyover.hunter.z)}" r="1.3"/>`);
   }
 
-  return `<svg class="guide-map" viewBox="${n2(x0)} ${n2(z0)} ${n2(w)} ${n2(d)}" `
+  /*
+   * 📡 THE INTERFERENCE IS PART OF THE MAP RATHER THAN A DIV OVER IT, AND THAT IS SO IT SCALES
+   * WITH THE HOUSE. The map's viewBox is in METRES and `preserveAspectRatio` letterboxes it, so
+   * an absolutely-positioned overlay would sit over the letterbox as well as the plan and would
+   * need the phone to measure the rendered box. Inside the SVG it is in the same coordinates as
+   * the rooms it is eating, for free, at any phone width.
+   *
+   * ⚠️ IT IS ALWAYS EMITTED AND `.jam` ON THE ROOT IS WHAT SWITCHES IT ON. `patchLive` in
+   * `views/party-phone.js` toggles that one class at 2 Hz; re-writing the whole SVG to add and
+   * remove a layer would re-lay-out the plan under the guide's thumb twice a second, which is
+   * the defect the structural stamp exists to prevent.
+   */
+  body.push(jamLayer(x0, z0, w, d));
+
+  return `<svg class="guide-map${jam ? ' jam' : ''}" viewBox="${n2(x0)} ${n2(z0)} ${n2(w)} ${n2(d)}" `
     + `preserveAspectRatio="xMidYMid meet" aria-label="The house">${body.join('')}</svg>`;
+}
+
+/**
+ * 🟥 **THE EVIL ROBOT EATING THE MAP — red matrix rain, in map metres.**
+ *
+ * John: *"the map feed is interrupted by static and spooky evil-robot effects — prefer red
+ * matrix-like symbols eating parts of the map and making it unusable for a stretch."*
+ *
+ * Three layers, and the middle one is the one that does the work:
+ *
+ *   `gm-jam-wash`   a full-bleed scrim, so nothing under it is readable at a glance.
+ *   `gm-jam-col`    columns of glyphs falling at staggered rates. These are the "eating" — each
+ *                   column is opaque and drawn over the plan, so rooms genuinely disappear
+ *                   behind them rather than being tinted.
+ *   `gm-jam-tear`   two horizontal tears that sweep, which is what reads as a broken FEED rather
+ *                   than as a decorative filter.
+ *
+ * ⚠️ **DETERMINISTIC, FROM THE GEOMETRY, WITH NO `Math.random`.** The map is rebuilt whenever the
+ * sheet's shape changes, and a random layout would jump on every rebuild — which is the one thing
+ * a guide would read as the map itself being broken rather than the feed.
+ */
+const JAM_GLYPHS = '01<>/\\|+*#=%$&@';
+const JAM_COLS = 14;
+const JAM_ROWS = 9;
+
+function jamLayer(x0, z0, w, d) {
+  const cw = w / JAM_COLS;
+  const out = [`<rect class="gm-jam-wash" x="${n2(x0)}" y="${n2(z0)}" width="${n2(w)}" height="${n2(d)}"/>`];
+  for (let c = 0; c < JAM_COLS; c++) {
+    // Two coprime-ish strides so the glyph grid does not repeat on a visible period, and a
+    // per-column delay so the rain falls rather than blinking in unison.
+    const glyphs = Array.from({ length: JAM_ROWS }, (_, r) =>
+      JAM_GLYPHS[(c * 5 + r * 3) % JAM_GLYPHS.length]).join('');
+    const x = x0 + cw * (c + 0.5);
+    const delay = ((c * 7) % 20) / 10;
+    const dur = 2.2 + ((c * 3) % 7) * 0.28;
+    out.push(`<text class="gm-jam-col" x="${n2(x)}" y="${n2(z0)}" `
+      + `style="animation-delay:${delay}s;animation-duration:${dur}s">`
+      + Array.from(glyphs, (g, r) =>
+        `<tspan x="${n2(x)}" dy="${r === 0 ? n2(d * 0.06) : n2(d / JAM_ROWS)}">${esc(g)}</tspan>`).join('')
+      + `</text>`);
+  }
+  for (const [i, at] of [0.34, 0.68].entries()) {
+    out.push(`<rect class="gm-jam-tear" x="${n2(x0)}" y="${n2(z0 + d * at)}" `
+      + `width="${n2(w)}" height="${n2(d * 0.055)}" style="animation-delay:${i * 0.9}s"/>`);
+  }
+  return `<g class="gm-jam">${out.join('')}</g>`;
 }
 
 /**
@@ -122,4 +184,29 @@ export const GUIDE_MAP_CSS = `
     .guide-map .gm-mark { fill:var(--night-soft); opacity:.55; }
     .guide-map .gm-runner { fill:var(--night-live); }
     .guide-map .gm-hunter { fill:var(--night-bad); }
-    .gm-blind { color:var(--night-dim); }`;
+    .gm-blind { color:var(--night-dim); }
+
+    /* 📡 The interference. Off unless the root carries .jam, so the layer costs a display
+       property rather than a rebuild — see jamLayer's header. */
+    .guide-map .gm-jam { display:none; }
+    .guide-map.jam .gm-jam { display:block; }
+    .guide-map.jam { border-color:var(--night-bad); }
+    .guide-map .gm-jam-wash { fill:var(--night-deep); opacity:.82; }
+    .guide-map .gm-jam-col { fill:var(--night-bad); font-size:1.9px; text-anchor:middle;
+      font-family:ui-monospace, Menlo, monospace; letter-spacing:.04em;
+      animation:gm-rain 3s linear infinite; }
+    .guide-map .gm-jam-tear { fill:var(--night-bad); opacity:.16;
+      animation:gm-tear 2.6s ease-in-out infinite; }
+    @keyframes gm-rain {
+      0%   { opacity:0; transform:translateY(-6%); }
+      18%  { opacity:1; }
+      82%  { opacity:1; }
+      100% { opacity:0; transform:translateY(6%); }
+    }
+    @keyframes gm-tear {
+      0%,100% { opacity:.06; transform:translateY(-3%); }
+      50%     { opacity:.30; transform:translateY(3%); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .guide-map .gm-jam-col, .guide-map .gm-jam-tear { animation:none; opacity:1; }
+    }`;

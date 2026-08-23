@@ -35,6 +35,7 @@ export const NIGHT_PALETTE = [
   ['--night-live', '#9ff2c8'],          // on air / reading / a lit camera
   ['--night-live-well', '#122019'],     // the hold bar while it is being held
   ['--night-bad', '#ff8a7a'],           // taken, dark, Production
+  ['--night-bad-rgb', '255,138,122'],
 ];
 
 /** The `:root` block. Prepended to the night skin so every later rule can reach these. */

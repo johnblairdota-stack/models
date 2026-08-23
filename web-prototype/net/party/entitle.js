@@ -107,6 +107,9 @@ export const MATRIX = [
   ['flyover.marks[].z',        'guide'],
   ['flyover.marks[].kind',     'guide'],
   ['flyover.hunter',           'guide'],
+  // Is the good guide's feed currently eaten by static? `src/party/mapfeed.js`. A boolean about
+  // the CHANNEL, never about the hunter — a jammed frame carries no hunter mark to describe.
+  ['flyover.jam',              'guide'],
 
   // ---- incidents. A count, never a list (party-anon A4).
   ['incident.alarms',          'all'],

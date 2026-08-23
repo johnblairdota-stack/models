@@ -235,6 +235,27 @@ export const FOLLOW_CHROME_CSS = `
 export const CAM_LABEL = 'RRR CAM 01';
 
 /**
+ * 📺 **HOW MUCH OF THE TELEVISION THE PICTURE TAKES, AS A PERCENTAGE OF THE SHORT SIDE.**
+ *
+ * John, on `0349ef6`: *"TV follow ~90%. Runner camera / follow frame should take about 90% of
+ * the TV screen — bigger broadcast picture, less chrome."*
+ *
+ * PR #7 set it to 58vh, and that was the right answer to the question it was asked: the frame had
+ * just stopped being a letterbox strip with four storeys of type under it, and 58 was a
+ * conservative first step that left the pair-hero and the camera line legible. Played on an
+ * actual television it reads as a video embedded in a web page rather than as a broadcast.
+ *
+ * It lives here rather than in `night-skin.js` for `FOLLOW_CHROME_CSS`'s reason — `injectNightSkin`
+ * builds its rules inside a function, so a bare-node gate cannot read them, and a number nobody
+ * can assert is a number that drifts. `night-skin.js` interpolates this; `party-warm` W14 pins it.
+ *
+ * ⚠️ **IT IS THE SHORT SIDE, NOT THE AREA.** At 16:9 a frame 90% of the height is also 90% of the
+ * width, so this is 81% of the pixels — which is what "about 90% of the screen" means to an eye
+ * and is as much as can be given away while the top strip and the pair line still fit.
+ */
+export const TV_FRAME_PCT = 90;
+
+/**
  * The `src` for the TV's follow iframe, or `null`.
  *
  * `room` is carried for the operator's log line only — the follow view opens no socket with it.
@@ -404,6 +425,85 @@ export function warmLabel(stage) {
  * the body ends up. A phone that could post a position could post any position.
  */
 export const MOVE_KEYS = ['t', 'x', 'y', 'run', 'swing', 'act'];
+
+/**
+ * 🧭 **THE STICK'S BEARING, AND THE MINUS SIGN IS THE WHOLE FUNCTION.**
+ *
+ * John, on `0349ef6`: *"Runner stick L/R inverted — drag left should aim and move left."* It did
+ * the opposite, and the reason is a sign that this codebase gets right everywhere else.
+ *
+ * The house's yaw convention is `forward = (sin y, cos y)`, so a body at yaw 0 faces **+Z** — a
+ * half turn from a default camera — and its RIGHT is therefore **−X**, which is what
+ * `follow-bed.js`'s `_solve` means by `rx = -Math.cos(f)`. Turning right is DECREASING yaw.
+ * `src/game/player.js` L887 already writes exactly this as `Math.atan2(-mv.x, mv.y) + aimYaw`;
+ * the follow bed wrote `Math.atan2(s.x, …)` and lost the minus, so a thumb pushed right turned
+ * the runner toward +X, which is the runner's left and the viewer's left as well — the chase
+ * camera sits behind the body, so screen-right is world-right and the mistake is visible rather
+ * than merely wrong.
+ *
+ * ⚠️ **THE FORWARD TERM IS NO LONGER CLAMPED POSITIVE EITHER, AND THAT WAS THE SECOND HALF.** The
+ * old line read `Math.atan2(s.x, Math.max(0.0001, s.y))`, which pins the answer inside ±90° — so
+ * pulling the stick straight back asked for the same heading as pushing it straight forward and
+ * the runner walked ON, away from the thing the player was backing away from. With the full range
+ * the stick's direction IS the direction, and a pull-back is a turn-and-go. The caller lerps
+ * toward this over about 9 rad/s and takes the short way round, so a 180° request reads as the
+ * body wheeling rather than snapping.
+ *
+ * Pure, and exported from here rather than living inline in the bed so `harness/party-warm.mjs`
+ * W15 can assert the sign in bare node — a control that must fail is the only thing that would
+ * have caught the original, since both signs produce a runner that moves.
+ *
+ * @param {number} x  stick right, −1..1
+ * @param {number} y  stick forward, −1..1
+ * @returns {number}  radians to ADD to the current heading
+ */
+export function stickHeading(x, y) {
+  return Math.atan2(-(Number(x) || 0), Number(y) || 0);
+}
+
+/** Below this the stick is centred. `views/party-phone.js` lights its nub on the same number. */
+export const STICK_DEADZONE = 0.12;
+
+/**
+ * 🧭 **THE FRAME THE STICK'S BEARING IS MEASURED FROM, AND WITHOUT IT THE RUNNER SPINS.**
+ *
+ * `stickHeading` alone is an OFFSET, and the shipped code added it to the live heading every
+ * frame:
+ *
+ *     want = heading + stickHeading(x, y);   heading += shortestTurn(want - heading) * k
+ *
+ * — where `want - heading` is `stickHeading(x, y)`, a CONSTANT. The target runs away from the
+ * body at exactly the speed the body chases it, so a thumb held left is a turn rate of about
+ * 14 rad/s rather than a direction: **two and a bit revolutions a second, forever.** Measured in
+ * Chromium, holding full left for nine seconds moved the runner 0.23 m — it walked a tight circle
+ * — while the same nine seconds of full forward covered 8.12 m. That is the other half of John's
+ * *"drag left aims/moves left (standard)"*: with the sign alone corrected, dragging left still
+ * would not have moved anyone left.
+ *
+ * A standard stick is a DIRECTION, so the bearing needs a frame that does not move under it. The
+ * frame is the heading the body had when the thumb went down, latched for as long as the thumb
+ * stays down and cleared when it comes back to centre:
+ *
+ *   · push left        → turn ninety degrees left, walk left, and STOP turning
+ *   · hold left        → keep walking left in a straight line
+ *   · roll the thumb   → the body follows the thumb
+ *   · pull back        → turn around and walk back
+ *
+ * ⚠️ **NOT CAMERA-RELATIVE, AND THAT IS THE OBVIOUS ALTERNATIVE.** A third-person stick is
+ * usually measured against the camera, and this camera is a produced one that CUTS: `lead` sits
+ * in front of the runner looking back, so screen-left is world-right in that shot and the
+ * controls would invert on an edit the player did not ask for. The body's own heading is the only
+ * frame here that a cut cannot move.
+ *
+ * @param {number|null} prevRef  the latch, or null when the stick was centred
+ * @param {number} x  stick right     @param {number} y  stick forward
+ * @param {number} heading  the body's heading right now
+ * @returns {number|null} the latch to carry into the next frame
+ */
+export function stickRef(prevRef, x, y, heading) {
+  if (Math.hypot(Number(x) || 0, Number(y) || 0) <= STICK_DEADZONE) return null;
+  return prevRef == null ? heading : prevRef;
+}
 
 export function moveViolations(msg) {
   const bad = [];

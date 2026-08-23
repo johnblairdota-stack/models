@@ -5,7 +5,7 @@ import { generatedTablesFor } from './spaces.js';
 import { Player } from './player.js';
 import { MOVE } from './rules.js';
 import { CONTACT_PHASE, SWING_DUR } from './sledge.js';
-import { SHOT_NAMES } from '../party/follow.js';
+import { SHOT_NAMES, STICK_DEADZONE, stickHeading, stickRef } from '../party/follow.js';
 import { HOME_ROOM, MISSION_ROOM, PLAN_OPTS } from '../party/mansion.js';
 import { createMeshAvatar } from '../characters/mesh-avatar.js';
 import { unit4hMaterials } from '../materials/surfaces/robot.js';
@@ -46,9 +46,10 @@ import { buildIntroBed, ballroomOf } from './intro-bed.js';
  *
  *   · **"no sledge"** — the runner spawns EQUIPPED. There is no pickup beat in a party night; the
  *     pair is sent in with the hammer, which is what `party-loop.md` line 21's task list assumes.
- *   · **"no hunter"** — there is a hunter TOKEN walking `room.patrolRoute()`. It has a position
- *     and nothing else: no body, no chase, no take. It exists because §3.8's intel is about a real
- *     position or it is theatre. `HunterAI` is the next slice and this is labelled as a stub.
+ *   · **"no hunter"** — there is a hunter TOKEN walking `room.patrolRoute()` room to room through
+ *     the house's own doorways (`room.pathPortals`). It has a position and nothing else: no body,
+ *     no chase, no take. It exists because §3.8's intel is about a real position or it is
+ *     theatre. `HunterAI` is the next slice and this is labelled as a stub.
  *   · **"no input"** — the runner is driven by its owner's thumbs over the cue channel. The
  *     scripted schedule below survives as the FALLBACK, which is the important half: see
  *     `perf.driven`.
@@ -390,35 +391,101 @@ function buildPainting(space, floorY) {
 }
 
 /**
- * 👁️ **THE HUNTER TOKEN — a position on the patrol route, and nothing else.**
+ * 👁️ **THE HUNTER TOKEN — a body walking the house through its doorways.**
  *
  * §3.8's intel is *"good players get sporadic/vague information about hunter location"*, and that
- * is only worth building if the location is real. This walks `room.patrolRoute()` — the same table
- * `HunterAI` walks in `game.play` — at a steady pace, so the room the guide is told about is a
- * room the hunter is genuinely in.
+ * is only worth building if the location is real. It walks `room.patrolRoute()` — the same table
+ * `HunterAI` walks in `game.play` — so the room the guide is told about is a room the hunter is
+ * genuinely in.
  *
- * 🚨 **IT HAS NO MESH, NO CHASE AND NO TAKE, AND THE ABSENCE OF THE MESH IS LOAD-BEARING.** A
- * hunter the TV could render is a hunter the TV could put on the shared screen, which is the
- * second item on `party-loop.md`'s "Do not" list. The token cannot leak because there is nothing
- * to see. Wiring `HunterAI` in — with a body, a chase and `taken.js` — is the next slice.
+ * ---------------------------------------------------------------------------------------------
+ * 🚨 **IT WENT THROUGH THE WALLS, AND THAT IS WHY JOHN SAW IT "NOT ACTUALLY MOVING".**
+ * ---------------------------------------------------------------------------------------------
+ * The first version steered straight at the next patrol stop. Two stops in one room is fine; two
+ * stops in different rooms is a diagonal through however much masonry is in the way, and the
+ * consequences were all on the guide's phone rather than on the TV, which is why nothing caught
+ * it:
+ *
+ *   · The straight line spends most of a room-to-room leg inside the WALL BAND, where
+ *     `room.spaceAt` returns null. `world()` therefore reported `hunter.room: null`,
+ *     `coverageRoomOf(null)` is honestly `null`, and the guide's mark went dark — for most of
+ *     every transit, on a route that is mostly transit.
+ *   · The rooms it did report were whichever rectangle the diagonal happened to clip, in an order
+ *     no adjacency explains. `patrol` exists to make the hunter's position LEARNABLE
+ *     (`spaces.js` `generatedPatrol`), and a route that teleports across the plan is the exact
+ *     failure that header warns about, reintroduced one layer up.
+ *
+ * So a leg is now expanded through `room.pathPortals` into the ordered doorway centres between
+ * here and the stop — the same call, the same `ROUTE_MIN_W`/`ROUTE_MIN_H` filter and the same
+ * reasoning as `RunnerRoute.replan` above. The hunter leaves a room by a door, crosses the
+ * passage, and arrives; the guide's dot tracks a walk instead of blinking.
+ *
+ * ⚠️ **THE REPORTED ROOM IS STICKY THROUGH A DOORWAY.** `spaceAt` can still legitimately answer
+ * null while the token is standing in an opening, and "nowhere" is a worse answer than "the room
+ * it has not left yet" — a mark that vanishes for a step reads as the feed dropping, which is now
+ * a thing the guide's map means on purpose (`src/party/mapfeed.js`).
+ *
+ * 🚨 **IT STILL HAS NO MESH, NO CHASE AND NO TAKE, AND THE ABSENCE OF THE MESH IS STILL
+ * LOAD-BEARING.** A hunter the TV could render is a hunter the TV could put on the shared screen,
+ * which is the second item on `party-loop.md`'s "Do not" list; `party-follow-drive` D6 greps the
+ * slot's whole DOM for the word. The token cannot leak because there is nothing to see. Wiring
+ * `HunterAI` in — with a body, a chase and `taken.js` — is still the next slice.
  */
 function buildHunterToken(room) {
-  const route = (room.patrolRoute?.() ?? []).filter((p) => Number.isFinite(p.x));
-  const pos = new THREE.Vector3(
-    route[0]?.x ?? 0, room.floorY ?? 0, route[0]?.z ?? 0);
-  let leg = 0, dwell = 0;
+  const stops = (room.patrolRoute?.() ?? [])
+    .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.z));
+  const floorY = room.floorY ?? 0;
+  const pos = new THREE.Vector3(stops[0]?.x ?? 0, floorY, stops[0]?.z ?? 0);
   const SPEED = 1.6;                      // slower than a walking robot; it is stalking, not racing
+  const ARRIVE_AT = 0.45;
+
+  let stop = 0;
+  let legs = [];
+  let dwell = 0;
+  let lastRoom = room.spaceAt(pos)?.id ?? null;
+  let doorways = 0;
+
+  /** Expand the walk to `stops[stop]` into doorway centres plus the stop itself. */
+  function plan() {
+    const target = stops[stop % stops.length];
+    if (!target) { legs = []; return; }
+    const goal = new THREE.Vector3(target.x, floorY, target.z);
+    // An unreachable stop falls through to the straight line rather than standing still: a
+    // hunter frozen in a corner all night is a worse bug than one that clips a corner.
+    const portals = room.pathPortals?.(pos, goal, ROUTE_MIN_W, ROUTE_MIN_H) ?? [];
+    legs = portals.map((p) => p.centre.clone());
+    legs.push(goal);
+  }
+  plan();
+
   return {
     pos,
+    /** The space it is in, held across a doorway. What `world()` reports and the map is keyed on. */
+    roomId: () => lastRoom,
+    /** Read by the drive: it has a route, it is walking it, and it is using the doors. */
+    telemetry: () => ({ stops: stops.length, stop: stops.length ? stop % stops.length : 0, doorways }),
     step(dt) {
-      if (!route.length) return;
+      if (!stops.length) return;
       if (dwell > 0) { dwell -= dt; return; }
-      const target = route[leg % route.length];
-      const dx = target.x - pos.x, dz = target.z - pos.z;
+      if (!legs.length) plan();
+      const wp = legs[0];
+      if (!wp) return;
+      const dx = wp.x - pos.x, dz = wp.z - pos.z;
       const d = Math.hypot(dx, dz);
-      if (d < 0.4) { dwell = target.dwell ?? 1.5; leg += 1; return; }
+      if (d < ARRIVE_AT) {
+        legs.shift();
+        if (legs.length) doorways += 1;         // what was just cleared was a portal centre
+        else {
+          dwell = Math.max(0.4, Number(stops[stop % stops.length]?.dwell) || 1.5);
+          stop += 1;
+          plan();
+        }
+        return;
+      }
       pos.x += (dx / d) * SPEED * dt;
       pos.z += (dz / d) * SPEED * dt;
+      const here = room.spaceAt(pos)?.id ?? null;
+      if (here) lastRoom = here;
     },
   };
 }
@@ -619,6 +686,8 @@ export async function buildFollowBed(engine, opts = {}) {
      */
     driven: false,
     stick: { x: 0, y: 0 },
+    /** The heading this push is measured from. `src/party/follow.js` `stickRef`. */
+    stickRef: null,
     run: false,
     /** Set when a swing lands; read once by `missionTick`. `sledge.swingHit` is consumed by Player. */
     contactAt: -1,
@@ -791,12 +860,20 @@ export async function buildFollowBed(engine, opts = {}) {
      * the stick left turns the runner rather than making it moonwalk sideways down a corridor.
      * `move.x` is kept as the strafe it already is, so a player who wants to sidestep a doorway
      * can, which is the "freedom" half of the brief.
+     *
+     * 🧭 **TWO THINGS WERE WRONG WITH THE OLD ONE LINE AND ONLY THE FIRST IS THE ONE JOHN NAMED.**
+     * The bearing had lost `player.js` L887's minus sign, so left was right; and it was measured
+     * from the LIVE heading, which makes the target run away from the body and turns a held thumb
+     * into a 14 rad/s spin. `stickHeading` and `stickRef` in `src/party/follow.js` carry both
+     * arguments and the measurements; they are exported so a bare-node gate can hold them down,
+     * because a wrong sign and a runaway frame both still produce a runner that moves.
      */
     if (perf.driven) {
       const s = perf.stick;
       const mag = Math.hypot(s.x, s.y);
-      if (mag > 0.12) {
-        const want = perf.heading + Math.atan2(s.x, Math.max(0.0001, s.y));
+      perf.stickRef = stickRef(perf.stickRef, s.x, s.y, perf.heading);
+      if (mag > STICK_DEADZONE) {
+        const want = perf.stickRef + stickHeading(s.x, s.y);
         const turn = Math.atan2(Math.sin(want - perf.heading), Math.cos(want - perf.heading));
         perf.heading += turn * (1 - Math.exp(-9.0 * dt));
       }
@@ -976,8 +1053,15 @@ export async function buildFollowBed(engine, opts = {}) {
      */
     world: () => ({
       runner: { room: roomIdAt(runner.pos), x: +runner.pos.x.toFixed(2), z: +runner.pos.z.toFixed(2) },
-      hunter: { room: roomIdAt(hunter.pos), x: +hunter.pos.x.toFixed(2), z: +hunter.pos.z.toFixed(2) },
+      // `roomId()` is the sticky read — see `buildHunterToken`. The coordinate is still the live
+      // one, so the guide's mark and the Production Feed's room name describe the same body.
+      hunter: {
+        room: roomIdAt(hunter.pos) ?? hunter.roomId(),
+        x: +hunter.pos.x.toFixed(2), z: +hunter.pos.z.toFixed(2),
+      },
       mission: { phase: mission.phase, room: mission.room },
     }),
+    /** The patrol, for `harness/party-follow-drive.mjs`. Never rendered, never on the wire. */
+    hunterTelemetry: () => ({ ...hunter.telemetry(), room: hunter.roomId() }),
   };
 }

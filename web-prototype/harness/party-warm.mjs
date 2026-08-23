@@ -24,12 +24,16 @@
  * than trusting it.
  */
 
+import { readFile } from 'node:fs/promises';
 import {
   CUE_CAST_KEYS, CUE_KEYS, CUE_KINDS, FOLLOW_FORBIDDEN, FOLLOW_KEYS, FOLLOW_VIEW,
-  IDENTITY_SECRETS, MISSION_PHASES, MOVE_KEYS, SPATIAL_WORDS, WARM_KEYS, WARM_STAGES, WORLD_KEYS,
-  cueViolations, followParams, followUrl, moveViolations, warmLabel, warmPct, warmUrl,
-  warmViolations, worldViolations,
+  IDENTITY_SECRETS, MISSION_PHASES, MOVE_KEYS, SPATIAL_WORDS, STICK_DEADZONE, TV_FRAME_PCT,
+  WARM_KEYS, WARM_STAGES, WORLD_KEYS, cueViolations, followParams, followUrl, moveViolations,
+  stickHeading, stickRef, warmLabel, warmPct, warmUrl, warmViolations, worldViolations,
 } from '../src/party/follow.js';
+import {
+  FEED_CYCLE_SECONDS, FEED_PHASES, JAM_SECONDS, PEEK_SECONDS, mapFeed,
+} from '../src/party/mapfeed.js';
 import {
   HOME_ROOM, MISSION_ROOM, PLAN_OPTS, PLAN_TRIES,
   coverageRoomOf, homeIsCorner, pickPlanSeed, planFor, planOptsFor, planPasses, planRegions,
@@ -746,6 +750,203 @@ console.log('\nparty-warm — the lobby-warm night');
     && byAuth('armor').length >= 1 && byAuth('armor').every((p) => p.spaceId === 'service')
     && !authored.some((p) => p.spaceId === 'chapel'),
     authored.map((p) => `${p.catalogId}@${p.spaceId}`).join(','));
+}
+
+// ---- W15 · THE MAP FEED — a few seconds, then the evil robot eats it ------------------------
+//
+// John: "When a good player is guide, the map may show the hunter briefly (few seconds), then the
+// map feed is interrupted by static… Evil guide keeps continuous exact runner+hunter without that
+// interrupt." The arithmetic lives in `src/party/mapfeed.js`; the ROOM-level consequence — what a
+// real socket actually receives on a real night — is `harness/guide-coverage.mjs` C5.
+{
+  t('W15 · a few seconds of map, then a longer stretch of static',
+    PEEK_SECONDS >= 3 && PEEK_SECONDS <= 10 && JAM_SECONDS > PEEK_SECONDS
+    && FEED_CYCLE_SECONDS === PEEK_SECONDS + JAM_SECONDS,
+    `${PEEK_SECONDS}s clear / ${JAM_SECONDS}s jammed`);
+
+  const good = (s) => mapFeed({ alignment: 'good', seconds: s });
+  t('W15a · the window opens at the top of the cycle and closes on the second',
+    good(0).phase === 'peek' && good(PEEK_SECONDS - 0.01).phase === 'peek'
+    && good(PEEK_SECONDS).phase === 'jam');
+  t('W15b · and it comes back — the map is not dead furniture for the rest of the run',
+    good(FEED_CYCLE_SECONDS).phase === 'peek'
+    && good(FEED_CYCLE_SECONDS * 3 + 1).phase === 'peek');
+  const sampled = Array.from({ length: 400 }, (_, i) => good(i * 0.5));
+  const jammedFrac = sampled.filter((f) => f.jammed).length / sampled.length;
+  t('W15c · the RESTING state is blind — a hidden-role map should fail toward less sight',
+    jammedFrac > 0.5, `${(jammedFrac * 100).toFixed(0)}% of ticks jammed`);
+  t('W15d · `left` counts down to the turnover rather than being decoration',
+    Math.abs(good(0).left - PEEK_SECONDS) < 1e-9
+    && Math.abs(good(PEEK_SECONDS).left - JAM_SECONDS) < 1e-9);
+
+  /*
+   * 🚨 THE CONTROL, AND IT IS THE WHOLE POINT OF THE FILE. Production's read is already ungated
+   * (W7a); a jammed Production map would mean the marks disagreed with the Production Feed line
+   * six pixels above them, which is the bug this slice exists to close, arriving from the other
+   * direction. Sampled across the cycle rather than at one instant.
+   */
+  const evilPhases = new Set(sampled.map((_, i) => mapFeed({ alignment: 'evil', seconds: i * 0.5 }).phase));
+  t('W15e control · Production is NEVER jammed, at any point in the cycle',
+    evilPhases.size === 1 && evilPhases.has('clear')
+    && !mapFeed({ alignment: 'evil', seconds: PEEK_SECONDS + 1 }).jammed,
+    [...evilPhases].join(','));
+  t('W15f · junk or negative time is a phase, not a throw and not a permanent blackout',
+    !mapFeed({ alignment: 'good', seconds: -3 }).jammed === !mapFeed({ alignment: 'good', seconds: FEED_CYCLE_SECONDS - 3 }).jammed
+    && FEED_PHASES.includes(mapFeed({ alignment: 'good', seconds: NaN }).phase)
+    && FEED_PHASES.includes(mapFeed({}).phase));
+
+  /*
+   * The flag the phone draws from. Without a row `project()` drops it and reports it unrowed,
+   * which `party-isolation` I1 fails on — and the failure is silent from the phone's side: the
+   * static simply never appears and the guide reads a jam as an uncovered room.
+   */
+  const jamRow = MATRIX.find(([g]) => g === 'flyover.jam');
+  t('W15g · `flyover.jam` has a `guide` row, like every other flyover field',
+    jamRow?.[1] === 'guide', jamRow ? jamRow.join(' -> ') : 'NO ROW');
+  t('W15h · and it is not `all` or `phones` — the TV is still not the map',
+    MATRIX.filter(([g]) => g.startsWith('flyover.')).every(([, a]) => a === 'guide'));
+}
+
+// ---- W16 · THE STICK'S SIGN ------------------------------------------------------------------
+//
+// 🕹️ John: "Runner stick L/R inverted. Fix so drag left aims/moves left (standard)."
+//
+// 🚨 THIS IS ASSERTED AGAINST `player.js`'s OWN STRAFE ARITHMETIC RATHER THAN AGAINST ITSELF.
+// `stickHeading` is one `Math.atan2`, so "the function returns what the function returns" would
+// be a tautology and would have passed on the broken sign too. `Player._stepGround` L906-907
+// turns a stick into a WORLD velocity by a completely separate expression —
+//
+//     vx = sin(aimYaw)·y − cos(aimYaw)·x     vz = cos(aimYaw)·y + sin(aimYaw)·x
+//
+// — and the body this drives is steered by heading alone (`move:{x:0, y:mag}`). So the test is
+// that the two agree: the direction the heading points must be the direction the strafe formula
+// would have sent the same thumb. They disagreed by a sign for the whole of PR #8.
+{
+  const fwd = (yaw) => [Math.sin(yaw), Math.cos(yaw)];
+  /** `player.js` L906-907 at `aimYaw`, normalised. The convention, independently expressed. */
+  const strafe = (x, y, yaw = 0) => {
+    const vx = Math.sin(yaw) * y - Math.cos(yaw) * x;
+    const vz = Math.cos(yaw) * y + Math.sin(yaw) * x;
+    const m = Math.hypot(vx, vz) || 1;
+    return [vx / m, vz / m];
+  };
+  const near = (a, b) => Math.abs(a[0] - b[0]) < 1e-9 && Math.abs(a[1] - b[1]) < 1e-9;
+
+  const STICKS = [[1, 0], [-1, 0], [0, 1], [0.7, 0.7], [-0.7, 0.7], [0.5, -0.86], [-0.5, -0.86]];
+  const agree = STICKS.filter(([x, y]) => near(fwd(stickHeading(x, y)), strafe(x, y)));
+  t('W16 · the heading a thumb asks for is the direction player.js would strafe it',
+    agree.length === STICKS.length, `${agree.length}/${STICKS.length} sticks agree`);
+
+  /*
+   * And in words, because "agrees with the other formula" is only reassuring if the other formula
+   * is the right way round. `forward = (sin y, cos y)` puts yaw 0 at +Z, so RIGHT is −X — which is
+   * what `follow-bed.js`'s shot solver already means by `rx = -Math.cos(f)`.
+   */
+  const RIGHT_AT_ZERO = [-1, 0];
+  t('W16a · drag right heads right, drag left heads left',
+    near(fwd(stickHeading(1, 0)), RIGHT_AT_ZERO)
+    && near(fwd(stickHeading(-1, 0)), [1, 0]),
+    `right -> ${fwd(stickHeading(1, 0)).map((v) => v.toFixed(2))}`);
+  t('W16b · straight ahead is no turn at all',
+    stickHeading(0, 1) === 0);
+  t('W16c · and pulling back turns the body around instead of walking on',
+    Math.abs(Math.abs(stickHeading(0, -1)) - Math.PI) < 1e-9,
+    `${(stickHeading(0, -1) * 180 / Math.PI).toFixed(0)}°`);
+
+  /*
+   * 🚨 THE REINTRODUCTION ARM. The shipped expression was `atan2(x, max(1e-4, y))`. Both signs
+   * produce a runner that walks, which is exactly why no gate and no drive caught it and a person
+   * playing the game did — so the broken formula runs here on every run and must disagree.
+   */
+  const wasShipped = (x, y) => Math.atan2(x, Math.max(0.0001, y));
+  // ⚠️ A LOOSER EPSILON HERE, AND IT IS THE BROKEN FORMULA'S OWN FAULT: `max(0.0001, y)` is a
+  // clamp, so a straight-across thumb lands 1e-4 rad off the axis rather than on it. Comparing
+  // the two arms at 1e-9 would report a MIRROR as merely "not identical", which is a weaker
+  // claim than this control is making.
+  const mirrored = (a, b) => Math.abs(a[0] + b[0]) < 1e-3 && Math.abs(a[1] - b[1]) < 1e-3;
+  t('W16d control · the formula PR #8 shipped really is left-right MIRRORED, not merely different',
+    !near(fwd(wasShipped(1, 0)), strafe(1, 0))
+    && mirrored(fwd(wasShipped(1, 0)), strafe(1, 0)),
+    `it sent a right thumb to ${fwd(wasShipped(1, 0)).map((v) => v.toFixed(2))}`);
+  t('W16e control · and it agreed on FORWARD, which is why it looked like it worked',
+    near(fwd(wasShipped(0, 1)), strafe(0, 1)));
+  t('W16f control · while a pull-back read as a push-forward — the clamp\'s own half of it',
+    near(fwd(wasShipped(0, -1)), fwd(wasShipped(0, 1)))
+    && !near(fwd(stickHeading(0, -1)), fwd(stickHeading(0, 1))));
+
+  /*
+   * 🌀 **THE FRAME, AND THE SPIN IT EXISTS TO STOP — the second half of the same bug, found in
+   * Chromium rather than reasoned about.**
+   *
+   * A bearing is only a direction if it is measured from something that does not move. Added to
+   * the LIVE heading every frame, `want - heading` is a constant, so the target runs away from
+   * the body at exactly the speed the body chases it: a thumb held left became a turn rate of
+   * about 14 rad/s. Measured — nine seconds of full left moved the runner 0.23 m round a tight
+   * circle while nine seconds of full forward covered 8.12 m.
+   *
+   * So the two arms are integrated here rather than argued about, over the SAME smoothing the bed
+   * uses, and the claim is convergence: one settles on a heading and the other never does.
+   */
+  const K = 1 - Math.exp(-9.0 * (1 / 60));
+  const spin = (latched) => {
+    let heading = 0, ref = null, turned = 0;
+    for (let i = 0; i < 600; i++) {                                   // ten seconds at 60 Hz
+      ref = stickRef(ref, -1, 0, heading);
+      const want = (latched ? ref : heading) + stickHeading(-1, 0);
+      const step = Math.atan2(Math.sin(want - heading), Math.cos(want - heading)) * K;
+      heading += step;
+      turned += Math.abs(step);
+    }
+    return { heading, turned, settled: Math.abs(heading - (Math.PI / 2)) < 1e-6 };
+  };
+  const now = spin(true);
+  const was = spin(false);
+  t('W15g · a held thumb SETTLES on a heading — left is a direction, not a turn rate',
+    now.settled && now.turned < Math.PI * 0.51,
+    `${(now.turned * 180 / Math.PI).toFixed(0)}° of turning in ten seconds, resting at 90°`);
+  t('W15h control · measured from the live heading it never settles — this is the observed spin',
+    was.turned > 20 * Math.PI && !was.settled,
+    `${(was.turned / (2 * Math.PI) / 10).toFixed(1)} revolutions per second, forever`);
+
+  t('W15i · the latch is per PUSH — it arms on contact, holds while held, clears at centre',
+    stickRef(null, -1, 0, 1.25) === 1.25
+    && stickRef(1.25, -1, 0, 2.5) === 1.25
+    && stickRef(1.25, 0, 0, 2.5) === null
+    && stickRef(1.25, 0.05, 0.05, 2.5) === null,
+    `deadzone ${STICK_DEADZONE}`);
+  t('W15j · and the phone\'s own nub lights on the same deadzone the bed steers on',
+    STICK_DEADZONE > 0 && STICK_DEADZONE < 0.3);
+}
+
+// ---- W17 · THE PICTURE TAKES THE TELEVISION --------------------------------------------------
+//
+// 📺 John: "TV follow ~90%. Runner camera / follow frame should take about 90% of the TV screen."
+// The number is a constant rather than a literal in the stylesheet for `palette.js`'s reason one
+// dimension over: `injectNightSkin` builds its rules inside a function, so nothing in bare node
+// can read them, and a number no gate can see is a number that drifts back.
+{
+  t('W17 · the broadcast picture is about 90% of the short side',
+    TV_FRAME_PCT >= 85 && TV_FRAME_PCT <= 95, `${TV_FRAME_PCT}%`);
+
+  const skin = await readFile(new URL('../src/party/night-skin.js', import.meta.url), 'utf8');
+  // ⚠️ `\}\n`, NOT `\}`. The rule's own text contains `${TV_FRAME_PCT}`, so a lazy match to the
+  // first brace stops four characters in and the check quietly passes on nothing. The declaration
+  // block's real close is the only `}` on this rule followed by a newline.
+  const rule = skin.match(/\.run-frame \{[\s\S]*?\}\n/)?.[0] ?? '';
+  t('W17a · and the run frame\'s height INTERPOLATES it rather than restating a number',
+    rule.includes('${TV_FRAME_PCT}vh') && rule.includes('aspect-ratio:16/9'),
+    rule.replace(/\s+/g, ' ').slice(0, 96));
+  /*
+   * The cap is the half that actually bit. `min(58vh, 620px)` reads as "58% of the height" and is
+   * 57% on a 1080p set and 38% on a 1440p one — so the picture got SMALLER on exactly the screens
+   * this view exists for. A pixel cap on this rule can never be right.
+   */
+  const px = rule.match(/\b\d{3,}px\b/g) || [];
+  t('W17b · with no pixel cap — a cap in px shrinks the picture on the biggest television',
+    px.length === 0, px.join(',') || 'no px cap');
+  t('W17c · the chrome around it gets out of the way on the run beat, or 90% does not fit',
+    /\.night\.on-run \.night-main \{[^}]*overflow:hidden/.test(skin)
+    && /\.night\.on-run \.night-top \{/.test(skin));
 }
 
 console.log(`\nparty-warm: ${pass} passed, ${fail} failed`);

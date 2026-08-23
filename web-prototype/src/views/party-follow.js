@@ -203,6 +203,13 @@ export default async function partyFollow({ params }) {
     cameraY: () => engine.camera.position.y,
     mode: () => bed.mode,
     world: () => bed.world(),
+    /*
+     * The patrol, for `harness/party-playtest-drive.mjs`. A window property on a same-origin
+     * iframe, deliberately NOT the DOM: `party-follow-drive` D6 greps this document's whole
+     * `innerHTML` and the slot's `src` for the word "hunter", and it must keep coming back clean.
+     * There is still nothing here to render and nothing here to see.
+     */
+    hunter: () => bed.hunterTelemetry(),
     storeyOfCamera: () => bed.room.spaceAt(engine.camera.position)?.storey ?? null,
   };
 

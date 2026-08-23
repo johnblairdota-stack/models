@@ -13,6 +13,7 @@
 import { NIGHT_TOKENS } from './palette.js';
 import { ROLE_CARD_CSS } from './rolecard.js';
 import { GUIDE_MAP_CSS } from './guidemap.js';
+import { TV_FRAME_PCT } from './follow.js';
 
 export function playerName(players, id) {
   const p = (players || []).find((x) => x.id === id);
@@ -80,11 +81,27 @@ export function injectNightSkin() {
        With a live camera in the frame that split is backwards: the first drive photographed a
        1024x215 letterbox strip with the runner four storeys of type below it. The hero is now a
        strapline under the picture, and the picture takes the height. */
-    .run-stage { display:flex; flex-direction:column; gap:6px; }
-    .run-stage .pair-hero { margin:12px 0 2px; font-size:clamp(24px, 3.6vw, 56px); line-height:1.05;
+    .run-stage { display:flex; flex-direction:column; gap:2px; }
+    .run-stage .pair-hero { margin:6px 0 0; font-size:clamp(15px, 1.7vw, 28px); line-height:1.05;
       text-align:center; }
     .run-stage .pair-hero br { display:none; }
-    .run-stage .night-line { font-size:15px; text-align:center; max-width:none; }
+    .run-stage .run-facts { text-align:center; color:var(--night-dim); font-size:12px;
+      letter-spacing:.16em; text-transform:uppercase; margin-top:2px; }
+    /* 📺 THE 90% FRAME ONLY FITS IF THE CHROME AROUND IT GETS OUT OF THE WAY, AND THAT IS THE
+       HALF OF "less chrome" THAT IS EASY TO FORGET. A 90vh picture leaves ten per cent of a
+       television for everything else, so on the run beat the top strip, the main padding and the
+       strapline all shrink together and the one remaining control floats out of flow. Off the run
+       beat nothing here applies and the lobby is exactly the screen it was. */
+    .night.on-run .night-top { padding:6px 22px 2px; }
+    .night.on-run .night-brand { font-size:11px; }
+    .night.on-run .night-phase { font-size:11px; }
+    .night.on-run .night-main { padding:0 12px 4px; overflow:hidden;
+      display:flex; flex-direction:column; justify-content:center; }
+    /* Bottom-right, not top-right: the top strip already ends in the phase readout and the two
+       collided on a 1920x1080 capture. Down here it is beside the facts line and out of the
+       picture, which is the only thing on this screen anyone is looking at. */
+    .night.on-run .run-actions { position:fixed; bottom:6px; right:22px; z-index:6; margin:0; }
+    .night.on-run .run-actions .btn { padding:7px 12px; font-size:11px; letter-spacing:.14em; }
     /* D13. The frame is a MOUNT for the follow camera with the PR #5 still behind it as the
        slate: the mansion takes seconds to bake, and a TV with no WebGL degrades to exactly the
        screen it had before rather than to black. The live class is set when the follow reports
@@ -96,8 +113,15 @@ export function injectNightSkin() {
        — one terminated the string and took the dev server down while this slice was built. */
     /* A 16:9 box driven by HEIGHT, so the picture is a television rather than a letterbox strip
        whose shape depends on how wide the host tab happens to be. The follow's own 2.35:1 bars
-       then sit inside a 16:9 frame, which is what a broadcast crop actually looks like. */
-    .run-frame { position:relative; height:min(58vh, 620px); aspect-ratio:16/9; width:auto;
+       then sit inside a 16:9 frame, which is what a broadcast crop actually looks like.
+       📺 THE HEIGHT IS 'TV_FRAME_PCT' OF THE SHORT SIDE AND THE 620 px CAP IS GONE.
+       John: "TV follow ~90%." The cap was the thing that actually bit on a television — 620 px
+       on a 1080p set is 57% of the height whatever the vh term says, so the picture was small
+       on precisely the screen this view exists for. The width term is what keeps a 16:9 box
+       inside a narrow window; see 'TV_FRAME_PCT' in src/party/follow.js for why it is the short
+       side rather than the area. */
+    .run-frame { position:relative;
+      height:min(${TV_FRAME_PCT}vh, calc(${TV_FRAME_PCT}vw * 9 / 16)); aspect-ratio:16/9; width:auto;
       max-width:100%; margin:0 auto; display:flex;
       align-items:center; justify-content:center;
       border:2px solid rgba(var(--night-accent-rgb), .35); border-radius:14px; overflow:hidden;
@@ -240,6 +264,10 @@ export function injectNightSkin() {
     .intel.exact { border-color:var(--night-bad); color:var(--night-ink); }
     .intel .k { display:block; color:var(--night-dim); font-size:11px; letter-spacing:.2em;
       text-transform:uppercase; margin-bottom:5px; }
+    /* 🔴 PRODUCTION FEED is the strip John named as the red to match, and it was reading in the
+       same grey as WORD FROM THE HOUSE — only the border was red. The words carry it now, and
+       'rolecard.js' takes the same token, so the two Production surfaces are one colour. */
+    .intel.exact .k { color:var(--night-bad); }
     .goal { margin-top:10px; color:var(--night-live); font-size:16px; font-weight:700; }
     ${GUIDE_MAP_CSS}
     @keyframes night-rise { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform:none; } }
