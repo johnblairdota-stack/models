@@ -372,7 +372,7 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
   }
 
   /** Play one scripted episode. Deterministic — the gates need two runs to agree exactly. */
-  function playEpisode({ takeRunner = false, hunterRoom = null, ballots = null, votes = null, nominations = null, living: livingOpt = null } = {}) {
+  function playEpisode({ takeRunner = false, hunterRoom = null, ballots = null, votes = null, nominations = null, living: livingOpt = null, scaffold = true } = {}) {
     const takeRunnerThisEpisode = takeRunner;
     if (hunterRoom) state.hunterRoom = hunterRoom;
     const allLiving = state.players.filter((p) => p.alive).map((p) => p.id);
@@ -415,28 +415,28 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     broadcast();
 
     setPhase('EXPEDITION');
-    // One miss and one alarm, so party-anon A0's arm has a failure of each kind to look at.
-    record(makeEvent('task.miss', VIS.PUBLIC, { kind: 'call', room: 'east', phaseTick: state.tick, loudness: 0.62 }));
-    record(makeEvent('panel.alarm', VIS.PUBLIC, { kind: 'panel', room: 'east', phaseTick: state.tick, loudness: 1.25 }));
-    // 🚨 ATTRIBUTION EXISTS FROM THE FIRST EPISODE AND IS SEALED UNTIL THE REUNION. The public
-    // record is a COUNT (T5, `incident.alarms`); `causedBy` lives here, in the same stream,
-    // visible to nobody. This is the one-mechanism claim paying off: the Reunion needs no second
-    // source for "Loudest Robot", and the live filter needs no special case to withhold it.
-    record(makeEvent('noise.emitted', VIS.SEALED, { causedBy: runner.id, loud: 1.25, room: 'east' }));
-    record(makeEvent('noise.emitted', VIS.SEALED, { causedBy: guide.id, loud: 0.62, room: 'east' }));
-    state.incident.alarms += 2;
+    /*
+     * LIVE NIGHT PASSES scaffold: false. The miss/alarm/camera-lit stubs exist so
+     * party-anon gates and party-sim have a failure of each kind and a win path — they are
+     * not events that happened in the house. On a live Send-them-in the TV was printing
+     * CAMERAS 2/1 · ALARMS 2 before anyone swung (playcritique overnight post-#19). The
+     * mansion reports real cameras and alarms; inventing them here is a lie on the shared
+     * screen. Gates omit the flag and keep the scaffold (default true).
+     */
+    if (scaffold) {
+      // One miss and one alarm, so party-anon A0's arm has a failure of each kind to look at.
+      record(makeEvent('task.miss', VIS.PUBLIC, { kind: 'call', room: 'east', phaseTick: state.tick, loudness: 0.62 }));
+      record(makeEvent('panel.alarm', VIS.PUBLIC, { kind: 'panel', room: 'east', phaseTick: state.tick, loudness: 1.25 }));
+      // ATTRIBUTION EXISTS FROM THE FIRST EPISODE AND IS SEALED UNTIL THE REUNION.
+      record(makeEvent('noise.emitted', VIS.SEALED, { causedBy: runner.id, loud: 1.25, room: 'east' }));
+      record(makeEvent('noise.emitted', VIS.SEALED, { causedBy: guide.id, loud: 0.62, room: 'east' }));
+      state.incident.alarms += 2;
 
-    // 🚨 THE OBJECTIVE HAS TO REACH THE LOG OR GOOD CANNOT WIN. `win.js` W2 counts
-    // `run.camera_lit` entries; this stub incremented `cameras.unlocked` and emitted nothing, so
-    // the camera win path was unreachable and good could only ever win by executing every member
-    // of Production. `party-sim` S1 read that as an 8-19% good win rate across every player
-    // count, which looked like a balance problem and was a missing event.
-    //
-    // A camera lights when the expedition SURVIVES. Being taken costs the terminal as well as
-    // the runner — `party-loop.md`: *"the terminal stays dark"*.
-    if (!takeRunnerThisEpisode) {
-      state.cameras.unlocked += 1;
-      record(makeEvent('run.camera_lit', VIS.PUBLIC, { camera: state.cameras.unlocked, episode: state.episode }));
+      // Camera lights when the expedition SURVIVES — gate/sim path only.
+      if (!takeRunnerThisEpisode) {
+        state.cameras.unlocked += 1;
+        record(makeEvent('run.camera_lit', VIS.PUBLIC, { camera: state.cameras.unlocked, episode: state.episode }));
+      }
     }
     broadcast();
 
