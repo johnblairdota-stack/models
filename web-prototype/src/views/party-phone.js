@@ -12,7 +12,7 @@ import { applyCastLock, applyCastTap, ballotFromCast, castPrompt, freshCast, mer
 import { cardFor, faceDownHtml, mountRoleCard, premiereHtml } from '../party/rolecard.js';
 import { EVIL } from '../party/cast.js';
 import { guideMapSvg } from '../party/guidemap.js';
-import { MISSION_ROOM, pickPlanSeed, roomLabel } from '../party/mansion.js';
+import { MISSION_ROOM, pickPlanSeed, planRoomLabels, roomLabel } from '../party/mansion.js';
 import { intelLine } from '../party/intel.js';
 import { STICK_DEADZONE, warmLabel } from '../party/follow.js';
 
@@ -682,6 +682,19 @@ export default async function partyPhone({ params }) {
    *     look bad, it breaks the pad: the stick's element is destroyed mid-drag, so the
    *     `setPointerCapture` goes with it and the runner keeps walking after the thumb lifts.
    */
+  /**
+   * 🗣️ The night's unique room names, or `null` before the socket knows the seed.
+   *
+   * The guide's map and this feed must print the SAME words — a guide saying "North Study" while
+   * the Production feed says "the Study" is two houses again, which is the thing `mansion.js`
+   * exists to forbid. `planRoomLabels` caches on the seed, so calling it from `patchLive` at 2 Hz
+   * does not rebuild the plan.
+   */
+  function nightLabels() {
+    const seed = state.client?.worldSeed;
+    return seed == null ? null : planRoomLabels(pickPlanSeed(seed).seed);
+  }
+
   /*
    * 🚫 **AND ON THE GUIDE'S SHEET IT IS PRODUCTION'S CHANNEL OR IT IS NOTHING.**
    *
@@ -711,7 +724,7 @@ export default async function partyPhone({ params }) {
     const exact = production || intel?.grade === 'exact';
     return `<div class="intel${exact ? ' exact' : ''}" data-intel data-intel-mode="${exact ? 'production' : 'house'}">
       <span class="k" data-intel-k>${exact ? 'Production feed' : 'Word from the house'}</span>
-      <span data-intel-v>${esc(intelLine(intel))}</span>
+      <span data-intel-v>${esc(intelLine(intel, nightLabels()))}</span>
     </div>`;
   }
 
@@ -749,7 +762,7 @@ export default async function partyPhone({ params }) {
       const k = slot.querySelector('[data-intel-k]');
       const v = slot.querySelector('[data-intel-v]');
       if (k) k.textContent = exact ? 'Production feed' : 'Word from the house';
-      if (v) v.textContent = intelLine(intel);
+      if (v) v.textContent = intelLine(intel, nightLabels());
     }
 
     if (map) {

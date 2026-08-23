@@ -104,14 +104,19 @@ export function intelFor({ alignment, world, stale, cameras, roll = 1 } = {}) {
 /**
  * The one line a good player's phone prints. Kept next to the rule that produced it so the copy
  * cannot drift into implying more precision than the data has.
+ *
+ * `labels` is the night's `mansion.js` `planRoomLabels(...)` map, and it is OPTIONAL. With it,
+ * a house holding two studies reads "the North Study" — the same words the guide's map draws.
+ * Without it the line still names a room, just not which of the pair, which is the old behaviour
+ * rather than a new failure.
  */
-export function intelLine(intel) {
+export function intelLine(intel, labels) {
   if (!intel) return 'No word on the hunter.';
   if (intel.grade === 'exact') {
-    const h = intel.hunter ? `Hunter in ${spaceLabel(intel.hunter.room)}` : 'Hunter —';
-    const r = intel.runner ? `Runner in ${spaceLabel(intel.runner.room)}` : 'Runner —';
+    const h = intel.hunter ? `Hunter in ${spaceLabel(intel.hunter.room, labels)}` : 'Hunter —';
+    const r = intel.runner ? `Runner in ${spaceLabel(intel.runner.room, labels)}` : 'Runner —';
     return `${h} · ${r}`;
   }
   const when = intel.age > 1 ? `, ${intel.age}s ago` : '';
-  return `Something ${intel.grade} them, in ${spaceLabel(intel.hunter?.room)}${when}.`;
+  return `Something ${intel.grade} them, in ${spaceLabel(intel.hunter?.room, labels)}${when}.`;
 }

@@ -28,7 +28,7 @@
  * and `harness/party-warm.mjs` walks this file's output the same way.
  */
 
-import { planRegions, roomLabel } from './mansion.js';
+import { planRegions, roomLabel, roomLabelsFor } from './mansion.js';
 
 /** Padding inside the viewBox, in world metres, so a mark on an outer wall is not clipped. */
 const PAD = 1.2;
@@ -69,12 +69,33 @@ export function guideMapSvg({ seed, runner, flyover, goal, jam = false } = {}) {
     body.push(`<rect class="gm-room${isGoal ? ' gm-goal' : ''}" x="${n2(r.x0)}" y="${n2(r.z0)}" `
       + `width="${n2(r.x1 - r.x0)}" height="${n2(r.z1 - r.z0)}"/>`);
   }
+  /*
+   * 🗣️ THE NAMES COME FROM `roomLabelsFor`, NOT FROM `roomLabel`, AND THAT IS THE FIX.
+   * A playcritique pass photographed this map with STUDY printed twice — and the guide's whole
+   * job is calling a room out loud. `mansion.js` disambiguates the pair by compass word, and
+   * `intel.js` speaks the same map through `spaceLabel`, so what is drawn here is exactly what
+   * the phone's own feed says.
+   */
+  const labels = roomLabelsFor(plan.rooms);
   // Labels last over the fills, and only where the room is wide enough to hold one — a label
   // spilling out of a 3.4 m service passage reads as a bug in the map rather than a tight room.
   for (const r of plan.rooms) {
     if (r.x1 - r.x0 < 5.0) continue;
-    body.push(`<text class="gm-label" x="${n2((r.x0 + r.x1) / 2)}" y="${n2((r.z0 + r.z1) / 2)}">`
-      + `${esc(roomLabel(r.type))}</text>`);
+    const cx = n2((r.x0 + r.x1) / 2);
+    const cz = (r.z0 + r.z1) / 2;
+    /*
+     * ⚠️ A DISAMBIGUATED NAME IS STACKED, NOT RUN ON. The 5.0 m guard above was measured against
+     * one-word labels; "NORTH STUDY" is half again as wide and would hang out over the wall,
+     * which reads as a broken map rather than as a named room. Split on the space and the widest
+     * drawn line is still the room type, so the guard keeps meaning what it meant.
+     */
+    const parts = String(labels.get(r.id) ?? roomLabel(r.type)).split(' ');
+    const lines = parts.length > 1 ? [parts[0], parts.slice(1).join(' ')] : parts;
+    const dy = lines.length > 1 ? 0.85 : 0;
+    body.push(`<text class="gm-label" x="${cx}" y="${n2(cz)}">`
+      + lines.map((line, i) => `<tspan x="${cx}" y="${n2(cz - dy + i * dy * 2)}">`
+        + `${esc(line)}</tspan>`).join('')
+      + '</text>');
   }
   for (const dr of plan.doors) {
     const half = 0.9;
