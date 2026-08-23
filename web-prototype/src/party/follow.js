@@ -256,6 +256,25 @@ export const CAM_LABEL = 'RRR CAM 01';
 export const TV_FRAME_PCT = 90;
 
 /**
+ * 🎬 **HOW MUCH OF THE TELEVISION THE INTROS TAKE, WHILE CASTING IS STILL UP.**
+ *
+ * The warm layer is full-bleed behind the lobby, dimmed and blurred on purpose so the join
+ * code wins. Intros fire the moment Start is pressed — which is CASTING — so that same dim
+ * backdrop is where the robots used to walk: a thin strip of ballroom on the far left of a
+ * ballot board. This number is the picture they get instead, a centred 16:9 frame, bright.
+ *
+ * Smaller than `TV_FRAME_PCT` because the phase strap and a one-line ballot hint still have
+ * to fit; large enough that a Meshy body at `INTRO_FOV` 38 is the thing you are looking at.
+ */
+export const INTRO_FRAME_PCT = 78;
+
+/**
+ * The intro lens, degrees. The run camera is 62° (`engine.js`). A Meshy body at the old
+ * standoff under that FOV is a strip; 38° is a portrait. `intro-bed.js` applies it.
+ */
+export const INTRO_FOV = 38;
+
+/**
  * The `src` for the TV's follow iframe, or `null`.
  *
  * `room` is carried for the operator's log line only — the follow view opens no socket with it.
@@ -461,8 +480,26 @@ export function stickHeading(x, y) {
   return Math.atan2(-(Number(x) || 0), Number(y) || 0);
 }
 
-/** Below this the stick is centred. `views/party-phone.js` lights its nub on the same number. */
-export const STICK_DEADZONE = 0.12;
+/**
+ * Below this the stick is centred. `views/party-phone.js` lights its nub on the same number.
+ *
+ * 0.15 (was 0.12) after the L/R + latch pass: a held thumb resting near the rim of the old
+ * zone still posted a heading, so a "release" that did not quite hit centre flicked the body
+ * onto a new bearing. The phone and the bed share this constant; W15j holds the range.
+ */
+export const STICK_DEADZONE = 0.15;
+/**
+ * Release is looser than press, so the latch does not chatter at the rim. A push arms at
+ * `STICK_DEADZONE`; it only clears once the thumb has come back inside this.
+ */
+export const STICK_RELEASE = 0.10;
+/**
+ * How fast the heading chases the stick's bearing, rad/s. Was 9.0 inline in the bed — a
+ * 90° ask arrived in ~0.2 s, then the body (`MOVE.turnRate` 3.4) spent another half-second
+ * catching the aim, which read as a slide. 6.4 keeps the latch a direction (W15g still
+ * settles) without the snap-then-drift.
+ */
+export const STICK_TURN = 6.4;
 
 /**
  * 🧭 **THE FRAME THE STICK'S BEARING IS MEASURED FROM, AND WITHOUT IT THE RUNNER SPINS.**
@@ -501,8 +538,27 @@ export const STICK_DEADZONE = 0.12;
  * @returns {number|null} the latch to carry into the next frame
  */
 export function stickRef(prevRef, x, y, heading) {
-  if (Math.hypot(Number(x) || 0, Number(y) || 0) <= STICK_DEADZONE) return null;
+  const mag = Math.hypot(Number(x) || 0, Number(y) || 0);
+  const cut = prevRef == null ? STICK_DEADZONE : STICK_RELEASE;
+  if (mag <= cut) return null;
   return prevRef == null ? heading : prevRef;
+}
+
+/**
+ * 🕹️ **THE STICK'S MAGNITUDE AFTER A RADIAL DEADZONE, RESCALED SO LEAVING CENTRE STARTS AT 0.**
+ *
+ * The bed used to drive `move.y = min(1, hypot(x,y))`. Crossing 0.12 therefore jumped from
+ * standstill to 12% of walk in one sample — a lurch — and a resting thumb that hovered just
+ * outside the zone walked forever. Subtract the zone, remap the rest onto 0..1, then
+ * smootherstep so a gentle push is a creep and a full throw is still a 1.
+ *
+ * Pure, exported, gated by W15k. Does not rewrite `Player._stepGround`.
+ */
+export function stickMag(x, y) {
+  const m = Math.hypot(Number(x) || 0, Number(y) || 0);
+  if (m <= STICK_DEADZONE) return 0;
+  const t = Math.min(1, (m - STICK_DEADZONE) / (1 - STICK_DEADZONE));
+  return t * t * t * (t * (t * 6 - 15) + 10);
 }
 
 export function moveViolations(msg) {

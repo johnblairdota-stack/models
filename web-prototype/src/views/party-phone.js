@@ -14,7 +14,7 @@ import { EVIL } from '../party/cast.js';
 import { guideMapSvg } from '../party/guidemap.js';
 import { MISSION_ROOM, pickPlanSeed, roomLabel } from '../party/mansion.js';
 import { intelLine } from '../party/intel.js';
-import { warmLabel } from '../party/follow.js';
+import { STICK_DEADZONE, warmLabel } from '../party/follow.js';
 
 export default async function partyPhone({ params }) {
   injectNightSkin();
@@ -565,7 +565,7 @@ export default async function partyPhone({ params }) {
       state.pad.x = x * k;
       state.pad.y = y * k;
       if (nub) nub.style.transform = `translate(calc(-50% + ${state.pad.x * 78}%), calc(-50% + ${-state.pad.y * 78}%))`;
-      stick.classList.toggle('on', Math.hypot(state.pad.x, state.pad.y) > 0.12);
+      stick.classList.toggle('on', Math.hypot(state.pad.x, state.pad.y) > STICK_DEADZONE);
     };
 
     const fromEvent = (e) => {

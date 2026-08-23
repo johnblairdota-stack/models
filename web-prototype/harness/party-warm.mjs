@@ -27,10 +27,14 @@
 import { readFile } from 'node:fs/promises';
 import {
   CUE_CAST_KEYS, CUE_KEYS, CUE_KINDS, FOLLOW_FORBIDDEN, FOLLOW_KEYS, FOLLOW_VIEW,
-  IDENTITY_SECRETS, MISSION_PHASES, MOVE_KEYS, SPATIAL_WORDS, STICK_DEADZONE, TV_FRAME_PCT,
+  IDENTITY_SECRETS, INTRO_FOV, INTRO_FRAME_PCT, MISSION_PHASES, MOVE_KEYS, SPATIAL_WORDS,
+  STICK_DEADZONE, STICK_RELEASE, STICK_TURN, TV_FRAME_PCT,
   WARM_KEYS, WARM_STAGES, WORLD_KEYS, cueViolations, followParams, followUrl, moveViolations,
-  stickHeading, stickRef, warmLabel, warmPct, warmUrl, warmViolations, worldViolations,
+  stickHeading, stickMag, stickRef, warmLabel, warmPct, warmUrl, warmViolations, worldViolations,
 } from '../src/party/follow.js';
+import {
+  BLEED_CONE, BLEED_PAST, bleedCoolPos, bleedKeyAngle, facingPortal, isPastSpace,
+} from '../src/lighting/door-bleed.js';
 import {
   FEED_CYCLE_SECONDS, FEED_PHASES, JAM_SECONDS, PEEK_SECONDS, mapFeed,
 } from '../src/party/mapfeed.js';
@@ -964,7 +968,7 @@ console.log('\nparty-warm — the lobby-warm night');
    * So the two arms are integrated here rather than argued about, over the SAME smoothing the bed
    * uses, and the claim is convergence: one settles on a heading and the other never does.
    */
-  const K = 1 - Math.exp(-9.0 * (1 / 60));
+  const K = 1 - Math.exp(-STICK_TURN * (1 / 60));
   const spin = (latched) => {
     let heading = 0, ref = null, turned = 0;
     for (let i = 0; i < 600; i++) {                                   // ten seconds at 60 Hz
@@ -993,6 +997,35 @@ console.log('\nparty-warm — the lobby-warm night');
     `deadzone ${STICK_DEADZONE}`);
   t('W15j · and the phone\'s own nub lights on the same deadzone the bed steers on',
     STICK_DEADZONE > 0 && STICK_DEADZONE < 0.3);
+
+  /*
+   * 🕹️ **THE FEEL PASS — radial deadzone, hysteresis, a slower chase.** Sign + latch stopped
+   * the spin; a held thumb still lurched off the rim and a 9 rad/s chase snapped the heading
+   * ahead of the body. These are the three knobs, each with a control that the old number fails.
+   */
+  t('W15k · leaving the deadzone starts at speed 0, not at the zone itself',
+    stickMag(STICK_DEADZONE, 0) === 0
+    && stickMag(STICK_DEADZONE + 0.001, 0) < 0.02
+    && stickMag(0, 1) === 1,
+    `mag@zone+ε=${stickMag(STICK_DEADZONE + 0.001, 0).toFixed(3)}`);
+  t('W15l control · the raw hypot at the same sample is the lurch this rescales away',
+    Math.hypot(STICK_DEADZONE + 0.02, 0) > 0.14
+    && stickMag(STICK_DEADZONE + 0.02, 0) < 0.05);
+  t('W15m · the latch has hysteresis — a thumb on the rim does not chatter',
+    STICK_RELEASE < STICK_DEADZONE
+    && stickRef(null, STICK_RELEASE + 0.01, 0, 1.1) === null
+    && stickRef(1.1, STICK_RELEASE + 0.01, 0, 2.2) === 1.1,
+    `arm ${STICK_DEADZONE} / release ${STICK_RELEASE}`);
+  t('W15n · the heading chase is slower than the snap that read as a slide',
+    STICK_TURN > 4 && STICK_TURN < 8.5, `${STICK_TURN} rad/s`);
+  t('W15o control · the number the bed used to hardcode really is the snap',
+    9.0 > 8.5);
+
+  const phonePad = await readFile(new URL('../src/views/party-phone.js', import.meta.url), 'utf8');
+  const bedSrcFeel = await readFile(new URL('../src/game/follow-bed.js', import.meta.url), 'utf8');
+  t('W15p · the phone nub and the bed both read the exported zone, not a restated 0.12',
+    /STICK_DEADZONE/.test(phonePad) && !/> 0\.12/.test(phonePad)
+    && /stickMag\(/.test(bedSrcFeel) && /STICK_TURN/.test(bedSrcFeel));
 }
 
 // ---- W17 · THE PICTURE TAKES THE TELEVISION --------------------------------------------------
@@ -1227,6 +1260,91 @@ console.log('\nparty-warm — the lobby-warm night');
     && /data-intel-mode="\$\{exact \? 'production' : 'house'\}"/.test(phone));
   t('W20e · and the patcher cannot relabel a Production strip back to the house word',
     /slot\.dataset\.intelMode === 'production'/.test(phone));
+}
+
+// ---- W21 · INTROS ARE THE MESHY ROBOT, CENTRED, NOT A DIM LEFT STRIP ------------------------
+//
+// John, after #12: intros used the old procedural robot, "framed far left / thin strip / looks
+// background during CASTING." Two defects, one picture: the body was unit4h, and CASTING kept
+// the follow layer as the warm backdrop (blurred, behind the ballot board) so a 62° plate of
+// the ballroom leaked around the left edge.
+{
+  t('W21 · the intro lens is a portrait, not the run\'s 62° plate',
+    INTRO_FOV >= 34 && INTRO_FOV <= 42, `${INTRO_FOV}°`);
+  t('W21a · and the CASTING picture is a centred frame, not a full-bleed strip',
+    INTRO_FRAME_PCT >= 70 && INTRO_FRAME_PCT < TV_FRAME_PCT, `${INTRO_FRAME_PCT}%`);
+
+  const introSrc = await readFile(new URL('../src/game/intro-bed.js', import.meta.url), 'utf8');
+  const bedSrc = await readFile(new URL('../src/game/follow-bed.js', import.meta.url), 'utf8');
+  const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
+  const skin = await readFile(new URL('../src/party/night-skin.js', import.meta.url), 'utf8');
+
+  t('W21b · intros clone the already-loaded Meshy body rather than baking eight new ones',
+    /cloneMeshAvatar/.test(introSrc) && /avatar: twin/.test(introSrc)
+    && /avatar,/.test(bedSrc));
+  t('W21c control · a failed fetch still builds a unit4h body, so a chair is never empty',
+    /tintedMaterials\(base/.test(introSrc) && /avatar: twin/.test(introSrc)
+    && /cloneMeshAvatar\(avatar/.test(introSrc));
+  t('W21d · the intro camera snaps onto a new robot instead of lerping from the warm dolly',
+    /if \(i !== focusI\)/.test(introSrc) && /INTRO_FOV/.test(introSrc));
+  t('W21e · CASTING promotes the follow layer to a highlighted intro frame',
+    /follow\.mode === 'intros'/.test(hostSrc)
+    && /intro-frame/.test(hostSrc)
+    && /on-intro/.test(hostSrc));
+  t('W21f · the skin interpolates INTRO_FRAME_PCT and drops the warm blur on that beat',
+    /\$\{INTRO_FRAME_PCT\}vh/.test(skin)
+    && /\.run-cam-layer\.intros/.test(skin)
+    && /\.night\.on-intro/.test(skin));
+  t('W21g control · the lobby warm layer is still the dim blurred backdrop',
+    /filter: blur\(2px\)/.test(skin) && /\.run-cam-layer\.warm \{/.test(skin));
+}
+
+// ---- W23 · YOU CAN SEE INTO THE NEXT ROOM THROUGH A DOOR ------------------------------------
+//
+// Rooms light independently: five lamps follow the space you are standing in, so an adjacent
+// room that `setViewpoints` has kept resident is unlit. The authored/generated tables already
+// park `cool` past ONE door. This picks the door in FRAME and puts the rim past THAT one.
+//
+// Arithmetic here; `_bleed1-doorlight.mjs` is the pixel control arm (`?bleed=0` vs on).
+{
+  const here = { id: 'study_w', x0: 0, x1: 8, z0: 0, z1: 6 };
+  const next = { id: 'gallery', x0: 0, x1: 8, z0: 8, z1: 20 };
+  const spaces = [here, next];
+  const door = { a: 'study_w', b: 'gallery', x: 4, z: 6.15, nx: 0, nz: 1 };
+  const behind = { a: 'study_w', b: 'service', x: 4, z: -0.2, nx: 0, nz: -1 };
+
+  const facing = facingPortal([door, behind], 'study_w', { x: 4, z: 3 }, { x: 0, z: 1 });
+  t('W23 · the portal in front of the camera wins, not the widest door and not the one behind',
+    facing === door, facing ? `${facing.a}->${facing.b}` : 'none');
+  t('W23a control · looking the other way does not pick the door behind your head',
+    facingPortal([door, behind], 'study_w', { x: 4, z: 3 }, { x: 0, z: -1 }) === behind);
+
+  const rim = bleedCoolPos(door, 'study_w', spaces);
+  t('W23b · the rim sits PAST the doorway, in the other room',
+    isPastSpace(rim, here) && !isPastSpace(rim, next)
+    && rim.z > door.z, `z=${rim.z.toFixed(2)} past=${BLEED_PAST}`);
+  t('W23c control · a rim left at the current room\'s centre is the defect',
+    !isPastSpace({ x: 4, y: 1.9, z: 3 }, here));
+
+  const staticCool = { x: 4, y: 1.9, z: -2.0 }; // past the BACK door, the table's widest
+  const through = { x: 4, z: 9.2 };             // two metres into the gallery
+  const dBleed = Math.hypot(through.x - rim.x, through.z - rim.z);
+  const dStatic = Math.hypot(through.x - staticCool.x, through.z - staticCool.z);
+  t('W23d · the facing rim is closer to the room you are looking into than the table\'s cool',
+    dBleed < 3 && dStatic > 8, `bleed ${dBleed.toFixed(2)} m vs table ${dStatic.toFixed(2)} m`);
+
+  t('W23e · the cone widen is a few degrees, not a flood',
+    Math.abs(bleedKeyAngle(0.30, true) - 0.30 - BLEED_CONE) < 1e-9
+    && bleedKeyAngle(0.86, true) <= 0.95
+    && bleedKeyAngle(0.30, false) === 0.30, `+${BLEED_CONE} rad`);
+
+  const bedSrc = await readFile(new URL('../src/game/follow-bed.js', import.meta.url), 'utf8');
+  t('W23f · the follow rig actually calls the rule, and `?bleed=0` is the control',
+    /facingPortal\(/.test(bedSrc) && /bleedCoolPos\(/.test(bedSrc)
+    && /get\('bleed'\) === '0'/.test(bedSrc));
+  t('W23g · the rig repositions the existing cool — it does not construct a sixth light',
+    /want\.cool\.pos\.set\(p\.x/.test(bedSrc)
+    && (bedSrc.match(/new THREE\.PointLight/g) || []).length === 4);
 }
 
 console.log(`\nparty-warm: ${pass} passed, ${fail} failed`);

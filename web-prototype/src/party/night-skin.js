@@ -13,7 +13,7 @@
 import { NIGHT_TOKENS } from './palette.js';
 import { ROLE_CARD_CSS } from './rolecard.js';
 import { GUIDE_MAP_CSS } from './guidemap.js';
-import { TV_FRAME_PCT } from './follow.js';
+import { INTRO_FRAME_PCT, TV_FRAME_PCT } from './follow.js';
 
 export function playerName(players, id) {
   const p = (players || []).find((x) => x.id === id);
@@ -148,6 +148,24 @@ export function injectNightSkin() {
     .run-cam-layer.warm { z-index:0; border-radius:0; box-shadow:none;
       opacity:0; filter: blur(2px) saturate(.85); }
     .run-cam-layer.warm.live { opacity:1; }
+    /* 🎬 INTROS — a centred picture, not the dim full-bleed strip CASTING used to leave.
+       Same layer as the run camera (z-index 5, no blur) so the Meshy body is the thing in
+       frame rather than wallpaper behind a ballot board. */
+    .run-cam-layer.intros { z-index:5; border-radius:12px; filter:none;
+      opacity:0; box-shadow: inset 0 0 60px rgba(0,0,0,.5); }
+    .run-cam-layer.intros.live { opacity:1; }
+    .night.on-intro .night-top { padding:8px 22px 4px; }
+    .night.on-intro .night-line { display:none; }
+    .night.on-intro .night-main { padding:0 16px 10px; overflow:hidden;
+      display:flex; flex-direction:column; justify-content:center; }
+    .intro-frame { position:relative;
+      height:min(${INTRO_FRAME_PCT}vh, calc(${INTRO_FRAME_PCT}vw * 9 / 16)); aspect-ratio:16/9; width:auto;
+      max-width:100%; margin:0 auto; display:flex;
+      align-items:center; justify-content:center;
+      border:2px solid rgba(var(--night-accent-rgb), .45); border-radius:14px; overflow:hidden;
+      background:var(--night-deep); }
+    .intro-hint { text-align:center; color:var(--night-dim); font-size:13px;
+      letter-spacing:.16em; text-transform:uppercase; margin-top:8px; }
     /* '.night' is opaque by design — it is the show's own black. While the mansion is warming
        behind it, it becomes a scrim instead, and 'party-host.js' sets 'rrr-warming' on <body> only
        once the layer is live so the lobby never fades toward a frame that has not rendered. */

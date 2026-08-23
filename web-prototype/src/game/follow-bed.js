@@ -5,7 +5,8 @@ import { generatedTablesFor } from './spaces.js';
 import { Player } from './player.js';
 import { MOVE, WEAPON_RANGE } from './rules.js';
 import { CONTACT_PHASE, SWING_DUR } from './sledge.js';
-import { SHOT_NAMES, STICK_DEADZONE, stickHeading, stickRef } from '../party/follow.js';
+import { SHOT_NAMES, STICK_TURN, stickHeading, stickMag, stickRef } from '../party/follow.js';
+import { bleedCoolPos, bleedKeyAngle, facingPortal } from '../lighting/door-bleed.js';
 import { HOME_ROOM, MISSION_ROOM, PLAN_OPTS } from '../party/mansion.js';
 import { createMeshAvatar } from '../characters/mesh-avatar.js';
 import { unit4hMaterials } from '../materials/surfaces/robot.js';
@@ -109,6 +110,23 @@ function followRig(L) {
     cool: { pos: new THREE.Vector3(), i: L.cool.intensity },
     up: GROUND0 ? GROUND0.clone() : null,
   };
+  /**
+   * 🚪 **`view` RE-HOMES THE COOL RIM ONTO THE DOOR IN FRAME.** The table parks cool past
+   * the room's widest door. Standing in that room looking through a different doorway, the
+   * adjacent room is resident and unlit — John's "hard to see into adjacent rooms." `?bleed=0`
+   * is the control arm (`_bleed1-doorlight.mjs`).
+   */
+  const bleedOff = typeof location !== 'undefined'
+    && new URLSearchParams(location.search).get('bleed') === '0';
+  const applyBleed = (space, view) => {
+    if (bleedOff || !view?.pos || !view?.dir || !view?.portals || !space?.id) return;
+    const hit = facingPortal(view.portals, space.id, view.pos, view.dir);
+    if (!hit) return;
+    const p = bleedCoolPos(hit, space.id, view.spaces);
+    want.cool.pos.set(p.x, p.y, p.z);
+    const base = space.lights?.key?.angle;
+    if (base != null) L.key.angle = bleedKeyAngle(base, true);
+  };
   const read = (space) => {
     const s = space?.lights;
     if (!s) return;
@@ -148,8 +166,12 @@ function followRig(L) {
     if (want.up) L.fill.groundColor.lerp(want.up, a);
   };
   return {
-    snapTo(space) { read(space); apply(1); },
-    follow(space, dt) { read(space); apply(1 - Math.exp(-dt / (LERP / 3))); },
+    snapTo(space, view) { read(space); applyBleed(space, view); apply(1); },
+    follow(space, dt, view) {
+      read(space);
+      applyBleed(space, view);
+      apply(1 - Math.exp(-dt / (LERP / 3)));
+    },
   };
 }
 
@@ -867,9 +889,26 @@ export async function buildFollowBed(engine, opts = {}) {
       intro?.step(dt, t);
       hunter.step(dt);
       const space = room.spaceAt(engine.camera.position);
-      if (space) rig.follow(space, dt);
-      camLight.position.copy(engine.camera.position);
-      camLight.position.y -= 0.18;
+      if (space) {
+        engine.camera.getWorldDirection(_dir);
+        rig.follow(space, dt, {
+          pos: engine.camera.position, dir: _dir,
+          portals: room.portals(), spaces: room.spaces,
+        });
+      }
+      const who = intro?.focus();
+      if (who?.pos) {
+        camLight.intensity = 4.6;
+        camLight.distance = 6.2;
+        if (who.accent) {
+          const hex = parseInt(String(who.accent).slice(1), 16);
+          if (Number.isFinite(hex)) camLight.color.setHex(hex);
+        }
+        camLight.position.set(who.pos.x, (who.pos.y ?? 0) + 1.55, who.pos.z);
+      } else {
+        camLight.position.copy(engine.camera.position);
+        camLight.position.y -= 0.18;
+      }
       engine.camera.getWorldDirection(_dir);
       room.setViewpoints(_views, dt);
       room.update?.(dt);
@@ -900,15 +939,15 @@ export async function buildFollowBed(engine, opts = {}) {
      */
     if (perf.driven) {
       const s = perf.stick;
-      const mag = Math.hypot(s.x, s.y);
+      const mag = stickMag(s.x, s.y);
       perf.stickRef = stickRef(perf.stickRef, s.x, s.y, perf.heading);
-      if (mag > STICK_DEADZONE) {
+      if (mag > 0 && perf.stickRef != null) {
         const want = perf.stickRef + stickHeading(s.x, s.y);
         const turn = Math.atan2(Math.sin(want - perf.heading), Math.cos(want - perf.heading));
-        perf.heading += turn * (1 - Math.exp(-9.0 * dt));
+        perf.heading += turn * (1 - Math.exp(-STICK_TURN * dt));
       }
       runner.update(dt, t, {
-        move: { x: 0, y: Math.min(1, mag) },
+        move: { x: 0, y: mag },
         run: perf.run,
         aimYaw: perf.heading,
       });
@@ -973,10 +1012,14 @@ export async function buildFollowBed(engine, opts = {}) {
     camLight.position.copy(engine.camera.position);
     camLight.position.y -= 0.18;
 
-    const space = room.spaceAt(runner.pos) ?? room.spaceAt(engine.camera.position);
-    if (space) rig.follow(space, dt);
-
     engine.camera.getWorldDirection(_dir);
+    const space = room.spaceAt(runner.pos) ?? room.spaceAt(engine.camera.position);
+    if (space) {
+      rig.follow(space, dt, {
+        pos: engine.camera.position, dir: _dir,
+        portals: room.portals(), spaces: room.spaces,
+      });
+    }
     room.setViewpoints(_views, dt);
     room.update?.(dt);
   }
@@ -993,7 +1036,7 @@ export async function buildFollowBed(engine, opts = {}) {
     readout: () => ({
       shot: mode === 'run' ? operator.shot : mode,
       throttle: perf.driven
-        ? (perf.run ? 'RUN' : (Math.hypot(perf.stick.x, perf.stick.y) > 0.12 ? 'WALK' : 'STILL'))
+        ? (perf.run ? 'RUN' : (stickMag(perf.stick.x, perf.stick.y) > 0 ? 'WALK' : 'STILL'))
         : (perf.hesitateFor > 0 ? 'CREEP' : perf.throttle),
       speed: +runner.speed.toFixed(2),
     }),
@@ -1024,7 +1067,9 @@ export async function buildFollowBed(engine, opts = {}) {
         introCast = (c.cast || []).slice(0, 8);
         if (!introCast.length) return;
         intro?.dispose();
-        intro = buildIntroBed(engine, { room, cast: introCast, materials: botMats, reelSight: reelToSight });
+        intro = buildIntroBed(engine, {
+          room, cast: introCast, materials: botMats, avatar, reelSight: reelToSight,
+        });
         mode = 'intros';
         runner.root.visible = false;
         return;
@@ -1040,6 +1085,8 @@ export async function buildFollowBed(engine, opts = {}) {
         mode = 'run';
         runnerName = c.name ?? null;
         runner.root.visible = true;
+        camLight.intensity = 1.4;
+        camLight.distance = 3.5;
         if (c.accent) {
           const hex = parseInt(String(c.accent).slice(1), 16);
           if (Number.isFinite(hex)) camLight.color.setHex(hex);
