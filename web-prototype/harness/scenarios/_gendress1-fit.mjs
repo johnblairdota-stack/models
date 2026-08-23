@@ -201,9 +201,9 @@ async function runOnce({ seed, rooms, off, shrink, hardcode }) {
       || Math.abs(sp.orderPlan.wid - 6.70) > 0.01).length;
     out.f4Lens = gal.map((sp) => [sp.id, sp.turns | 0, +sp.orderPlan.len.toFixed(2), +sp.orderPlan.wid.toFixed(2)]);
 
-    // ---- F5: a turned ballroom keeps its colonnade, on the right axis --------------------------
-    // The piers are `put` into the merged `mould` bucket, so they are not their own mesh — the
-    // thing that CAN be read back is the collider each one registers (`solid(w, H, w, …)`).
+    // ---- F5: the ballroom has NO centre colonnade (John 2026-08-23, PR A) ----------------------
+    // gendress-1 required six piers on a turned ballroom. The lock deletes them: they sat in
+    // the chair circle. The thing that CAN be read back is `sp.columns` (or its absence).
     const balls = room.spaces.filter((sp) => sp.roomType === 'ballroom');
     out.f5Ballrooms = balls.length;
     out.f5NoColumns = balls.filter((sp) => !sp.columns).length;
@@ -319,10 +319,10 @@ for (const r of rows) {
   ok(r.f2Refused === 0, `F2 ${tag}: ${r.f2Refused} room rows refused (${r.refusedWhy.join(',')})`);
   ok(r.f3Orders === r.f3Want, `F3 ${tag}: the BUILT house has ${r.f3Orders} orders, the table says ${r.f3Want}`);
   ok(r.f4Bad === 0, `F4 ${tag}: ${r.f4Bad} of ${r.f4Galleries} galleries solved for the wrong axis — ${JSON.stringify(r.f4Lens)}`);
-  ok(r.f5NoColumns === 0, `F5 ${tag}: ${r.f5NoColumns} of ${r.f5Ballrooms} ballrooms lost their colonnade`);
-  for (const [id, turns, n, inside, long, short] of r.f5Cols) {
-    ok(n === 6 && inside && long > 20 && short === 0,
-      `F5 ${tag}: ${id} (turns ${turns}) colonnade is ${n} piers, inside ${inside}, span ${long} x ${short}`);
+  ok(r.f5NoColumns === r.f5Ballrooms,
+    `F5 ${tag}: ${r.f5NoColumns} of ${r.f5Ballrooms} ballrooms have no centre colonnade`);
+  for (const [id, turns, n] of r.f5Cols) {
+    ok(n === 0, `F5 ${tag}: ${id} (turns ${turns}) still has ${n} piers`);
   }
   ok(r.f6Overlap === 0, `F6 ${tag}: ${r.f6Overlap} "overlapping cuts" warnings — ${JSON.stringify(r.warns)}`);
   ok(r.skinEmpty === 0, `F7 ${tag}: ${r.skinEmpty} of ${r.skinFaces} dig faces LOST their skin`

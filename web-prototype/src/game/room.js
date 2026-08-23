@@ -2339,19 +2339,18 @@ export async function buildTestRoom(engine, o = {}) {
       }
     }
 
-    // ---- the ballroom colonnade. Occlusion, not decoration: it breaks the 31 m diagonal
-    // SOMETIMES, which is what an arena wants — cover you have to use well rather than cover
-    // that is a guarantee. One merged mesh under `mould`, so six piers cost no draw call.
+    // ---- colonnade reader. Occlusion, not decoration: it breaks a long diagonal SOMETIMES.
+    // One merged mesh under `mould`. John 2026-08-23 deleted `ROOMS.ballroom.columns` and
+    // `placeRoom` / `dressGenerated` refuse to attach columns to a ballroom, so the live
+    // starting room no longer emits this block. The reader stays: a non-ballroom `sp.columns`
+    // (or a future field) still becomes mould + colliders. Do not put a ballroom special-case
+    // here — the policy is in `spaces.js`.
     //
-    // 🆕 **TWO SHAPES, AND THE SECOND ONE IS WHAT LETS A TURNED BALLROOM HAVE A COLONNADE AT
-    // ALL** (`gendress-1`, 2026-08-15). `{ z, xs, w }` is a pier row at one world z — the shape
-    // this file has always read, and the one the authored ballroom still emits byte for byte.
-    // `{ pts: [[x, z], …], w }` is the general form `spaces.js`'s own note asked for: a quarter
-    // turn puts the row at one world X, which the pair cannot say, and `placeColumns` used to
-    // THROW rather than emit a colonnade on the wrong axis. 44% of generated rooms are turned,
-    // and the colonnade is this room's gameplay — it breaks the 31 m diagonal SOMETIMES — so
-    // "turned ballrooms get no piers" would have been a per-seed arena change nobody could see.
-    // `house-packing.md` §9.4b item 2, closed.
+    // 🆕 **TWO SHAPES** (`gendress-1`, 2026-08-15). `{ z, xs, w }` is a pier row at one world z —
+    // the shape this file has always read. `{ pts: [[x, z], …], w }` is the general form a
+    // quarter-turn needs: the row sits at one world X, which the pair cannot say.
+    // `house-packing.md` §9.4b item 2, closed. The live ballroom no longer supplies either
+    // shape (John 2026-08-23); other rooms still can.
     if (sp.columns) {
       const { w = 0.95 } = sp.columns;
       const pts = sp.columns.pts ?? sp.columns.xs.map((x) => [x, sp.columns.z]);

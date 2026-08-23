@@ -24,7 +24,7 @@
  * `harness/` by relative path for the same reason, so this is a precedent rather than a new sin.
  */
 
-import { buildPlan } from '../../harness/genspike.mjs';
+import { buildPlan, roomAtEnvCorner } from '../../harness/genspike.mjs';
 
 /** The two rooms the night's mission needs. Both are `genspike.mjs` `LIBRARY` types. */
 export const MISSION_ROOM = 'gallery';
@@ -44,7 +44,11 @@ export const HOME_ROOM = 'ballroom';
  * `buildPlan`'s own defaults, restated so the phone and the TV cannot drift apart if one of them
  * is ever called with a partial object.
  */
-export const PLAN_OPTS = { rooms: 6, align: 0.35, gap: 2.2, waste: 0.04, doors: 'open' };
+export const PLAN_OPTS = {
+  rooms: 6, align: 0.35, gap: 2.2, waste: 0.04, doors: 'open',
+  /** John 2026-08-23: ballroom is pinned to a plan corner by construction, not by retry luck. */
+  homeCorner: true,
+};
 
 /** How many seeds `pickPlanSeed` will try before it gives up and takes the first. */
 export const PLAN_TRIES = 32;
@@ -120,10 +124,16 @@ function connected(plan, ai, bi) {
  * If all `PLAN_TRIES` candidates fail, take candidate 0 and report it. A playable-but-wrong house
  * beats a throw on the biggest screen in the room; `ok:false` is how the caller can say so.
  */
+/** True when the ballroom shares a corner with `plan.env`. */
+export function homeIsCorner(plan) {
+  return roomAtEnvCorner(plan, HOME_ROOM);
+}
+
 export function planPasses(plan) {
   const gal = regionsOfType(plan, MISSION_ROOM);
   const ball = regionsOfType(plan, HOME_ROOM);
   if (!gal.length || !ball.length) return false;
+  if (!homeIsCorner(plan)) return false;
   return connected(plan, plan.regions.indexOf(gal[0]), plan.regions.indexOf(ball[0]));
 }
 

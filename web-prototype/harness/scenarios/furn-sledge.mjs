@@ -70,9 +70,10 @@ export default async function furnSledge({ page, note, pass, fail, skip, shot })
   note(`census: ${JSON.stringify(census)}`);
   if (!census) return fail('boot', 'no engine.room');
   if (!census.estate) return skip('estate ballroom', 'room.estate.ballroom is off — need ?estate=port');
-  census.circle === 8
-    ? pass('F1 eight ballroom chairs registered', `${census.circle} · ${JSON.stringify(census.circleMeta)}`)
-    : fail('F1 eight ballroom chairs registered', JSON.stringify(census));
+  const lockCount = census.circleMeta?.count;
+  (census.circle >= 1 && census.circle === lockCount && census.circleMeta?.deferred && !census.circleMeta?.baked)
+    ? pass('F1 ballroom chairs from seating lock', `${census.circle} · ${JSON.stringify(census.circleMeta)}`)
+    : fail('F1 ballroom chairs from seating lock', JSON.stringify(census));
 
   if (census.study) {
     census.desks >= 2

@@ -21,6 +21,7 @@ import { candelabra as makeCandelabra } from '../lighting/practicals.js';
 import { FurnProp, furnBox, FURN_HP } from '../destruction/furnprop.js';
 import { FurnPart, FurnAssembly, FurnCladding, partBoxWorld } from '../destruction/furn-parts.js';
 import { makeFurnHandlers } from '../destruction/furn-fx.js';
+import { dressCatalogFurniture } from './furn-layout.js';
 
 const HIT_H = 1.25; // minimum collider height so a sledge ray from eye height can connect
 
@@ -892,60 +893,76 @@ function dressCameras(room, materials, handlers) {
   return cams;
 }
 
+const EMPTY_DRESS = {
+  studies: 0, ballroom: 0, gallery: 0, service: 0, chapel: 0,
+  cameras: 0, counts: {}, cams: [],
+  catalog: { placed: 0, missing: [], props: [] },
+};
+
 /**
- * Dress studies, ballroom extras, gallery, service, chapel, and house cameras.
- * @returns {{ studies, ballroom, gallery, service, chapel, cameras, counts, cams }}
+ * Dress studies, ballroom extras, gallery, service, chapel, house cameras, and the smash
+ * catalog (armor / lounges / piano / chandeliers).
+ *
+ * 🪑 **THIS IS THE PLACER HOOK** (`docs/slices/task-procedural-mansion-layout.md` Change 5).
+ * Catalog ids live in `furn-layout.js`; they load from here so `game.js` / `follow-bed.js`
+ * do not invent a second dresser. Missing GLBs skip (`catalog.missing`), never throw.
+ * Early-return paths still attempt the catalog — a room that cannot take a procedural desk
+ * can still take a knight if `registerFurn` exists.
+ *
+ * @returns {Promise<{ studies, ballroom, gallery, service, chapel, cameras, counts, cams, catalog }>}
  */
-export function dressLooseFurniture(room, { debris, dust, rng } = {}) {
-  if (!room?.materials || !room.registerFurn) {
-    return {
-      studies: 0, ballroom: 0, gallery: 0, service: 0, chapel: 0,
-      cameras: 0, counts: {}, cams: [],
-    };
-  }
-  const materials = furnMats(room);
-  if (!materials.wood) {
-    return {
-      studies: 0, ballroom: 0, gallery: 0, service: 0, chapel: 0,
-      cameras: 0, counts: {}, cams: [],
-    };
-  }
-  const handlers = makeFurnHandlers({ debris, dust });
-  const seedRng = rng ?? (() => 0.5);
-
-  let studies = 0, ballroom = 0, gallery = 0, service = 0, chapel = 0;
-  const counts = {
-    urn: 0, candelabra: 0, painting: 0, fireplace: 0, boarded: 0, giltbox: 0,
-    camera: 0, trestle: 0, bench: 0, pew: 0, mound: 0, crate: 0, desk: 0, console: 0,
+export async function dressLooseFurniture(room, { debris, dust, rng } = {}) {
+  const out = {
+    studies: 0, ballroom: 0, gallery: 0, service: 0, chapel: 0,
+    cameras: 0, counts: {}, cams: [],
+    catalog: EMPTY_DRESS.catalog,
   };
+  if (!room?.registerFurn) return out;
 
-  for (const sp of room.spaces) {
-    if (sp.order === 'study' && sp.orderPlan) {
-      dressStudy(sp, room, materials, handlers, seedRng);
-      studies++;
-    } else if (sp.order === 'ballroom' && sp.orderPlan) {
-      dressBallroomExtras(sp, room, materials, handlers, seedRng);
-      ballroom++;
-    } else if (sp.order === 'gallery' && sp.orderPlan) {
-      dressGallery(sp, room, materials, handlers);
-      gallery++;
-    } else if (sp.id === 'service') {
-      dressService(sp, room, materials, handlers, seedRng);
-      service++;
-    } else if (sp.id === 'chapel') {
-      dressChapel(sp, room, materials, handlers, seedRng);
-      chapel++;
+  if (room.materials) {
+    const materials = furnMats(room);
+    if (materials.wood) {
+      const handlers = makeFurnHandlers({ debris, dust });
+      const seedRng = rng ?? (() => 0.5);
+
+      for (const sp of room.spaces) {
+        if (sp.order === 'study' && sp.orderPlan) {
+          dressStudy(sp, room, materials, handlers, seedRng);
+          out.studies++;
+        } else if (sp.order === 'ballroom' && sp.orderPlan) {
+          dressBallroomExtras(sp, room, materials, handlers, seedRng);
+          out.ballroom++;
+        } else if (sp.order === 'gallery' && sp.orderPlan) {
+          dressGallery(sp, room, materials, handlers);
+          out.gallery++;
+        } else if (sp.id === 'service') {
+          dressService(sp, room, materials, handlers, seedRng);
+          out.service++;
+        } else if (sp.id === 'chapel') {
+          dressChapel(sp, room, materials, handlers, seedRng);
+          out.chapel++;
+        }
+      }
+
+      out.cams = dressCameras(room, materials, handlers);
+      out.cameras = out.cams.length;
+
+      const counts = {
+        urn: 0, candelabra: 0, painting: 0, fireplace: 0, boarded: 0, giltbox: 0,
+        camera: 0, trestle: 0, bench: 0, pew: 0, mound: 0, crate: 0, desk: 0, console: 0,
+      };
+      for (const fp of room.furnProps ?? []) {
+        if (counts[fp.kind] != null) counts[fp.kind]++;
+      }
+      out.counts = counts;
     }
   }
 
-  const cams = dressCameras(room, materials, handlers);
-
-  for (const fp of room.furnProps ?? []) {
-    if (counts[fp.kind] != null) counts[fp.kind]++;
+  try {
+    out.catalog = await dressCatalogFurniture(room, { debris, dust });
+  } catch (e) {
+    console.warn('[furn-dress] catalog furniture skipped —', e?.message ?? e);
+    out.catalog = { placed: 0, missing: [], props: [], error: e?.message ?? String(e) };
   }
-
-  return {
-    studies, ballroom, gallery, service, chapel,
-    cameras: cams.length, counts, cams,
-  };
+  return out;
 }

@@ -36,8 +36,12 @@ import {
 } from '../src/party/mapfeed.js';
 import {
   HOME_ROOM, MISSION_ROOM, PLAN_OPTS, PLAN_TRIES,
-  coverageRoomOf, pickPlanSeed, planFor, planOptsFor, planPasses, planRegions, roomLabel, spaceLabel,
+  coverageRoomOf, homeIsCorner, pickPlanSeed, planFor, planOptsFor, planPasses, planRegions,
+  roomLabel, spaceLabel,
 } from '../src/party/mansion.js';
+import { lockedSeatCount } from '../src/game/chair-seats.js';
+import { LAYOUT_CATALOG_IDS, catalogPlacements, catalogUrl, CATALOG_URL_PREFIX, spaceKind } from '../src/game/furn-layout.js';
+import { FURN_SMASH_ASSETS } from '../src/game/furn-catalog.js';
 import { ROOMS, hunterVisibleToGuide } from '../src/party/coverage.js';
 import { buildPlan } from './genspike.mjs';
 import { DROP_RATE, GRADES, STALE_MAX, gradeFor, intelFor, intelLine } from '../src/party/intel.js';
@@ -47,6 +51,9 @@ import { COMPOSITION, dealCast } from '../src/party/cast.js';
 import { isNightToken } from '../src/party/palette.js';
 import { MATRIX } from '../net/party/entitle.js';
 import { FANOUT_KEYS, fanoutViolations } from '../net/party/local.mjs';
+import { existsSync, openSync, readSync, closeSync, readFileSync, statSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 let pass = 0, fail = 0;
 const t = (n, c, d = '') => {
@@ -622,30 +629,153 @@ console.log('\nparty-warm — the lobby-warm night');
     !anyRaw && anyMapped, `raw ${anyRaw} · mapped ${anyMapped}`);
 }
 
-// ---- W14 · THE MAP FEED — a few seconds, then the evil robot eats it ------------------------
+// ---- W14 · PR A mansion layout: corner ballroom, deferred seats, catalog ids only ------------
+//
+// John 2026-08-23. Cyan map-edge is a follow-up (slice §4) and is not asserted here.
+{
+  t('W14 · the night asks the packer for a corner ballroom',
+    PLAN_OPTS.homeCorner === true, JSON.stringify(PLAN_OPTS));
+
+  let corners = 0, firstTry = 0;
+  for (let ws = 0; ws < 24; ws++) {
+    const picked = pickPlanSeed(ws);
+    const plan = planFor(picked.seed);
+    if (homeIsCorner(plan)) corners++;
+    if (picked.tries === 1 && picked.ok) firstTry++;
+  }
+  t('W14b · every world seed 0..23 puts the ballroom in an env corner',
+    corners === 24, `${corners}/24`);
+  t('W14c · and homeCorner does that on the first candidate, not by retry luck',
+    firstTry === 24, `${firstTry}/24 first-try`);
+
+  let rejectedCorner = 0;
+  for (let s = 0; s < 48; s++) {
+    const loose = buildPlan(String(s), { ...PLAN_OPTS, homeCorner: false });
+    const hasRooms = loose.regions.some((R) => R.kind === 'room' && R.type === MISSION_ROOM)
+      && loose.regions.some((R) => R.kind === 'room' && R.type === HOME_ROOM);
+    if (hasRooms && !homeIsCorner(loose) && !planPasses(loose)) rejectedCorner++;
+  }
+  t('W14d control · planPasses refuses a playable house whose ballroom is not in a corner',
+    rejectedCorner > 0, `${rejectedCorner}/48 unconstrained plans caught`);
+
+  t('W14e · locked seats follow joined players, not an eight-chair bake',
+    lockedSeatCount({ players: 4 }) === 4
+    && lockedSeatCount({ players: 1 }) === 1
+    && lockedSeatCount({ players: 0 }) === 1);
+  t('W14f · `?chairs=` is the seating lock a developer typed',
+    lockedSeatCount({ players: 1, chairsQuery: '8' }) === 8
+    && lockedSeatCount({ players: 4, chairsQuery: '2' }) === 2);
+
+  const catalogIds = new Set(FURN_SMASH_ASSETS.map((a) => a.id));
+  const unknown = LAYOUT_CATALOG_IDS.filter((id) => !catalogIds.has(id));
+  t('W14g · layout ids are all real furn-catalog rows',
+    unknown.length === 0 && LAYOUT_CATALOG_IDS.length === 6, unknown.join(',') || LAYOUT_CATALOG_IDS.join(','));
+
+  const fake = catalogPlacements([
+    { id: 'r0.ballroom', roomType: 'ballroom', x0: 0, x1: 27.2, z0: 0, z1: 15.3 },
+    { id: 'r1.study', roomType: 'study', x0: 28, x1: 39.6, z0: 0, z1: 15.4 },
+    { id: 'c0.0', x0: 13, x1: 16, z0: 16, z1: 22 },
+  ]);
+  const used = [...new Set(fake.map((p) => p.catalogId))];
+  t('W14h · placements only emit catalog ids this slice named',
+    used.every((id) => LAYOUT_CATALOG_IDS.includes(id))
+    && used.includes('armor') && used.includes('grand-piano') && used.includes('chandelier')
+    && used.includes('wingback'), used.join(','));
+
+  /*
+   * The live hook is `dressLooseFurniture`. Callers must not import `dressCatalogFurniture`
+   * themselves — that was the second dresser this slice deleted. Read source, do not import
+   * `furn-dress.js` (it pulls THREE).
+   */
+  const here = dirname(fileURLToPath(import.meta.url));
+  const src = (rel) => readFileSync(join(here, '..', rel), 'utf8');
+  const dress = src('src/game/furn-dress.js');
+  const follow = src('src/game/follow-bed.js');
+  const game = src('src/views/game.js');
+  t('W14i · dressLooseFurniture is the catalog placer hook',
+    /export async function dressLooseFurniture/.test(dress)
+    && /dressCatalogFurniture/.test(dress));
+  t('W14j · follow-bed and game.js go through that hook, not furn-layout',
+    follow.includes("import('./furn-dress.js')")
+    && !follow.includes('furn-layout.js')
+    && game.includes("import('../game/furn-dress.js')")
+    && !game.includes('furn-layout.js'));
+
+  /*
+   * The 24 smash GLBs are in git as normal blobs under public/models/furn/. A previous
+   * note that this folder was empty was wrong (the agent glob missed binaries). `bed.glb`
+   * / `tato.glb` are local-only and are not required.
+   */
+  const furnDir = join(here, '..', 'public', 'models', 'furn');
+  const onDisk = [];
+  let pointer = 0, tiny = 0, notGltf = 0;
+  for (const spec of FURN_SMASH_ASSETS) {
+    const p = join(furnDir, spec.file);
+    if (!existsSync(p)) { tiny++; continue; }
+    const bytes = statSync(p).size;
+    const fd = openSync(p, 'r');
+    const head = Buffer.alloc(12);
+    readSync(fd, head, 0, 12, 0);
+    closeSync(fd);
+    const magic = head.subarray(0, 4).toString('ascii');
+    if (head.toString('utf8').startsWith('version https://git-lfs')) pointer++;
+    if (bytes < 1_000_000) tiny++;
+    if (magic !== 'glTF') notGltf++;
+    onDisk.push({ id: spec.id, file: spec.file, bytes, magic, url: catalogUrl(spec.id) });
+  }
+  t('W14k · all 24 catalog GLBs are real glTF blobs on disk, not LFS pointers',
+    onDisk.length === 24 && pointer === 0 && tiny === 0 && notGltf === 0,
+    `${onDisk.length}/24 · ptr ${pointer} · tiny ${tiny} · magic-fail ${notGltf}`);
+
+  const layoutDisk = LAYOUT_CATALOG_IDS.map((id) => onDisk.find((r) => r.id === id));
+  t('W14l · layout URLs are /models/furn/<file> and resolve to those blobs',
+    layoutDisk.every((r) => r && r.url === `${CATALOG_URL_PREFIX}${r.file}` && r.bytes > 1_000_000)
+    && /catalogUrl\(slot\.catalogId\)/.test(src('src/game/furn-layout.js')),
+    layoutDisk.map((r) => r && `${r.id}:${r.bytes}`).join(','));
+
+  const authored = catalogPlacements([
+    { id: 'ballroom', order: 'ballroom', x0: 0, x1: 27.2, z0: 0, z1: 15.3 },
+    { id: 'study_w', order: 'study', x0: -13.6, x1: -2.0, z0: -24, z1: -8.6 },
+    { id: 'chapel', x0: 4.2, x1: 11.0, z0: -37.8, z1: -31.3 },
+    { id: 'service', x0: -1.7, x1: 1.7, z0: -24, z1: -8.6 },
+  ]);
+  const byAuth = (id) => authored.filter((p) => p.catalogId === id);
+  t('W14m · authored HOUSE_PLAN shape (order, no roomType) still places the lock',
+    spaceKind({ id: 'ballroom', order: 'ballroom' }) === 'ballroom'
+    && spaceKind({ id: 'study_w', order: 'study' }) === 'study'
+    && spaceKind({ id: 'c0.3' }) === null
+    && byAuth('grand-piano').every((p) => p.spaceId === 'ballroom')
+    && byAuth('chandelier').length === 2 && byAuth('chandelier').every((p) => p.spaceId === 'ballroom')
+    && ['wingback', 'settee', 'chaise'].every((id) => byAuth(id).every((p) => p.spaceId === 'study_w'))
+    && byAuth('armor').length >= 1 && byAuth('armor').every((p) => p.spaceId === 'service')
+    && !authored.some((p) => p.spaceId === 'chapel'),
+    authored.map((p) => `${p.catalogId}@${p.spaceId}`).join(','));
+}
+
+// ---- W15 · THE MAP FEED — a few seconds, then the evil robot eats it ------------------------
 //
 // John: "When a good player is guide, the map may show the hunter briefly (few seconds), then the
 // map feed is interrupted by static… Evil guide keeps continuous exact runner+hunter without that
 // interrupt." The arithmetic lives in `src/party/mapfeed.js`; the ROOM-level consequence — what a
 // real socket actually receives on a real night — is `harness/guide-coverage.mjs` C5.
 {
-  t('W14 · a few seconds of map, then a longer stretch of static',
+  t('W15 · a few seconds of map, then a longer stretch of static',
     PEEK_SECONDS >= 3 && PEEK_SECONDS <= 10 && JAM_SECONDS > PEEK_SECONDS
     && FEED_CYCLE_SECONDS === PEEK_SECONDS + JAM_SECONDS,
     `${PEEK_SECONDS}s clear / ${JAM_SECONDS}s jammed`);
 
   const good = (s) => mapFeed({ alignment: 'good', seconds: s });
-  t('W14a · the window opens at the top of the cycle and closes on the second',
+  t('W15a · the window opens at the top of the cycle and closes on the second',
     good(0).phase === 'peek' && good(PEEK_SECONDS - 0.01).phase === 'peek'
     && good(PEEK_SECONDS).phase === 'jam');
-  t('W14b · and it comes back — the map is not dead furniture for the rest of the run',
+  t('W15b · and it comes back — the map is not dead furniture for the rest of the run',
     good(FEED_CYCLE_SECONDS).phase === 'peek'
     && good(FEED_CYCLE_SECONDS * 3 + 1).phase === 'peek');
   const sampled = Array.from({ length: 400 }, (_, i) => good(i * 0.5));
   const jammedFrac = sampled.filter((f) => f.jammed).length / sampled.length;
-  t('W14c · the RESTING state is blind — a hidden-role map should fail toward less sight',
+  t('W15c · the RESTING state is blind — a hidden-role map should fail toward less sight',
     jammedFrac > 0.5, `${(jammedFrac * 100).toFixed(0)}% of ticks jammed`);
-  t('W14d · `left` counts down to the turnover rather than being decoration',
+  t('W15d · `left` counts down to the turnover rather than being decoration',
     Math.abs(good(0).left - PEEK_SECONDS) < 1e-9
     && Math.abs(good(PEEK_SECONDS).left - JAM_SECONDS) < 1e-9);
 
@@ -656,11 +786,11 @@ console.log('\nparty-warm — the lobby-warm night');
    * direction. Sampled across the cycle rather than at one instant.
    */
   const evilPhases = new Set(sampled.map((_, i) => mapFeed({ alignment: 'evil', seconds: i * 0.5 }).phase));
-  t('W14e control · Production is NEVER jammed, at any point in the cycle',
+  t('W15e control · Production is NEVER jammed, at any point in the cycle',
     evilPhases.size === 1 && evilPhases.has('clear')
     && !mapFeed({ alignment: 'evil', seconds: PEEK_SECONDS + 1 }).jammed,
     [...evilPhases].join(','));
-  t('W14f · junk or negative time is a phase, not a throw and not a permanent blackout',
+  t('W15f · junk or negative time is a phase, not a throw and not a permanent blackout',
     !mapFeed({ alignment: 'good', seconds: -3 }).jammed === !mapFeed({ alignment: 'good', seconds: FEED_CYCLE_SECONDS - 3 }).jammed
     && FEED_PHASES.includes(mapFeed({ alignment: 'good', seconds: NaN }).phase)
     && FEED_PHASES.includes(mapFeed({}).phase));
@@ -671,13 +801,13 @@ console.log('\nparty-warm — the lobby-warm night');
    * static simply never appears and the guide reads a jam as an uncovered room.
    */
   const jamRow = MATRIX.find(([g]) => g === 'flyover.jam');
-  t('W14g · `flyover.jam` has a `guide` row, like every other flyover field',
+  t('W15g · `flyover.jam` has a `guide` row, like every other flyover field',
     jamRow?.[1] === 'guide', jamRow ? jamRow.join(' -> ') : 'NO ROW');
-  t('W14h · and it is not `all` or `phones` — the TV is still not the map',
+  t('W15h · and it is not `all` or `phones` — the TV is still not the map',
     MATRIX.filter(([g]) => g.startsWith('flyover.')).every(([, a]) => a === 'guide'));
 }
 
-// ---- W15 · THE STICK'S SIGN ------------------------------------------------------------------
+// ---- W16 · THE STICK'S SIGN ------------------------------------------------------------------
 //
 // 🕹️ John: "Runner stick L/R inverted. Fix so drag left aims/moves left (standard)."
 //
@@ -704,7 +834,7 @@ console.log('\nparty-warm — the lobby-warm night');
 
   const STICKS = [[1, 0], [-1, 0], [0, 1], [0.7, 0.7], [-0.7, 0.7], [0.5, -0.86], [-0.5, -0.86]];
   const agree = STICKS.filter(([x, y]) => near(fwd(stickHeading(x, y)), strafe(x, y)));
-  t('W15 · the heading a thumb asks for is the direction player.js would strafe it',
+  t('W16 · the heading a thumb asks for is the direction player.js would strafe it',
     agree.length === STICKS.length, `${agree.length}/${STICKS.length} sticks agree`);
 
   /*
@@ -713,13 +843,13 @@ console.log('\nparty-warm — the lobby-warm night');
    * what `follow-bed.js`'s shot solver already means by `rx = -Math.cos(f)`.
    */
   const RIGHT_AT_ZERO = [-1, 0];
-  t('W15a · drag right heads right, drag left heads left',
+  t('W16a · drag right heads right, drag left heads left',
     near(fwd(stickHeading(1, 0)), RIGHT_AT_ZERO)
     && near(fwd(stickHeading(-1, 0)), [1, 0]),
     `right -> ${fwd(stickHeading(1, 0)).map((v) => v.toFixed(2))}`);
-  t('W15b · straight ahead is no turn at all',
+  t('W16b · straight ahead is no turn at all',
     stickHeading(0, 1) === 0);
-  t('W15c · and pulling back turns the body around instead of walking on',
+  t('W16c · and pulling back turns the body around instead of walking on',
     Math.abs(Math.abs(stickHeading(0, -1)) - Math.PI) < 1e-9,
     `${(stickHeading(0, -1) * 180 / Math.PI).toFixed(0)}°`);
 
@@ -734,13 +864,13 @@ console.log('\nparty-warm — the lobby-warm night');
   // the two arms at 1e-9 would report a MIRROR as merely "not identical", which is a weaker
   // claim than this control is making.
   const mirrored = (a, b) => Math.abs(a[0] + b[0]) < 1e-3 && Math.abs(a[1] - b[1]) < 1e-3;
-  t('W15d control · the formula PR #8 shipped really is left-right MIRRORED, not merely different',
+  t('W16d control · the formula PR #8 shipped really is left-right MIRRORED, not merely different',
     !near(fwd(wasShipped(1, 0)), strafe(1, 0))
     && mirrored(fwd(wasShipped(1, 0)), strafe(1, 0)),
     `it sent a right thumb to ${fwd(wasShipped(1, 0)).map((v) => v.toFixed(2))}`);
-  t('W15e control · and it agreed on FORWARD, which is why it looked like it worked',
+  t('W16e control · and it agreed on FORWARD, which is why it looked like it worked',
     near(fwd(wasShipped(0, 1)), strafe(0, 1)));
-  t('W15f control · while a pull-back read as a push-forward — the clamp\'s own half of it',
+  t('W16f control · while a pull-back read as a push-forward — the clamp\'s own half of it',
     near(fwd(wasShipped(0, -1)), fwd(wasShipped(0, 1)))
     && !near(fwd(stickHeading(0, -1)), fwd(stickHeading(0, 1))));
 
@@ -788,14 +918,14 @@ console.log('\nparty-warm — the lobby-warm night');
     STICK_DEADZONE > 0 && STICK_DEADZONE < 0.3);
 }
 
-// ---- W16 · THE PICTURE TAKES THE TELEVISION --------------------------------------------------
+// ---- W17 · THE PICTURE TAKES THE TELEVISION --------------------------------------------------
 //
 // 📺 John: "TV follow ~90%. Runner camera / follow frame should take about 90% of the TV screen."
 // The number is a constant rather than a literal in the stylesheet for `palette.js`'s reason one
 // dimension over: `injectNightSkin` builds its rules inside a function, so nothing in bare node
 // can read them, and a number no gate can see is a number that drifts back.
 {
-  t('W16 · the broadcast picture is about 90% of the short side',
+  t('W17 · the broadcast picture is about 90% of the short side',
     TV_FRAME_PCT >= 85 && TV_FRAME_PCT <= 95, `${TV_FRAME_PCT}%`);
 
   const skin = await readFile(new URL('../src/party/night-skin.js', import.meta.url), 'utf8');
@@ -803,7 +933,7 @@ console.log('\nparty-warm — the lobby-warm night');
   // first brace stops four characters in and the check quietly passes on nothing. The declaration
   // block's real close is the only `}` on this rule followed by a newline.
   const rule = skin.match(/\.run-frame \{[\s\S]*?\}\n/)?.[0] ?? '';
-  t('W16a · and the run frame\'s height INTERPOLATES it rather than restating a number',
+  t('W17a · and the run frame\'s height INTERPOLATES it rather than restating a number',
     rule.includes('${TV_FRAME_PCT}vh') && rule.includes('aspect-ratio:16/9'),
     rule.replace(/\s+/g, ' ').slice(0, 96));
   /*
@@ -812,9 +942,9 @@ console.log('\nparty-warm — the lobby-warm night');
    * this view exists for. A pixel cap on this rule can never be right.
    */
   const px = rule.match(/\b\d{3,}px\b/g) || [];
-  t('W16b · with no pixel cap — a cap in px shrinks the picture on the biggest television',
+  t('W17b · with no pixel cap — a cap in px shrinks the picture on the biggest television',
     px.length === 0, px.join(',') || 'no px cap');
-  t('W16c · the chrome around it gets out of the way on the run beat, or 90% does not fit',
+  t('W17c · the chrome around it gets out of the way on the run beat, or 90% does not fit',
     /\.night\.on-run \.night-main \{[^}]*overflow:hidden/.test(skin)
     && /\.night\.on-run \.night-top \{/.test(skin));
 }
