@@ -243,7 +243,7 @@ export function bindConnection(room, { token, wantTV = false }) {
 
 /** Closed keys for the public side-channel. A field not on this list is a violation. */
 export const FANOUT_KEYS = {
-  lobby: ['t', 'code', 'phase', 'episode', 'seats'],
+  lobby: ['t', 'code', 'phase', 'episode', 'airingEpisode', 'seats'],
   lobbySeat: ['id', 'playerId', 'isTV', 'name', 'seat', 'joined', 'connected', 'shell', 'accent'],
   ballots: ['t', 'votes'],
   ballotVote: ['voter', 'runner', 'guide'],
@@ -293,6 +293,7 @@ export function lobbySnapshot(room) {
     code: room.code,
     phase: room.game.state.phase,
     episode: room.game.state.episode,
+    airingEpisode: room.game.state.airingEpisode,
     seats: room.game.sockets.map((s) => {
       const player = s.playerId ? room.game.state.players.find((p) => p.id === s.playerId) : null;
       const joined = s.isTV ? room.tvTaken : room.seatsTaken.has(s.id);
