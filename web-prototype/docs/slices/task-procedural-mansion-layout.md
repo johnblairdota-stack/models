@@ -57,10 +57,12 @@ This slice may edit these. Anything else is another owner's.
 | `src/game/dig.js` | **owned for the cyan follow-up, not this PR.** Do not retune interconnect / G-channel. |
 | `src/game/room.js` | colonnade **reader** only (comment + consume `sp.columns` as it already does). No barrier policy. |
 | `src/views/game.js` | Phase A chairs after seating lock, not `count: 8`. Phase B calls `dressLooseFurniture` once. |
-| `src/game/furn-dress.js` | **the placer hook.** `dressLooseFurniture` loads catalog ids. |
+| `src/game/furn-dress.js` | **the placer hook.** Catalog always; GeoBin kit only if `?kitdress=1`. |
 | `src/game/furn-catalog.js` | **read.** `FURN_SMASH_ASSETS` is the id list. Do not invent rows. |
-| `src/game/furn-layout.js` | **new.** pure placement table + GLB loader that the hook calls |
-| `src/game/chair-seats.js` | **new.** locked seat count (pure) |
+| `src/game/furn-layout.js` | placement table + GLB loader that the hook calls; full 24 |
+| `src/game/furn-fit.js` | shared Meshy scale (`fitCatalogProp`); smash lab imports it |
+| `src/game/portal-clearance.js` | **the one doorway keep-out helper.** Pure. Reuse, do not fork. |
+| `src/game/chair-seats.js` | locked seat count (pure) |
 | `harness/party-warm.mjs` | W14 layout assertions |
 | `harness/scenarios/furn-sledge.mjs` | F1 reads the seating lock, not "always 8" |
 
@@ -144,18 +146,39 @@ Catalog: `src/game/furn-catalog.js` `FURN_SMASH_ASSETS`. Assets under
 `public/models/furn/` — 24 `rrr_prop_*.glb` blobs in git. Vite serves them at
 `/models/furn/<file>`, the same prefix `furn-smash-lab.js` already loads.
 
-| id | file | kind | room (John) |
+| id | file | kind | room |
 |---|---|---|---|
-| `armor` | `rrr_prop_armor_v1.glb` | urn | corridors (knight) |
-| `chaise` | `rrr_prop_chaise_v1.glb` | chair | study (lounge) |
-| `settee` | `rrr_prop_settee_v1.glb` | chair | study (lounge) |
-| `wingback` | `rrr_prop_wingback_v1.glb` | chair | study (lounge) |
-| `grand-piano` | `rrr_prop_grand-piano_v1.glb` | desk | ballroom |
-| `chandelier` | `rrr_prop_chandelier_v1.glb` | giltbox | ballroom |
+| `armor` | `rrr_prop_armor_v1.glb` | urn | corridors / service (John: knight) |
+| `hall-stand` | `rrr_prop_hall-stand_v1.glb` | desk | corridors / service |
+| `crate` | `rrr_prop_crate_v1.glb` | crate | corridors / service |
+| `chaise` | `rrr_prop_chaise_v1.glb` | chair | study (John: lounge) |
+| `settee` | `rrr_prop_settee_v1.glb` | chair | study (John: lounge) |
+| `wingback` | `rrr_prop_wingback_v1.glb` | chair | study (John: lounge) |
+| `ottoman` | `rrr_prop_ottoman_v1.glb` | chair | study (lounge group) |
+| `desk` | `rrr_prop_desk_v1.glb` | desk | study |
+| `bookcase` | `rrr_prop_bookcase_v1.glb` | desk | study |
+| `chair` | `rrr_prop_chair_v1.glb` | chair | study |
+| `fireplace` | `rrr_prop_fireplace_v1.glb` | fireplace | study (wall, never a doorway) |
+| `gramophone` | `rrr_prop_gramophone_v1.glb` | giltbox | study |
+| `grand-piano` | `rrr_prop_grand-piano_v1.glb` | desk | ballroom (John) |
+| `chandelier` | `rrr_prop_chandelier_v1.glb` | giltbox | ballroom (John; two, hanging) |
+| `rug-circle` | `rrr_prop_rug-circle_v1.glb` | rug | ballroom centre (thin) |
+| `torchiere` | `rrr_prop_torchiere_v1.glb` | giltbox | ballroom (gallery fallback) |
+| `card-table` | `rrr_prop_card-table_v1.glb` | console | ballroom, clear of chair ring |
+| `cam-tripod` | `rrr_prop_cam-tripod_v1.glb` | camera | ballroom (Meshy smash cam) |
+| `console` | `rrr_prop_console_v1.glb` | console | gallery (ballroom fallback) |
+| `vitrine` | `rrr_prop_vitrine_v1.glb` | desk | gallery |
+| `sideboard` | `rrr_prop_sideboard_v1.glb` | desk | gallery |
+| `pedestal-bust` | `rrr_prop_pedestal-bust_v1.glb` | urn | gallery (chapel fallback) |
+| `cam-wall` | `rrr_prop_cam-wall_v1.glb` | camera | gallery (Meshy smash cam) |
+| `table-round` | `rrr_prop_table-round_v1.glb` | console | chapel (study fallback) |
+
+`bed.glb` / `tato.glb` stay local-only and are **not** in the catalog.
 
 Placer hook: `src/game/furn-dress.js` `dressLooseFurniture`. The table lives in
-`furn-layout.js` (`catalogPlacements` / `dressCatalogFurniture`) so `party-warm` can
-assert ids without importing THREE.
+`furn-layout.js` (`catalogPlacements` / `dressCatalogFurniture` / `CATALOG_ROOM_ASSIGN`)
+so `party-warm` can assert ids without importing THREE. Doorway keep-out is
+`src/game/portal-clearance.js` — the one shared helper.
 
 Procedural stand-ins that **are** in repo (not catalog GLBs): `world/chandelier.js`
 `buildChandelier`, `world/props.js` chairs / desks / urns, `furn-dress.js` Phase B
@@ -229,6 +252,44 @@ The loader URL is `catalogUrl(id)` → `/models/furn/<file>`. A 404 is a skip
 not an empty checkout. Authored `HOUSE_PLAN` rows carry `order` (not `roomType`);
 `spaceKind` reads both so `game.play` still gets piano / lounges / knights.
 
+### Change 6 — full 24 catalog, kit gated, doorway clearance (follow-up)
+
+John playtested the merged PR #10 house and said none of the furniture matched the
+24 smash props. Diagnosis (this follow-up, 2026-08-23):
+
+1. All 24 `public/models/furn/rrr_prop_*.glb` exist in git and match the concept sheet.
+2. PR A only placed 6 via `LAYOUT_CATALOG_IDS` (armor, chaise, settee, wingback,
+   grand-piano, chandelier).
+3. The visual majority was still GeoBin kit inside `dressLooseFurniture`
+   (`dressStudy` / `dressBallroomExtras` / `dressGallery` / service / chapel).
+4. The full 24 lineup was only on `?furnline=1`.
+5. A table sat in a gallery opening.
+
+**Dress rules (this PR):**
+
+- `LAYOUT_CATALOG_IDS` is the full `FURN_SMASH_ASSETS` list (24). Room map is
+  `CATALOG_ROOM_ASSIGN` in `furn-layout.js` and the table in §2.5.
+- **GeoBin kit is off by default** on party / gen / estate nights. Gate:
+  `kitDressEnabled()` in `furn-dress.js` — `?kitdress=1` restores urns, candelabra,
+  procedural desks, depot crates, kit cameras. Documented here so a later agent
+  does not "fix" an empty kit census.
+- Catalog GLBs are the default smash dress on `game.play` estate **and** follow-bed
+  warm, still through `dressLooseFurniture`.
+- **Scale:** `dressCatalogFurniture` wraps the GLB and runs `fitCatalogProp`
+  (`furn-fit.js`) — the same `targetH` / `maxSpan` / 1.55 boost as the smash lab.
+  Do not park a raw `gltf.scene` and hope the AABB is the size.
+- **Cameras:** kit `rrrCamera` GeoBins are off with the rest of kit. Catalog
+  `cam-wall` / `cam-tripod` sit on the old `dressCameras` sites (gallery west
+  wall, ballroom tripod at cx−5.4 / cz+4.2), not a random wall slot.
+- **Doorway clearance** is `src/game/portal-clearance.js`. One helper: opening
+  keep-out is `w/2 + CLEARANCE_PAD` (0.45) along the width axis and
+  `CLEARANCE_DEPTH` (1.35 m) into both rooms. `catalogPlacements` refuses a slot
+  that overlaps. Hanging chandeliers (`liftY ≥ 2`) and thin rugs do not block a
+  walk. Play-feel work (`bc-a515127a` had no helper/branch when this landed)
+  should import this file, not invent a second AABB.
+
+Cyan / dig / `bed.glb` / `tato.glb` stay out of scope.
+
 ---
 
 ## 4. Cyan follow-up (out of scope — do not implement here)
@@ -271,6 +332,9 @@ Interior interconnect search on `game.play` stays as shipped until that follow-u
 - **Do not invent GLB filenames.** Catalog ids only; skip on 404.
 - **Do not call `dressCatalogFurniture` from `game.js` or `follow-bed.js`.** The hook
   is `dressLooseFurniture`.
+- **Do not invent a second doorway AABB.** Import `portal-clearance.js`.
+- **Do not turn GeoBin kit back on by default.** The gate is `?kitdress=1`.
+- **Do not park a raw `gltf.scene`.** `fitCatalogProp` is the size.
 - **Backticks in template literals** — this project's usual Edit trap.
 
 ---
@@ -288,11 +352,13 @@ W14 must say:
 - every world seed 0..23: picked plan has the ballroom at an env corner
 - `planPasses` rejects a house whose ballroom is not in a corner (control: `homeCorner: false`)
 - `lockedSeatCount({ players: 4 }) === 4` and `lockedSeatCount({ players: 1, chairsQuery: '8' }) === 8`
-- catalog placement table names only real `furn-catalog.js` ids
-- `dressLooseFurniture` is the catalog placer hook
+- catalog placement table names all 24 real `furn-catalog.js` ids
+- `dressLooseFurniture` is the catalog placer hook; kit dress is `?kitdress=1` only
 - all 24 catalog GLBs are real glTF blobs on disk; layout URLs resolve to them
 - authored `order` rows (no `roomType`) still place piano/chandeliers in the ballroom,
   lounges in the study, and armor in the service passage — not the chapel
+- a table centred on D1 (gallery entry) is refused; every emitted placement is
+  `placementsClearOfOpenings` against the authored portals
 
 Play:
 
@@ -301,8 +367,11 @@ Play:
    ballroom centre.
 3. `?plan=gen` → ballroom in a corner, no centre piers, spawn in the ballroom.
 4. `game.play` → one chair unless `?chairs=N`.
-5. Catalog GLBs: knights in corridors / service, lounges in studies, piano + two
-   chandeliers in the ballroom. `__furnLayout.missing` should be empty when Vite is
-   serving `public/`.
+5. Catalog GLBs: the full 24 (inventory in §2.5). Knights / hall-stand / crate in
+   corridors / service, lounge group in studies, piano + two chandeliers + rug in
+   the ballroom, display pieces in the gallery, round table in the chapel. No
+   `rrr_prop_*` in a doorway. `__furnLayout.missing` should be empty when Vite is
+   serving `public/`. Kit urns / depot crates / kit cameras stay off unless
+   `?kitdress=1`.
 
 Cyan / dig-through-inter-room is **not** a test of this PR.

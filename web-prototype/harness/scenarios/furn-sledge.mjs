@@ -4,6 +4,10 @@
  *   node harness/playtest.mjs --view game.play --script harness/scenarios/furn-sledge.mjs \
  *        --port 5288 --q "seed=s4" --shots
  *
+ * Default party/gen/estate dress is the 24 `rrr_prop_*` catalog GLBs (kit OFF).
+ * This census still counts GeoBin kit kinds — pass `?kitdress=1` when you want
+ * the urn / candelabra / kit-camera numbers. F1 (seating lock) does not need it.
+ *
  * Phase A: F1–F5, W1 · Phase B: B1–B3 · Phase C: C1–C5 census
  */
 export default async function furnSledge({ page, note, pass, fail, skip, shot }) {

@@ -40,8 +40,12 @@ import {
   roomLabel, spaceLabel,
 } from '../src/party/mansion.js';
 import { lockedSeatCount } from '../src/game/chair-seats.js';
-import { LAYOUT_CATALOG_IDS, catalogPlacements, catalogUrl, CATALOG_URL_PREFIX, spaceKind } from '../src/game/furn-layout.js';
+import {
+  LAYOUT_CATALOG_IDS, CATALOG_ROOM_ASSIGN, catalogPlacements, catalogUrl,
+  CATALOG_URL_PREFIX, spaceKind, placementsClearOfOpenings, walkHalf,
+} from '../src/game/furn-layout.js';
 import { FURN_SMASH_ASSETS } from '../src/game/furn-catalog.js';
+import { blockedByOpenings, overlapsOpening, openingFootprint } from '../src/game/portal-clearance.js';
 import { ROOMS, hunterVisibleToGuide } from '../src/party/coverage.js';
 import { buildPlan } from './genspike.mjs';
 import { DROP_RATE, GRADES, STALE_MAX, gradeFor, intelFor, intelLine } from '../src/party/intel.js';
@@ -668,8 +672,12 @@ console.log('\nparty-warm — the lobby-warm night');
 
   const catalogIds = new Set(FURN_SMASH_ASSETS.map((a) => a.id));
   const unknown = LAYOUT_CATALOG_IDS.filter((id) => !catalogIds.has(id));
-  t('W14g · layout ids are all real furn-catalog rows',
-    unknown.length === 0 && LAYOUT_CATALOG_IDS.length === 6, unknown.join(',') || LAYOUT_CATALOG_IDS.join(','));
+  const assignKeys = Object.keys(CATALOG_ROOM_ASSIGN);
+  const assignMiss = LAYOUT_CATALOG_IDS.filter((id) => !CATALOG_ROOM_ASSIGN[id]);
+  t('W14g · layout ids are all 24 real furn-catalog rows',
+    unknown.length === 0 && LAYOUT_CATALOG_IDS.length === 24
+    && assignKeys.length === 24 && assignMiss.length === 0,
+    unknown.join(',') || assignMiss.join(',') || LAYOUT_CATALOG_IDS.join(','));
 
   const fake = catalogPlacements([
     { id: 'r0.ballroom', roomType: 'ballroom', x0: 0, x1: 27.2, z0: 0, z1: 15.3 },
@@ -677,10 +685,10 @@ console.log('\nparty-warm — the lobby-warm night');
     { id: 'c0.0', x0: 13, x1: 16, z0: 16, z1: 22 },
   ]);
   const used = [...new Set(fake.map((p) => p.catalogId))];
-  t('W14h · placements only emit catalog ids this slice named',
+  t('W14h · placements only emit catalog ids, and a three-room house still gets the lock',
     used.every((id) => LAYOUT_CATALOG_IDS.includes(id))
     && used.includes('armor') && used.includes('grand-piano') && used.includes('chandelier')
-    && used.includes('wingback'), used.join(','));
+    && used.includes('wingback') && used.length >= 20, used.join(','));
 
   /*
    * The live hook is `dressLooseFurniture`. Callers must not import `dressCatalogFurniture`
@@ -700,6 +708,16 @@ console.log('\nparty-warm — the lobby-warm night');
     && !follow.includes('furn-layout.js')
     && game.includes("import('../game/furn-dress.js')")
     && !game.includes('furn-layout.js'));
+  t('W14i2 · GeoBin kit is gated (`?kitdress=1`), not the default night',
+    /export function kitDressEnabled/.test(dress)
+    && /get\('kitdress'\) === '1'/.test(dress)
+    && /kitOn && room\.materials/.test(dress));
+  const layoutSrc = src('src/game/furn-layout.js');
+  const fitSrc = src('src/game/furn-fit.js');
+  t('W14i3 · mansion catalog dress uses the smash-lab fit (targetH/maxSpan, not AABB-only)',
+    /fitCatalogProp/.test(layoutSrc)
+    && /export function fitCatalogProp/.test(fitSrc)
+    && /from '\.\/furn-fit\.js'/.test(src('src/game/furn-smash-lab.js')));
 
   /*
    * The 24 smash GLBs are in git as normal blobs under public/models/furn/. A previous
@@ -733,24 +751,78 @@ console.log('\nparty-warm — the lobby-warm night');
     && /catalogUrl\(slot\.catalogId\)/.test(src('src/game/furn-layout.js')),
     layoutDisk.map((r) => r && `${r.id}:${r.bytes}`).join(','));
 
-  const authored = catalogPlacements([
-    { id: 'ballroom', order: 'ballroom', x0: 0, x1: 27.2, z0: 0, z1: 15.3 },
+  const authoredSpaces = [
+    { id: 'gallery', order: 'gallery', x0: -13.6, x1: 13.6, z0: -31.0, z1: -24.3 },
     { id: 'study_w', order: 'study', x0: -13.6, x1: -2.0, z0: -24, z1: -8.6 },
-    { id: 'chapel', x0: 4.2, x1: 11.0, z0: -37.8, z1: -31.3 },
+    { id: 'study_e', order: 'study', x0: 2.0, x1: 13.6, z0: -24, z1: -8.6 },
     { id: 'service', x0: -1.7, x1: 1.7, z0: -24, z1: -8.6 },
-  ]);
+    { id: 'ballroom', order: 'ballroom', x0: -13.6, x1: 13.6, z0: -8.3, z1: 7.0 },
+    { id: 'chapel', x0: 4.2, x1: 11.0, z0: -37.8, z1: -31.3 },
+  ];
+  // Authored OPEN doorways (`spaces.js` PORTALS). D1 is the gallery entry John walked into a table.
+  const authoredOpenings = [
+    { id: 'D1', a: 'gallery', b: 'study_w', axis: 'x', x: -8.60, z: -24.15, w: 1.90 },
+    { id: 'D4', a: 'study_w', b: 'ballroom', axis: 'x', x: -8.60, z: -8.45, w: 1.90 },
+    { id: 'D5', a: 'service', b: 'ballroom', axis: 'x', x: 0.00, z: -8.45, w: 1.90 },
+    { id: 'D6', a: 'study_e', b: 'ballroom', axis: 'x', x: 8.60, z: -8.45, w: 1.90 },
+    { id: 'p.chapel', a: 'gallery', b: 'chapel', axis: 'x', x: 5.60, z: -31.15, w: 2.08 },
+  ];
+  const authored = catalogPlacements(authoredSpaces, authoredOpenings);
   const byAuth = (id) => authored.filter((p) => p.catalogId === id);
+  const authoredIds = new Set(authored.map((p) => p.catalogId));
   t('W14m · authored HOUSE_PLAN shape (order, no roomType) still places the lock',
     spaceKind({ id: 'ballroom', order: 'ballroom' }) === 'ballroom'
     && spaceKind({ id: 'study_w', order: 'study' }) === 'study'
     && spaceKind({ id: 'c0.3' }) === null
     && byAuth('grand-piano').every((p) => p.spaceId === 'ballroom')
     && byAuth('chandelier').length === 2 && byAuth('chandelier').every((p) => p.spaceId === 'ballroom')
-    && ['wingback', 'settee', 'chaise'].every((id) => byAuth(id).every((p) => p.spaceId === 'study_w'))
+    && ['wingback', 'settee', 'chaise', 'ottoman'].every((id) => byAuth(id).every((p) => p.spaceId === 'study_w'))
     && byAuth('armor').length >= 1 && byAuth('armor').every((p) => p.spaceId === 'service')
-    && !authored.some((p) => p.spaceId === 'chapel'),
+    && byAuth('table-round').every((p) => p.spaceId === 'chapel')
+    && byAuth('console').every((p) => p.spaceId === 'gallery'),
     authored.map((p) => `${p.catalogId}@${p.spaceId}`).join(','));
+  t('W14n · a full authored house places every one of the 24 smash ids',
+    authoredIds.size === 24
+    && LAYOUT_CATALOG_IDS.every((id) => authoredIds.has(id)),
+    `placed ${authoredIds.size}/24 · ${LAYOUT_CATALOG_IDS.filter((id) => !authoredIds.has(id)).join(',')}`);
+
+  /*
+   * Playtest: a table in the gallery doorway. The keep-out is `portal-clearance.js`.
+   * A 1.45 m table-round centred on D1 must overlap; every catalog slot must not.
+   */
+  const d1 = authoredOpenings[0];
+  const tableHalf = 1.45 / 2;
+  t('W14o · a table on D1 is the playtest overlap (control)',
+    overlapsOpening(d1.x, d1.z, tableHalf, tableHalf, d1)
+    && !!blockedByOpenings(d1.x, d1.z, tableHalf, tableHalf, authoredOpenings)
+    && openingFootprint(d1) != null);
+  t('W14p · catalog slots stay out of every authored opening',
+    placementsClearOfOpenings(authored, authoredOpenings)
+    && !authored.some((p) => {
+      const spec = FURN_SMASH_ASSETS.find((a) => a.id === p.catalogId);
+      return blockedByOpenings(p.x, p.z, walkHalf(spec), walkHalf(spec), authoredOpenings);
+    }),
+    authored.filter((p) => {
+      const spec = FURN_SMASH_ASSETS.find((a) => a.id === p.catalogId);
+      return blockedByOpenings(p.x, p.z, walkHalf(spec), walkHalf(spec), authoredOpenings);
+    }).map((p) => `${p.catalogId}@${p.spaceId}`).join(','));
+
+  // Kit dressCameras: gallery west wall + ballroom tripod (cx-5.4, cz+4.2). Catalog, not GeoBin.
+  const wallCam = byAuth('cam-wall')[0];
+  const tripod = byAuth('cam-tripod')[0];
+  const gal = authoredSpaces.find((s) => s.id === 'gallery');
+  const ball = authoredSpaces.find((s) => s.id === 'ballroom');
+  const galMidZ = (gal.z0 + gal.z1) / 2;
+  const ballMid = { x: (ball.x0 + ball.x1) / 2, z: (ball.z0 + ball.z1) / 2 };
+  t('W14q · catalog cams sit on the kit camera sites, not a random wall',
+    wallCam && wallCam.spaceId === 'gallery'
+    && Math.abs(wallCam.x - (gal.x0 + 0.22)) < 0.4
+    && Math.abs(wallCam.z - galMidZ) < 0.4
+    && tripod && tripod.spaceId === 'ballroom'
+    && Math.hypot(tripod.x - (ballMid.x - 5.4), tripod.z - (ballMid.z + 4.2)) < 0.6,
+    `wall ${wallCam && `${wallCam.x.toFixed(2)},${wallCam.z.toFixed(2)}`} · tripod ${tripod && `${tripod.x.toFixed(2)},${tripod.z.toFixed(2)}`}`);
 }
+
 
 // ---- W15 · THE MAP FEED — a few seconds, then the evil robot eats it ------------------------
 //
