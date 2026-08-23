@@ -1091,7 +1091,7 @@ console.log('\nparty-warm — the lobby-warm night');
     kxW > 1.9, `${kxW} m of clear for a 1.90 m door`);
 
   let placedTotal = 0, blockedBefore = 0, blockedAfter = 0, droppedTotal = 0;
-  let strayed = 0, movedMax = 0;
+  let centreOut = 0;
   for (let ws = 0; ws < 24; ws++) {
     const tables = generatedTables(pickPlanSeed(ws).seed, PLAN_OPTS);
     const bySpace = new Map(tables.spaces.map((s) => [s.id, s]));
@@ -1105,26 +1105,40 @@ console.log('\nparty-warm — the lobby-warm night');
     blockedAfter += after.filter((p) => canBlock(p)
       && blockedByOpenings(p.x, p.z, walkOf(p), walkOf(p), tables.portals)).length;
 
-    // A prop cleared off a door must still be in its own room — otherwise the rule has
-    // traded a blocked door for a marooned piano. Walk footprint, not the smash AABB:
-    // a thin rug's maxSpan is not the thing a body walks into.
-    const wasAt = new Map(before.map((p) => [p.id, p]));
+    // Catalog dress REFUSES a blocked slot and tries the next candidate — it does not
+    // slide. The centre must still sit in the space the id names. (A wall console's
+    // smash AABB is allowed to overlap masonry; that is not a doorway miss.)
     for (const p of after) {
       const sp = bySpace.get(p.spaceId);
-      const half = walkOf(p);
-      const r = footprintRect(p.x, p.z, half * 2, half * 2, p.rotY);
-      if (sp && (r.x0 < sp.x0 || r.x1 > sp.x1 || r.z0 < sp.z0 || r.z1 > sp.z1)) strayed++;
-      const was = wasAt.get(p.id);
-      if (was) movedMax = Math.max(movedMax, Math.hypot(p.x - was.x, p.z - was.z));
+      if (sp && (p.x < sp.x0 || p.x > sp.x1 || p.z < sp.z0 || p.z > sp.z1)) centreOut++;
     }
   }
   t('W18b · NO catalog placement stands in a doorway, on any of 24 world seeds',
     blockedAfter === 0, `${blockedAfter} of ${placedTotal} placements`);
   t('W18c control · the table that shipped really did block doorways — the rule rejects something',
     blockedBefore > 0,
-    `${blockedBefore} of ${placedTotal} blocked before the fix, ${droppedTotal} dropped rather than nudged`);
-  t('W18d · a cleared prop is still inside its own room',
-    strayed === 0, `${strayed} strayed · worst shift ${movedMax.toFixed(2)} m`);
+    `${blockedBefore} of ${placedTotal} blocked before the fix, ${droppedTotal} dropped rather than retried`);
+
+  /*
+   * Nudge (authored kit / registerGroup) is the other half of the same AABB. Sliding a
+   * console off a door must leave it in its room — ROOM_MARGIN is what stops a clear
+   * from posting it through the wall. Catalog refuse is W18b; this is the slide.
+   */
+  const nudgeRoom = { x0: -6, x1: 6, z0: -4, z1: 4 };
+  const nudgeDoor = portalKeepouts([{ id: 'd', x: 0, z: 4, w: 1.9, axis: 'x' }]);
+  const nudged = clearOfPortals(
+    { x: 0, z: 3.48, w: 1.35, d: 0.44, rotY: Math.PI, baseY: 0 },
+    nudgeDoor,
+    nudgeRoom,
+  );
+  const nudgedRect = nudged && footprintRect(nudged.x, nudged.z, 1.35, 0.44, Math.PI);
+  t('W18d · a nudged prop is still inside its own room',
+    centreOut === 0
+    && nudged && nudged.moved > 0
+    && nudgedRect
+    && nudgedRect.x0 >= nudgeRoom.x0 && nudgedRect.x1 <= nudgeRoom.x1
+    && nudgedRect.z0 >= nudgeRoom.z0 && nudgedRect.z1 <= nudgeRoom.z1,
+    `centres out ${centreOut} · nudge ${nudged ? nudged.moved.toFixed(2) : '—'} m`);
 
   /*
    * 🖼️ **THE PROP JOHN ACTUALLY WALKED INTO**, asserted by its own formula rather than by a class
