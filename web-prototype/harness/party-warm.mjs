@@ -806,6 +806,21 @@ console.log('\nparty-warm — the lobby-warm night');
       const spec = FURN_SMASH_ASSETS.find((a) => a.id === p.catalogId);
       return blockedByOpenings(p.x, p.z, walkHalf(spec), walkHalf(spec), authoredOpenings);
     }).map((p) => `${p.catalogId}@${p.spaceId}`).join(','));
+
+  // Kit dressCameras: gallery west wall + ballroom tripod (cx-5.4, cz+4.2). Catalog, not GeoBin.
+  const wallCam = byAuth('cam-wall')[0];
+  const tripod = byAuth('cam-tripod')[0];
+  const gal = authoredSpaces.find((s) => s.id === 'gallery');
+  const ball = authoredSpaces.find((s) => s.id === 'ballroom');
+  const galMidZ = (gal.z0 + gal.z1) / 2;
+  const ballMid = { x: (ball.x0 + ball.x1) / 2, z: (ball.z0 + ball.z1) / 2 };
+  t('W14q · catalog cams sit on the kit camera sites, not a random wall',
+    wallCam && wallCam.spaceId === 'gallery'
+    && Math.abs(wallCam.x - (gal.x0 + 0.22)) < 0.4
+    && Math.abs(wallCam.z - galMidZ) < 0.4
+    && tripod && tripod.spaceId === 'ballroom'
+    && Math.hypot(tripod.x - (ballMid.x - 5.4), tripod.z - (ballMid.z + 4.2)) < 0.6,
+    `wall ${wallCam && `${wallCam.x.toFixed(2)},${wallCam.z.toFixed(2)}`} · tripod ${tripod && `${tripod.x.toFixed(2)},${tripod.z.toFixed(2)}`}`);
 }
 
 

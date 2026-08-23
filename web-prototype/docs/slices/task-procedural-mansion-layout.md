@@ -278,9 +278,9 @@ John playtested the merged PR #10 house and said none of the furniture matched t
 - **Scale:** `dressCatalogFurniture` wraps the GLB and runs `fitCatalogProp`
   (`furn-fit.js`) — the same `targetH` / `maxSpan` / 1.55 boost as the smash lab.
   Do not park a raw `gltf.scene` and hope the AABB is the size.
-- **Cameras:** kit `rrrCamera` GeoBins are off with the rest of kit. The smash
-  cams on the default night are catalog `cam-wall` (gallery) and `cam-tripod`
-  (ballroom).
+- **Cameras:** kit `rrrCamera` GeoBins are off with the rest of kit. Catalog
+  `cam-wall` / `cam-tripod` sit on the old `dressCameras` sites (gallery west
+  wall, ballroom tripod at cx−5.4 / cz+4.2), not a random wall slot.
 - **Doorway clearance** is `src/game/portal-clearance.js`. One helper: opening
   keep-out is `w/2 + CLEARANCE_PAD` (0.45) along the width axis and
   `CLEARANCE_DEPTH` (1.35 m) into both rooms. `catalogPlacements` refuses a slot

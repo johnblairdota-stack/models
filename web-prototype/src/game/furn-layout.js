@@ -69,9 +69,9 @@ export const CATALOG_ROOM_ASSIGN = {
   vitrine:        { rooms: ['gallery', 'study'], note: 'display case' },
   sideboard:      { rooms: ['gallery', 'ballroom'], note: 'serving board on a long wall' },
   'pedestal-bust':{ rooms: ['gallery', 'chapel'], note: 'sculpture on a short wall' },
-  'cam-wall':     { rooms: ['gallery', 'study'], note: 'RRR wall camera, Meshy smash mesh' },
+  'cam-wall':     { rooms: ['gallery', 'study'], note: 'catalog smash cam at kit dressCameras wall sites' },
   'table-round':  { rooms: ['chapel', 'study'], note: 'small centre table' },
-  'cam-tripod':   { rooms: ['ballroom', 'service'], note: 'RRR floor camera, clear of chair ring' },
+  'cam-tripod':   { rooms: ['ballroom', 'service'], note: 'catalog smash cam at kit cam.ballroom.tripod' },
 };
 
 /** Vite serves `public/` at `/`. Same prefix `furn-smash-lab.js` already loads. */
@@ -186,9 +186,9 @@ const RECIPES = [
   { id: 'vitrine',         copies: 1, place: 'wall',    inset: 0.62, walls: ['n', 's'] },
   { id: 'sideboard',       copies: 1, place: 'wall',    inset: 0.70, walls: ['s', 'n'] },
   { id: 'pedestal-bust',   copies: 1, place: 'wall',    inset: 0.80, walls: ['e', 'w'] },
-  { id: 'cam-wall',        copies: 1, place: 'wall',    inset: 0.28, walls: WALLS_ALL },
+  { id: 'cam-wall',        copies: 1, place: 'cam-wall' },
   { id: 'table-round',     copies: 1, place: 'inboard', ox: 0.00, oz: 0.00, rotY: 0.15 },
-  { id: 'cam-tripod',      copies: 1, place: 'inboard', ox: -0.30, oz: 0.26, rotY: 2.2, clearCentre: 5.2 },
+  { id: 'cam-tripod',      copies: 1, place: 'cam-tripod', clearCentre: 5.2 },
 ];
 
 function pickSpaces(spaces, assign, pick) {
@@ -226,6 +226,27 @@ function candidatesFor(recipe, space, spec) {
   if (recipe.place === 'centre') {
     const c = mid(space);
     out.push({ x: c.x, z: c.z, rotY: 0 });
+    return out;
+  }
+  if (recipe.place === 'cam-wall') {
+    // Same mouths `dressCameras` used for kit `rrrCamera` — catalog GLB, not GeoBin.
+    const c = mid(space);
+    out.push(
+      { x: space.x0 + 0.22, z: c.z, rotY: Math.PI / 2 },
+      { x: space.x1 - 0.22, z: c.z, rotY: -Math.PI / 2 },
+      { x: c.x, z: space.z0 + 0.22, rotY: 0 },
+      { x: c.x + Math.min(3.5, (space.x1 - space.x0) * 0.12), z: space.z1 - 0.22, rotY: Math.PI },
+    );
+    return out;
+  }
+  if (recipe.place === 'cam-tripod') {
+    // Kit `cam.ballroom.tripod` at (cx-5.4, cz+4.2), then mirrors if that slot is blocked.
+    const c = mid(space);
+    out.push(
+      { x: c.x - 5.4, z: c.z + 4.2, rotY: 2.2 },
+      { x: c.x + 5.4, z: c.z + 4.2, rotY: -2.2 },
+      { x: c.x - 5.4, z: c.z - 4.2, rotY: 0.8 },
+    );
     return out;
   }
   if (recipe.place === 'inboard') {
