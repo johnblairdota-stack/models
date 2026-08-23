@@ -497,12 +497,21 @@ export default async function partyHost({ params }) {
 
     // 📺 `on-run` is what lets the night skin give the picture 90% of the television — see
     // `TV_FRAME_PCT` and the `.night.on-run` block in `night-skin.js`.
+    /*
+     * ?? THE CHROME PRINTS THE SHOW BEAT, NOT THE PHASE MACHINE.
+     *
+     * `playEpisode` resolves a whole episode synchronously, so by the time the TV is on the live
+     * expedition `state.phase` is already VERDICT. Printing both made the top-right read
+     * "EXPEDITION · EPISODE 2 · VERDICT" while Ellie was still walking — playcritique F4, and a
+     * watcher who glances at the corner thinks the night is over. The durable beat on the wire is
+     * `show` (`ui.beat`); that is the only word this chrome may say.
+     */
     const onIntro = show === 'casting' && ui.introsSent && !ui.introsDone;
     root.className = `night${onRun ? ' on-run' : ''}${onIntro ? ' on-intro' : ''}`;
     root.innerHTML = `
       <div class="night-top">
         <div class="night-brand">Prime Time</div>
-        <div class="night-phase">${esc(show.toUpperCase())} · episode ${esc(String(episode))} · ${esc(phase)}</div>
+        <div class="night-phase">${esc(show.toUpperCase())} · episode ${esc(String(episode))}</div>
       </div>
       ${onRun ? '' : `<div class="night-line">${esc(LINE)}</div>`}
       <div class="night-main">${body}</div>`;
