@@ -11,6 +11,10 @@ import { fitCamera } from './hunter-stage.js';
  * Do not overload `mesh.animated` — that table is the Lumi / Friendly player set, and a
  * stale `?clip=` there already once rendered the wrong robot with no error.
  *
+ * In-game wiring is a different file: `createHunterMeshAvatar` + `?hunterm=1` on
+ * `game.play` (PLAYHUNTER.bat). This view stays the clip picker. Do not fold the game
+ * adapter into here.
+ *
  * ⚠️ MATERIALS STAY AS THEY ARRIVE. The hunter pack is textured in Meshy. This view does
  * not run the identity kit, the wordmark, or `shellWhite()` — those exist to dress a
  * material-less player body. Replacing a baked atlas with the procedural shell would throw

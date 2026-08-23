@@ -526,10 +526,33 @@ export default async function view(args = {}) {
     return 'auto';
   })();
 
+  /*
+   * 🤖 `?hunterm=1` DRIVES THE HUNTER AS THE MESHY STAGE-3 MESH. Opt-in, deliberately:
+   * extra-arm weights are a biped approximation, contact phase is unmeasured, and
+   * existing playtests must stay on the procedural `buildHunter`. Omit the flag or
+   * pass `?hunterm=0` for yesterday's hunter. `PLAYHUNTER.bat` opens this on.
+   *
+   * Same load shape as `?mesh=1` / `createMeshAvatar`: awaited before the AI is
+   * constructed, and a failed pack falls back to procedural with the reason on the
+   * console so a missing GLB cannot take the whole run with it.
+   */
+  let hunterAvatar = null;
+  if ((new URLSearchParams(location.search).get('hunterm') ?? '0') === '1') {
+    try {
+      const { createHunterMeshAvatar } = await import('../characters/hunter-mesh-avatar.js');
+      hunterAvatar = await createHunterMeshAvatar({ height: 1.7 });
+      console.log('[game] hunter: MESHY mesh avatar (stage-3 clips: walk / run / attack / double-combo)');
+    } catch (e) {
+      console.error('[game] hunter mesh avatar failed to load, falling back to the procedural hunter:', e);
+      hunterAvatar = null;
+    }
+  }
+
   const hunter = new HunterAI({
     room, scene, rng, debris, dust, weapons,
     position: room.spawn.hunter.clone(),
     noise, bangPolicy: BANG_POLICY,
+    meshAvatar: hunterAvatar,
   });
   // seeded one part short of stage 2, so the first limb it takes in the demo is the one
   // that grows it — the escalation has to be visible inside a 26 second loop
@@ -1833,8 +1856,9 @@ export default async function view(args = {}) {
     hunter.lastKnown.copy(room.spawn.hunter);
     if (hunter.stage !== 1) {
       hunter.stage = 1;
-      for (const s of [1, 2, 3]) hunter.rigs[s].root.visible = s === 1;
     }
+    // Mesh mode stays on the Meshy body; procedural-only flips stage-1 back on.
+    hunter.syncVisuals();
     // radius tracks stage and is only rewritten at the END of a growth, so a round that reset
     // out of stage 3 kept a 0.66 m body on a stage-1 rig and could not fit through D7.
     hunter.radius = 0.30 + hunter.stage * 0.12;
@@ -2539,6 +2563,8 @@ export default async function view(args = {}) {
       arms: player?.caps?.arms ?? null,
       playerBody: avatar?.sourceFile ?? (avatar ? 'unknown' : 'procedural fallback'),
       playerClips: avatar?.clipNames?.length ?? 0,
+      hunterBody: hunterAvatar?.sourceFile ?? (hunter.meshMode ? 'unknown' : 'procedural'),
+      hunterClip: hunterAvatar?.clip ?? null,
     };
   };
 
