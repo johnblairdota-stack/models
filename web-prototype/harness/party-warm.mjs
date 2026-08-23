@@ -29,8 +29,9 @@ import {
   CUE_CAST_KEYS, CUE_KEYS, CUE_KINDS, FOLLOW_FORBIDDEN, FOLLOW_KEYS, FOLLOW_VIEW,
   IDENTITY_SECRETS, INTRO_FOV, INTRO_FRAME_PCT, MISSION_PHASES, MOVE_KEYS, SPATIAL_WORDS,
   STICK_DEADZONE, STICK_RELEASE, STICK_TURN, TV_FRAME_PCT,
-  WARM_KEYS, WARM_STAGES, WORLD_KEYS, cueViolations, followParams, followUrl, moveViolations,
-  stickHeading, stickMag, stickRef, warmLabel, warmPct, warmUrl, warmViolations, worldViolations,
+  WARM_KEYS, WARM_STAGES, WORLD_KEYS, cueViolations, followParams, followUrl, liveRunShot,
+  lookYaw, moveViolations, stickCamMove, stickHeading, stickMag, stickRef, warmLabel, warmPct,
+  warmUrl, warmViolations, worldViolations,
 } from '../src/party/follow.js';
 import {
   BLEED_CONE, BLEED_PAST, bleedCoolPos, bleedKeyAngle, facingPortal, isPastSpace,
@@ -1072,7 +1073,7 @@ console.log('\nparty-warm — the lobby-warm night');
   const bedSrcFeel = await readFile(new URL('../src/game/follow-bed.js', import.meta.url), 'utf8');
   t('W15p · the phone nub and the bed both read the exported zone, not a restated 0.12',
     /STICK_DEADZONE/.test(phonePad) && !/> 0\.12/.test(phonePad)
-    && /stickMag\(/.test(bedSrcFeel) && /STICK_TURN/.test(bedSrcFeel));
+    && /stickCamMove\(/.test(bedSrcFeel) && /stickMag\(/.test(bedSrcFeel));
 }
 
 // ---- W16 · PR B cyan policy (THREE-free) — envelope keeps G, inter-room does not ------------
@@ -1489,6 +1490,85 @@ console.log('\nparty-warm — the lobby-warm night');
     && !/c\.runEnd \|\| 'TIME'/.test(phoneSrc)
     && /THE OUTCOME WORD IS THE ONE FACT/.test(phoneSrc)
     && /same honesty as TV/.test(phoneSrc));
+}
+
+// ---- W25 · CHASE-ONLY + CAMERA-RELATIVE STICK DURING A LIVE RUN -----------------------------
+//
+// John locked Spine A: during an expedition both the TV follow and the runner phone use a
+// continuous chase camera, and the stick is camera-relative (up = into the shot). The old
+// body-heading latch + `move:{x:0,y:mag}` was the right answer while the operator cut to
+// `lead`; it is the wrong answer now that the cut is gone.
+{
+  t('W25 · a live run locks the operator on chase',
+    liveRunShot('run') === 'chase'
+    && liveRunShot('run', null) === 'chase');
+  t('W25a · warm and intros do not — they keep their own cameras',
+    liveRunShot('warm') === null && liveRunShot('intros') === null);
+  t('W25b · a typed ?shot= instrument still pins — host slots never emit one',
+    liveRunShot('run', 'lead') === 'lead'
+    && liveRunShot('run', 'shoulder') === 'shoulder'
+    && liveRunShot('run', 'doorway') === 'doorway'
+    && liveRunShot('run', 'leed') === 'chase');
+
+  const fwd = (yaw) => [Math.sin(yaw), Math.cos(yaw)];
+  const right = (yaw) => [-Math.cos(yaw), Math.sin(yaw)];
+  const strafe = (x, y, yaw) => {
+    const vx = Math.sin(yaw) * y - Math.cos(yaw) * x;
+    const vz = Math.cos(yaw) * y + Math.sin(yaw) * x;
+    return [vx, vz];
+  };
+  const near = (a, b) => Math.abs(a[0] - b[0]) < 1e-9 && Math.abs(a[1] - b[1]) < 1e-9;
+  const norm = (v) => {
+    const m = Math.hypot(v[0], v[1]) || 1;
+    return [v[0] / m, v[1] / m];
+  };
+
+  t('W25c · stickCamMove keeps the thumb\'s direction and the deadzoned magnitude',
+    stickCamMove(0, 0).x === 0 && stickCamMove(0, 0).y === 0
+    && stickCamMove(0, 1).x === 0 && stickCamMove(0, 1).y === 1
+    && stickCamMove(1, 0).x === 1 && stickCamMove(1, 0).y === 0
+    && stickCamMove(STICK_DEADZONE, 0).x === 0
+    && stickCamMove(0, STICK_DEADZONE).y === 0);
+
+  const up = stickCamMove(0, 1);
+  const left = stickCamMove(-1, 0);
+  t('W25d · push up at any chase yaw walks where the lens points (player.js strafe)',
+    [[0], [0.4], [Math.PI / 2], [Math.PI], [-1.1]].every(([yaw]) => (
+      near(norm(strafe(up.x, up.y, yaw)), fwd(yaw))
+    )));
+  t('W25e · push left strafes along the lens\' left, not a heading latch',
+    [[0], [0.7], [Math.PI / 2]].every(([yaw]) => (
+      near(norm(strafe(left.x, left.y, yaw)), [-right(yaw)[0], -right(yaw)[1]])
+    )));
+  t('W25f · lookYaw is the house yaw of a flattened look direction',
+    lookYaw(0, 1) === 0
+    && Math.abs(lookYaw(1, 0) - Math.PI / 2) < 1e-9
+    && Math.abs(Math.abs(lookYaw(0, -1)) - Math.PI) < 1e-9);
+
+  const bedSrc = await readFile(new URL('../src/game/follow-bed.js', import.meta.url), 'utf8');
+  const phoneSrc = await readFile(new URL('../src/views/party-phone.js', import.meta.url), 'utf8');
+  const followSrc = await readFile(new URL('../src/party/follow.js', import.meta.url), 'utf8');
+  t('W25g · the bed drives with stickCamMove + the operator basis, not heading+forward-only',
+    /stickCamMove\(/.test(bedSrc)
+    && /operator\.basisYaw\(/.test(bedSrc)
+    && /liveRunShot\(/.test(bedSrc)
+    && !/perf\.stickRef/.test(bedSrc)
+    && !/move: \{ x: 0, y: mag \}/.test(bedSrc));
+  t('W25h · a live run refuses mid-run production cuts to shoulder / lead / doorway',
+    /liveRunShot\(mode, opts\.pinShot\) === 'chase'\) return/.test(bedSrc)
+    && /lockShot: liveRunShot\(mode, opts\.pinShot\)/.test(bedSrc)
+    && /until = 1e9/.test(bedSrc));
+  t('W25i · the runner phone embeds the follow slot and dropped the eyes-on-TV copy',
+    /warmUrl\(/.test(phoneSrc)
+    && /runner-chase-layer/.test(phoneSrc)
+    && /sendChaseCue/.test(phoneSrc)
+    && !/Eyes on the TV/.test(phoneSrc)
+    && /Walk into the shot/.test(phoneSrc));
+  t('W25j · the guide path is still the map — chase is not mounted on that sheet',
+    /guideMapSvg\(/.test(phoneSrc)
+    && /iAmGuide/.test(phoneSrc)
+    && /The map is yours/.test(phoneSrc)
+    && !/guideMapSvg/.test(followSrc));
 }
 
 

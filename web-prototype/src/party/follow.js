@@ -527,11 +527,11 @@ export const STICK_TURN = 6.4;
  *   · roll the thumb   → the body follows the thumb
  *   · pull back        → turn around and walk back
  *
- * ⚠️ **NOT CAMERA-RELATIVE, AND THAT IS THE OBVIOUS ALTERNATIVE.** A third-person stick is
- * usually measured against the camera, and this camera is a produced one that CUTS: `lead` sits
- * in front of the runner looking back, so screen-left is world-right in that shot and the
- * controls would invert on an edit the player did not ask for. The body's own heading is the only
- * frame here that a cut cannot move.
+ * ⚠️ **THIS LATCH IS NOT THE LIVE RUN ANY MORE.** It stays exported because the sign and the
+ * spin it stopped are still the right diagnosis of a heading measured from itself, and the
+ * warm gate holds both. The driven expedition now uses `stickCamMove` in the chase lens'
+ * horizontal basis — see `liveRunShot` — because the operator no longer cuts mid-run, so the
+ * reason this frame refused the camera (a `lead` invert) is gone.
  *
  * @param {number|null} prevRef  the latch, or null when the stick was centred
  * @param {number} x  stick right     @param {number} y  stick forward
@@ -560,6 +560,59 @@ export function stickMag(x, y) {
   if (m <= STICK_DEADZONE) return 0;
   const t = Math.min(1, (m - STICK_DEADZONE) / (1 - STICK_DEADZONE));
   return t * t * t * (t * (t * 6 - 15) + 10);
+}
+
+/**
+ * 🎥 **CAMERA-RELATIVE STICK — the live run's move, once the operator is chase-only.**
+ *
+ * `Player._stepGround` is already aim-relative (`sin/cos aimYaw` × `move.y/x`). So "up = into
+ * the shot" is one product: flatten the chase lens onto Y, put that yaw on `aimYaw`, and hand
+ * the deadzoned stick through as real strafe+forward (`move.x` + `move.y`). The body faces the
+ * travel via `_targetFacing`. Genshin / Roblox with one stick and no look pad.
+ *
+ * Direction is the thumb's; magnitude is `stickMag` (radial deadzone + smootherstep). A raw
+ * hypot would reintroduce the rim lurch W15k holds down.
+ *
+ * @param {number} x  stick right, −1..1
+ * @param {number} y  stick forward, −1..1
+ * @returns {{x:number,y:number}}
+ */
+export function stickCamMove(x, y) {
+  const sx = Number(x) || 0;
+  const sy = Number(y) || 0;
+  const mag = stickMag(sx, sy);
+  const raw = Math.hypot(sx, sy);
+  if (raw <= 0 || mag <= 0) return { x: 0, y: 0 };
+  const s = mag / raw;
+  return { x: sx * s, y: sy * s };
+}
+
+/**
+ * Horizontal yaw of a look direction (Y flattened). Same convention as `player.aimYaw`:
+ * forward = `(sin yaw, cos yaw)`.
+ */
+export function lookYaw(dx, dz) {
+  return Math.atan2(Number(dx) || 0, Number(dz) || 0);
+}
+
+/**
+ * 🎬 **CHASE-ONLY WHILE THE EXPEDITION IS ON THE AIR.**
+ *
+ * The operator still knows four shots. During a live run it is not allowed to use the other
+ * three: auto-cuts to `shoulder` / `lead` / `doorway` invert a camera-relative stick and take
+ * the runner's eyes off the frame their thumb is steering. Warm / intros do not go through
+ * this lock — they have their own cameras.
+ *
+ * `pinShot` is the `?shot=` instrument. A developer who typed `?shot=lead` still gets lead.
+ * A host-built slot never emits that param (`FOLLOW_INSTRUMENTS` / F9d).
+ *
+ * @param {string} mode  `warm` · `intros` · `run`
+ * @param {string|null} [pinShot]
+ * @returns {'chase'|string|null}
+ */
+export function liveRunShot(mode, pinShot = null) {
+  if (pinShot && SHOT_NAMES.includes(pinShot)) return pinShot;
+  return mode === 'run' ? 'chase' : null;
 }
 
 export function moveViolations(msg) {

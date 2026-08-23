@@ -29,8 +29,10 @@
  * catches the right key carrying a wrong value.
  */
 
+import { readFileSync } from 'node:fs';
 import { createRoom } from '../src/party/room.js';
 import { audienceFor, entitled } from '../net/party/entitle.js';
+import { liveRunShot } from '../src/party/follow.js';
 
 const SEEDS = [11, 12, 13, 14, 15];
 const COUNT = 8;
@@ -332,6 +334,30 @@ t('I6 · only evil sockets get teammates, and the set equals ground truth', R.I6
 t('I7 · a take reveals nothing, and no survivor frame changes shape across it', R.I7,
   R.detail.I7 || 'alignment absent, role absent, shape unchanged');
 t('I8 · the flyover reaches one phone and never the TV', R.I8, R.detail.I8 || 'party-loop.md "Do not" holds');
+
+// ---- I10 · chase-only / camera-relative does not punch a new hole in the matrix --------------
+//
+// The runner phone now embeds the follow slot. That slot has no socket and cannot be handed
+// flyover / lid / plan. This block holds the policy and the source so a later "helpfully
+// give the phone its own mansion socket" fails here, not in a lounge.
+{
+  const phoneSrc = readFileSync(new URL('../src/views/party-phone.js', import.meta.url), 'utf8');
+  t('I10 · a live run is chase-only — the operator lock is a follow-slot policy, not a new frame field',
+    liveRunShot('run') === 'chase' && liveRunShot('warm') === null);
+  t('I10a · the runner chase embed is the warm follow URL, not a second party socket',
+    /warmUrl\(/.test(phoneSrc)
+    && /sandbox/.test(phoneSrc)
+    && /allow-scripts allow-same-origin/.test(phoneSrc)
+    && (phoneSrc.match(/new PartyNightClient/g) || []).length === 1);
+  t('I10b · the guide sheet still paints the map and never mounts that chase layer',
+    /guideMapSvg\(/.test(phoneSrc)
+    && /The map is yours/.test(phoneSrc)
+    && /iAmGuide/.test(phoneSrc));
+  t('I10c · flyover is still a guide-only matrix row — I8\'s rule did not move',
+    audienceFor('flyover.jam') === 'guide'
+    && audienceFor('flyover.marks[].kind') === 'guide'
+    && audienceFor('flyover.marks[].x') === 'guide');
+}
 
 // ---------------------------------------------------------------- I9 · the controls
 /**

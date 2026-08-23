@@ -271,6 +271,20 @@ export function injectNightSkin() {
       border:1px solid rgba(var(--night-accent-rgb), .28); }
     .stick-btn.on { background:var(--night-accent); color:var(--night-deep); }
     .stick-btn.swing.on { background:var(--night-bad); }
+    /* 🎥 RUNNER CHASE — the follow slot sits behind the pad, never inside it.
+       opacity, not display:none: a hidden iframe is a paused bake (party-host warm note). */
+    .runner-chase-layer { position:fixed; inset:0; z-index:0; pointer-events:none;
+      background:var(--night-deep); opacity:0; }
+    .runner-chase-layer.on { opacity:1; }
+    .runner-chase-layer iframe.runner-chase { width:100%; height:100%; border:0; display:block; }
+    .night.phone.chase-live { background:transparent; }
+    .night.phone.chase-live .phone-top,
+    .night.phone.chase-live h1,
+    .night.phone.chase-live .hint,
+    .night.phone.chase-live .here,
+    .night.phone.chase-live .goal { text-shadow:0 2px 12px rgba(0,0,0,.92); }
+    .night.phone.chase-live .stick-wrap { margin-top:auto; }
+    .night.phone.chase-live .stick { box-shadow:0 10px 28px rgba(0,0,0,.45); }
     /* 🔨 THE PAD'S OWN ANSWER TO A SWING. The button's .on flash is under the thumb that is
        covering it, so it confirms nothing to the person who tapped it — this line sits clear of
        both the stick and the buttons.
