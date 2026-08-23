@@ -47,6 +47,13 @@ export default async function partyPhone({ params }) {
      * metronome. See `startPad`.
      */
     pad: { x: 0, y: 0, run: false, swing: false, sent: '', timer: 0 },
+    /**
+     * 📳 The pad's answer to the last thing the thumb did. `label` is the word under the stick,
+     * `kind` is the CSS modifier, `timer` wipes it. See `padFx`.
+     */
+    padFx: { label: '', kind: '', timer: 0 },
+    /** The last `mission.*` this phone painted, so the BREAK can be told from the steady state. */
+    missionSeen: null,
     /** How far along the TV's mansion bake is — fanned to every phone, not just the host. */
     warm: '',
     warmPct: 0,
@@ -361,6 +368,30 @@ export default async function partyPhone({ params }) {
      * whole SVG was rebuilt on that rhythm and the interference animation restarted from frame
      * one each time. The stamp is the sheet's SHAPE; a circle is not a shape.
      */
+    /**
+     * 🔨 **THE ONE SWING THE HOUSE ACTUALLY REPORTS — the painting going down.**
+     *
+     * ⚠️ **READ OFF THE MISSION EVENT, NOT INVENTED HERE.** `mission.return` is appended by
+     * `src/party/room.js` off the TV's world report, which is the only process that owns a
+     * mansion and therefore the only one that knows a blow landed. This phone is told; it does
+     * not decide. That is why there is no HIT on an ordinary swing — nothing on the wire carries
+     * one, and a pad that said HIT on a swing at empty air would be lying to the person aiming.
+     *
+     * Fired from `paint()` because `paint()` runs on every socket message, and the transition is
+     * the whole signal: `missionSeen` is armed by the first expedition paint, so joining a night
+     * that is already on its way home does not buzz a smash that happened before you looked.
+     */
+    if (iAmRunner && beat === 'expedition') {
+      if (state.missionSeen && state.missionSeen !== missionPhase && missionPhase === 'mission.return') {
+        // Buzz-gap-BUZZ. A single long pulse reads as an error tone on a phone; two beats read as
+        // an impact, and this is the only moment in the run that has earned one.
+        padFx('Smash!', 'smash', [0, 45, 55, 120]);
+      }
+      state.missionSeen = missionPhase;
+    } else {
+      state.missionSeen = null;
+    }
+
     const liveStamp = beat === 'expedition' && !state.stage
       ? `${beat}:${iAmRunner ? 'run' : iAmGuide ? 'guide' : 'watch'}:${missionPhase}`
         + `:${hasCard() ? 'card' : 'nocard'}`
@@ -427,7 +458,8 @@ export default async function partyPhone({ params }) {
               <button class="stick-btn" id="run-btn" type="button">Run</button>
               <button class="stick-btn swing" id="swing-btn" type="button">Swing</button>
             </div>
-          </div>`;
+          </div>
+          ${padFxHtml()}`;
       } else if (iAmGuide) {
         /*
          * 🗺️ **THE GUIDE FINALLY HAS THE MAP THEY HAVE BEEN TOLD THEY HAVE.** D13 shipped the
@@ -603,10 +635,68 @@ export default async function partyPhone({ params }) {
       swingBtn.addEventListener('pointerdown', () => {
         swingBtn.classList.add('on');
         sendPad(true);
+        // Straight after the send, so the buzz dates the message rather than the render. 18 ms is
+        // a tick, not a rumble: this fires as fast as the player can tap and a long pattern would
+        // queue up behind itself into one continuous drone.
+        padFx('Swing', '', 18);
         setTimeout(() => swingBtn.classList.remove('on'), 220);
       });
     }
     startPad();
+  }
+
+  /**
+   * 📳 **THE PAD ANSWERS THE THUMB — a word and a buzz, and NOTHING ELSE CHANGES.**
+   *
+   * 🚨 **THE SWING WAS THE ONE INPUT ON THIS SCREEN WITH NO RECEIPT.** The stick answers itself:
+   * the nub moves under the thumb and the body walks on the TV. The swing had a 220 ms tint on
+   * the button — under the finger that is pressing it — and then a hammer that lands somewhere
+   * on a television the player is not looking at while they aim. So a tap that went out and a tap
+   * that was eaten by a scroll gesture felt identical, and the honest player read was "this thing
+   * is broken", which is the read a controller must never produce.
+   *
+   * ⚠️ **THE BUZZ IS FIRED WHERE THE MESSAGE IS SENT, NOT WHERE A RESULT COMES BACK.** It is a
+   * confirmation of the INPUT — the same promise a physical button's click makes — and it has to
+   * be immediate to keep it. Waiting on the mansion would put a round trip plus a swing
+   * animation between the tap and the buzz, which is how haptics stop reading as your own hand.
+   *
+   * `navigator.vibrate` is absent on desktop and iOS Safari, and throws on nothing; the `?.` plus
+   * the try is so that a phone that cannot buzz still gets the word. The word is the fallback.
+   */
+  function haptic(pattern) {
+    try { navigator.vibrate?.(pattern); } catch { /* no motor, or the tab is not the top level */ }
+  }
+
+  function padFx(label, kind = '', pattern = 0) {
+    state.padFx.label = label;
+    state.padFx.kind = kind;
+    haptic(pattern);
+    paintPadFx();
+    clearTimeout(state.padFx.timer);
+    state.padFx.timer = setTimeout(() => {
+      state.padFx.label = '';
+      state.padFx.kind = '';
+      paintPadFx();
+    }, kind === 'smash' ? 1500 : 520);
+  }
+
+  /**
+   * ⚠️ WRITES THE ELEMENT IN PLACE AND NEVER CALLS `paint()`. A swing is a tap-rate event and
+   * `paint()` rebuilds the sheet — repainting on every swing would destroy the stick under a
+   * thumb that is still holding it, which is the exact failure the `liveStamp` above exists to
+   * prevent. The label is emitted from `state` by `padFxHtml` too, so a repaint the SHOW causes
+   * (the mission phase changing is one) carries the word across the rebuild instead of eating it.
+   */
+  function paintPadFx() {
+    const el = root.querySelector('[data-pad-fx]');
+    if (!el) return;
+    el.textContent = state.padFx.label;
+    el.className = `pad-fx${state.padFx.label ? ' on' : ''}${state.padFx.kind ? ` ${state.padFx.kind}` : ''}`;
+  }
+
+  function padFxHtml() {
+    return `<div class="pad-fx${state.padFx.label ? ' on' : ''}${state.padFx.kind ? ` ${state.padFx.kind}` : ''}"
+      data-pad-fx aria-live="polite">${esc(state.padFx.label)}</div>`;
   }
 
   function sendPad(swing = false) {
@@ -630,6 +720,11 @@ export default async function partyPhone({ params }) {
   }
 
   function stopPad() {
+    // The word goes with the pad. A sheet that is no longer the pad has no element to write into,
+    // and a stale label surviving into the next expedition would announce last episode's smash.
+    clearTimeout(state.padFx.timer);
+    state.padFx.label = '';
+    state.padFx.kind = '';
     if (!state.pad.timer) return;
     clearInterval(state.pad.timer);
     state.pad.timer = 0;
