@@ -3520,9 +3520,9 @@ export default async function view(args = {}) {
     })());
   }
   /**
-   * 🪑 Phase B — desks / consoles / crates into study, ballroom and gallery, plus the
-   * smash catalog (armor / lounges / piano / chandeliers). `dressLooseFurniture` is the
-   * one placer; catalog ids are not dressed from a second call site.
+   * 🪑 Phase B — smash catalog (all 24 `rrr_prop_*` ids) through `dressLooseFurniture`.
+   * GeoBin kit dress is off unless `?kitdress=1`. Catalog ids are not dressed from a
+   * second call site.
    */
   if (_estate?.port && new URLSearchParams(location.search).get('furn') !== '0') {
     await engine.work((async () => {

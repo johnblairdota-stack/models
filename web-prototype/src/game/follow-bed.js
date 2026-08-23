@@ -573,8 +573,10 @@ export async function buildFollowBed(engine, opts = {}) {
     : null;
   /*
    * Loose + catalog smashables through the one placer (`dressLooseFurniture`) — not chairs.
+   * Default dress is the 24 `rrr_prop_*` catalog ids; GeoBin kit is `?kitdress=1` only.
    * Chairs wait for the intros cue so the count is the joined cast (`intro-bed.js`).
-   * Missing catalog GLBs skip (`__furnLayout.missing`).
+   * Missing catalog GLBs skip (`__furnLayout.missing`). Doorway keep-out is
+   * `portal-clearance.js` (shared with any play-feel work).
    */
   try {
     const { dressLooseFurniture } = await import('./furn-dress.js');

@@ -9,6 +9,7 @@ import { FurnProp, furnBox, FURN_HP } from '../destruction/furnprop.js';
 import { makeFurnHandlers } from '../destruction/furn-fx.js';
 import { FurnVoxelBody } from '../destruction/furn-voxels.js';
 import { FURN_SMASH_ASSETS } from './furn-catalog.js';
+import { FURN_FIT_BOOST, fitCatalogProp } from './furn-fit.js';
 
 export const LAB = {
   x0: -26, x1: 26, z0: -11, z1: 11, y0: 0, y1: 7.5,
@@ -17,7 +18,7 @@ export const LAB = {
   rowZ: 3.6,
   cols: 12,
   /** Extra uniform scale after targetH/maxSpan — Meshy native chairs read as toys next to UNIT-4H. */
-  boost: 1.55,
+  boost: FURN_FIT_BOOST,
 };
 
 const HIT_H = 1.25;
@@ -47,39 +48,8 @@ function boxNormal(b, o, d, t) {
   return new THREE.Vector3(0, 0, 1);
 }
 
-function measure(scene) {
-  scene.updateMatrixWorld(true);
-  const box = new THREE.Box3().setFromObject(scene);
-  const size = new THREE.Vector3();
-  box.getSize(size);
-  return { box, size };
-}
-
-/** Meshy rugs are a disc in local XY (thin Z). Pin them to the floor. */
-function layFlat(scene) {
-  scene.rotation.set(-Math.PI / 2, 0, 0);
-  scene.updateMatrixWorld(true);
-  const { size } = measure(scene);
-  if (size.y <= size.x && size.y <= size.z) return;
-  scene.rotation.set(0, 0, Math.PI / 2);
-  scene.updateMatrixWorld(true);
-}
-
 function fitProp(scene, spec) {
-  if (spec.thin) layFlat(scene);
-  let { box, size } = measure(scene);
-  const span = Math.max(size.x, size.z, 1e-4);
-  const sH = spec.targetH ? spec.targetH / Math.max(size.y, 1e-4) : Infinity;
-  const sW = spec.maxSpan ? spec.maxSpan / span : Infinity;
-  let s = Number.isFinite(Math.min(sH, sW)) ? Math.min(sH, sW) : 1;
-  if (!spec.thin) s *= LAB.boost;
-  scene.scale.multiplyScalar(s);
-  ({ box, size } = measure(scene));
-  scene.position.x += -(box.min.x + box.max.x) * 0.5;
-  scene.position.z += -(box.min.z + box.max.z) * 0.5;
-  scene.position.y += -box.min.y;
-  ({ size } = measure(scene));
-  return { w: size.x, h: size.y, d: size.z };
+  return fitCatalogProp(scene, spec, { boost: LAB.boost });
 }
 
 function dressCameraMaterial(mat) {

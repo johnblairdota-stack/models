@@ -23,6 +23,25 @@ import { FurnPart, FurnAssembly, FurnCladding, partBoxWorld } from '../destructi
 import { makeFurnHandlers } from '../destruction/furn-fx.js';
 import { dressCatalogFurniture } from './furn-layout.js';
 
+/**
+ * GeoBin kit dress (urns, candelabra, procedural desks, depot crates, kit cameras).
+ *
+ * Default **OFF** on party / gen / estate nights so the 24 Meshy `rrr_prop_*` catalog
+ * pieces are the visual majority. Playtest after PR #10: kit drowned the smash set.
+ *
+ * Restore the old kit with `?kitdress=1`. `?furn=0` still ablates smashables entirely
+ * (`furnDressEnabled`). This gate is documented in
+ * `docs/slices/task-procedural-mansion-layout.md` Change 6.
+ */
+export function kitDressEnabled() {
+  try {
+    if (typeof location === 'undefined') return false;
+    return new URLSearchParams(location.search).get('kitdress') === '1';
+  } catch {
+    return false;
+  }
+}
+
 const HIT_H = 1.25; // minimum collider height so a sledge ray from eye height can connect
 
 function furnMats(room) {
@@ -895,31 +914,35 @@ function dressCameras(room, materials, handlers) {
 
 const EMPTY_DRESS = {
   studies: 0, ballroom: 0, gallery: 0, service: 0, chapel: 0,
-  cameras: 0, counts: {}, cams: [],
-  catalog: { placed: 0, missing: [], props: [] },
+  cameras: 0, counts: {}, cams: [], kit: false,
+  catalog: { placed: 0, missing: [], props: [], cams: [] },
 };
 
 /**
- * Dress studies, ballroom extras, gallery, service, chapel, house cameras, and the smash
- * catalog (armor / lounges / piano / chandeliers).
+ * Dress the smash catalog (all 24 `rrr_prop_*` ids). GeoBin kit dress is gated
+ * (`kitDressEnabled` / `?kitdress=1`) so kit urns and depot crates are not the default night.
  *
- * 🪑 **THIS IS THE PLACER HOOK** (`docs/slices/task-procedural-mansion-layout.md` Change 5).
+ * 🪑 **THIS IS THE PLACER HOOK** (`docs/slices/task-procedural-mansion-layout.md` Change 5+6).
  * Catalog ids live in `furn-layout.js`; they load from here so `game.js` / `follow-bed.js`
  * do not invent a second dresser. Missing GLBs skip (`catalog.missing`), never throw.
  * Early-return paths still attempt the catalog — a room that cannot take a procedural desk
  * can still take a knight if `registerFurn` exists.
  *
- * @returns {Promise<{ studies, ballroom, gallery, service, chapel, cameras, counts, cams, catalog }>}
+ * @returns {Promise<{ studies, ballroom, gallery, service, chapel, cameras, counts, cams, catalog, kit }>}
  */
 export async function dressLooseFurniture(room, { debris, dust, rng } = {}) {
   const out = {
     studies: 0, ballroom: 0, gallery: 0, service: 0, chapel: 0,
     cameras: 0, counts: {}, cams: [],
     catalog: EMPTY_DRESS.catalog,
+    kit: false,
   };
   if (!room?.registerFurn) return out;
 
-  if (room.materials) {
+  const kitOn = kitDressEnabled();
+  out.kit = kitOn;
+
+  if (kitOn && room.materials) {
     const materials = furnMats(room);
     if (materials.wood) {
       const handlers = makeFurnHandlers({ debris, dust });
@@ -962,7 +985,13 @@ export async function dressLooseFurniture(room, { debris, dust, rng } = {}) {
     out.catalog = await dressCatalogFurniture(room, { debris, dust });
   } catch (e) {
     console.warn('[furn-dress] catalog furniture skipped —', e?.message ?? e);
-    out.catalog = { placed: 0, missing: [], props: [], error: e?.message ?? String(e) };
+    out.catalog = { placed: 0, missing: [], props: [], cams: [], error: e?.message ?? String(e) };
+  }
+
+  // Default night: catalog cameras are the smash set. Kit cameras only when ?kitdress=1.
+  if (!kitOn && Array.isArray(out.catalog?.cams) && out.catalog.cams.length) {
+    out.cams = out.catalog.cams;
+    out.cameras = out.cams.length;
   }
   return out;
 }
