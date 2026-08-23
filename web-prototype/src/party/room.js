@@ -67,7 +67,7 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
    */
   const log = createLog();
   const state = {
-    phase: 'LOBBY', tick: 0, episode: 1, worldSeed,
+    phase: 'LOBBY', tick: 0, episode: 1, airingEpisode: 1, worldSeed,
     players: deal.seats.map((s) => ({
       id: s.id, seat: s.seat, name: `Robot ${s.seat + 1}`, alive: true,
       shell: null, accent: null,
@@ -119,7 +119,7 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
   /** The full frame for a socket, before projection. `you` is that socket's own deal view. */
   function fullFor(sock) {
     const base = {
-      phase: state.phase, tick: state.tick, episode: state.episode, worldSeed: state.worldSeed,
+      phase: state.phase, tick: state.tick, episode: state.episode, airingEpisode: state.airingEpisode, worldSeed: state.worldSeed,
       players: state.players.map((p) => ({ ...p })),
       pair: { ...state.pair },
       cameras: { ...state.cameras },
@@ -382,6 +382,12 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       : allLiving;
     // An explicit empty ballot list means wait — do not invent a pair from unused Robot N chairs.
     if (Array.isArray(ballots) && ballots.length === 0) return;
+
+    /*
+     * TV chrome airs this number. playEpisode bumps state.episode before the live
+     * run, so frame.episode would say 2 on the first walk. Sibling of #18 VERDICT lie.
+     */
+    state.airingEpisode = state.episode;
     setPhase('CASTING');
     // 🚨 THE PAIR COMES OUT OF A BALLOT, NOT A SEAT INDEX. `ballot.js` resolves every tie
     // deterministically and publicly, so casting never stalls and never waits on a human.
@@ -536,7 +542,11 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     /** Has the cast been drawn? A phone with no card is a phone that has not been dealt to. */
     isDealt: () => dealt,
     /** Host-driven: open CASTING and wait for phone ballots. `playEpisode` still starts here too. */
-    beginCasting() { setPhase('CASTING'); },
+    beginCasting() {
+      // Next ballot is for state.episode (already bumped after the last playEpisode).
+      state.airingEpisode = state.episode;
+      setPhase('CASTING');
+    },
     /**
      * Published nameplate. 12 chars, same cap as the phone spec's cheap join. Does not broadcast —
      * the transport decides when a frame or lobby snapshot should follow.

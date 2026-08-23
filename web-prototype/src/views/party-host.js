@@ -420,7 +420,8 @@ export default async function partyHost({ params }) {
   function paint() {
     const frame = client.frame;
     const phase = frame?.phase || client.lobby?.phase || 'LOBBY';
-    const episode = frame?.episode || client.lobby?.episode || 1;
+    /* airingEpisode = episode on the air; frame.episode is already bumped post-playEpisode. */
+    const episode = frame?.airingEpisode ?? client.lobby?.airingEpisode ?? frame?.episode ?? client.lobby?.episode ?? 1;
     const recap = recapFromEvents(client.events);
     const names = players();
     const votes = client.ballots;

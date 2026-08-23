@@ -230,6 +230,24 @@ await sleep(220);
       && runnerName !== guideName
       && !/^Robot /.test(runnerName || '') && !/^Robot /.test(guideName || ''),
     JSON.stringify({ runner: runnerName, guide: guideName, pair: frame?.pair }));
+  t('N7e2 · TV frame carries airingEpisode 1 after the first playEpisode',
+    frame?.airingEpisode === 1,
+    JSON.stringify({ airingEpisode: frame?.airingEpisode, episode: frame?.episode, phase: frame?.phase }));
+  {
+    const r = createRoom({ count: 8, castSeed: 9, worldSeed: 9, send: () => {}, emit: () => {} });
+    r.start();
+    const living = r.state.players.map((p) => p.id);
+    r.dealRoles(living);
+    r.playEpisode({
+      living,
+      ballots: living.map((v, i) => ({
+        voter: v, runner: living[(i + 1) % living.length], guide: living[(i + 2) % living.length],
+      })),
+    });
+    t('N7e3 · playEpisode leaves airingEpisode on the aired cast and bumps episode for the next',
+      r.state.airingEpisode === 1 && r.state.episode === 2,
+      JSON.stringify({ airingEpisode: r.state.airingEpisode, episode: r.state.episode }));
+  }
 }
 
 {

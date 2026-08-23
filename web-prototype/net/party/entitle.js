@@ -44,6 +44,7 @@ export const MATRIX = [
   ['phase',                    'all'],
   ['tick',                     'all'],
   ['episode',                  'all'],
+  ['airingEpisode',            'all'],   // episode on the air; see room.js playEpisode
   ['worldSeed',                'all'],   // public exactly as today (run.js L43-48)
   // 'castSeed'                          NO ROW. See src/party/cast.js's header.
 
