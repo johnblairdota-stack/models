@@ -354,6 +354,9 @@ export default async function partyHost({ params }) {
     if (m.ready) {
       follow.live = true;
       root.querySelector('.run-frame')?.classList.add('live');
+      /* Once the bed is live/run, CAMERA WARMING must not stay readable in the host underlay. */
+      const warmSlot = root.querySelector('.run-slot');
+      if (warmSlot) warmSlot.textContent = '';
       /*
        * Overnight post-#25: sendCue can "succeed" (contentWindow exists) before the
        * iframe has installed its message listener — cuedRunner latches and the bed
@@ -491,6 +494,7 @@ export default async function partyHost({ params }) {
         guideId: pair.guide || recap.guide,
         cameras: frame?.cameras,
         alarms: frame?.incident?.alarms,
+        followLive: follow.live,
       });
       /*
        * 🗑️ **THE RECAP BUTTON IS GONE, AND IT IS THE AFFORDANCE RATHER THAN THE BEAT THAT WENT.**
@@ -657,7 +661,7 @@ function seatLook(lobby, playerId) {
  * never enters this subtree at all. See `syncFollow()` and slice §5.1 for why an empty div here
  * to append into would not have worked.
  */
-function runStage({ names, lobby, runnerId, guideId, cameras, alarms }) {
+function runStage({ names, lobby, runnerId, guideId, cameras, alarms, followLive }) {
   const runner = joinedName(names, runnerId, 'The runner');
   const guide = joinedName(names, guideId, 'The guide');
   const look = seatLook(lobby, runnerId) || DEFAULT_LOOK;
@@ -670,7 +674,7 @@ function runStage({ names, lobby, runnerId, guideId, cameras, alarms }) {
           <div class="run-follow">
             <div class="run-face">${face}</div>
             <div class="run-tag">${esc(runner)} is running</div>
-            <div class="run-slot">camera warming</div>
+            <div class="run-slot">${followLive ? '' : 'camera warming'}</div>
           </div>
         </div>
       </div>
