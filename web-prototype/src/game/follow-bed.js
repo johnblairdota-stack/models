@@ -3,9 +3,10 @@ import { WallField } from '../destruction/wall.js';
 import { buildTestRoom } from './room.js';
 import { generatedTablesFor } from './spaces.js';
 import { Player } from './player.js';
-import { MOVE } from './rules.js';
+import { MOVE, WEAPON_RANGE } from './rules.js';
 import { CONTACT_PHASE, SWING_DUR } from './sledge.js';
-import { SHOT_NAMES, STICK_DEADZONE, stickHeading, stickRef } from '../party/follow.js';
+import { SHOT_NAMES, STICK_TURN, stickHeading, stickMag, stickRef } from '../party/follow.js';
+import { bleedCoolPos, bleedKeyAngle, facingPortal } from '../lighting/door-bleed.js';
 import { HOME_ROOM, MISSION_ROOM, PLAN_OPTS } from '../party/mansion.js';
 import { createMeshAvatar } from '../characters/mesh-avatar.js';
 import { unit4hMaterials } from '../materials/surfaces/robot.js';
@@ -109,6 +110,23 @@ function followRig(L) {
     cool: { pos: new THREE.Vector3(), i: L.cool.intensity },
     up: GROUND0 ? GROUND0.clone() : null,
   };
+  /**
+   * 🚪 **`view` RE-HOMES THE COOL RIM ONTO THE DOOR IN FRAME.** The table parks cool past
+   * the room's widest door. Standing in that room looking through a different doorway, the
+   * adjacent room is resident and unlit — John's "hard to see into adjacent rooms." `?bleed=0`
+   * is the control arm (`_bleed1-doorlight.mjs`).
+   */
+  const bleedOff = typeof location !== 'undefined'
+    && new URLSearchParams(location.search).get('bleed') === '0';
+  const applyBleed = (space, view) => {
+    if (bleedOff || !view?.pos || !view?.dir || !view?.portals || !space?.id) return;
+    const hit = facingPortal(view.portals, space.id, view.pos, view.dir);
+    if (!hit) return;
+    const p = bleedCoolPos(hit, space.id, view.spaces);
+    want.cool.pos.set(p.x, p.y, p.z);
+    const base = space.lights?.key?.angle;
+    if (base != null) L.key.angle = bleedKeyAngle(base, true);
+  };
   const read = (space) => {
     const s = space?.lights;
     if (!s) return;
@@ -148,8 +166,12 @@ function followRig(L) {
     if (want.up) L.fill.groundColor.lerp(want.up, a);
   };
   return {
-    snapTo(space) { read(space); apply(1); },
-    follow(space, dt) { read(space); apply(1 - Math.exp(-dt / (LERP / 3))); },
+    snapTo(space, view) { read(space); applyBleed(space, view); apply(1); },
+    follow(space, dt, view) {
+      read(space);
+      applyBleed(space, view);
+      apply(1 - Math.exp(-dt / (LERP / 3)));
+    },
   };
 }
 
@@ -798,21 +820,49 @@ export async function buildFollowBed(engine, opts = {}) {
   }
 
   /**
-   * 🖼️ The mission, in three states and one distance test.
+   * 🔨 **DID THAT SWING HIT THE PAINTING? A RAY DOWN THE RUNNER'S OWN AIM, NOT A RADIUS.**
    *
-   * `seek` -> the painting is up. A landed swing within reach of it breaks it.
+   * This replaces `Math.hypot(runner.pos - painting.pos) <= 1.9`, and the radius is the bug rather
+   * than a tuning miss. The gallery is DRESSED (`furn-dress.js` puts consoles, urns and portraits
+   * on its walls, and the catalog placer adds more), so "a swing landed and the body is
+   * within 1.9 m of the painting" is satisfied by smashing a crate that happens to be standing
+   * near the same wall — while facing the other way. John's note is the symptom of exactly this
+   * class of end: *"I didn't go anywhere or do much. I just hit a box."*
+   *
+   * ⚠️ **IT IS THE SAME RAY EVERY OTHER WEAPON RESOLVES ON.** `player.js` `_resolveSledgeHit` casts
+   * `eye` along `aimDir` for the wall, and `attack()` returns that same pair for the hitscan — so
+   * the painting is now hit by the thing the player is aiming at rather than by the thing they are
+   * standing beside. The reach is `WEAPON_RANGE.sledge` plus one margin for the frame's own 9 cm of
+   * depth, so a blow that would not have reached a wall panel does not reach the canvas either.
+   *
+   * ⚠️ Still not a `FurnProp` — see `buildPainting`'s header. That swap is a local change to this
+   * function once a painting asset exists; what has changed is that the test is now a HIT.
+   */
+  const _paintRay = new THREE.Raycaster();
+  const PAINTING_REACH = WEAPON_RANGE.sledge + 0.35;
+
+  function swingHitPainting() {
+    if (!painting?.intact) return false;
+    _paintRay.set(runner.eye, runner.aimDir);
+    _paintRay.near = 0;
+    _paintRay.far = PAINTING_REACH;
+    return _paintRay.intersectObject(painting.group, true).length > 0;
+  }
+
+  /**
+   * 🖼️ The mission, in three states.
+   *
+   * `seek` -> the painting is up. A swing AIMED at it breaks it; a swing at anything else does not.
    * `return` -> the painting is down and the runner is told to go home.
    * `done` -> the runner is inside the ballroom. `src/party/room.js` `setWorld` turns that into
-   *           the DEBRIEF phase, which is John's *"next step after return"*.
+   *           the DEBRIEF phase, and `net/party/local.mjs` `endRunOnMission` turns it into the
+   *           recap beat — which is the ONLY thing that ends an episode short of the backstop
+   *           clock in `src/party/show.js`.
    */
   function missionTick(t) {
     if (mission.phase === 'seek' && painting?.intact && perf.contactAt >= 0 && t >= perf.contactAt) {
       perf.contactAt = -1;
-      const d = Math.hypot(runner.pos.x - painting.pos.x, runner.pos.z - painting.pos.z);
-      // 1.9 m: `WEAPON_RANGE.sledge` is 1.55 from the eye, and the painting hangs 0.22 m proud of
-      // a wall the body cannot stand inside. Generous on purpose — a mission that needs pixel
-      // alignment to complete is a mission that reads as broken.
-      if (d <= 1.9) {
+      if (swingHitPainting()) {
         painting.intact = false;
         painting.group.visible = false;
         mission.phase = 'return';
@@ -839,9 +889,26 @@ export async function buildFollowBed(engine, opts = {}) {
       intro?.step(dt, t);
       hunter.step(dt);
       const space = room.spaceAt(engine.camera.position);
-      if (space) rig.follow(space, dt);
-      camLight.position.copy(engine.camera.position);
-      camLight.position.y -= 0.18;
+      if (space) {
+        engine.camera.getWorldDirection(_dir);
+        rig.follow(space, dt, {
+          pos: engine.camera.position, dir: _dir,
+          portals: room.portals(), spaces: room.spaces,
+        });
+      }
+      const who = intro?.focus();
+      if (who?.pos) {
+        camLight.intensity = 4.6;
+        camLight.distance = 6.2;
+        if (who.accent) {
+          const hex = parseInt(String(who.accent).slice(1), 16);
+          if (Number.isFinite(hex)) camLight.color.setHex(hex);
+        }
+        camLight.position.set(who.pos.x, (who.pos.y ?? 0) + 1.55, who.pos.z);
+      } else {
+        camLight.position.copy(engine.camera.position);
+        camLight.position.y -= 0.18;
+      }
       engine.camera.getWorldDirection(_dir);
       room.setViewpoints(_views, dt);
       room.update?.(dt);
@@ -872,15 +939,15 @@ export async function buildFollowBed(engine, opts = {}) {
      */
     if (perf.driven) {
       const s = perf.stick;
-      const mag = Math.hypot(s.x, s.y);
+      const mag = stickMag(s.x, s.y);
       perf.stickRef = stickRef(perf.stickRef, s.x, s.y, perf.heading);
-      if (mag > STICK_DEADZONE) {
+      if (mag > 0 && perf.stickRef != null) {
         const want = perf.stickRef + stickHeading(s.x, s.y);
         const turn = Math.atan2(Math.sin(want - perf.heading), Math.cos(want - perf.heading));
-        perf.heading += turn * (1 - Math.exp(-9.0 * dt));
+        perf.heading += turn * (1 - Math.exp(-STICK_TURN * dt));
       }
       runner.update(dt, t, {
-        move: { x: 0, y: Math.min(1, mag) },
+        move: { x: 0, y: mag },
         run: perf.run,
         aimYaw: perf.heading,
       });
@@ -945,10 +1012,14 @@ export async function buildFollowBed(engine, opts = {}) {
     camLight.position.copy(engine.camera.position);
     camLight.position.y -= 0.18;
 
-    const space = room.spaceAt(runner.pos) ?? room.spaceAt(engine.camera.position);
-    if (space) rig.follow(space, dt);
-
     engine.camera.getWorldDirection(_dir);
+    const space = room.spaceAt(runner.pos) ?? room.spaceAt(engine.camera.position);
+    if (space) {
+      rig.follow(space, dt, {
+        pos: engine.camera.position, dir: _dir,
+        portals: room.portals(), spaces: room.spaces,
+      });
+    }
     room.setViewpoints(_views, dt);
     room.update?.(dt);
   }
@@ -965,7 +1036,7 @@ export async function buildFollowBed(engine, opts = {}) {
     readout: () => ({
       shot: mode === 'run' ? operator.shot : mode,
       throttle: perf.driven
-        ? (perf.run ? 'RUN' : (Math.hypot(perf.stick.x, perf.stick.y) > 0.12 ? 'WALK' : 'STILL'))
+        ? (perf.run ? 'RUN' : (stickMag(perf.stick.x, perf.stick.y) > 0 ? 'WALK' : 'STILL'))
         : (perf.hesitateFor > 0 ? 'CREEP' : perf.throttle),
       speed: +runner.speed.toFixed(2),
     }),
@@ -996,7 +1067,9 @@ export async function buildFollowBed(engine, opts = {}) {
         introCast = (c.cast || []).slice(0, 8);
         if (!introCast.length) return;
         intro?.dispose();
-        intro = buildIntroBed(engine, { room, cast: introCast, materials: botMats, reelSight: reelToSight });
+        intro = buildIntroBed(engine, {
+          room, cast: introCast, materials: botMats, avatar, reelSight: reelToSight,
+        });
         mode = 'intros';
         runner.root.visible = false;
         return;
@@ -1012,6 +1085,8 @@ export async function buildFollowBed(engine, opts = {}) {
         mode = 'run';
         runnerName = c.name ?? null;
         runner.root.visible = true;
+        camLight.intensity = 1.4;
+        camLight.distance = 3.5;
         if (c.accent) {
           const hex = parseInt(String(c.accent).slice(1), 16);
           if (Number.isFinite(hex)) camLight.color.setHex(hex);

@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { Player } from './player.js';
 import { chairCircle } from '../world/props.js';
 import { unit4hMaterials } from '../materials/surfaces/robot.js';
+import { cloneMeshAvatar } from '../characters/mesh-avatar.js';
+import { INTRO_FOV } from '../party/follow.js';
 
 /**
  * 🎬 **THE INTROS — the joined cast walking to their chairs in the ballroom, one at a time.**
@@ -42,6 +44,23 @@ const ENTRY_OUT = 3.4;
 const ARRIVE = 0.42;
 /** How far in front of its chair a robot stands. See the note on `at` below. */
 const STAND_IN = 0.62;
+/**
+ * 🎥 **THE INTRO LENS IS A PORTRAIT, NOT THE RUN'S WIDE PLATE.**
+ *
+ * The engine's default FOV is 62° (`engine.js`). At that angle a 1.7 m Meshy body standing
+ * 3.2 m from the lens occupies about half the frame, and during the walk-in — when the body
+ * is still outside the circle — it collapses to a thin strip on one side of a dim ballroom.
+ * John, after the playtest: the intros used the old robot, "framed far left / thin strip /
+ * looks background during CASTING."
+ *
+ * 38° at 1.75 m in front of the stand-mark fills the frame with the body that just chose a
+ * colour. Restored on `dispose` so the expedition keeps the run's 62°.
+ */
+/** Eye standoff in front of the stand-mark, metres. Was STAND_IN + 2.6. */
+const EYE_OUT = 1.75;
+/** Look-at height — chest of a 1.7 m Meshy, not the chair rail. */
+const LOOK_Y = 1.22;
+const EYE_Y = 1.48;
 
 /**
  * 🎨 **PER-ROBOT COLOUR BY CLONING A BAKED MATERIAL, NOT BY BAKING A NEW ONE.**
@@ -134,9 +153,10 @@ export function ballroomOf(room) {
  * @param {object} o.room       the built mansion
  * @param {Array}  o.cast       `[{ id, seat, name, shell, accent }]` — the JOINED phones, in order
  * @param {object} [o.materials] a shared `unit4hMaterials()` set, so nothing is baked twice
+ * @param {object} [o.avatar]    the runner's already-loaded Meshy body, cloned per seat
  * @param {(eye,at)=>void} [o.reelSight]  `follow-bed.js`'s sight reel — see its use below
  */
-export function buildIntroBed(engine, { room, cast, materials, reelSight } = {}) {
+export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight } = {}) {
   const scene = engine.scene;
   const rng = engine.rng;
   const space = ballroomOf(room);
@@ -202,12 +222,20 @@ export function buildIntroBed(engine, { room, cast, materials, reelSight } = {})
     const len = Math.hypot(ox, oz) || 1;
     const ux = ox / len, uz = oz / len;
 
+    /*
+     * 🤖 **MESHY WHEN WE HAVE ONE, UNIT4H WHEN WE DO NOT.** The runner's body is fetched during
+     * the lobby bake (`follow-bed.js`). Cloning it here is what makes the intros the same robot
+     * the expedition is about to follow, instead of the old procedural stand-in. A failed or
+     * skipped fetch falls through to unit4h so a chair is never empty.
+     */
+    const twin = avatar ? cloneMeshAvatar(avatar, { shell: seat.shell, accent: seat.accent }) : null;
     const body = new Player({
       scene: group,
       world: room,
       rng,
       id: `intro-${seat.id ?? i}`,
       materials: tintedMaterials(base, seat.shell, seat.accent, ownedMaterials),
+      avatar: twin,
     });
     const start = new THREE.Vector3(cx + ux * (radius + ENTRY_OUT), room.floorY ?? 0, cz + uz * (radius + ENTRY_OUT));
     // Nudge the entry point back inside the house if the ballroom is not big enough to hold it.
@@ -234,8 +262,8 @@ export function buildIntroBed(engine, { room, cast, materials, reelSight } = {})
        * is a `Gait` this body does not have — see §9 of the slice.)
        */
       at: new THREE.Vector3(chair.x - ux * STAND_IN, room.floorY ?? 0, chair.z - uz * STAND_IN),
-      // Where the camera stands to see this robot's FRONT: inside the ring, on the same bearing.
-      eye: new THREE.Vector3(chair.x - ux * (STAND_IN + 2.6), 1.42, chair.z - uz * (STAND_IN + 2.6)),
+      // Portrait stand: inside the ring, close enough that a 38° lens fills on the body.
+      eye: new THREE.Vector3(chair.x - ux * (STAND_IN + EYE_OUT), EYE_Y, chair.z - uz * (STAND_IN + EYE_OUT)),
       face: Math.atan2(cx - chair.x, cz - chair.z),
       arrived: false,
       t0: i * STAGGER,
@@ -247,9 +275,13 @@ export function buildIntroBed(engine, { room, cast, materials, reelSight } = {})
 
   let clock = 0;
   let done = false;
+  let focusI = -1;
   const _look = new THREE.Vector3();
   const _eye = new THREE.Vector3();
-  engine.camera.position.copy(robots[0]?.eye ?? new THREE.Vector3(cx, 1.42, cz + 3));
+  const fov0 = engine.camera.fov;
+  engine.camera.fov = INTRO_FOV;
+  engine.camera.updateProjectionMatrix();
+  engine.camera.position.copy(robots[0]?.eye ?? new THREE.Vector3(cx, EYE_Y, cz + 3));
 
   function driveOne(r, dt, t) {
     if (clock < r.t0) return;                       // has not been called in yet
@@ -292,10 +324,15 @@ export function buildIntroBed(engine, { room, cast, materials, reelSight } = {})
     focus() {
       const i = Math.min(robots.length - 1, Math.max(0, Math.floor(clock / step)));
       const r = robots[i];
-      return r ? { index: i, name: r.seat.name ?? null, shell: r.seat.shell, accent: r.seat.accent, flair: r.flair.name } : null;
+      return r ? {
+        index: i, name: r.seat.name ?? null, shell: r.seat.shell, accent: r.seat.accent,
+        flair: r.flair.name, pos: r.body.pos, meshy: !!r.body.avatar,
+      } : null;
     },
     get done() { return done; },
     chairs: circle.seats.length,
+    /** True when at least one intro body is wearing a Meshy clone. */
+    get meshy() { return robots.some((r) => !!r.body.avatar); },
 
     step(dt, t) {
       clock += dt;
@@ -313,7 +350,7 @@ export function buildIntroBed(engine, { room, cast, materials, reelSight } = {})
       const i = Math.min(robots.length - 1, Math.max(0, Math.floor(clock / step)));
       const r = robots[i];
       if (r) {
-        _look.set(r.body.pos.x, 1.15, r.body.pos.z);
+        _look.set(r.body.pos.x, LOOK_Y, r.body.pos.z);
         _eye.copy(r.eye);
         /*
          * ⚠️ THE REEL STAYS EVEN THOUGH PR A REMOVED THE BALLROOM COLONNADE. A chair circle still
@@ -321,10 +358,19 @@ export function buildIntroBed(engine, { room, cast, materials, reelSight } = {})
          * `follow-bed.js` uses for the run camera — the shot tightens rather than going crooked.
          */
         reelSight?.(_eye, _look);
-        engine.camera.position.lerp(_eye, 1 - Math.exp(-2.6 * dt));
+        /*
+         * A new focus SNAPS; holding on one robot still eases. The warm camera is a dolly down
+         * the ballroom, and a 2.6-rate lerp from that eye left the first robot as a strip on
+         * the left of a wide plate for most of its hold — the "far left / thin strip" note.
+         */
+        if (i !== focusI) {
+          engine.camera.position.copy(_eye);
+          focusI = i;
+        } else {
+          engine.camera.position.lerp(_eye, 1 - Math.exp(-3.4 * dt));
+        }
         engine.camera.up.set(0, 1, 0);
         engine.camera.lookAt(_look);
-        // The same breath the run camera has, so the two beats are one production.
         engine.camera.rotateZ(Math.sin(t * 0.73) * 0.004);
       }
       if (!done && clock >= total) done = true;
@@ -356,12 +402,16 @@ export function buildIntroBed(engine, { room, cast, materials, reelSight } = {})
      * what was wrong was letting a borrower run the destructor.
      */
     dispose() {
+      engine.camera.fov = fov0;
+      engine.camera.updateProjectionMatrix();
       scene.remove(group);
       group.traverse((o) => {
+        if (o.userData?.sharedGeo) return;
         if (o.isMesh || o.isSkinnedMesh || o.isInstancedMesh || o.isLine || o.isPoints) {
           o.geometry?.dispose?.();
         }
       });
+      for (const r of robots) r.body.avatar?.dispose?.();
       for (const m of ownedMaterials) m.dispose?.();
       ownedMaterials.length = 0;
     },

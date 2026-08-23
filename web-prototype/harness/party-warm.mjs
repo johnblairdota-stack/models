@@ -27,10 +27,14 @@
 import { readFile } from 'node:fs/promises';
 import {
   CUE_CAST_KEYS, CUE_KEYS, CUE_KINDS, FOLLOW_FORBIDDEN, FOLLOW_KEYS, FOLLOW_VIEW,
-  IDENTITY_SECRETS, MISSION_PHASES, MOVE_KEYS, SPATIAL_WORDS, STICK_DEADZONE, TV_FRAME_PCT,
+  IDENTITY_SECRETS, INTRO_FOV, INTRO_FRAME_PCT, MISSION_PHASES, MOVE_KEYS, SPATIAL_WORDS,
+  STICK_DEADZONE, STICK_RELEASE, STICK_TURN, TV_FRAME_PCT,
   WARM_KEYS, WARM_STAGES, WORLD_KEYS, cueViolations, followParams, followUrl, moveViolations,
-  stickHeading, stickRef, warmLabel, warmPct, warmUrl, warmViolations, worldViolations,
+  stickHeading, stickMag, stickRef, warmLabel, warmPct, warmUrl, warmViolations, worldViolations,
 } from '../src/party/follow.js';
+import {
+  BLEED_CONE, BLEED_PAST, bleedCoolPos, bleedKeyAngle, facingPortal, isPastSpace,
+} from '../src/lighting/door-bleed.js';
 import {
   FEED_CYCLE_SECONDS, FEED_PHASES, JAM_SECONDS, PEEK_SECONDS, mapFeed,
 } from '../src/party/mapfeed.js';
@@ -45,7 +49,12 @@ import {
   CATALOG_URL_PREFIX, spaceKind, placementsClearOfOpenings, walkHalf,
 } from '../src/game/furn-layout.js';
 import { FURN_SMASH_ASSETS } from '../src/game/furn-catalog.js';
-import { blockedByOpenings, overlapsOpening, openingFootprint } from '../src/game/portal-clearance.js';
+import {
+  PORTAL_SIDE_PAD, blockedBy, blockedByOpenings, clearOfPortals,
+  footprintRect, openingFootprint, overlapsOpening, portalKeepout, portalKeepouts,
+} from '../src/game/portal-clearance.js';
+import { generatedTables } from '../src/world/genplan.js';
+import { RECAP_BACKSTOP_MS, missionEndsRun, recapAfterMs } from '../src/party/show.js';
 import { ROOMS, hunterVisibleToGuide } from '../src/party/coverage.js';
 import { buildPlan } from './genspike.mjs';
 import { DROP_RATE, GRADES, STALE_MAX, gradeFor, intelFor, intelLine } from '../src/party/intel.js';
@@ -959,7 +968,7 @@ console.log('\nparty-warm — the lobby-warm night');
    * So the two arms are integrated here rather than argued about, over the SAME smoothing the bed
    * uses, and the claim is convergence: one settles on a heading and the other never does.
    */
-  const K = 1 - Math.exp(-9.0 * (1 / 60));
+  const K = 1 - Math.exp(-STICK_TURN * (1 / 60));
   const spin = (latched) => {
     let heading = 0, ref = null, turned = 0;
     for (let i = 0; i < 600; i++) {                                   // ten seconds at 60 Hz
@@ -988,6 +997,35 @@ console.log('\nparty-warm — the lobby-warm night');
     `deadzone ${STICK_DEADZONE}`);
   t('W15j · and the phone\'s own nub lights on the same deadzone the bed steers on',
     STICK_DEADZONE > 0 && STICK_DEADZONE < 0.3);
+
+  /*
+   * 🕹️ **THE FEEL PASS — radial deadzone, hysteresis, a slower chase.** Sign + latch stopped
+   * the spin; a held thumb still lurched off the rim and a 9 rad/s chase snapped the heading
+   * ahead of the body. These are the three knobs, each with a control that the old number fails.
+   */
+  t('W15k · leaving the deadzone starts at speed 0, not at the zone itself',
+    stickMag(STICK_DEADZONE, 0) === 0
+    && stickMag(STICK_DEADZONE + 0.001, 0) < 0.02
+    && stickMag(0, 1) === 1,
+    `mag@zone+ε=${stickMag(STICK_DEADZONE + 0.001, 0).toFixed(3)}`);
+  t('W15l control · the raw hypot at the same sample is the lurch this rescales away',
+    Math.hypot(STICK_DEADZONE + 0.02, 0) > 0.14
+    && stickMag(STICK_DEADZONE + 0.02, 0) < 0.05);
+  t('W15m · the latch has hysteresis — a thumb on the rim does not chatter',
+    STICK_RELEASE < STICK_DEADZONE
+    && stickRef(null, STICK_RELEASE + 0.01, 0, 1.1) === null
+    && stickRef(1.1, STICK_RELEASE + 0.01, 0, 2.2) === 1.1,
+    `arm ${STICK_DEADZONE} / release ${STICK_RELEASE}`);
+  t('W15n · the heading chase is slower than the snap that read as a slide',
+    STICK_TURN > 4 && STICK_TURN < 8.5, `${STICK_TURN} rad/s`);
+  t('W15o control · the number the bed used to hardcode really is the snap',
+    9.0 > 8.5);
+
+  const phonePad = await readFile(new URL('../src/views/party-phone.js', import.meta.url), 'utf8');
+  const bedSrcFeel = await readFile(new URL('../src/game/follow-bed.js', import.meta.url), 'utf8');
+  t('W15p · the phone nub and the bed both read the exported zone, not a restated 0.12',
+    /STICK_DEADZONE/.test(phonePad) && !/> 0\.12/.test(phonePad)
+    && /stickMag\(/.test(bedSrcFeel) && /STICK_TURN/.test(bedSrcFeel));
 }
 
 // ---- W17 · THE PICTURE TAKES THE TELEVISION --------------------------------------------------
@@ -1019,6 +1057,308 @@ console.log('\nparty-warm — the lobby-warm night');
   t('W17c · the chrome around it gets out of the way on the run beat, or 90% does not fit',
     /\.night\.on-run \.night-main \{[^}]*overflow:hidden/.test(skin)
     && /\.night\.on-run \.night-top \{/.test(skin));
+}
+
+// ---- W18 · A DOORWAY IS NOT A PLACE TO PUT A TABLE ------------------------------------------
+//
+// John, playtesting `7838abb`: *"I couldn't walk into the gallery, a table was blocking the
+// doorway."* The gallery is the MISSION room, so a blocked door is not a scruffy room — it is a
+// night nobody can finish.
+//
+// 🚨 EVERY CLAIM HERE CARRIES ITS CONTROL, and the controls are the point: a clearance rule that
+// rejected nothing would satisfy "no placement blocks a door" completely and perfectly. So the
+// pre-fix table is run on the same 24 world seeds and has to come back DIRTY.
+{
+  const specOf = new Map(FURN_SMASH_ASSETS.map((a) => [a.id, a]));
+  const walkOf = (p) => walkHalf(specOf.get(p.catalogId));
+  const canBlock = (p) => walkOf(p) > 0;
+
+  /*
+   * ⚠️ THE AXIS. `genplan.js` writes `axis: widthAxisOf(run.axis)` and `room.js` reads it back as
+   * `axis === 'x' ? normal +Z : normal +X`, so `axis: 'x'` means the opening SPANS x. Read the
+   * other way round the keepout is a correct rectangle rotated ninety degrees — it still rejects
+   * placements, just never the ones in the doorway, and every test below would still pass.
+   */
+  const kx = portalKeepout({ id: 'k', x: 0, z: 0, w: 1.9, axis: 'x' });
+  const kz = portalKeepout({ id: 'k', x: 0, z: 0, w: 1.9, axis: 'z' });
+  const span = (k) => [+(k.x1 - k.x0).toFixed(3), +(k.z1 - k.z0).toFixed(3)];
+  const [kxW, kxD] = span(kx);
+  const [kzW, kzD] = span(kz);
+  t('W18 · the DOOR\'S OWN WIDTH lands on the axis it spans, and the stride depth across it',
+    kxW === +(1.9 + 2 * PORTAL_SIDE_PAD).toFixed(3) && kzD === kxW && kxD === kzW && kxW !== kxD,
+    `axis x -> ${kxW} x ${kxD} m · axis z -> ${kzW} x ${kzD} m`);
+  t('W18a · and it is wider than the opening, because a body does not arrive square-on',
+    kxW > 1.9, `${kxW} m of clear for a 1.90 m door`);
+
+  let placedTotal = 0, blockedBefore = 0, blockedAfter = 0, droppedTotal = 0;
+  let centreOut = 0;
+  for (let ws = 0; ws < 24; ws++) {
+    const tables = generatedTables(pickPlanSeed(ws).seed, PLAN_OPTS);
+    const bySpace = new Map(tables.spaces.map((s) => [s.id, s]));
+    const before = catalogPlacements(tables.spaces);
+    const after = catalogPlacements(tables.spaces, { portals: tables.portals });
+
+    placedTotal += before.length;
+    droppedTotal += before.length - after.length;
+    blockedBefore += before.filter((p) => canBlock(p)
+      && blockedByOpenings(p.x, p.z, walkOf(p), walkOf(p), tables.portals)).length;
+    blockedAfter += after.filter((p) => canBlock(p)
+      && blockedByOpenings(p.x, p.z, walkOf(p), walkOf(p), tables.portals)).length;
+
+    // Catalog dress REFUSES a blocked slot and tries the next candidate — it does not
+    // slide. The centre must still sit in the space the id names. (A wall console's
+    // smash AABB is allowed to overlap masonry; that is not a doorway miss.)
+    for (const p of after) {
+      const sp = bySpace.get(p.spaceId);
+      if (sp && (p.x < sp.x0 || p.x > sp.x1 || p.z < sp.z0 || p.z > sp.z1)) centreOut++;
+    }
+  }
+  t('W18b · NO catalog placement stands in a doorway, on any of 24 world seeds',
+    blockedAfter === 0, `${blockedAfter} of ${placedTotal} placements`);
+  t('W18c control · the table that shipped really did block doorways — the rule rejects something',
+    blockedBefore > 0,
+    `${blockedBefore} of ${placedTotal} blocked before the fix, ${droppedTotal} dropped rather than retried`);
+
+  /*
+   * Nudge (authored kit / registerGroup) is the other half of the same AABB. Sliding a
+   * console off a door must leave it in its room — ROOM_MARGIN is what stops a clear
+   * from posting it through the wall. Catalog refuse is W18b; this is the slide.
+   */
+  const nudgeRoom = { x0: -6, x1: 6, z0: -4, z1: 4 };
+  const nudgeDoor = portalKeepouts([{ id: 'd', x: 0, z: 4, w: 1.9, axis: 'x' }]);
+  const nudged = clearOfPortals(
+    { x: 0, z: 3.48, w: 1.35, d: 0.44, rotY: Math.PI, baseY: 0 },
+    nudgeDoor,
+    nudgeRoom,
+  );
+  const nudgedRect = nudged && footprintRect(nudged.x, nudged.z, 1.35, 0.44, Math.PI);
+  t('W18d · a nudged prop is still inside its own room',
+    centreOut === 0
+    && nudged && nudged.moved > 0
+    && nudgedRect
+    && nudgedRect.x0 >= nudgeRoom.x0 && nudgedRect.x1 <= nudgeRoom.x1
+    && nudgedRect.z0 >= nudgeRoom.z0 && nudgedRect.z1 <= nudgeRoom.z1,
+    `centres out ${centreOut} · nudge ${nudged ? nudged.moved.toFixed(2) : '—'} m`);
+
+  /*
+   * 🖼️ **THE PROP JOHN ACTUALLY WALKED INTO**, asserted by its own formula rather than by a class
+   * of props. `furn-dress.js` `dressGallery` puts a 1.35 x 0.44 console at `x: sp.cx, z: sp.z1 -
+   * 0.52` — the middle of a long wall — and `genplan.js` `pushPortal` cuts a doorway at the middle
+   * of the overlap between two rooms, which on a shared long wall is the same place. Neither file
+   * was wrong on its own; what was missing is that neither knew the other existed.
+   */
+  let galleryBlockedBefore = 0, galleryBlockedAfter = 0, galleryDropped = 0;
+  for (let ws = 0; ws < 24; ws++) {
+    const tables = generatedTables(pickPlanSeed(ws).seed, PLAN_OPTS);
+    const gallery = tables.spaces.find((s) => s.roomType === MISSION_ROOM);
+    if (!gallery) continue;
+    const keepouts = portalKeepouts(tables.portals);
+    const authored = { x: (gallery.x0 + gallery.x1) / 2, z: gallery.z1 - 0.52 };
+    const shape = { w: 1.35, d: 0.44, rotY: Math.PI, baseY: 0 };
+    if (blockedBy(footprintRect(authored.x, authored.z, shape.w, shape.d, shape.rotY), keepouts)) {
+      galleryBlockedBefore++;
+    }
+    const clear = clearOfPortals({ ...authored, ...shape }, keepouts, gallery);
+    if (!clear) { galleryDropped++; continue; }
+    if (blockedBy(footprintRect(clear.x, clear.z, shape.w, shape.d, shape.rotY), keepouts)) {
+      galleryBlockedAfter++;
+    }
+  }
+  t('W18e · the gallery console clears the gallery\'s own doors on every seed',
+    galleryBlockedAfter === 0, `${galleryBlockedAfter} blocked · ${galleryDropped} dropped`);
+  t('W18f control · and the un-nudged placement really did shut the mission room',
+    galleryBlockedBefore > 0, `${galleryBlockedBefore}/24 world seeds had the gallery console on a door`);
+
+  // A fitting hung above head height cannot be in anyone's way, and must not be slid sideways for
+  // a door it floats a clear metre above. Both arms, because "never nudges" and "always nudges"
+  // are equally wrong and the constant is what separates them.
+  const onDoor = portalKeepouts([{ id: 'd', x: 0, z: 0, w: 1.9, axis: 'x' }]);
+  const hung = clearOfPortals({ x: 0, z: 0, w: 1.55, d: 1.55, rotY: 0, baseY: 2.85 }, onDoor);
+  const stood = clearOfPortals({ x: 0, z: 0, w: 1.55, d: 1.55, rotY: 0, baseY: 0 },
+    onDoor, { x0: -12, x1: 12, z0: -12, z1: 12 });
+  t('W18g · a chandelier at 2.85 m is left where it hangs',
+    hung && hung.moved === 0, `moved ${hung?.moved ?? '—'} m`);
+  t('W18h control · and the same footprint standing on the floor is moved off the door',
+    stood && stood.moved > 0.5, `moved ${stood ? stood.moved.toFixed(2) : '—'} m`);
+
+  /*
+   * The rule has to be consulted by the PLACERS, not merely exist. `registerGroup` is the one door
+   * every authored prop in `furn-dress.js` goes through, which is what makes a prop a later slice
+   * adds inherit the clearance instead of having to remember it — the defect here was a placer that
+   * had never been told doorways existed, and a rule restated at each call site is that again.
+   */
+  const dressSrc = await readFile(new URL('../src/game/furn-dress.js', import.meta.url), 'utf8');
+  const layoutSrc = await readFile(new URL('../src/game/furn-layout.js', import.meta.url), 'utf8');
+  t('W18i · registerGroup asks before it places, so every authored prop inherits the rule',
+    /function registerGroup\(room, \{[\s\S]{0,600}?clearOfPortals\(/.test(dressSrc)
+    && /placeCrateStack[\s\S]{0,600}?clearOfPortals\(/.test(dressSrc));
+  t('W18j · and the catalog loader hands the house\'s real doorways to the table',
+    /openingsFromRoom\(room\)/.test(layoutSrc)
+    && /catalogPlacements\(room\.spaces \?\? \[\], openings\)/.test(layoutSrc));
+}
+
+// ---- W19 · SMASHING A BOX IS NOT THE END OF AN EPISODE ---------------------------------------
+//
+// John: *"it randomly goes to the recap screen. I didn't go anywhere or do much. I just hit a
+// box."* Two mechanisms, and only one of them is the one he named:
+//
+//   · the 26 s stub clock in `show.js`, which ended every episode whatever anyone was doing
+//   · `follow-bed.js` `missionTick`, which counted ANY landed swing within 1.9 m of the mission
+//     painting as having broken it — and the gallery is dressed, so there are boxes to smash there
+{
+  t('W19 · the show clock is a backstop, not the beat — minutes, not seconds',
+    recapAfterMs() >= 120000, `${(recapAfterMs() / 1000 / 60).toFixed(1)} min`);
+  t('W19a control · and it is not infinite, so a dead TV cannot strand the room on expedition',
+    Number.isFinite(RECAP_BACKSTOP_MS) && RECAP_BACKSTOP_MS > 0, `${RECAP_BACKSTOP_MS} ms`);
+  t('W19b · only a FINISHED mission ends the run — the painting down AND the runner home',
+    missionEndsRun('done')
+    && !missionEndsRun('return') && !missionEndsRun('seek') && !missionEndsRun('none'),
+    MISSION_PHASES.filter(missionEndsRun).join(',') || 'none');
+
+  const localSrc = await readFile(new URL('../net/party/local.mjs', import.meta.url), 'utf8');
+  t('W19c · the server ends the run off the TV\'s world report, not off a timer',
+    /endRunOnMission\(room, msg\.mission\)/.test(localSrc)
+    && /function endRunOnMission/.test(localSrc));
+
+  /*
+   * 🔨 AND THE HIT IS A HIT. The radius test is gone: the mission painting is now struck by a ray
+   * down the runner's own aim, the same `eye` / `aimDir` pair `player.js` `_resolveSledgeHit` casts
+   * for the wall — so a swing at a crate beside it, facing the other way, does not finish a night.
+   */
+  const bedSrc = await readFile(new URL('../src/game/follow-bed.js', import.meta.url), 'utf8');
+  t('W19d · the painting is broken by a swing AIMED at it, not by one that landed nearby',
+    /function swingHitPainting/.test(bedSrc)
+    && /_paintRay\.set\(runner\.eye, runner\.aimDir\)/.test(bedSrc)
+    && !/d <= 1\.9/.test(bedSrc));
+}
+
+// ---- W20 · WORD FROM THE HOUSE IS FOR THE CHAIRS ---------------------------------------------
+//
+// John, playing the GOOD guide: the map was drawing its static — which is that guide's blindness,
+// working as designed — with *"No word on the hunter"* printed six pixels underneath it. Two
+// surfaces answering the same question by two different rules is the defect `mapfeed.js` exists to
+// close, arriving from the other side.
+//
+// #12 took the strip off the RUNNER on the same argument: that seat already has a channel — a human
+// being talking to them. The guide's channel is the map. The one seat the strip was ever for is the
+// CHAIR, where it is a watcher's whole contribution.
+//
+// ⚠️ Asserted from SOURCE, because `views/party-phone.js` is a DOM view and this gate runs in bare
+// node with no `npm install`. The rendered claim is `party-playtest-drive.mjs` E6d.
+{
+  const phone = await readFile(new URL('../src/views/party-phone.js', import.meta.url), 'utf8');
+  const guideBranch = phone.match(/\} else if \(iAmGuide\) \{[\s\S]*?\n {6}\} else \{/)?.[0] ?? '';
+  const seatedBranch = phone.match(/\n {6}\} else \{[\s\S]*?data-r="SHOCK"[\s\S]*?\n {6}\}/)?.[0] ?? '';
+  const runnerBranch = phone.match(/if \(iAmRunner\) \{[\s\S]*?\} else if \(iAmGuide\)/)?.[0] ?? '';
+
+  t('W20 arm · the three expedition sheets were all found in the source',
+    guideBranch.length > 200 && seatedBranch.length > 100 && runnerBranch.length > 200,
+    `guide ${guideBranch.length} · seated ${seatedBranch.length} · runner ${runnerBranch.length} chars`);
+  t('W20a · the guide\'s sheet asks for PRODUCTION\'S feed only, never the house word',
+    /intelBlock\(frame, \{ productionOnly: true \}\)/.test(guideBranch)
+    && !/intelBlock\(frame\)/.test(guideBranch));
+  t('W20b · the runner\'s pad still has no intel block at all',
+    !/intelBlock\(/.test(runnerBranch));
+  t('W20c control · a SEATED watcher keeps it — the strip was moved to one seat, not deleted',
+    /intelBlock\(frame\)/.test(seatedBranch));
+
+  /*
+   * 🚨 **AND IT IS KEYED TO THE ALIGNMENT, NOT TO THIS TICK'S GRADE.** `intelFor` returns null
+   * until the TV's first world report lands, so `grade === 'exact'` is false for the opening half
+   * second of every expedition. Keyed on the grade, a Production guide's strip would appear a
+   * moment after the sheet did — which is the *"flashing 'word from the house', which moves and
+   * resizes everything else"* that the reserved slot was built to stop, reintroduced.
+   */
+  t('W20d · a Production guide keeps their feed, decided by ALIGNMENT rather than by a grade',
+    /alignment === 'evil'/.test(phone)
+    && /data-intel-mode="\$\{exact \? 'production' : 'house'\}"/.test(phone));
+  t('W20e · and the patcher cannot relabel a Production strip back to the house word',
+    /slot\.dataset\.intelMode === 'production'/.test(phone));
+}
+
+// ---- W21 · INTROS ARE THE MESHY ROBOT, CENTRED, NOT A DIM LEFT STRIP ------------------------
+//
+// John, after #12: intros used the old procedural robot, "framed far left / thin strip / looks
+// background during CASTING." Two defects, one picture: the body was unit4h, and CASTING kept
+// the follow layer as the warm backdrop (blurred, behind the ballot board) so a 62° plate of
+// the ballroom leaked around the left edge.
+{
+  t('W21 · the intro lens is a portrait, not the run\'s 62° plate',
+    INTRO_FOV >= 34 && INTRO_FOV <= 42, `${INTRO_FOV}°`);
+  t('W21a · and the CASTING picture is a centred frame, not a full-bleed strip',
+    INTRO_FRAME_PCT >= 70 && INTRO_FRAME_PCT < TV_FRAME_PCT, `${INTRO_FRAME_PCT}%`);
+
+  const introSrc = await readFile(new URL('../src/game/intro-bed.js', import.meta.url), 'utf8');
+  const bedSrc = await readFile(new URL('../src/game/follow-bed.js', import.meta.url), 'utf8');
+  const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
+  const skin = await readFile(new URL('../src/party/night-skin.js', import.meta.url), 'utf8');
+
+  t('W21b · intros clone the already-loaded Meshy body rather than baking eight new ones',
+    /cloneMeshAvatar/.test(introSrc) && /avatar: twin/.test(introSrc)
+    && /avatar,/.test(bedSrc));
+  t('W21c control · a failed fetch still builds a unit4h body, so a chair is never empty',
+    /tintedMaterials\(base/.test(introSrc) && /avatar: twin/.test(introSrc)
+    && /cloneMeshAvatar\(avatar/.test(introSrc));
+  t('W21d · the intro camera snaps onto a new robot instead of lerping from the warm dolly',
+    /if \(i !== focusI\)/.test(introSrc) && /INTRO_FOV/.test(introSrc));
+  t('W21e · CASTING promotes the follow layer to a highlighted intro frame',
+    /follow\.mode === 'intros'/.test(hostSrc)
+    && /intro-frame/.test(hostSrc)
+    && /on-intro/.test(hostSrc));
+  t('W21f · the skin interpolates INTRO_FRAME_PCT and drops the warm blur on that beat',
+    /\$\{INTRO_FRAME_PCT\}vh/.test(skin)
+    && /\.run-cam-layer\.intros/.test(skin)
+    && /\.night\.on-intro/.test(skin));
+  t('W21g control · the lobby warm layer is still the dim blurred backdrop',
+    /filter: blur\(2px\)/.test(skin) && /\.run-cam-layer\.warm \{/.test(skin));
+}
+
+// ---- W23 · YOU CAN SEE INTO THE NEXT ROOM THROUGH A DOOR ------------------------------------
+//
+// Rooms light independently: five lamps follow the space you are standing in, so an adjacent
+// room that `setViewpoints` has kept resident is unlit. The authored/generated tables already
+// park `cool` past ONE door. This picks the door in FRAME and puts the rim past THAT one.
+//
+// Arithmetic here; `_bleed1-doorlight.mjs` is the pixel control arm (`?bleed=0` vs on).
+{
+  const here = { id: 'study_w', x0: 0, x1: 8, z0: 0, z1: 6 };
+  const next = { id: 'gallery', x0: 0, x1: 8, z0: 8, z1: 20 };
+  const spaces = [here, next];
+  const door = { a: 'study_w', b: 'gallery', x: 4, z: 6.15, nx: 0, nz: 1 };
+  const behind = { a: 'study_w', b: 'service', x: 4, z: -0.2, nx: 0, nz: -1 };
+
+  const facing = facingPortal([door, behind], 'study_w', { x: 4, z: 3 }, { x: 0, z: 1 });
+  t('W23 · the portal in front of the camera wins, not the widest door and not the one behind',
+    facing === door, facing ? `${facing.a}->${facing.b}` : 'none');
+  t('W23a control · looking the other way does not pick the door behind your head',
+    facingPortal([door, behind], 'study_w', { x: 4, z: 3 }, { x: 0, z: -1 }) === behind);
+
+  const rim = bleedCoolPos(door, 'study_w', spaces);
+  t('W23b · the rim sits PAST the doorway, in the other room',
+    isPastSpace(rim, here) && !isPastSpace(rim, next)
+    && rim.z > door.z, `z=${rim.z.toFixed(2)} past=${BLEED_PAST}`);
+  t('W23c control · a rim left at the current room\'s centre is the defect',
+    !isPastSpace({ x: 4, y: 1.9, z: 3 }, here));
+
+  const staticCool = { x: 4, y: 1.9, z: -2.0 }; // past the BACK door, the table's widest
+  const through = { x: 4, z: 9.2 };             // two metres into the gallery
+  const dBleed = Math.hypot(through.x - rim.x, through.z - rim.z);
+  const dStatic = Math.hypot(through.x - staticCool.x, through.z - staticCool.z);
+  t('W23d · the facing rim is closer to the room you are looking into than the table\'s cool',
+    dBleed < 3 && dStatic > 8, `bleed ${dBleed.toFixed(2)} m vs table ${dStatic.toFixed(2)} m`);
+
+  t('W23e · the cone widen is a few degrees, not a flood',
+    Math.abs(bleedKeyAngle(0.30, true) - 0.30 - BLEED_CONE) < 1e-9
+    && bleedKeyAngle(0.86, true) <= 0.95
+    && bleedKeyAngle(0.30, false) === 0.30, `+${BLEED_CONE} rad`);
+
+  const bedSrc = await readFile(new URL('../src/game/follow-bed.js', import.meta.url), 'utf8');
+  t('W23f · the follow rig actually calls the rule, and `?bleed=0` is the control',
+    /facingPortal\(/.test(bedSrc) && /bleedCoolPos\(/.test(bedSrc)
+    && /get\('bleed'\) === '0'/.test(bedSrc));
+  t('W23g · the rig repositions the existing cool — it does not construct a sixth light',
+    /want\.cool\.pos\.set\(p\.x/.test(bedSrc)
+    && (bedSrc.match(/new THREE\.PointLight/g) || []).length === 4);
 }
 
 console.log(`\nparty-warm: ${pass} passed, ${fail} failed`);

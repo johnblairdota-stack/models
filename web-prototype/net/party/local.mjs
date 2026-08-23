@@ -39,7 +39,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { createRoom } from '../../src/party/room.js';
 import { WARM_STAGES, moveViolations, warmPct, worldViolations } from '../../src/party/follow.js';
-import { isShowBeat, recapAfterMs } from '../../src/party/show.js';
+import { isShowBeat, missionEndsRun, recapAfterMs } from '../../src/party/show.js';
 
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 export const MAX_PHONES = 8;
@@ -135,8 +135,15 @@ function setShow(room, beat) {
   fanout(room, { t: 'show', beat: room.show });
 }
 
-/** Pair locked / playEpisode started — every client including the TV enters the run. */
-function startStubShow(room) {
+/**
+ * Pair locked / playEpisode started — every client including the TV enters the run.
+ *
+ * ⚠️ **THE TIMER IS A BACKSTOP AND NO LONGER THE THING THAT ENDS THE RUN.** `src/party/show.js`
+ * carries the argument and the playtest note behind it; what matters here is that the run's real
+ * end is `endRunOnMission` below, fired by the TV's own world report, and this clock exists only
+ * so a room whose TV tab died cannot sit on the expedition beat all evening.
+ */
+function startShowClock(room) {
   clearShowClock(room);
   setShow(room, 'expedition');
   const wait = recapAfterMs();
@@ -145,6 +152,25 @@ function startStubShow(room) {
     if (room.show === 'expedition') setShow(room, 'recap');
   }, wait);
   room.showClock.unref?.();
+}
+
+/**
+ * 🎬 **THE RUN ENDS BECAUSE THE MISSION ENDED — the one clear end the night has.**
+ *
+ * `src/game/follow-bed.js` `missionTick` walks `seek -> return -> done`: the gallery painting has
+ * to be struck by a swing aimed at it, and then the runner has to be back inside the ballroom.
+ * Only `done` lands here (`missionEndsRun`), so breaking the painting does not cut the show while
+ * the runner is still walking home, and smashing a box does not cut it at all.
+ *
+ * Idempotent on purpose — the TV reports twice a second and will keep reporting `done` — so the
+ * beat is set once and the guard is `room.show === 'expedition'` rather than a flag somebody has
+ * to remember to clear between episodes.
+ */
+function endRunOnMission(room, mission) {
+  if (!missionEndsRun(mission?.phase)) return;
+  if (room.show !== 'expedition') return;
+  clearShowClock(room);
+  setShow(room, 'recap');
 }
 
 /**
@@ -472,6 +498,7 @@ function handleClient(room, bound, self, msg) {
   if (msg.t === 'world' && isTV) {
     if (worldViolations(msg).length) return;
     room.game.setWorld({ runner: msg.runner, hunter: msg.hunter, mission: msg.mission });
+    endRunOnMission(room, msg.mission);
     return;
   }
 
@@ -511,8 +538,8 @@ function handleClient(room, bound, self, msg) {
       ...(votes.length ? { ballots: votes } : {}),
       ...(seated.length ? { living: seated } : {}),
     });
-    // Durable show: expedition now, recap after the stub window. Do not pin CASTING.
-    startStubShow(room);
+    // Durable show: expedition now, recap when the mission says so. Do not pin CASTING.
+    startShowClock(room);
     fanout(room, lobbySnapshot(room));
   }
 }

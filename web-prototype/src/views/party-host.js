@@ -213,12 +213,13 @@ export default async function partyHost({ params }) {
    * a mansion fading up behind the join code tells you WHAT is happening, and it is the thing they
    * are about to be inside.
    */
-  function placeFollow() {
+    function placeFollow() {
     if (!follow.layer) return;
-    const frame = root.querySelector('.run-frame');
+    const frame = root.querySelector('.run-frame') || root.querySelector('.intro-frame');
     const s = follow.layer.style;
-    const runMode = follow.mode === 'run' && !!frame;
+    const runMode = (follow.mode === 'run' || follow.mode === 'intros') && !!frame;
     follow.layer.classList.toggle('warm', !runMode);
+    follow.layer.classList.toggle('intros', follow.mode === 'intros' && runMode);
     if (runMode) {
       const r = frame.getBoundingClientRect();
       s.left = `${r.left}px`;
@@ -329,6 +330,7 @@ export default async function partyHost({ params }) {
     }
     if (m.intros === 'done' && !ui.introsDone) {
       ui.introsDone = true;
+      paint();
       return;
     }
     if (m.world) {
@@ -461,12 +463,18 @@ export default async function partyHost({ params }) {
         body += `<p class="hint" style="margin-top:16px">No eviction this episode. Phones down — talk.</p>`;
       }
     } else if (show === 'casting') {
-      body += ballotBoard(votes, names, pair, recap, episode);
+      const showingIntros = ui.introsSent && !ui.introsDone;
+      if (showingIntros) {
+        body += `<div class="intro-frame" aria-label="Player intros"></div>
+          <p class="intro-hint">the cast, walking in · phones are voting</p>`;
+      } else {
+        body += ballotBoard(votes, names, pair, recap, episode);
+      }
       body += `<div class="actions">`;
       if (canLock) body += `<button class="btn" id="lock">Send them in</button>`;
       if (hasPair) body += `<button class="btn ghost" id="to-run">Watch the run</button>`;
       body += `</div>`;
-      if (episode === 1) {
+      if (episode === 1 && !showingIntros) {
         body += `<p class="hint" style="margin-top:16px">Episode 1 airs every ballot. Nobody is evicted tonight.</p>`;
       }
     } else {
@@ -489,7 +497,8 @@ export default async function partyHost({ params }) {
 
     // 📺 `on-run` is what lets the night skin give the picture 90% of the television — see
     // `TV_FRAME_PCT` and the `.night.on-run` block in `night-skin.js`.
-    root.className = `night${onRun ? ' on-run' : ''}`;
+    const onIntro = show === 'casting' && ui.introsSent && !ui.introsDone;
+    root.className = `night${onRun ? ' on-run' : ''}${onIntro ? ' on-intro' : ''}`;
     root.innerHTML = `
       <div class="night-top">
         <div class="night-brand">Prime Time</div>
@@ -536,7 +545,8 @@ export default async function partyHost({ params }) {
      * behind-the-lobby placement and the over-the-show one is a class and a rect, not a remount.
      */
     const runnerId = pair.runner || recap.runner;
-    follow.mode = onRun && runnerId ? 'run' : 'warm';
+    follow.mode = onRun && runnerId ? 'run'
+      : (show === 'casting' && ui.introsSent && !ui.introsDone ? 'intros' : 'warm');
     mountFollow();
     placeFollow();
 

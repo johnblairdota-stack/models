@@ -14,7 +14,7 @@ import { EVIL } from '../party/cast.js';
 import { guideMapSvg } from '../party/guidemap.js';
 import { MISSION_ROOM, pickPlanSeed, roomLabel } from '../party/mansion.js';
 import { intelLine } from '../party/intel.js';
-import { warmLabel } from '../party/follow.js';
+import { STICK_DEADZONE, warmLabel } from '../party/follow.js';
 
 export default async function partyPhone({ params }) {
   injectNightSkin();
@@ -410,8 +410,12 @@ export default async function partyPhone({ params }) {
          * FROM THE HOUSE from the runner. Runner gets info from the guide verbally."* The runner
          * is the one seat that is supposed to be looking at the television and listening to a
          * human being, and a second information channel on the thing in their hands competes
-         * with both. Seated good players keep it (below) — it is their whole contribution from a
-         * chair — and so does the guide, whose job is to read.
+         * with both.
+         *
+         * ⚠️ **THE GUIDE'S SHEET LOST IT TOO** — see `intelBlock`. A good guide reads the map and
+         * its static; the strip was answering the same question underneath with a different rule.
+         * SEATED players keep it, and that is the one seat it was always for: it is their whole
+         * contribution from a chair.
          */
         body += `<h1>You walk.</h1>
           <p class="hint">Eyes on the TV. Drag to move, hold RUN, tap SWING. Running is loud.</p>
@@ -469,7 +473,7 @@ export default async function partyPhone({ params }) {
           <p class="hint ${hunterMark ? '' : 'gm-blind'}" data-gm-note>${esc(mapNote(jam, hunterMark))}</p>
           ${missionLine(frame)}
           <p class="hint">Cameras live ${frame?.cameras?.unlocked ?? '—'}.</p>
-          ${intelBlock(frame)}`;
+          ${intelBlock(frame, { productionOnly: true })}`;
       } else {
         body += `<h1>Watch.</h1>
           <p class="hint">Reaction only. Dead air is the metric.</p>
@@ -561,7 +565,7 @@ export default async function partyPhone({ params }) {
       state.pad.x = x * k;
       state.pad.y = y * k;
       if (nub) nub.style.transform = `translate(calc(-50% + ${state.pad.x * 78}%), calc(-50% + ${-state.pad.y * 78}%))`;
-      stick.classList.toggle('on', Math.hypot(state.pad.x, state.pad.y) > 0.12);
+      stick.classList.toggle('on', Math.hypot(state.pad.x, state.pad.y) > STICK_DEADZONE);
     };
 
     const fromEvent = (e) => {
@@ -678,10 +682,34 @@ export default async function partyPhone({ params }) {
    *     look bad, it breaks the pad: the stick's element is destroyed mid-drag, so the
    *     `setPointerCapture` goes with it and the runner keeps walking after the thumb lifts.
    */
-  function intelBlock(frame) {
+  /*
+   * 🚫 **AND ON THE GUIDE'S SHEET IT IS PRODUCTION'S CHANNEL OR IT IS NOTHING.**
+   *
+   * John, playing the GOOD guide: the map was showing its static correctly — which is the good
+   * guide's blindness, working — and *"No word on the hunter"* was printed under it at the same
+   * time. Two surfaces answering the same question with two different rules, six pixels apart, is
+   * the defect `mapfeed.js` was written to close, arriving from the other side. #12 removed the
+   * strip from the RUNNER; this removes it from the guide, and the reasoning is the same one both
+   * times: the seat already has its channel. The runner has a human being talking to them; the
+   * good guide has the map, its peek and its static.
+   *
+   * ⚠️ **THE EVIL GUIDE KEEPS THE PRODUCTION FEED**, because that is not the same strip wearing a
+   * different label — it is the exact simultaneous read that IS the Production role
+   * (`src/party/intel.js`), and it is what a Production guide steers with.
+   *
+   * ⚠️ **AND THE TEST IS THE ALIGNMENT, NOT THIS TICK'S GRADE.** `intelFor` returns `null` until
+   * the TV's first world report lands, so `grade === 'exact'` is false for the first half second
+   * of every expedition — keying the block on it would delete the element out from under a
+   * Production guide and put back exactly the *"flashing 'word from the house', which moves and
+   * resizes everything else"* this function's reserved slot exists to prevent. `data-intel-mode`
+   * carries the decision to `patchLive` so the label cannot flip back either.
+   */
+  function intelBlock(frame, { productionOnly = false } = {}) {
     const intel = frame?.you?.intel;
-    const exact = intel?.grade === 'exact';
-    return `<div class="intel${exact ? ' exact' : ''}" data-intel>
+    const production = productionOnly || frame?.you?.alignment === 'evil';
+    if (productionOnly && frame?.you?.alignment !== 'evil') return '';
+    const exact = production || intel?.grade === 'exact';
+    return `<div class="intel${exact ? ' exact' : ''}" data-intel data-intel-mode="${exact ? 'production' : 'house'}">
       <span class="k" data-intel-k>${exact ? 'Production feed' : 'Word from the house'}</span>
       <span data-intel-v>${esc(intelLine(intel))}</span>
     </div>`;
@@ -713,7 +741,10 @@ export default async function partyPhone({ params }) {
 
     if (slot) {
       const intel = frame?.you?.intel;
-      const exact = intel?.grade === 'exact';
+      // A slot stamped `production` stays Production's, whatever this tick's read grades as. See
+      // `intelBlock` — a Production guide's strip must not relabel itself to "Word from the house"
+      // on the frames where `intelFor` happens to have nothing to say.
+      const exact = slot.dataset.intelMode === 'production' || intel?.grade === 'exact';
       slot.classList.toggle('exact', exact);
       const k = slot.querySelector('[data-intel-k]');
       const v = slot.querySelector('[data-intel-v]');

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { attachIdentity, attachChestWordmark } from './mesh-identity.js';
 import { shellWhite } from '../materials/surfaces/robot.js';
 
@@ -1194,5 +1195,109 @@ export async function createMeshAvatar(opts = {}) {
       mixer.stopAllAction();
       rig.traverse((o) => { if (o.isMesh || o.isSkinnedMesh) o.geometry?.dispose?.(); });
     },
+
+    /**
+     * Clips, exposed so `cloneMeshAvatar` can retarget them onto a skinned clone without a
+     * second 9 MB fetch. The runner already paid for this file during the lobby bake.
+     */
+    actions,
   };
+}
+
+/**
+ * 🎭 **A SECOND MESHY BODY THAT SHARES THE RUNNER'S FILE.**
+ *
+ * The intros need one robot per joined phone. Fetching `friendly_all38.glb` per seat would
+ * be eight copies of a 9 MB download on the TV's already-warm context. `SkeletonUtils.clone`
+ * copies the skeleton and the scene graph; the GLB's geometries stay SHARED with the source,
+ * which is why `intro-bed.js` must not dispose them (see that file's `dispose`).
+ *
+ * Intros only need idle + walk. Attack / prop / limb collapse stay on the runner's original.
+ * Materials are cloned before tinting so a red seat cannot recolour the runner.
+ *
+ * @param {object} source  a `createMeshAvatar()` result
+ * @param {object} [opts]
+ * @param {string} [opts.shell]   lobby shell hex
+ * @param {string} [opts.accent]  lobby accent hex
+ */
+export function cloneMeshAvatar(source, opts = {}) {
+  if (!source?.root || !source.actions?.idle || !source.actions?.walk) return null;
+  const rig = cloneSkinned(source.root);
+  rig.traverse((o) => {
+    if (!o.isMesh && !o.isSkinnedMesh) return;
+    o.userData.sharedGeo = true;
+    o.frustumCulled = false;
+    if (o.material) {
+      o.material = Array.isArray(o.material)
+        ? o.material.map((m) => m.clone())
+        : o.material.clone();
+    }
+  });
+  tintIntroRig(rig, opts.shell, opts.accent);
+
+  const mixer = new THREE.AnimationMixer(rig);
+  const idle = mixer.clipAction(source.actions.idle.getClip());
+  const walk = mixer.clipAction(source.actions.walk.getClip());
+  idle.enabled = true; walk.enabled = true;
+  idle.setEffectiveWeight(1); walk.setEffectiveWeight(0);
+  idle.play(); walk.play();
+
+  const hips = (() => {
+    let found = null;
+    rig.traverse((o) => { if (o.isBone && o.name === 'Hips') found = o; });
+    return found;
+  })();
+  const hipsRest = hips ? hips.position.clone() : null;
+
+  return {
+    root: rig,
+    sourceFile: source.sourceFile,
+    cloned: true,
+    get clip() { return walk.getEffectiveWeight() > 0.5 ? 'walk' : 'idle'; },
+    get swing() { return null; },
+    get propMounted() { return false; },
+    mountProp() { return false; },
+    unmountProp() {},
+    playAttack() {},
+    setLimbVisible() {},
+    update(dt, state = {}) {
+      const speed = state.speed ?? 0;
+      const runAt = state.runAt ?? 2.6;
+      const still = speed < runAt * 0.10;
+      const target = still ? 0 : 1;
+      const w = walk.getEffectiveWeight();
+      const next = w + (target - w) * Math.min(1, dt / 0.18);
+      walk.setEffectiveWeight(next);
+      idle.setEffectiveWeight(1 - next);
+      const ref = runAt * 0.42;
+      walk.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / (ref || 1), 0.55, 1.65));
+      mixer.update(dt);
+      if (hips && hipsRest) { hips.position.x = hipsRest.x; hips.position.z = hipsRest.z; }
+    },
+    dispose() {
+      mixer.stopAllAction();
+      // Geometries are the runner's. Materials were cloned and are ours.
+      rig.traverse((o) => {
+        if (!o.isMesh && !o.isSkinnedMesh) return;
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        for (const m of mats) m?.dispose?.();
+      });
+    },
+  };
+}
+
+/** Wear the lobby colours on a cloned Meshy body without discarding the baked atlas. */
+function tintIntroRig(rig, shellHex, accentHex) {
+  const shell = shellHex ? new THREE.Color(shellHex) : null;
+  const accent = accentHex ? new THREE.Color(accentHex) : null;
+  rig.traverse((o) => {
+    if (!o.isMesh && !o.isSkinnedMesh) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    for (const m of mats) {
+      if (!m?.color) continue;
+      const name = `${o.name || ''} ${m.name || ''}`;
+      if (accent && /mint|cap|wedge|accent/i.test(name)) m.color.copy(accent);
+      else if (shell) m.color.lerp(shell, 0.38);
+    }
+  });
 }
