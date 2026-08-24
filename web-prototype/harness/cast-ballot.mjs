@@ -15,7 +15,7 @@
  * decision rather than re-deriving it.
  */
 
-import { tallyCasting, refuse, seededPick, describeCastTiebreaks, historyFromCastEvents, previewCastTiebreaks } from '../src/party/ballot.js';
+import { tallyCasting, refuse, seededPick, describeCastTiebreaks, historyFromCastEvents, previewCastTiebreaks, shouldArmCastSend, CAST_BACKSTOP_MS, castLockoutId } from '../src/party/ballot.js';
 
 let pass = 0, fail = 0;
 const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' · ' + d : ''}`); } else { fail++; console.log(`  FAIL ${n}${d ? ' · ' + d : ''}`); } return c; };
@@ -187,6 +187,35 @@ const NO_LOCK = { runner: null, guide: null };
     previewCastTiebreaks({ ballots: [], living, events: [], ep: 1, matchSeed: 1 }).length === 0);
   t('B11c · a missing world seed does not invent a house pick',
     previewCastTiebreaks({ ballots, living, events: [], ep: 5, matchSeed: null }).length === 0);
+}
+
+// ---------------------------------------------------------------- B12 · 3·2·1 arm: all-in or 20s, never the first ballot alone
+{
+  const living = ids(3);
+  const one = [{ voter: 'p1', runner: 'p2', guide: 'p3' }];
+  const two = [...one, { voter: 'p2', runner: 'p3', guide: 'p1' }];
+  const all = [...two, { voter: 'p3', runner: 'p1', guide: 'p2' }];
+  t('B12 · empty never arms — no invented pair',
+    shouldArmCastSend({ livingIds: living, votes: [], firstBallotAt: 1, now: 1 + CAST_BACKSTOP_MS }) === false);
+  t('B12b · the first ballot does not arm while others are still picking',
+    shouldArmCastSend({ livingIds: living, votes: one, firstBallotAt: 1000, now: 1000 }) === false
+      && shouldArmCastSend({ livingIds: living, votes: two, firstBallotAt: 1000, now: 5000 }) === false);
+  t('B12c · every living phone balloted → arm now',
+    shouldArmCastSend({ livingIds: living, votes: all, firstBallotAt: 1000, now: 1000 }) === true);
+  t('B12d · ~20s after the first ballot, a partial tally still arms',
+    CAST_BACKSTOP_MS === 20000
+      && shouldArmCastSend({ livingIds: living, votes: one, firstBallotAt: 1000, now: 1000 + CAST_BACKSTOP_MS }) === true);
+  t('B12e · empty at the backstop still refuses — empty-never-invent',
+    shouldArmCastSend({ livingIds: living, votes: [], firstBallotAt: 1, now: 1 + CAST_BACKSTOP_MS * 4 }) === false);
+}
+
+// ---------------------------------------------------------------- B13 · one-way lock helper matches tallyCasting
+{
+  t('B13 · lockout is one-way and void below four alive',
+    castLockoutId({ runner: 'p1', guide: 'p2' }, 6, 'runner') === 'p1'
+      && castLockoutId({ runner: 'p1', guide: 'p2' }, 6, 'guide') === 'p2'
+      && castLockoutId({ runner: 'p1', guide: 'p2' }, 3, 'runner') == null
+      && castLockoutId({ runner: 'p1', guide: 'p2' }, 6, 'swap') == null);
 }
 
 console.log(`\ncast-ballot: ${pass} passed, ${fail} failed`);

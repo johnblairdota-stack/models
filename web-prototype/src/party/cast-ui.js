@@ -3,6 +3,8 @@
  * The wire is still one complete public ballot: { voter, runner, guide }.
  */
 
+import { castLockoutId } from './ballot.js';
+
 export function freshCast() {
   return { phase: 'runner', draft: null, runner: null, guide: null };
 }
@@ -24,6 +26,38 @@ export function applyCastTap(cast, playerId) {
   if (cur.phase === 'guide' && playerId === cur.runner) return cur;
   if (cur.draft === playerId) return cur;
   return { ...cur, draft: playerId };
+}
+
+/**
+ * Why this name is not a vote. Rotation lockout matches `castLockoutId` /
+ * `tallyCasting` (one-way, void below four). Same-chair is the sequential padlock
+ * rule. Self-picks are NOT blocked here — the server decides that; the phone
+ * only has to show the state.
+ */
+export function castRowBlock(playerId, cast, { lastPair, livingCount } = {}) {
+  const cur = cast || freshCast();
+  if (!playerId || cur.phase === 'sent') return null;
+  if (cur.phase === 'guide' && playerId === cur.runner) return 'runner';
+  const slot = cur.phase === 'guide' ? 'guide' : 'runner';
+  if (castLockoutId(lastPair, livingCount, slot) === playerId) {
+    return slot === 'guide' ? 'guided' : 'ran';
+  }
+  return null;
+}
+
+export const CAST_BLOCK_WHY = {
+  runner: 'Already the runner — pick someone else.',
+  ran: 'Ran last expedition — they cannot run again.',
+  guided: 'Guided last expedition — they cannot guide again.',
+};
+
+export function castRowMark(player, cast, { selfId, lastPair, livingCount } = {}) {
+  const blocked = castRowBlock(player?.id, cast, { lastPair, livingCount });
+  if (blocked === 'runner') return ' · runner';
+  if (blocked === 'ran') return ' · ran last';
+  if (blocked === 'guided') return ' · guided last';
+  if (player?.id && player.id === selfId) return ' (you)';
+  return '';
 }
 
 export function applyCastLock(cast) {
