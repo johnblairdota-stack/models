@@ -228,30 +228,60 @@ export const SHOW_CHROME_CSS = `
     .show-third .sub { margin-top:6px; font-size:12px; letter-spacing:.26em; text-transform:uppercase;
       color:var(--night-accent); text-shadow:0 2px 10px rgba(0,0,0,.9); }
     .show-clock { display:flex; flex-direction:column; align-items:flex-end; text-align:right; }
-    .show-clock-k { color:var(--night-accent); font-size:12px; letter-spacing:.22em;
-      text-transform:uppercase; font-weight:700; margin-bottom:4px; }
-    .show-clock .talk-clock { font-size:clamp(56px, 12vw, 120px); }
-    .talk-overlay-top { display:flex; justify-content:space-between; align-items:flex-start;
-      gap:16px; width:100%; }
-    .talk-overlay-bot { display:flex; flex-direction:column; align-items:flex-start; gap:10px; }
-    .show-verdict { margin:8px 0 4px; padding:16px 20px; border:2px solid rgba(var(--night-accent-rgb), .55);
-      background:rgba(0,0,0,.72); border-radius:4px 18px 4px 4px; max-width:min(100%, 42rem); }
-    .show-verdict-k { color:var(--night-accent); font-size:13px; letter-spacing:.28em;
+    .show-clock-k { color:var(--night-accent); font-size:11px; letter-spacing:.22em;
+      text-transform:uppercase; font-weight:700; margin-bottom:2px; }
+    .show-clock .talk-clock { font-size:clamp(32px, 5vw, 56px); }
+    /* Talk chrome lives in reserved bands around the ballroom well — never inset over the
+       3D layer. The follow canvas is a body-level z-index 5 plate; night is z-index 1, so
+       any overlay that shares the frame rect is under the chairs. No backticks in this comment. */
+    .talk-chrome-top { display:flex; justify-content:space-between; align-items:flex-start;
+      gap:12px; width:100%; flex:0 0 auto; padding:0 0 8px; }
+    .talk-chrome-bot { display:flex; flex-direction:column; align-items:flex-start; gap:6px;
+      width:100%; flex:0 0 auto; padding:8px 0 0; }
+    .talk-well { flex:1 1 auto; min-height:0; display:flex; flex-direction:row;
+      align-items:stretch; gap:12px; width:100%; }
+    .talk-picture { flex:1 1 auto; min-width:0; min-height:0;
+      display:flex; align-items:center; justify-content:center; }
+    .talk-side { flex:0 0 min(26%, 280px); min-width:168px; max-width:300px;
+      min-height:0; overflow:hidden; display:flex; flex-direction:column; gap:6px; }
+    .show-verdict { margin:0; padding:10px 14px; border:2px solid rgba(var(--night-accent-rgb), .55);
+      background:rgba(0,0,0,.72); border-radius:4px 14px 4px 4px; max-width:min(100%, 42rem); }
+    .show-verdict-k { color:var(--night-accent); font-size:11px; letter-spacing:.24em;
       text-transform:uppercase; font-weight:800; }
-    .show-verdict-v { margin-top:8px; font-size:clamp(28px, 5vw, 64px); font-weight:800;
+    .show-verdict-v { margin-top:4px; font-size:clamp(18px, 2.6vw, 32px); font-weight:800;
       line-height:1.05; color:var(--night-ink); text-transform:uppercase; }
-    .show-verdict-s { margin-top:8px; color:var(--night-dim); font-size:12px; letter-spacing:.16em;
+    .show-verdict-s { margin-top:4px; color:var(--night-dim); font-size:11px; letter-spacing:.14em;
       text-transform:uppercase; }
-    .show-tally { display:flex; flex-wrap:wrap; gap:10px 18px; margin-top:8px; }
-    .show-tally-row { display:flex; align-items:baseline; gap:10px;
-      padding:8px 12px; background:rgba(0,0,0,.55); border-radius:8px;
+    .show-tally { display:flex; flex-wrap:wrap; gap:6px 10px; margin-top:0; }
+    .show-tally-row { display:flex; align-items:baseline; gap:8px;
+      padding:6px 10px; background:rgba(0,0,0,.55); border-radius:6px;
       border:1px solid rgba(var(--night-accent-rgb), .22); }
-    .show-tally-row .who { font-size:clamp(18px, 2.4vw, 28px); font-weight:800; }
-    .show-tally-row .n { font-size:clamp(22px, 3vw, 36px); font-weight:800; color:var(--night-accent);
+    .show-tally-row .who { font-size:clamp(14px, 1.6vw, 20px); font-weight:800; }
+    .show-tally-row .n { font-size:clamp(16px, 2vw, 24px); font-weight:800; color:var(--night-accent);
       font-variant-numeric:tabular-nums; }
     .nom-board { pointer-events:none; }
-    .nom-row.show-nom { display:flex; align-items:center; gap:12px; padding:8px 10px; }
+    .nom-row.show-nom { display:flex; align-items:center; gap:8px; padding:6px 8px; }
     .nom-row.show-nom .show-third { background:transparent; padding:0; }
+    .talk-side .nom-board { margin:0; max-width:none; gap:6px; width:100%; }
+    .talk-side .show-third .face, .talk-side .show-third .face .bot-face { width:40px; height:40px; }
+    .talk-side .show-third .who { font-size:clamp(16px, 1.8vw, 24px); }
+    .talk-chrome-bot .show-third .face, .talk-chrome-bot .show-third .face .bot-face {
+      width:44px; height:44px; }
+    .talk-chrome-bot .show-third .who { font-size:clamp(20px, 2.8vw, 36px); }
+    .talk-chrome-bot .show-third { padding:8px 16px 8px 8px; }
+    /* Recap is a lower-third strip, one 16:9 viewport, no scroll. */
+    .recap-stage { width:100%; display:flex; flex-direction:column; gap:8px; }
+    .recap-head { display:flex; justify-content:flex-end; align-items:flex-end; }
+    .recap { display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr));
+      gap:8px; width:100%; max-width:none; }
+    .recap .fact { padding:10px 14px; border-radius:8px; background:rgba(0,0,0,.62);
+      border:1px solid rgba(var(--night-accent-rgb), .28); }
+    .recap .k { letter-spacing:.2em; text-transform:uppercase; color:var(--night-accent); font-size:11px;
+      font-weight:700; }
+    .recap .v { font-size:clamp(22px, 3vw, 36px); font-weight:800; line-height:1.05; margin-top:4px; }
+    .recap .v.bad { color:var(--night-bad); }
+    .recap .v.ok { color:var(--night-live); }
+    .night.on-recap .show-clock .talk-clock { font-size:clamp(28px, 4vw, 44px); }
     .pick-list.jackbox button { min-height:76px; font-size:clamp(22px, 7vw, 36px);
       padding:18px 20px; letter-spacing:.04em; }
     .pick-list.buzz button { animation: night-rise .35s ease; }
@@ -289,6 +319,9 @@ export const SHOW_CHROME_CSS = `
     .night.on-run .show-rail.ribbon { padding:0 22px; }
     .night.on-run .show-ep { font-size:10px; }
     .night.on-run .show-mast-clock { font-size:18px; }
-    .night.on-talk .show-rail, .night.on-intro .show-rail { padding:2px 22px 8px; }
+    .night.on-talk .show-rail, .night.on-intro .show-rail, .night.on-recap .show-rail {
+      padding:2px 22px 8px; }
+    .night.on-recap .show-rec { font-size:10px; }
+    .night.on-recap .show-dot { width:8px; height:8px; }
     @keyframes fl-rec { 0%,100% { opacity:.25; } 50% { opacity:1; } }
 `;

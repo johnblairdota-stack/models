@@ -531,6 +531,7 @@ export default async function partyHost({ params }) {
     const onTalk = show === 'recap' || show === 'debrief' || show === 'reckoning'
       || show === 'vote' || show === 'execution';
     const onStage = isTalkBeat(show);
+    const onRecap = show === 'recap';
     const onRun = show === 'expedition' || (hasPair && !onTalk && show !== 'casting');
     const clock = formatRemain(remainingMs(ui.showUntil));
 
@@ -563,7 +564,7 @@ export default async function partyHost({ params }) {
        */
     } else if (show === 'recap') {
       body += recapBoard(recap, names, ui.runEnd, clock);
-      body += `<div class="actions"><button class="btn ghost" id="to-run">Run</button></div>`;
+      body += `<div class="actions recap-actions"><button class="btn ghost" id="to-run">Run</button></div>`;
       body += `<p class="hint spaced">Phones down. Debrief is next.</p>`;
     } else if (show === 'debrief') {
       body += talkStage({
@@ -650,7 +651,7 @@ export default async function partyHost({ params }) {
     const onIntro = show === 'casting' && ui.introsSent && !ui.introsDone;
     const ribbon = onRun || rundownRibbon(show);
     const hold = holdMsFor(show, client.noms?.length ?? 0);
-    root.className = `night${onRun ? ' on-run' : ''}${onIntro ? ' on-intro' : ''}${onStage ? ' on-talk' : ''}`;
+    root.className = `night${onRun ? ' on-run' : ''}${onIntro ? ' on-intro' : ''}${onStage ? ' on-talk' : ''}${onRecap ? ' on-recap' : ''}`;
     root.innerHTML = `
       <div class="night-top">
         <div class="night-brand-row">
@@ -663,7 +664,7 @@ export default async function partyHost({ params }) {
         </div>
       </div>
       ${rundownRailHtml({ beat: show, until: ui.showUntil, holdMs: hold, ribbon })}
-      ${onRun || onStage || show === 'lobby' ? '' : `<div class="night-line">${esc(SHOW_LINE)}</div>`}
+      ${onRun || onStage || onRecap || show === 'lobby' ? '' : `<div class="night-line">${esc(SHOW_LINE)}</div>`}
       <div class="night-main">${body}</div>`;
 
     /*
@@ -904,21 +905,23 @@ function talkStage({
         : '',
     })
     : '';
+  const side = `${nomBoard(standing, names, lobby)}${tally ? lynchBoard(tally.votes, tally.result, names) : ''}`;
   return `
-    <div class="talk-stage">
-      <div class="intro-frame talk-frame" aria-label="Ballroom debrief"></div>
-      <div class="talk-overlay">
-        <div class="talk-overlay-top">
-          ${recapMini(recap, names, runEnd)}
-          ${countdownHtml({ clock, label: (beat || 'debrief').toUpperCase() })}
+    <div class="talk-stage${side ? ' has-side' : ''}">
+      <div class="talk-chrome-top">
+        ${recapMini(recap, names, runEnd)}
+        ${countdownHtml({ clock, label: (beat || 'debrief').toUpperCase() })}
+      </div>
+      <div class="talk-well">
+        <div class="talk-picture">
+          <div class="intro-frame talk-frame" aria-label="Ballroom debrief"></div>
         </div>
-        ${nomBoard(standing, names, lobby)}
-        ${tally ? lynchBoard(tally.votes, tally.result, names) : ''}
-        <div class="talk-overlay-bot">
-          ${spectacle}
-          ${plate}
-          <p class="talk-kicker">${esc(kicker || 'Phones down — talk.')}</p>
-        </div>
+        ${side ? `<aside class="talk-side">${side}</aside>` : ''}
+      </div>
+      <div class="talk-chrome-bot">
+        ${spectacle}
+        ${plate}
+        <p class="talk-kicker">${esc(kicker || 'Phones down — talk.')}</p>
       </div>
     </div>`;
 }
@@ -991,11 +994,14 @@ function recapBoard(recap, names, runEnd, clock) {
   const outcome = runEnd
     ? `<div class="fact"><div class="k">Outcome</div><div class="v ${runEnd === 'SMASHED' ? 'ok' : 'bad'}">${esc(runEnd)}</div></div>`
     : '';
-  return `${countdownHtml({ clock, label: 'RECAP' })}<div class="recap">
-    ${outcome}
-    <div class="fact"><div class="k">Camera</div><div class="v ${recap.cameraLit ? 'ok' : 'bad'}">${recap.cameraLit ? 'LIT' : 'STAYED DARK'}</div></div>
-    <div class="fact"><div class="k">Runner</div><div class="v ${recap.taken?.length ? 'bad' : 'ok'}">${esc(taken)}</div></div>
-    <div class="fact"><div class="k">Alarms</div><div class="v">${esc(String(recap.alarmCount ?? 0))}</div></div>
+  return `<div class="recap-stage">
+    <div class="recap-head">${countdownHtml({ clock, label: 'RECAP' })}</div>
+    <div class="recap">
+      ${outcome}
+      <div class="fact"><div class="k">Camera</div><div class="v ${recap.cameraLit ? 'ok' : 'bad'}">${recap.cameraLit ? 'LIT' : 'STAYED DARK'}</div></div>
+      <div class="fact"><div class="k">Runner</div><div class="v ${recap.taken?.length ? 'bad' : 'ok'}">${esc(taken)}</div></div>
+      <div class="fact"><div class="k">Alarms</div><div class="v">${esc(String(recap.alarmCount ?? 0))}</div></div>
+    </div>
   </div>`;
 }
 

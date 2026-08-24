@@ -1847,6 +1847,56 @@ console.log('\nparty-warm — the lobby-warm night');
       && !(SHOW_CHROME_CSS.match(/#[0-9a-f]{3,8}\b/gi) || []).length);
 }
 
+// ---- W31 · COMPACT RECAP + TALK SAFE ZONES ----------------------------------------------
+//
+// Live playtest: recap scrolled on the TV; talk plates sat in the ballroom well and the
+// seated chairs (z-index 5 follow layer) covered them. Recap is a lower-third strip.
+// Talk chrome is reserved bands around the picture, not an overlay on it.
+{
+  const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
+  const skin = await readFile(new URL('../src/party/night-skin.js', import.meta.url), 'utf8');
+
+  t('W31 · recap is a compact no-scroll lower-third, not stacked 84px cards',
+    /function recapBoard/.test(hostSrc)
+      && /recap-stage/.test(hostSrc)
+      && /on-recap/.test(hostSrc)
+      && /onRecap \? ' on-recap'/.test(hostSrc)
+      && /grid-template-columns:repeat\(auto-fit, minmax\(140px, 1fr\)\)/.test(SHOW_CHROME_CSS)
+      && /clamp\(22px, 3vw, 36px\)/.test(SHOW_CHROME_CSS)
+      && !/clamp\(40px, 8vw, 84px\)/.test(skin)
+      && !/clamp\(56px, 12vw, 120px\)/.test(SHOW_CHROME_CSS)
+      && !/clamp\(40px, 8vw, 84px\)/.test(SHOW_CHROME_CSS));
+
+  t('W31a · recap hides the show line and locks night-main to one viewport',
+    /onRun \|\| onStage \|\| onRecap \|\| show === 'lobby'/.test(hostSrc)
+      && /\.night\.on-recap \.night-main \{ padding:4px 22px 14px; overflow:hidden/.test(skin)
+      && /\.night\.on-recap \.night-line \{ display:none/.test(skin));
+
+  t('W31b · talk chrome sits in reserved bands outside the ballroom frame',
+    /talk-chrome-top/.test(hostSrc)
+      && /talk-chrome-bot/.test(hostSrc)
+      && /talk-well/.test(hostSrc)
+      && /talk-side/.test(hostSrc)
+      && /talk-picture/.test(hostSrc)
+      && /intro-frame talk-frame/.test(hostSrc)
+      && !/talk-overlay/.test(hostSrc)
+      && !/\.talk-overlay \{/.test(skin)
+      && /\.night\.on-talk \.intro-frame\.talk-frame \{ height:100%/.test(skin));
+
+  t('W31c · noms / tallies / verdict stay on the shared builders, not a second overlay language',
+    /verdictPlateHtml\(/.test(hostSrc)
+      && /nameplateHtml\(/.test(hostSrc)
+      && /countdownHtml\(/.test(hostSrc)
+      && /rundownRailHtml\(/.test(hostSrc)
+      && SHOW_CHROME_CSS.includes('.talk-chrome-top')
+      && SHOW_CHROME_CSS.includes('.talk-side')
+      && SHOW_CHROME_CSS.includes('.show-verdict')
+      && !SHOW_CHROME_CSS.includes('`'));
+
+  t('W31d · guide map is still never on the TV',
+    !/guideMapSvg/.test(hostSrc) && !/GUIDE_MAP/.test(hostSrc));
+}
+
 
 console.log(`\nparty-warm: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
