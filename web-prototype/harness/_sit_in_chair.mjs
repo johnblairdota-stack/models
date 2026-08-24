@@ -126,5 +126,20 @@ t('S7 · the allow-list only names real Meshy sit clips',
   SIT_CLIP_ALLOW.every((n) => /Sit|sit/.test(n)),
   SIT_CLIP_ALLOW.join(', '));
 
+{
+  // `intro-bed` `driveOne` sets sitLock then keeps calling `Player.update`. Facing always
+  // reads mv/mlen; they must be declared before the sitLock branch (PR #42 TDZ crash).
+  const playerSrc = readFileSync(join(ROOT, '..', 'src', 'game', 'player.js'), 'utf8');
+  const updStart = playerSrc.indexOf('update(dt, t, input');
+  const facingAt = playerSrc.indexOf('this._targetFacing(mv, mlen, caps)', updStart);
+  const upd = facingAt > updStart ? playerSrc.slice(updStart, facingAt) : '';
+  const mvAt = upd.indexOf('const mv = input.move');
+  const mlenAt = upd.indexOf('let mlen = Math.hypot');
+  const sitAt = upd.indexOf('if (this.sitLock)');
+  t('S8 · Player.update defines mv/mlen before sitLock so seated facing cannot TDZ',
+    updStart >= 0 && facingAt > updStart
+    && mvAt >= 0 && mlenAt >= 0 && sitAt > mlenAt && mvAt < sitAt);
+}
+
 console.log(`\nsit-in-chair: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

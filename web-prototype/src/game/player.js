@@ -441,22 +441,29 @@ export class Player {
     this.aimYaw = input.aimYaw ?? this.aimYaw;
     this.aimPitch = input.aimPitch ?? this.aimPitch;
 
+    // Stick is always normalised here. `_targetFacing(mv, mlen, caps)` runs after the
+    // sitLock branch; declaring these inside the else TDZ'd them once robots sat
+    // (`VIEW "party.follow" FAILED` — ReferenceError: mv is not defined).
+    const mv = input.move ?? { x: 0, y: 0 };
+    let mlen = Math.hypot(mv.x, mv.y);
+    if (mlen > 1) { mv.x /= mlen; mv.y /= mlen; mlen = 1; }
+
     /*
      * 🪑 SIT LOCK — intro twins occupy a chair AABB. `Player.collide` would shove them
      * back to the stand-mark every frame (that is why they used to idle in front of
      * the seat). The expedition runner never sets this; only `intro-bed` does.
+     * Skip ground/skate stepping; facing still sees defined mv/mlen (mlen≈0 → aimYaw).
      */
     if (this.sitLock) {
       this.vel.set(0, 0, 0);
       this.speed = 0;
+    } else if (caps.gait === 'skate') {
+      this._stepSkate(dt, mv, mlen, input);
+    } else if (caps.gait === 'down') {
+      this.vel.set(0, 0, 0);
+      this.speed = 0;
     } else {
-      const mv = input.move ?? { x: 0, y: 0 };
-      let mlen = Math.hypot(mv.x, mv.y);
-      if (mlen > 1) { mv.x /= mlen; mv.y /= mlen; mlen = 1; }
-
-      if (caps.gait === 'skate') this._stepSkate(dt, mv, mlen, input);
-      else if (caps.gait === 'down') { this.vel.set(0, 0, 0); this.speed = 0; }
-      else this._stepGround(dt, mv, mlen, input, caps);
+      this._stepGround(dt, mv, mlen, input, caps);
     }
 
     // ---- GRAPPLE PULL. Overrides the stick while it is taut.
@@ -487,25 +494,27 @@ export class Player {
     // ---- collide and integrate
     _v.copy(this.pos).addScaledVector(this.vel, dt);
     if (this.sitLock) {
+      // Occupying a chair AABB: zero vel and pin y. Do not world-collide shove
+      // and do not copy `_v` onto pos, or the sit park walks back to the stand-mark.
       this.vel.set(0, 0, 0);
       this.pos.y = this.world?.floorY ?? this.pos.y;
     } else {
       if (this.world?.collide) {
-      // ⚠️ TWO ARGUMENTS. The third used to be `this.pos`, left over from a signature this
-      // function has not had for a long time — and `room.collide` now takes a CLEAR HEIGHT there
-      // (`rules.js` PASS_H), so passing a Vector3 would have made every player `[object Object]` tall.
-      // 🪜 FOUR ARGUMENTS NOW. The fourth is the STEP-UP (`rules.js` `STEP_H`) and it is the
-      // player's own, not the hunter's — see that table for the decision and for why the
-      // hunter's BFS stays honest without sharing it.
-      const r = this.world.collide(_v, this.radius, PASS_H.robot, STEP_H.robot);
-      if (r) _v.copy(r);
-      this._sill = this.world.sillTop?.() ?? 0;
-    }
-    // recover the velocity the collision actually allowed, so sliding along a wall does
-    // not keep the full forward speed and the gait does not run on the spot
-    if (dt > 0) this.vel.copy(_v).sub(this.pos).multiplyScalar(1 / dt);
-    this.pos.copy(_v);
-    this.pos.y = this.world?.floorY ?? 0;
+        // ⚠️ TWO ARGUMENTS. The third used to be `this.pos`, left over from a signature this
+        // function has not had for a long time — and `room.collide` now takes a CLEAR HEIGHT there
+        // (`rules.js` PASS_H), so passing a Vector3 would have made every player `[object Object]` tall.
+        // 🪜 FOUR ARGUMENTS NOW. The fourth is the STEP-UP (`rules.js` `STEP_H`) and it is the
+        // player's own, not the hunter's — see that table for the decision and for why the
+        // hunter's BFS stays honest without sharing it.
+        const r = this.world.collide(_v, this.radius, PASS_H.robot, STEP_H.robot);
+        if (r) _v.copy(r);
+        this._sill = this.world.sillTop?.() ?? 0;
+      }
+      // recover the velocity the collision actually allowed, so sliding along a wall does
+      // not keep the full forward speed and the gait does not run on the spot
+      if (dt > 0) this.vel.copy(_v).sub(this.pos).multiplyScalar(1 / dt);
+      this.pos.copy(_v);
+      this.pos.y = this.world?.floorY ?? 0;
     }
 
     /**
