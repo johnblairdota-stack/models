@@ -396,13 +396,18 @@ t('N13c · a refresh resumes the server show beat, not casting',
     JSON.stringify(last(host, 'show')));
   const phases = [];
   phases.push(night.show);
+  const toDebrief = progressShow(night);
+  await sleep(40);
   t('N17b · progressShow walks Recap → Debrief',
-    progressShow(night) === 'debrief' && night.show === 'debrief'
+    toDebrief === 'debrief' && night.show === 'debrief'
       && last(host, 'show')?.beat === 'debrief',
-    night.show);
+    JSON.stringify({ show: night.show, host: last(host, 'show')?.beat }));
   phases.push(night.show);
+  const toCasting = progressShow(night);
+  await sleep(40);
   t('N17c · and Debrief → Casting for the next pair (episode already bumped by playEpisode)',
-    progressShow(night) === 'casting' && night.show === 'casting'
+    toCasting === 'casting' && night.show === 'casting'
+      && last(host, 'show')?.beat === 'casting'
       && night.game.state.phase === 'CASTING'
       && night.game.state.airingEpisode === before
       && night.game.state.pair.runner == null && night.game.state.pair.guide == null,

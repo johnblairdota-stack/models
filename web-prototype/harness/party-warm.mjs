@@ -1318,7 +1318,7 @@ console.log('\nparty-warm — the lobby-warm night');
     && /_paintRay\.set\(runner\.eye, runner\.aimDir\)/.test(bedSrc)
     && !/d <= 1\.9/.test(bedSrc));
   t('W19e · a new run cue re-arms the mission so episode 2 does not start already done',
-    /armMission\(c\.episode\)/.test(bedSrc) && /function armMission/.test(bedSrc));
+    /armMission\(c\.episode \?\? 1\)/.test(bedSrc) && /function armMission/.test(bedSrc));
 }
 
 // ---- W20 · WORD FROM THE HOUSE IS FOR THE CHAIRS ---------------------------------------------
