@@ -2044,6 +2044,18 @@ console.log('\nparty-warm — the lobby-warm night');
     && /holdForRun/.test(introSrc)
     && /THE CIRCLE STAYS/.test(bedSrc)
     && seatCircleRadius(8) <= 5.0);
+  // Casting walk-in died with `ReferenceError: mv is not defined` once sitLock went true:
+  // PR #42 declared mv/mlen inside the sitLock else, then `_targetFacing(mv, mlen, caps)`
+  // ran anyway. Stick must be in scope for the whole update, including the sit path.
+  const updStart = playerSrc.indexOf('update(dt, t, input');
+  const facingAt = playerSrc.indexOf('this._targetFacing(mv, mlen, caps)', updStart);
+  const upd = facingAt > updStart ? playerSrc.slice(updStart, facingAt) : '';
+  const mvAt = upd.indexOf('const mv = input.move');
+  const mlenAt = upd.indexOf('let mlen = Math.hypot');
+  const sitAt = upd.indexOf('if (this.sitLock)');
+  t('W33h · sitLock update declares mv/mlen before the lock, so facing cannot TDZ',
+    updStart >= 0 && facingAt > updStart
+    && mvAt >= 0 && mlenAt >= 0 && sitAt > mlenAt && mvAt < sitAt);
 }
 
 console.log(`\nparty-warm: ${pass} passed, ${fail} failed`);
