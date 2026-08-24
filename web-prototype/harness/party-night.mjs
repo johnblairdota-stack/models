@@ -8,7 +8,7 @@
  * This one proves a reviewer can open a host, two phones, see the lobby, and advance.
  */
 
-import { startServer, fanoutViolations, lobbySnapshot, progressShow, expireShowHold, applyNominate } from '../net/party/local.mjs';
+import { startServer, fanoutViolations, lobbySnapshot, progressShow, expireShowHold, applyNominate, MAX_PHONES } from '../net/party/local.mjs';
 import { recapFromEvents } from '../src/party/recap.js';
 import { qrMatrix } from '../src/party/qr.js';
 import {
@@ -277,6 +277,28 @@ t('N6 · host opens CASTING',
     JSON.stringify(premature));
 }
 
+{
+  const PORT8 = PORT + 1;
+  const srv8 = startServer({ port: PORT8, count: 8, castSeed: 8, worldSeed: 8, code: 'n8' });
+  await sleep(80);
+  const base8 = `ws://localhost:${PORT8}/?room=n8`;
+  const tv8 = await open(`${base8}&host=1`);
+  const phones8 = [];
+  for (let i = 0; i < MAX_PHONES; i++) phones8.push(await open(base8));
+  await sleep(80);
+  tv8.send({ t: 'start' });
+  tv8.send({ t: 'casting' });
+  await sleep(80);
+  tv8.send({ t: 'episode', opts: {} });
+  await sleep(80);
+  const pair8 = last(tv8, 'state')?.frame?.pair;
+  t('N6d · N=8 empty-noop waits — unused===0 must not invent a rotation pair',
+    !pair8?.runner && !pair8?.guide,
+    JSON.stringify(pair8));
+  for (const c of [tv8, ...phones8]) c.close();
+  srv8.close();
+}
+
 a.send({ t: 'ballot', runner: b.welcome.playerId, guide: a.welcome.playerId });
 b.send({ t: 'ballot', runner: a.welcome.playerId, guide: b.welcome.playerId });
 await sleep(80);
@@ -325,6 +347,14 @@ await sleep(220);
   r.playEpisode({ ballots: [], living: ['p1', 'p2'] });
   t('N7f · playEpisode with an empty ballot list does not invent a pair',
     r.state.pair.runner == null && r.state.pair.guide == null);
+  {
+    const r8 = createRoom({ count: 8, castSeed: 1, worldSeed: 1, send: () => {} });
+    r8.start();
+    const living8 = r8.state.players.filter((p) => p.alive).map((p) => p.id);
+    r8.playEpisode({ ballots: [], living: living8 });
+    t('N7f2 · playEpisode empty ballots at N=8 (unused===0) still wait',
+      living8.length === 8 && r8.state.pair.runner == null && r8.state.pair.guide == null);
+  }
   r.playEpisode({ ballots: [{ voter: 'p1', runner: 'p1', guide: 'p2' }], living: ['p1', 'p2'] });
   t('N7g · a seated-human living pool cannot elect an unused deal slot',
     [r.state.pair.runner, r.state.pair.guide].sort().join(',') === 'p1,p2'

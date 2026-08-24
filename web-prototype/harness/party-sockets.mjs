@@ -73,6 +73,19 @@ t('S1 · nine distinct seats and nine distinct tokens',
 conns[0].send({ t: 'start' });
 await sleep(60);
 conns[0].send({ t: 'episode', opts: { hunterRoom: 'cellar' } });
+await sleep(80);
+{
+  const room0 = srv.rooms.get('g1');
+  const pair0 = room0.game.state.pair;
+  t('S2b · N=8 empty-noop waits — unused===0 must not invent a rotation pair',
+    !pair0?.runner && !pair0?.guide, JSON.stringify(pair0));
+}
+const phones = conns.filter((c) => c.welcome.playerId);
+const pid = phones.map((c) => c.welcome.playerId);
+phones[0].send({ t: 'ballot', runner: pid[0], guide: pid[1] });
+phones[1].send({ t: 'ballot', runner: pid[1], guide: pid[2] });
+await sleep(60);
+conns[0].send({ t: 'episode', opts: { hunterRoom: 'cellar' } });
 await sleep(60);
 conns[0].send({ t: 'episode', opts: { hunterRoom: 'gallery', takeRunner: true } });
 await sleep(200);
