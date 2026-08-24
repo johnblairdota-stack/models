@@ -678,8 +678,9 @@ export function startServer({ port = 5181, count = 8, castSeed = null, worldSeed
 
 /** Joined phone player ids. Empty deal slots are not seated. */
 export function seatedPlayerIds(room) {
+  const taken = room.seatsTaken || new Set();
   return room.game.sockets
-    .filter((s) => !s.isTV && room.seatsTaken.has(s.id) && s.playerId)
+    .filter((s) => !s.isTV && taken.has(s.id) && s.playerId)
     .map((s) => s.playerId);
 }
 

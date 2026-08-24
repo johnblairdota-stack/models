@@ -512,7 +512,8 @@ function showRoom() {
   game.start();
   game.playEpisode();
   return {
-    game, conns: new Map(), show: 'recap', showClock: null, showUntil: null,
+    game, conns: new Map(), seatsTaken: new Set(), tvTaken: false,
+    show: 'recap', showClock: null, showUntil: null,
     reckoningStartedAt: null, reckoningEmptyExtends: 0, runEnd: RUN_END.SMASHED,
     ballots: new Map(),
   };
