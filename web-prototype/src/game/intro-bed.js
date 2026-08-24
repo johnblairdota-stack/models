@@ -204,7 +204,7 @@ function parkSit(r) {
   r.arrived = true;
   r.seated = true;
   r.body.avatar?.playSit?.({
-    seatIndex: r.seatIndex, skipDown: true, phase: sitPhase(r.seatIndex),
+    seatIndex: r.seatIndex, phase: sitPhase(r.seatIndex),
   });
 }
 
@@ -358,9 +358,9 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
   scene.add(group);
 
   /*
-   * 🧶 THE RUG MATCHES THE LIVE CHAIR RING, not the catalog's 2.80 m toy disc.
-   * Thin rugs do not grow doorway keep-outs (`walkHalf` caps them); we only restale
-   * the already-placed centre mesh. Same helper `game.js` uses after smash dress.
+   * 🧶 THE RUG MATCHES 1.40 × THE LIVE CHAIR RADIUS, not the catalog's 2.80 m toy
+   * disc and not a disc that merely kisses the ring. Thin rugs do not grow doorway
+   * keep-outs (`walkHalf` caps them); we only restale the already-placed centre mesh.
    */
   scaleBallroomRug(room, space, radius);
 
@@ -439,7 +439,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       body.aimYaw = face;
       body.sitLock = true;
       body.root.visible = true;
-      body.avatar?.playSit?.({ seatIndex: i, skipDown: true, phase: sitPhase(i) });
+      body.avatar?.playSit?.({ seatIndex: i, phase: sitPhase(i) });
     } else {
       body.pos.copy(start);
       const inward = Math.atan2(via.x - start.x, via.z - start.z);
@@ -539,7 +539,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       body.aimYaw = r.face;
       r.seated = true;
       body.avatar?.playSit?.({
-        seatIndex: r.seatIndex, skipDown: false, phase: sitPhase(r.seatIndex),
+        seatIndex: r.seatIndex, phase: sitPhase(r.seatIndex),
       });
     }
     body.sitLock = true;
@@ -645,6 +645,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
 
     /**
      * Reckoning / Vote: a red "!" above each standing nominee's name tag.
+     * Casting must pass empty — a leftover bang from a prior episode is a stray !.
      * `standing` is FANOUT noms rows (`nominator`, `target`). Empty clears.
      */
     setNominees(standing) {

@@ -1430,6 +1430,13 @@ console.log('\nparty-warm — the lobby-warm night');
   })());
   t('W22a control — casting with a locked pair still offers Watch the run',
     /if \(hasPair\) body \+= `[\s\S]*?Watch the run/.test(hostSrc));
+  t('W22b · Send them in is gone — a locked pair auto-sends after a 3 s count',
+    !/<button[^>]*>Send them in<\/button>/.test(hostSrc)
+    && !/id="lock">Send them in/.test(hostSrc)
+    && /SEND_COUNTDOWN_MS = 3000/.test(hostSrc)
+    && /function armSendCountdown/.test(hostSrc)
+    && /function sendThemIn/.test(hostSrc)
+    && /data-send-count/.test(hostSrc));
   t('W25 — run cue is only marked cued after a successful postMessage',
     /function cueRun\(/.test(hostSrc)
     && /if \(ok\) ui\.cuedRunner = runnerId/.test(hostSrc)
@@ -1698,7 +1705,7 @@ console.log('\nparty-warm — the lobby-warm night');
     && /new THREE\.Sprite/.test(tagSrc)
     && /headName/.test(tagSrc)
     && /sizeAttenuation/.test(tagSrc)
-    && /TAG_W = 0\.56/.test(tagSrc));
+    && /TAG_W = 0\.92/.test(tagSrc));
 }
 
 // ---- W26 · DUAL-STICK TV CHASE — no phone embed; look cue + camera-relative move ------------
@@ -2013,18 +2020,20 @@ console.log('\nparty-warm — the lobby-warm night');
     && SIT_CLIP_ALLOW.includes('Stand_to_Sit_Transition_M')
     && /sitPhase/.test(introSrc)
     && /holdForRun/.test(introSrc));
-  t('W33b · name tags are a no-mip high-contrast atlas, STYLE_CONTRACT colours',
+  t('W33b · name tags are a no-mip nearest-neighbour atlas, STYLE_CONTRACT colours',
     /generateMipmaps = false/.test(tagSrc)
-    && /LinearFilter/.test(tagSrc)
+    && /NearestFilter/.test(tagSrc)
     && /strokeText/.test(tagSrc)
-    && /#054E84/.test(tagSrc) && /#EDEFF0/.test(tagSrc) && /#B9BEC2/.test(tagSrc));
+    && /#054E84/.test(tagSrc) && /#EDEFF0/.test(tagSrc) && /#B9BEC2/.test(tagSrc)
+    && /TAG_REF_DIST/.test(tagSrc) && /NAME_CAP = 8/.test(tagSrc));
   t('W33c · nominators are pre-cast and cannot recast',
     /function assumedLynchVotes/.test(voteSrc)
     && /nominator vote locked/.test(roomSrc)
     && /Your nomination of/.test(phoneSrc)
     && /You do not vote again/.test(phoneSrc));
-  t('W33d · the ballroom rug scales with the live chair radius, not a 2.80 toy disc',
+  t('W33d · the ballroom rug radius is 1.40 × the live chair radius',
     rugSpanForSeats(4.96) > 8
+    && Math.abs(rugSpanForSeats(4.96) - 2 * 4.96 * 1.40) < 1e-9
     && rugSpanForSeats(2.4) >= 2.4
     && /rugScaleForSeats/.test(introSrc)
     && /scaleBallroomRug/.test(introSrc));
@@ -2056,6 +2065,12 @@ console.log('\nparty-warm — the lobby-warm night');
   t('W33h · sitLock update declares mv/mlen before the lock, so facing cannot TDZ',
     updStart >= 0 && facingAt > updStart
     && mvAt >= 0 && mlenAt >= 0 && sitAt > mlenAt && mvAt < sitAt);
+  t('W33i · bangs only arm on Reckoning/Vote — Casting sends an empty standing list',
+    /const live = show === 'reckoning' \|\| show === 'vote'/.test(hostSrc)
+    && /intro\?\.setNominees\?\.\(\[\]\)/.test(bedSrc));
+  t('W33j · sitLock pins the model so gait offset cannot unseat the clip',
+    /if \(this\.sitLock\) \{[\s\S]*?this\.model\.position\.set\(0, 0, 0\)/.test(playerSrc)
+    && /sitIdle = sitIdleM \|\| sitIdleF/.test(await readFile(new URL('../src/characters/mesh-avatar.js', import.meta.url), 'utf8')));
 }
 
 console.log(`\nparty-warm: ${pass} passed, ${fail} failed`);

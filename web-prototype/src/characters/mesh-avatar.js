@@ -1433,11 +1433,13 @@ export function cloneMeshAvatar(source, opts = {}) {
     playAttack() {},
     setLimbVisible() {},
     /**
-     * Loop a seated idle, with an optional sit-down transition. Per-seat `phase` so
-     * eight clones do not sync. Hips XZ are left to the clip (not in-place pinned).
+     * Loop a seated idle. Every seat uses Chair_Sit_Idle_M (F tucks 0.56 m and
+     * reads as sunk/through-back). Hips X is pinned to bind after the mixer so
+     * the clip's sideways translate cannot walk them off the cushion; Y/Z stay
+     * on the clip. The stand-to-sit transition is not played at the sit attach.
      */
-    playSit({ seatIndex = 0, skipDown = false, phase = 0 } = {}) {
-      sitIdle = (seatIndex % 2 === 0 ? sitIdleM : sitIdleF) || sitIdleM || sitIdleF;
+    playSit({ seatIndex = 0, skipDown: _skipDown = false, phase = 0 } = {}) {
+      sitIdle = sitIdleM || sitIdleF;
       if (!sitIdle) return false;
       pose = 'sit';
       sitClipName = sitIdle.getClip().name;
@@ -1447,17 +1449,14 @@ export function cloneMeshAvatar(source, opts = {}) {
       walk.setEffectiveWeight(0);
       if (sitIdleM && sitIdleM !== sitIdle) sitIdleM.setEffectiveWeight(0);
       if (sitIdleF && sitIdleF !== sitIdle) sitIdleF.setEffectiveWeight(0);
-      if (!skipDown && sitDown) {
-        sitDown.reset();
-        sitDown.setLoop(THREE.LoopOnce, 1);
-        sitDown.clampWhenFinished = true;
-        sitDown.setEffectiveWeight(1);
-        sitIdle.setEffectiveWeight(0);
-        sitClipName = sitDown.getClip().name;
-      } else {
-        if (sitDown) sitDown.setEffectiveWeight(0);
-        sitIdle.setEffectiveWeight(1);
-      }
+      /*
+       * Always skip the stand-to-sit transition at the sit attach. Playing it here
+       * starts the clip's STANDING frame inside the chair (legs through the seat) —
+       * John's "crouching on the floor in front of / clipping through the chair".
+       * Walk-in already showed them on their feet; occupying the seat is Idle_M.
+       */
+      if (sitDown) sitDown.setEffectiveWeight(0);
+      sitIdle.setEffectiveWeight(1);
       return true;
     },
     update(dt, state = {}) {
@@ -1473,6 +1472,9 @@ export function cloneMeshAvatar(source, opts = {}) {
           }
         }
         mixer.update(dt);
+        // Clip writes a ~0.18 m sideways hips.x. Pin X to bind so both twins sit
+        // on the cushion centre; leave Y/Z to Idle_M (the sit drop and hip-back).
+        if (hips && hipsRest) hips.position.x = hipsRest.x;
         return;
       }
       const speed = state.speed ?? 0;

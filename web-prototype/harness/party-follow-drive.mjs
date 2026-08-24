@@ -254,9 +254,10 @@ try {
     console.log(`  ${name} cast a runner and a guide`);
   }
   await sleep(500);
-  await tv.waitForSelector('#lock:not([disabled])', { timeout: 15000 });
-  await tv.click('#lock', { timeout: 15000 });
-  console.log('  host sent them in');
+  await tv.waitForSelector('[data-send-count]', { timeout: 60000 });
+  console.log('  TV counting down to auto-send');
+  await tv.waitForSelector('.run-frame', { timeout: 20000 });
+  console.log('  host auto-sent them in');
 
   await tv.waitForSelector('.run-frame', { timeout: 10000 });
   t('D1 · the run beat replaces the lobby — no QR, and a run frame exists',

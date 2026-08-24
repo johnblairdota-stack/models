@@ -66,6 +66,13 @@ export function injectNightSkin() {
     .btn:disabled { opacity:.35; cursor:not-allowed; }
     .btn.ghost { background:transparent; color:#e8dcc8; border:1px solid rgba(232,220,200,.3); }
     .btn.wide { width:100%; }
+    .send-go { display:flex; flex-direction:column; align-items:flex-start; gap:0;
+      pointer-events:none; margin:8px 0 4px; }
+    .send-go-k { color:#f5a14a; font-size:12px; letter-spacing:.28em; text-transform:uppercase;
+      font-weight:700; }
+    .send-count { font-size:clamp(120px, 22vw, 280px); font-weight:900; line-height:.9;
+      color:#fff; letter-spacing:.04em; font-variant-numeric:tabular-nums;
+      text-shadow:0 12px 48px rgba(0,0,0,.9); }
     .actions { display:flex; gap:12px; flex-wrap:wrap; margin-top:22px; }
     .err { color:#ff8a7a; white-space:pre-wrap; font-family:ui-monospace,Menlo,monospace; font-size:13px; }
     .ballot { display:flex; flex-direction:column; gap:14px; }

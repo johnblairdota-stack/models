@@ -641,10 +641,18 @@ export class Player {
 
       this.avatar.update(dt, { speed: this.speed, runAt: MOVE.run, swinging });
     }
-    const off = this.gait.offset;
-    // 🪜 `stepLift` is the only term here that is not the gait's — see the block above `speed`.
-    this.model.position.set(off.x, off.y + this.stepLift, off.z ?? 0);
-    this.model.rotation.set(off.pitch, off.yaw, off.roll);
+    if (this.sitLock) {
+      // Gait offset is a standing walk (bob, lean, foot-plant Z). Applied to the
+      // model that holds the Meshy sit clip it shoves one twin into the cushion
+      // and leaves the other crouched in front of the chair. Pin it.
+      this.model.position.set(0, 0, 0);
+      this.model.rotation.set(0, 0, 0);
+    } else {
+      const off = this.gait.offset;
+      // 🪜 `stepLift` is the only term here that is not the gait's — see the block above `speed`.
+      this.model.position.set(off.x, off.y + this.stepLift, off.z ?? 0);
+      this.model.rotation.set(off.pitch, off.yaw, off.roll);
+    }
 
     this._fireCd = Math.max(0, this._fireCd - dt);
     this._interactCd = Math.max(0, this._interactCd - dt);
