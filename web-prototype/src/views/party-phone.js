@@ -1022,11 +1022,15 @@ export default async function partyPhone({ params }) {
     const cast = state.cast;
     const phase = cast.phase;
     const living = (players || []).filter((p) => p.alive !== false);
-    // The card arriving is a change of SHAPE — the tab appears — so it belongs in the structural
-    // stamp. Without it the sheet would keep a cached DOM that has no way to reach the card.
-    const stamp = `${phase}:${hasCard() ? 'card' : 'nocard'}:${living.map((p) => `${p.id}:${p.name}`).join(',')}`;
+    /*
+     * Stamp is the sheet's SHAPE: step + who can be picked. Names and the role-card
+     * tab arriving used to live here, so a lobby fanout mid-thumb rebuilt `#lock-pick`
+     * and dropped the tap. Patch those in place instead.
+     */
+    const stamp = `${phase}:${living.map((p) => p.id).join(',')}`;
     if (root.dataset.castUi === stamp) {
       syncCastHighlight(cast);
+      patchCastSheet(players, me, cast);
       return;
     }
 
@@ -1056,6 +1060,31 @@ export default async function partyPhone({ params }) {
     root.dataset.castUi = stamp;
     bindCast(players, me);
     bindCardTab();
+  }
+
+  function patchCastSheet(players, me, cast) {
+    for (const b of root.querySelectorAll('[data-pick]')) {
+      const p = (players || []).find((x) => x.id === b.dataset.pick);
+      if (!p) continue;
+      const blocked = cast.phase === 'guide' && p.id === cast.runner;
+      const mark = blocked ? ' · runner' : (p.id === me.playerId ? ' (you)' : '');
+      const label = `${p.name || p.id}${mark}`;
+      if (b.textContent !== label) b.textContent = label;
+    }
+    const mine = root.querySelector('.phone-top span:last-child');
+    if (mine) {
+      const want = `casting · ${playerName(players, me.playerId) || me.name || 'You'}`;
+      if (mine.textContent !== want) mine.textContent = want;
+    }
+    const hint = root.querySelector('.cast-step > .hint');
+    if (hint && cast.phase === 'guide') {
+      const want = `${playerName(players, cast.runner)} walks. Pick someone else — nothing is sent until you lock it.`;
+      if (hint.textContent !== want) hint.textContent = want;
+    }
+    if (hasCard() && !root.querySelector('#card-tab')) {
+      root.insertAdjacentHTML('beforeend', faceDownHtml());
+      bindCardTab();
+    }
   }
 
   function bindCast(players, me) {

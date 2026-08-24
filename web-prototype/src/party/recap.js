@@ -25,5 +25,6 @@ export function recapFromEvents(events) {
     runner: pair?.data?.runner ?? ballot?.data?.runner ?? null,
     guide: pair?.data?.guide ?? ballot?.data?.guide ?? null,
     episode: ballot?.data?.episode ?? cameras[0]?.data?.episode ?? null,
+    tiebreaks: Array.isArray(ballot?.data?.tiebreaks) ? ballot.data.tiebreaks : [],
   };
 }

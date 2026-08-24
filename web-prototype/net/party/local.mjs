@@ -808,12 +808,12 @@ function handleClient(room, bound, self, msg) {
     const seated = seatedPlayerIds(room);
     const votes = [...room.ballots.values()].filter((v) =>
       seated.includes(v.runner) && seated.includes(v.guide) && v.runner !== v.guide);
-    const unused = room.game.state.players.length - seated.length;
-    // Empty chairs in the deal must not invent a pair. Gates that fill every seat still synthesize.
-    if (!votes.length && unused > 0) return;
+    // Empty ballots never invent a pair, including at capacity (unused===0 / N=8).
+    // playEpisode() with the ballots key omitted still synthesizes for gates/sim.
+    if (!votes.length) return;
     room.game.playEpisode({
       ...(msg.opts || {}),
-      ...(votes.length ? { ballots: votes } : {}),
+      ballots: votes,
       ...(seated.length ? { living: seated } : {}),
       // Live night: mansion reports cameras/alarms — do not invent gate scaffold on the TV.
       scaffold: false,

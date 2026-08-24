@@ -15,7 +15,7 @@
  * decision rather than re-deriving it.
  */
 
-import { tallyCasting, refuse, seededPick } from '../src/party/ballot.js';
+import { tallyCasting, refuse, seededPick, describeCastTiebreaks, historyFromCastEvents, previewCastTiebreaks } from '../src/party/ballot.js';
 
 let pass = 0, fail = 0;
 const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' · ' + d : ''}`); } else { fail++; console.log(`  FAIL ${n}${d ? ' · ' + d : ''}`); } return c; };
@@ -147,6 +147,46 @@ const NO_LOCK = { runner: null, guide: null };
     'the literal wording would cast p2; B4 casts p1. A gate that agreed either way would prove nothing');
   t('B8b control · seededPick is stable and spreads', seededPick(1, 'x', ['a', 'b', 'c']) === seededPick(1, 'x', ['a', 'b', 'c'])
     && new Set([0, 1, 2, 3, 4, 5].map((s) => seededPick(s, 'cast', ['a', 'b', 'c']))).size > 1);
+}
+
+// ---------------------------------------------------------------- B9 · TV copy of the existing chain
+{
+  t('B9 · describeCastTiebreaks names fewer-expeditions → lastEp → seededPick',
+    describeCastTiebreaks(['runner:expeditions', 'guide:staleness', 'runner:seeded']).join(' | ')
+      === 'Runner: fewer expeditions | Guide: longest since last walk | Runner: seeded pick');
+  t('B9b · unknown codes stay off the board — no second system',
+    describeCastTiebreaks(['runner:revote', 'guide:coin']).length === 0
+      && describeCastTiebreaks([]).length === 0);
+}
+
+// ---------------------------------------------------------------- B10 · history from the public log
+{
+  const { history, lastPair } = historyFromCastEvents([
+    { type: 'cast.ballot', data: { episode: 1, runner: 'p1', guide: 'p2', tiebreaks: ['runner:seeded'] } },
+    { type: 'cast.pair', data: { runner: 'p1', guide: 'p2' } },
+    { type: 'cast.ballot', data: { episode: 2, runner: 'p3', guide: 'p1' } },
+  ]);
+  t('B10 · historyFromCastEvents counts expeditions once per ballot, not again on cast.pair',
+    history.p1.expeditions === 2 && history.p1.lastEp === 2
+      && history.p2.expeditions === 1 && history.p2.lastEp === 1
+      && lastPair.runner === 'p3' && lastPair.guide === 'p1');
+}
+
+// ---------------------------------------------------------------- B11 · preview is tallyCasting
+{
+  const living = ids(4);
+  const ballots = [
+    { voter: 'p1', runner: 'p1', guide: 'p4' }, { voter: 'p2', runner: 'p2', guide: 'p4' },
+    { voter: 'p3', runner: 'p1', guide: 'p4' }, { voter: 'p4', runner: 'p2', guide: 'p3' },
+  ];
+  const direct = tallyCasting({ ballots, living, history: flat(living), lastPair: NO_LOCK, ep: 5, matchSeed: 1 });
+  const preview = previewCastTiebreaks({ ballots, living, events: [], ep: 5, matchSeed: 1 });
+  t('B11 · previewCastTiebreaks is the same chain, not a second resolver',
+    JSON.stringify(preview) === JSON.stringify(direct.tiebreaks));
+  t('B11b · empty ballots preview nothing — no invented pair',
+    previewCastTiebreaks({ ballots: [], living, events: [], ep: 1, matchSeed: 1 }).length === 0);
+  t('B11c · a missing world seed does not invent a house pick',
+    previewCastTiebreaks({ ballots, living, events: [], ep: 5, matchSeed: null }).length === 0);
 }
 
 console.log(`\ncast-ballot: ${pass} passed, ${fail} failed`);

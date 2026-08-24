@@ -18,13 +18,21 @@ import {
   DEFAULT_LOOK, SHOW_LINE, SHOW_TITLE, cleanLook, codeBugHtml, countdownHtml, nameplateHtml,
   recBugHtml, robotFaceSvg, rundownRailHtml, titlePlateHtml, verdictPlateHtml,
 } from '../party/look.js';
-import { mergePublicNames } from '../party/cast-ui.js';
+import { mergePublicNames, publicName } from '../party/cast-ui.js';
 import { cueViolations, warmLabel, warmPct, warmUrl } from '../party/follow.js';
 import { formatRemain, holdMsFor, isTalkBeat, remainingMs, rundownRibbon } from '../party/show.js';
 import { NO_ONE, SHOWRUNNER } from '../party/vote.js';
+import { describeCastTiebreaks, previewCastTiebreaks } from '../party/ballot.js';
 
 /** TV chrome 3·2·1 after ballots can lock a pair, then `{ t: 'episode' }`. */
 const SEND_COUNTDOWN_MS = 3000;
+/**
+ * Follow introsDone arrives from the iframe's rAF loop, which stops when the TV
+ * tab is hidden. Overnight grind then never arms the 3·2·1. ~12s after send
+ * (or after the tab is backgrounded) we force the beat so a pair can still go in.
+ * Visible nights wait for the real walk-in — 8-player intros are longer than 12s.
+ */
+const INTROS_DONE_MS = 12000;
 
 export default async function partyHost({ params }) {
   injectNightSkin();
@@ -66,6 +74,7 @@ export default async function partyHost({ params }) {
     /** Set once the intro cue has gone out, so a repaint cannot fire it twice. */
     introsSent: false,
     introsDone: false,
+    introsTimer: 0,
     /** The runner the run cue named, so a repaint cannot re-cue the same runner. */
     cuedRunner: null,
     /** How many world reports have been relayed. Read by the drive, never by the UI. */
@@ -399,9 +408,8 @@ export default async function partyHost({ params }) {
       }
       return;
     }
-    if (m.intros === 'done' && !ui.introsDone) {
-      ui.introsDone = true;
-      paint();
+    if (m.intros === 'done') {
+      markIntrosDone();
       return;
     }
     if (m.world) {
@@ -445,7 +453,35 @@ export default async function partyHost({ params }) {
     if (!cast.length) return;
     ui.introsSent = true;
     sendCue({ kind: 'intros', cast });
+    armIntrosWatchdog();
   }
+
+  function markIntrosDone() {
+    if (ui.introsTimer) { clearTimeout(ui.introsTimer); ui.introsTimer = 0; }
+    if (ui.introsDone) return;
+    ui.introsDone = true;
+    paint();
+  }
+
+  /**
+   * Hidden-tab failsafe. `armSendCountdown` waits on introsDone; follow rAF never
+   * flips it while the TV is backgrounded. Visible nights keep waiting.
+   */
+  function armIntrosWatchdog() {
+    if (ui.introsTimer) { clearTimeout(ui.introsTimer); ui.introsTimer = 0; }
+    if (ui.introsDone || !ui.introsSent) return;
+    ui.introsTimer = setTimeout(() => {
+      ui.introsTimer = 0;
+      if (ui.introsDone) return;
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') return;
+      markIntrosDone();
+    }, INTROS_DONE_MS);
+  }
+  window.addEventListener('visibilitychange', () => {
+    if (ui.introsSent && !ui.introsDone && document.visibilityState === 'hidden') {
+      armIntrosWatchdog();
+    }
+  });
 
   function cueSitDown() {
     if (ui.sitCued) return;
@@ -564,6 +600,21 @@ export default async function partyHost({ params }) {
     </div>`;
   }
 
+  function seatedLivingIds() {
+    const dead = new Set((client.frame?.players || []).filter((p) => p.alive === false).map((p) => p.id));
+    return phones().map((s) => s.playerId).filter((id) => id && !dead.has(id));
+  }
+
+  function castTiebreaks(votes, episode) {
+    return previewCastTiebreaks({
+      ballots: votes,
+      living: seatedLivingIds(),
+      events: client.events,
+      ep: episode,
+      matchSeed: client.worldSeed,
+    });
+  }
+
   function paint() {
     const frame = client.frame;
     const phase = frame?.phase || client.lobby?.phase || 'LOBBY';
@@ -680,10 +731,10 @@ export default async function partyHost({ params }) {
           who: joinedName(names, pair.runner || recap.runner, 'The circle'),
           whoSub: 'live · casting',
           whoId: pair.runner || recap.runner,
-          aside: ballotBoard(votes, names, pair, recap, episode),
+          aside: ballotBoard(votes, names, pair, recap, episode, castTiebreaks(votes, episode)),
         });
       } else {
-        body += ballotBoard(votes, names, pair, recap, episode);
+        body += ballotBoard(votes, names, pair, recap, episode, castTiebreaks(votes, episode));
       }
       body += `<div class="actions">`;
       if (sendLeft != null) {
@@ -813,17 +864,12 @@ export default async function partyHost({ params }) {
 }
 
 /**
- * Joined lobby name, never a leftover Robot N or a raw id on the TV.
- *
- * ⚠️ `'—'` IS `playerName`'s NOT-FOUND SENTINEL AND IT IS NOT A NAME. Without this line an
- * unresolved runner reaches the screen as literally "— is running", which is what the D13 drive
- * caught on a frame where the pair had not landed yet. It is truthy, it is not the id, and it is
- * not `Robot N`, so every other guard here lets it through.
+ * Joined lobby name on the TV. Stock `Robot N` is a name — do not paint it as
+ * "The runner" / "The guide". Missing names, the em-dash sentinel, and a raw id
+ * still fall back (D13: "— is running" on a pair that had not landed).
  */
 function joinedName(names, id, fallback) {
-  const n = playerName(names, id);
-  if (!n || n === '—' || n === id || /^Robot \d+$/i.test(n)) return fallback;
-  return n;
+  return publicName(playerName(names, id), id, fallback);
 }
 
 function seatLook(lobby, playerId) {
@@ -946,7 +992,7 @@ function cssEscape(s) {
   return String(s ?? '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
-function ballotBoard(votes, names, pair, recap, episode) {
+function ballotBoard(votes, names, pair, recap, episode, tiebreaks) {
   const rows = (votes || []).map((v) => `
     <div class="row">
       <div class="who">${esc(joinedName(names, v.voter, 'Someone'))}</div>
@@ -958,9 +1004,11 @@ function ballotBoard(votes, names, pair, recap, episode) {
   const hero = runner
     ? `<div class="pair-hero">${esc(joinedName(names, runner, 'The runner'))} walks · ${esc(joinedName(names, guide, 'The guide'))} talks</div>`
     : `<p class="hint">Ballots land here, huge. A pair goes in on its own.</p>`;
+  const why = describeCastTiebreaks(tiebreaks).join(' · ');
+  const whyLine = why ? `<p class="ballot-why">${esc(why)}</p>` : '';
   // playEpisode increments episode after the premiere; recap.episode stays 1.
   const huge = Number(episode) === 1 || recap.episode === 1;
-  return `${hero}<div class="ballot${huge ? ' huge' : ''}">${rows || '<p class="hint">No ballots yet — phones pick a runner and a guide.</p>'}</div>`;
+  return `${hero}${whyLine}<div class="ballot${huge ? ' huge' : ''}">${rows || '<p class="hint">No ballots yet — phones pick a runner and a guide.</p>'}</div>`;
 }
 
 function standingLead(standing, names) {
