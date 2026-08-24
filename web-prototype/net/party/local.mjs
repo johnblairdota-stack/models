@@ -41,6 +41,7 @@ import { createRoom } from '../../src/party/room.js';
 import { WARM_STAGES, moveViolations, warmPct, worldViolations } from '../../src/party/follow.js';
 import {
   isShowBeat, missionEndsRun, recapAfterMs, nextShowBeat, holdMsFor, remainingMs,
+  CASTING_BACKSTOP_MS,
   RUN_END, LATE_DEBRIEF_MS, EMPTY_RECKONING_EXTEND_CAP,
 } from '../../src/party/show.js';
 import { reckoningSeconds } from '../../src/party/phases.js';
@@ -168,6 +169,61 @@ function setShow(room, beat, end = null) {
     room.reckoningStartedAt = null;
   } else if (end) room.runEnd = end;
   fanout(room, showPayload(room));
+  // Casting is the one beat with no visible deadline, so it gets an invisible one. Armed here
+  // rather than in `enterNextCasting` so every path into casting is covered, including the
+  // host's `t:'show'` workaround.
+  if (beat === 'casting') startCastingClock(room);
+}
+
+/** Valid cast ballots — seated, distinct, both roles filled. The ONE definition. */
+function validCastBallots(room) {
+  const seated = seatedPlayerIds(room);
+  return [...room.ballots.values()].filter((v) =>
+    seated.includes(v.runner) && seated.includes(v.guide) && v.runner !== v.guide);
+}
+
+/**
+ * Resolve casting into a live expedition. The TV's `t:'episode'` and the server backstop both
+ * come through here, so there is exactly one answer to "how does casting resolve".
+ */
+function runEpisodeFromBallots(room, votes, opts = {}) {
+  const seated = seatedPlayerIds(room);
+  room.game.playEpisode({
+    ...opts,
+    ballots: votes,
+    ...(seated.length ? { living: seated } : {}),
+    // Live night: mansion reports cameras/alarms — do not invent gate scaffold on the TV.
+    scaffold: false,
+  });
+  // Durable show: expedition now, recap when the mission says so. Do not pin CASTING.
+  startShowClock(room);
+  fanout(room, lobbySnapshot(room));
+}
+
+function startCastingClock(room) {
+  clearShowClock(room);
+  room.showClock = setTimeout(() => {
+    room.showClock = null;
+    castingBackstop(room);
+  }, CASTING_BACKSTOP_MS);
+  room.showClock.unref?.();
+}
+
+/**
+ * What the casting net does when it fires. Gates call it directly so they do not sit 45s.
+ *
+ * Zero valid ballots RE-ARMS and stays on casting — see `CASTING_BACKSTOP_MS`'s header. That is
+ * a table that has not voted, not a room that is stuck, and empty never invents a pair.
+ */
+export function castingBackstop(room) {
+  if (!room || room.show !== 'casting') return null;
+  const votes = validCastBallots(room);
+  if (!votes.length) {
+    startCastingClock(room);
+    return 'casting';
+  }
+  runEpisodeFromBallots(room, votes);
+  return room.show;
 }
 
 /**
@@ -805,22 +861,11 @@ function handleClient(room, bound, self, msg) {
     enterNextCasting(room);
   }
   if (msg.t === 'episode') {
-    const seated = seatedPlayerIds(room);
-    const votes = [...room.ballots.values()].filter((v) =>
-      seated.includes(v.runner) && seated.includes(v.guide) && v.runner !== v.guide);
     // Empty ballots never invent a pair, including at capacity (unused===0 / N=8).
     // playEpisode() with the ballots key omitted still synthesizes for gates/sim.
+    const votes = validCastBallots(room);
     if (!votes.length) return;
-    room.game.playEpisode({
-      ...(msg.opts || {}),
-      ballots: votes,
-      ...(seated.length ? { living: seated } : {}),
-      // Live night: mansion reports cameras/alarms — do not invent gate scaffold on the TV.
-      scaffold: false,
-    });
-    // Durable show: expedition now, recap when the mission says so. Do not pin CASTING.
-    startShowClock(room);
-    fanout(room, lobbySnapshot(room));
+    runEpisodeFromBallots(room, votes, msg.opts || {});
   }
 }
 

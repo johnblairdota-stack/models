@@ -8,7 +8,7 @@
  * This one proves a reviewer can open a host, two phones, see the lobby, and advance.
  */
 
-import { startServer, fanoutViolations, lobbySnapshot, progressShow, expireShowHold, applyNominate, MAX_PHONES } from '../net/party/local.mjs';
+import { startServer, fanoutViolations, lobbySnapshot, progressShow, expireShowHold, applyNominate, castingBackstop, MAX_PHONES } from '../net/party/local.mjs';
 import { recapFromEvents } from '../src/party/recap.js';
 import { qrMatrix } from '../src/party/qr.js';
 import {
@@ -19,7 +19,8 @@ import {
 } from '../src/party/night-client.js';
 import { PHASE, SECONDS } from '../src/party/phases.js';
 import { missionFor, MISSION_PAINTING, MISSION_TABLE } from '../src/party/mission.js';
-import { RUN_END } from '../src/party/show.js';
+import { RUN_END, CASTING_BACKSTOP_MS } from '../src/party/show.js';
+import { CAST_BACKSTOP_MS } from '../src/party/ballot.js';
 import { ACCENTS, SHELLS, cleanLook } from '../src/party/look.js';
 import { applyCastLock, applyCastTap, ballotFromCast, CAST_BLOCK_WHY, castPrompt, castRowBlock, castRowMark, freshCast, mergePublicNames, nominationPlayers, publicName } from '../src/party/cast-ui.js';
 import { createRoom } from '../src/party/room.js';
@@ -681,6 +682,60 @@ t('N14 · host can pace the room onto the recap beat',
     alias.welcome?.t === 'welcome' && alias.welcome?.isTV === false,
     JSON.stringify({ t: alias.welcome?.t, id: alias.welcome?.id, isTV: alias.welcome?.isTV }));
   alias.close();
+}
+
+
+// ------------------------------------------------------------------ N20 · casting's safety net
+/*
+ * 🚨 **A DEAD TV TAB USED TO HANG THE ROOM ON CASTING FOREVER.** Every other beat had a server
+ * clock; casting had none — `setShow` clears `showUntil` for it and the only thing that ended the
+ * beat was the television sending `t:'episode'`. Close that tab mid-casting and eight phones wait
+ * on a room that will never move.
+ *
+ * N20b is the half that must NOT change: an empty ballot box still waits. A net that "rescued" an
+ * unvoted table by inventing a pair would be N7f2's bug wearing a helmet.
+ */
+{
+  const netBase = `ws://localhost:${PORT}/?room=net`;
+  const tv = await open(`${netBase}&host=1`);
+  const p1 = await open(netBase);
+  const p2 = await open(netBase);
+  await sleep(60);
+  tv.send({ t: 'start' });
+  await sleep(40);
+  tv.send({ t: 'casting' });
+  await sleep(40);
+  const net = srv.rooms.get('net');
+
+  t('N20 · entering casting arms a server clock, so the beat has a deadline the TV cannot lose',
+    net.show === 'casting' && net.showClock != null);
+  t('N20a · and that net fires later than the television\'s own 3·2·1, so it never races it',
+    CASTING_BACKSTOP_MS > CAST_BACKSTOP_MS, `net ${CASTING_BACKSTOP_MS}ms vs TV ${CAST_BACKSTOP_MS}ms`);
+
+  const empty = castingBackstop(net);
+  t('N20b · EMPTY BALLOTS STILL WAIT — the net re-arms, it never invents a pair',
+    empty === 'casting' && net.show === 'casting'
+      && net.game.state.pair.runner == null && net.game.state.pair.guide == null
+      && net.showClock != null,
+    JSON.stringify({ show: net.show, pair: net.game.state.pair }));
+
+  p1.send({ t: 'ballot', runner: p2.welcome.playerId, guide: p1.welcome.playerId });
+  p2.send({ t: 'ballot', runner: p2.welcome.playerId, guide: p1.welcome.playerId });
+  await sleep(60);
+  tv.close();                       // the tab dies with ballots already in
+  await sleep(60);
+
+  castingBackstop(net);
+  await sleep(40);
+  t('N20c · with the TV gone but ballots in, the net resolves casting into the expedition',
+    net.show === 'expedition' && net.game.state.pair.runner != null && net.game.state.pair.guide != null,
+    JSON.stringify({ show: net.show, pair: net.game.state.pair }));
+  t('N20d · the phones were told, so they are not left on a casting sheet',
+    last(p1, 'show')?.beat === 'expedition' && last(p2, 'show')?.beat === 'expedition');
+  t('N20e · and the net is a no-op once the beat has moved on',
+    castingBackstop(net) === null);
+
+  for (const c of [p1, p2]) c.close();
 }
 
 for (const c of [host, a, b, back]) c.close();

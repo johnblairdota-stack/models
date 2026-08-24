@@ -92,6 +92,26 @@ export const isTalkBeat = (beat) => TALK_BEATS.includes(String(beat || ''));
 export const RECAP_BACKSTOP_MS = 480000;
 
 /**
+ * ⏱️ **CASTING'S SAFETY NET — leaving casting must not require a live TV tab.**
+ *
+ * Every other beat has a server clock. Casting did not: `setShow` clears `showUntil` for it, and
+ * the only thing that ever ended the beat was the TV deciding its 3·2·1 had run and sending
+ * `t:'episode'`. Close the TV tab mid-casting — or hit the `!votes.length` early return with a
+ * ballot the server rejects — and eight phones wait on a room that will never move again.
+ *
+ * ⚠️ **THIS IS A NET, NOT THE CLOCK.** The TV still arms at `CAST_BACKSTOP_MS` (20s, `ballot.js`)
+ * and should always win; this fires a full casting beat later so it cannot race the television.
+ * `episode-order`-style divergence is avoided by both paths running the SAME resolver in
+ * `local.mjs` — the net does not get its own copy of "how casting resolves".
+ *
+ * 🚨 **AN EMPTY TABLE IS NOT A HUNG ROOM AND THE NET MUST NOT "RESCUE" IT.** With zero valid
+ * ballots this re-arms and waits, because inventing a pair from an empty ballot box is the N=8
+ * bug John found on the overnight loop (`party-night` N7f2). Waiting on people is correct
+ * behaviour; only waiting on a dead television is the defect.
+ */
+export const CASTING_BACKSTOP_MS = SECONDS[PHASE.CASTING] * 1000;
+
+/**
  * Product order after a finished run. The recap step's `ms` is the expedition BACKSTOP
  * (how long the room may sit on expedition before TIME). debrief/casting `ms` are the
  * holds after the previous beat, not offsets from Send-them-in.
