@@ -19,11 +19,11 @@ const SHELL = '#EDEFF0';
 const CHROME = '#B9BEC2';
 const NAME_CAP = 12;
 
-const TAG_W = 0.168;
-const TAG_H = 0.038;
+const TAG_W = 0.210;
+const TAG_H = 0.048;
 /** Gap from the wordmark's bottom edge to the plate's top edge, metres. */
-const UNDER_GAP = 0.010;
-const LIFT = 0.0016;
+const UNDER_GAP = 0.012;
+const LIFT = 0.004;
 
 function paintPlate(label) {
   if (typeof document === 'undefined') return null;
@@ -47,13 +47,13 @@ function paintPlate(label) {
   g.fillStyle = CHROME;
   round(0, 0, 512, 128, 22);
   g.fill();
-  g.fillStyle = SHELL;
+  g.fillStyle = INK;
   round(10, 10, 492, 108, 16);
   g.fill();
 
   const text = String(label || '').trim().slice(0, NAME_CAP).toUpperCase();
   if (!text) return null;
-  g.fillStyle = INK;
+  g.fillStyle = SHELL;
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   let size = 72;
@@ -77,16 +77,6 @@ function findNamed(root, names) {
   root?.traverse?.((o) => {
     if (found) return;
     if (want.has(o.name)) found = o;
-  });
-  return found;
-}
-
-function findBone(root, names) {
-  let found = null;
-  const want = new Set(names);
-  root?.traverse?.((o) => {
-    if (found) return;
-    if (o.isBone && want.has(o.name)) found = o;
   });
   return found;
 }
@@ -124,14 +114,14 @@ export function attachChestNameTag(player, name) {
   const mark = findNamed(search, ['wordmark', 'decal']);
 
   /*
-   * ⚠️ PARENT THE PLATE TO THE TORSO THAT IS ON SCREEN. With a Meshy body the procedural
-   * unit is hidden (`Player._hideProceduralBody`); hanging the tag on `j.chest` would put
-   * a correctly seated plate on a mesh nobody can see, and the clone's chest would stay
-   * blank. Spine is the same bone the wordmark skins to.
+   * ⚠️ PARENT TO `player.model`, NOT THE SPINE. A Mixamo Spine has +Y up the bone; hanging a
+   * +Z plane there with an inverted bind quat put the plate inside the shell or edge-on, which
+   * is why a live graph could report `chestName` while the TV still showed a blank sternum.
+   * `model` yaws with the body (`Player.root.rotation.y`) and +Z is the figure's front, so
+   * identity in this frame is "printed on the chest". Walk bounce on the skinned wordmark is a
+   * couple of centimetres; the plate staying put is the point, not a defect.
    */
-  const parent = avatarRoot
-    ? (findBone(avatarRoot, ['Spine', 'Spine01', 'Spine02']) || avatarRoot)
-    : (player.unit?.joints?.chest || player.model || player.root);
+  const parent = player.model || player.root;
   if (!parent) {
     tex.dispose();
     return null;
@@ -143,9 +133,10 @@ export function attachChestNameTag(player, name) {
     transparent: true,
     depthWrite: false,
     toneMapped: true,
+    side: THREE.DoubleSide,
     polygonOffset: true,
-    polygonOffsetFactor: -2,
-    polygonOffsetUnits: -2,
+    polygonOffsetFactor: -4,
+    polygonOffsetUnits: -4,
   });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.name = 'chestName';
@@ -155,6 +146,8 @@ export function attachChestNameTag(player, name) {
 
   parent.updateWorldMatrix(true, true);
 
+  const H = player.height || 1.7;
+  const expected = new THREE.Vector3(0, H * 0.698, H * 0.078);
   const world = new THREE.Vector3();
   const box = markWorldBox(mark);
   if (box && Number.isFinite(box.min.y)) {
@@ -164,27 +157,16 @@ export function attachChestNameTag(player, name) {
       box.max.z + LIFT,
     );
   } else {
-    /*
-     * No mark (identity kit skipped). Sternum of a 1.7 m figure, just below where the
-     * wordmark sits (0.731 H) — still on the chest, never the face.
-     */
-    const H = player.height || 1.7;
-    world.set(0, H * 0.695, H * 0.072);
-    (player.model || player.root).localToWorld(world);
+    world.copy(expected);
+    parent.localToWorld(world);
   }
 
-  /*
-   * World quaternion identity at bind = PlaneGeometry +Z down the figure's front. Local is
-   * the inverse of the torso's bind rotation so a pitched `j.chest` or a Mixamo Spine (whose
-   * +Y is up the bone) does not print the name along the neck. After attach, a walk yaw or
-   * a flair carries the plate with the torso.
-   */
   const local = world.clone();
   parent.worldToLocal(local);
+  if (local.distanceTo(expected) > 0.40) local.copy(expected);
+  local.x = 0;
   mesh.position.copy(local);
-  const parentQ = new THREE.Quaternion();
-  parent.getWorldQuaternion(parentQ);
-  mesh.quaternion.copy(parentQ.invert());
+  mesh.quaternion.identity();
   parent.add(mesh);
   return mesh;
 }

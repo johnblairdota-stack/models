@@ -57,15 +57,15 @@ const STAND_IN = 0.62;
  * 50° (`INTRO_FOV`) at ~2.55 m, offset along the tangent so the shot is a 3/4 rather than
  * a passport photo. Restored on `dispose` so the expedition keeps the run's 62°.
  */
-/** Eye standoff in front of the robot, metres. Was 1.75 — a face-fill. */
+/** Eye standoff is no longer a face-fill; the intro eye sits inside the ring, off-axis. */
 const EYE_OUT = 2.55;
-/** Tangent offset so a neighbour can sit in the same plate. */
-const EYE_SIDE = 1.45;
+/** How far off the radial line the intro lens sits, so a neighbour can share the plate. */
+const EYE_SIDE = 1.25;
 /** Look-at height — upper chest of a 1.7 m Meshy, with enough floor that chairs read. */
-const LOOK_Y = 1.10;
-const EYE_Y = 1.58;
+const LOOK_Y = 1.12;
+const EYE_Y = 1.56;
 /** Neighbour bias on the look-at, metres along the tangent. */
-const LOOK_SIDE = 0.48;
+const LOOK_SIDE = 0.85;
 
 /**
  * 🎬 **TALK / DEBRIEF SHOTS — changing angles, slow sweeps, never a locked chair cam.**
@@ -107,36 +107,42 @@ function talkFrame(robots, clock, cx, cz, radius, eye, look) {
   const tx = a.tx, tz = a.tz;
 
   if (shot.name === 'pair') {
-    const back = Math.max(0.55, radius * 0.22);
-    const side = 0.90 + u * 0.40;
-    eye.set(cx - ox * back + tx * side, 1.56 + Math.sin(u * Math.PI) * 0.08, cz - oz * back + tz * side);
+    const back = Math.max(0.85, radius * 0.32);
+    const side = 1.05 + u * 0.35;
+    eye.set(cx - ox * back + tx * side, 1.54 + Math.sin(u * Math.PI) * 0.07, cz - oz * back + tz * side);
     look.set(
-      a.body.pos.x * 0.62 + b.body.pos.x * 0.38,
-      1.16,
-      a.body.pos.z * 0.62 + b.body.pos.z * 0.38,
+      a.body.pos.x * 0.58 + b.body.pos.x * 0.42,
+      1.18,
+      a.body.pos.z * 0.58 + b.body.pos.z * 0.42,
     );
   } else if (shot.name === 'orbit') {
     const ang = clock * 0.10 + focus * ((Math.PI * 2) / n);
-    const r = Math.max(0.72, radius * 0.34);
-    eye.set(cx + Math.sin(ang) * r, 1.70 + Math.sin(clock * 0.21) * 0.10, cz + Math.cos(ang) * r);
+    const r = Math.max(1.05, radius * 0.42);
+    eye.set(cx + Math.sin(ang) * r, 1.62 + Math.sin(clock * 0.21) * 0.08, cz + Math.cos(ang) * r);
     look.set(
-      cx + Math.sin(ang + 1.05) * radius * 0.62,
-      1.14,
-      cz + Math.cos(ang + 1.05) * radius * 0.62,
+      cx + Math.sin(ang + 0.95) * radius * 0.72,
+      1.16,
+      cz + Math.cos(ang + 0.95) * radius * 0.72,
     );
   } else if (shot.name === 'wide') {
-    const ang = focus * ((Math.PI * 2) / n) + 0.55;
-    const r = Math.max(0.32, radius * 0.14);
-    eye.set(cx + Math.sin(ang) * r, 1.88 - u * 0.16, cz + Math.cos(ang) * r);
-    look.set(cx + ox * radius * 0.58, 1.08, cz + oz * radius * 0.58);
+    eye.set(cx, 1.68, cz);
+    look.set(
+      a.body.pos.x * 0.40 + b.body.pos.x * 0.35 + far.body.pos.x * 0.25,
+      1.22,
+      a.body.pos.z * 0.40 + b.body.pos.z * 0.35 + far.body.pos.z * 0.25,
+    );
   } else if (shot.name === 'push') {
-    const dist = THREE.MathUtils.lerp(radius * 0.52, radius * 0.26, u);
-    eye.set(cx - ox * dist + tx * 0.58, 1.52 + (1 - u) * 0.12, cz - oz * dist + tz * 0.58);
-    look.set(a.body.pos.x + tx * 0.38, 1.14, a.body.pos.z + tz * 0.38);
+    const dist = THREE.MathUtils.lerp(radius * 0.48, radius * 0.28, u);
+    eye.set(cx - ox * dist + tx * 0.70, 1.50 + (1 - u) * 0.08, cz - oz * dist + tz * 0.70);
+    look.set(a.body.pos.x + tx * 0.42, 1.16, a.body.pos.z + tz * 0.42);
   } else {
-    const inward = 0.95;
-    eye.set(a.at.x - ox * inward + tx * 0.35, 1.50, a.at.z - oz * inward + tz * 0.35);
-    look.set(far.body.pos.x, 1.18, far.body.pos.z);
+    const inward = 1.15;
+    eye.set(a.at.x - ox * inward + tx * 0.55, 1.52, a.at.z - oz * inward + tz * 0.55);
+    look.set(
+      far.body.pos.x * 0.7 + b.body.pos.x * 0.3,
+      1.18,
+      far.body.pos.z * 0.7 + b.body.pos.z * 0.3,
+    );
   }
   return { index: focus, shot: shot.name };
 }
@@ -320,7 +326,8 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     if (tag?.material) ownedMaterials.push(tag.material);
 
     const tx = -uz, tz = ux;
-    const side = (i % 2 === 0 ? 1 : -1) * EYE_SIDE;
+    // Always offset toward the next seat so a neighbour can sit in the 3/4, not toward empty floor.
+    const side = EYE_SIDE;
     const at = new THREE.Vector3(chair.x - ux * STAND_IN, room.floorY ?? 0, chair.z - uz * STAND_IN);
     const face = Math.atan2(cx - chair.x, cz - chair.z);
 
@@ -359,11 +366,15 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
        * is a `Gait` this body does not have — see §9 of the slice.)
        */
       at,
-      // 3/4 stand: inside the ring, pulled back and off-axis so a neighbour reads.
+      /*
+       * Interior 3/4: the lens sits near the circle centre, offset along the tangent, looking
+       * at the arriving robot. A radial passport-cam put the neighbour behind the camera;
+       * this one keeps another chair in the same plate.
+       */
       eye: new THREE.Vector3(
-        chair.x - ux * (STAND_IN + EYE_OUT) + tx * side,
+        cx + tx * Math.min(EYE_SIDE, radius * 0.48) - ux * Math.min(0.55, radius * 0.18),
         EYE_Y,
-        chair.z - uz * (STAND_IN + EYE_OUT) + tz * side,
+        cz + tz * Math.min(EYE_SIDE, radius * 0.48) - uz * Math.min(0.55, radius * 0.18),
       ),
       face,
       arrived: !!talk,
@@ -462,15 +473,37 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
         if (r) {
           const hold = Math.max(0, clock - i * step);
           const sway = Math.sin(hold * 0.62) * 0.52;
-          _look.set(
-            r.body.pos.x + r.tx * LOOK_SIDE,
-            LOOK_Y,
-            r.body.pos.z + r.tz * LOOK_SIDE,
-          );
-          _eye.copy(r.eye);
-          _eye.x += r.tx * sway;
-          _eye.z += r.tz * sway;
-          _eye.y += Math.sin(hold * 0.41) * 0.07;
+          const other = robots.find((o, j) => j !== i && o.body.root.visible);
+          if (other) {
+            _look.set(
+              r.body.pos.x * 0.62 + other.body.pos.x * 0.38,
+              LOOK_Y,
+              r.body.pos.z * 0.62 + other.body.pos.z * 0.38,
+            );
+          } else {
+            _look.set(
+              r.body.pos.x + r.tx * LOOK_SIDE,
+              LOOK_Y,
+              r.body.pos.z + r.tz * LOOK_SIDE,
+            );
+          }
+          if (!r.arrived) {
+            /*
+             * Track the walk-in from the same interior 3/4, not from the stand-mark. A 50°
+             * plate parked at the chair while the body was still outside the circle read as
+             * "tiny robot, empty ballroom".
+             */
+            _eye.set(
+              r.body.pos.x * 0.35 + r.eye.x * 0.65,
+              EYE_Y,
+              r.body.pos.z * 0.35 + r.eye.z * 0.65,
+            );
+          } else {
+            _eye.copy(r.eye);
+            _eye.x += r.tx * sway;
+            _eye.z += r.tz * sway;
+            _eye.y += Math.sin(hold * 0.41) * 0.07;
+          }
           /*
            * ⚠️ THE REEL STAYS EVEN THOUGH PR A REMOVED THE BALLROOM COLONNADE. A chair circle still
            * does not know what else is in the room (catalog piano, a wall). Same reel

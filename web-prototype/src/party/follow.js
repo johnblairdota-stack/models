@@ -278,7 +278,7 @@ export const INTRO_FRAME_PCT = 78;
  * another contestant sit in the soft background. `intro-bed.js` applies it; the expedition
  * still restores 62° on dispose.
  */
-export const INTRO_FOV = 50;
+export const INTRO_FOV = 52;
 
 /**
  * Talk beats (Debrief / Reckoning / Vote / Execution) sit a touch wider so a slow sweep
