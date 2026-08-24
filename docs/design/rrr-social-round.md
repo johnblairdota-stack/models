@@ -16,16 +16,16 @@ An **episode** is one round. The show never leaves the air; the phases are a sho
 |---|---|---|---|---|
 | 1 | `CASTING` | 45 s | Task and wing announced first, then the pair is voted in (§2) | ballot |
 | 2 | `EXPEDITION` | 90 s | Runner + guide in the mansion. Everyone else watches the TV | runner: FPS · guide: flyover · rest: reaction bar |
-| 3 | `RECAP` | 20 s | Produced recap reel, cut from the log (§5) | dark |
+| 3 | `RECAP` | 10 s | Produced recap reel, cut from the log (§5) | dark |
 | 4 | `DEBRIEF` | 75 s | Talking in the room. Chat drops its five tips | claims/nameplates only |
 | 5 | `RECKONING` | 45 s, +15 s per nomination, hard cap 90 s | Nominations and counter-nominations (§3) | nominate |
 | 6 | `VOTE` | 25 s | One simultaneous ballot over all standing nominees | vote |
 | 7 | `EXECUTION` | 20 s, skipped if nobody cleared threshold | The nominator swings the sledgehammer, on TV | dark |
 | 8 | `VERDICT` | 15 s | RENEWED / CANCELLED / SEASON FINALE (§4) | dark |
 
-**Base round 335 s (5:35), worst case 380 s (6:20).** **Episode 1 skips phases 5–8** — no eviction in the premiere, because nobody has anything to go on and the first round's job is teaching the loop. Premiere episode = 3:50.
+**Base round 325 s (5:25), worst case 370 s (6:10).** **Episode 1 skips phases 5–8** — no eviction in the premiere, because nobody has anything to go on and the first round's job is teaching the loop. Premiere episode = 3:40.
 
-**Session budget.** `PREMIERE` (join, seat the circle, deal roles, read the rules) 2:30 + episode 1 3:50 + episodes 2..N at 5:35 + `REUNION` 4:00 → 4 episodes **27:05** · 5 **32:40** · 6 **38:15**. `EPISODE_CAP = 5` is what keeps the worst case inside 40 minutes. The match ends the moment a win predicate fires (§6), so most sessions land at 4–5.
+**Session budget.** `PREMIERE` (join, seat the circle, deal roles, read the rules) 2:30 + episode 1 3:40 + episodes 2..N at 5:25 + `REUNION` 4:00 → 4 episodes **26:25** · 5 **31:50** · 6 **37:25**. `EPISODE_CAP = 5` is what keeps the worst case inside 40 minutes. The match ends the moment a win predicate fires (§6), so most sessions land at 4–5.
 
 ---
 
