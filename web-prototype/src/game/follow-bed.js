@@ -1228,6 +1228,8 @@ export async function buildFollowBed(engine, opts = {}) {
         intro?.dispose();
         intro = buildIntroBed(engine, {
           room, cast: introCast, materials: botMats, avatar, reelSight: reelToSight,
+          // Debrief / reckoning / vote / execution: sweeping circle cam, no walk-in.
+          talk: !!c.talk,
         });
         mode = 'intros';
         runner.root.visible = false;

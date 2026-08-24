@@ -448,7 +448,7 @@ export default async function partyHost({ params }) {
       sendCue({ kind: 'idle' });
       ui.cuedRunner = null;
     }
-    ui.sitCued = sendCue({ kind: 'intros', cast });
+    ui.sitCued = sendCue({ kind: 'intros', cast, talk: true });
   }
 
   function startClockTick() {
