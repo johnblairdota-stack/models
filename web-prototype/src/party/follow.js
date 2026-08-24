@@ -378,7 +378,7 @@ export function warmUrl(opts = {}) {
  * `FOLLOW_FORBIDDEN` verbatim, and a violation THROWS at both ends rather than being dropped.
  *
  * The reasoning is `follow.js`'s own, one channel over. The follow view still has no socket; it
- * still cannot read the room. What it can now be TOLD is exactly these five shapes and nothing
+ * still cannot read the room. What it can now be TOLD is exactly these six shapes and nothing
  * else, and the words that may never appear in any of them are the same words that may never
  * appear in a URL or on the public side-channel.
  *
@@ -386,7 +386,7 @@ export function warmUrl(opts = {}) {
  * wire: `id`, `seat`, `name`, `shell`, `accent` are precisely `FANOUT_KEYS.lobbySeat`'s public
  * fields, already fanned out to every socket in the room by a decision that predates this slice.
  */
-export const CUE_KINDS = ['intros', 'run', 'move', 'shot', 'idle'];
+export const CUE_KINDS = ['intros', 'run', 'move', 'shot', 'idle', 'noms'];
 
 /** Per-kind closed allow-lists. A key not listed for its kind is a violation, not a pass. */
 export const CUE_KEYS = {
@@ -395,10 +395,13 @@ export const CUE_KEYS = {
   move: ['kind', 'x', 'y', 'lookX', 'lookY', 'run', 'swing', 'act'],
   shot: ['kind', 'shot'],
   idle: ['kind'],
+  noms: ['kind', 'standing'],
 };
 
 /** What one seat may contribute to an `intros` cue. `FANOUT_KEYS.lobbySeat`'s public subset. */
 export const CUE_CAST_KEYS = ['id', 'seat', 'name', 'shell', 'accent'];
+/** Public standing noms — the same pair `FANOUT_KEYS.nomRow` already fans to every socket. */
+export const CUE_NOM_KEYS = ['nominator', 'target'];
 
 function scanKeys(obj, allowed, path, bad, forbidden = FOLLOW_FORBIDDEN) {
   if (!obj || typeof obj !== 'object') { bad.push(`${path}:<not an object>`); return; }
@@ -419,6 +422,11 @@ export function cueViolations(cue) {
     const cast = cue.cast;
     if (!Array.isArray(cast)) bad.push('cue.intros.cast:<not an array>');
     else cast.forEach((s, i) => scanKeys(s, CUE_CAST_KEYS, `cue.intros.cast[${i}]`, bad));
+  }
+  if (kind === 'noms') {
+    const standing = cue.standing;
+    if (!Array.isArray(standing)) bad.push('cue.noms.standing:<not an array>');
+    else standing.forEach((s, i) => scanKeys(s, CUE_NOM_KEYS, `cue.noms.standing[${i}]`, bad));
   }
   if (kind === 'shot' && cue.shot != null && !SHOT_NAMES.includes(cue.shot)) {
     bad.push(`cue.shot.shot=${cue.shot}`);

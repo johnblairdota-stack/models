@@ -26,7 +26,7 @@
 
 import { readFile } from 'node:fs/promises';
 import {
-  CUE_CAST_KEYS, CUE_KEYS, CUE_KINDS, FOLLOW_FORBIDDEN, FOLLOW_KEYS, FOLLOW_VIEW,
+  CUE_CAST_KEYS, CUE_KEYS, CUE_KINDS, CUE_NOM_KEYS, FOLLOW_FORBIDDEN, FOLLOW_KEYS, FOLLOW_VIEW,
   IDENTITY_SECRETS, INTRO_FOV, INTRO_FRAME_PCT, MISSION_PHASES, MOVE_KEYS, RING_OUT, SPATIAL_WORDS,
   STICK_DEADZONE, STICK_RELEASE, STICK_TURN, TALK_FOV, TV_FRAME_PCT,
   WARM_KEYS, WARM_STAGES, WORLD_KEYS, chaseOrbitOffset, cueViolations, followParams, followUrl,
@@ -45,7 +45,7 @@ import {
   coverageRoomOf, homeIsCorner, pickPlanSeed, planFor, planOptsFor, planPasses, planRegions,
   planRoomLabels, roomLabel, spaceLabel,
 } from '../src/party/mansion.js';
-import { lockedSeatCount } from '../src/game/chair-seats.js';
+import { lockedSeatCount, seatCircleRadius, rugSpanForSeats, SIT_IDLE_CLIPS, SIT_CLIP_ALLOW } from '../src/game/chair-seats.js';
 import {
   LAYOUT_CATALOG_IDS, CATALOG_ROOM_ASSIGN, catalogPlacements, catalogUrl,
   CATALOG_URL_PREFIX, spaceKind, placementsClearOfOpenings, walkHalf,
@@ -152,6 +152,7 @@ console.log('\nparty-warm — the lobby-warm night');
     { kind: 'move', x: 0.4, y: -1, run: true, swing: false, act: 0 },
     { kind: 'shot', shot: 'lead' },
     { kind: 'idle' },
+    { kind: 'noms', standing: [{ nominator: 'p1', target: 'p2' }] },
   ];
   let clean = 0;
   for (const cue of GOOD) {
@@ -208,6 +209,11 @@ console.log('\nparty-warm — the lobby-warm night');
     cueViolations({ kind: 'intros', cast: CAST, talk: true }).length === 0
     && CUE_KEYS.intros.includes('talk')
     && cueViolations({ kind: 'intros', cast: CAST, talk: true, hunter: 1 }).length > 0);
+  t('W3i · standing noms are a closed public cue, same pair the wire already fans',
+    cueViolations({ kind: 'noms', standing: [{ nominator: 'p1', target: 'p2' }] }).length === 0
+    && CUE_KEYS.noms.includes('standing')
+    && CUE_NOM_KEYS.every((k) => FANOUT_KEYS.nomRow.includes(k))
+    && cueViolations({ kind: 'noms', standing: [{ nominator: 'p1', target: 'p2', role: 'PLANT' }] }).length > 0);
 }
 
 // ---- W4 · the pad and the world report -------------------------------------------------------
@@ -1986,6 +1992,59 @@ console.log('\nparty-warm — the lobby-warm night');
     !/guideMapSvg/.test(hostSrc) && !/GUIDE_MAP/.test(hostSrc));
 }
 
+// ---- W33 · PLAYTEST ASKS: SIT, RUG, CAMERAMAN, BANG, CRISP TAGS, NOMINATOR VOTE -------------
+{
+  const introSrc = await readFile(new URL('../src/game/intro-bed.js', import.meta.url), 'utf8');
+  const tagSrc = await readFile(new URL('../src/characters/chest-nameplate.js', import.meta.url), 'utf8');
+  const voteSrc = await readFile(new URL('../src/party/vote.js', import.meta.url), 'utf8');
+  const roomSrc = await readFile(new URL('../src/party/room.js', import.meta.url), 'utf8');
+  const phoneSrc = await readFile(new URL('../src/views/party-phone.js', import.meta.url), 'utf8');
+  const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
+  const bedSrc = await readFile(new URL('../src/game/follow-bed.js', import.meta.url), 'utf8');
+  const playerSrc = await readFile(new URL('../src/game/player.js', import.meta.url), 'utf8');
+
+  t('W33 · sit attach parks the root in the chair and locks collision',
+    /function parkSit/.test(introSrc)
+    && /sitLock/.test(playerSrc)
+    && /playSit/.test(introSrc)
+    && /Chair_Sit_Idle/.test(await readFile(new URL('../src/characters/mesh-avatar.js', import.meta.url), 'utf8')));
+  t('W33a · seated idles are the Meshy allow-list, phase-offset per seat',
+    SIT_IDLE_CLIPS.includes('Chair_Sit_Idle_M')
+    && SIT_CLIP_ALLOW.includes('Stand_to_Sit_Transition_M')
+    && /sitPhase/.test(introSrc)
+    && /holdForRun/.test(introSrc));
+  t('W33b · name tags are a no-mip high-contrast atlas, STYLE_CONTRACT colours',
+    /generateMipmaps = false/.test(tagSrc)
+    && /LinearFilter/.test(tagSrc)
+    && /strokeText/.test(tagSrc)
+    && /#054E84/.test(tagSrc) && /#EDEFF0/.test(tagSrc) && /#B9BEC2/.test(tagSrc));
+  t('W33c · nominators are pre-cast and cannot recast',
+    /function assumedLynchVotes/.test(voteSrc)
+    && /nominator vote locked/.test(roomSrc)
+    && /Your nomination of/.test(phoneSrc)
+    && /You do not vote again/.test(phoneSrc));
+  t('W33d · the ballroom rug scales with the live chair radius, not a 2.80 toy disc',
+    rugSpanForSeats(4.96) > 8
+    && rugSpanForSeats(2.4) >= 2.4
+    && /rugScaleForSeats/.test(introSrc)
+    && /scaleBallroomRug/.test(introSrc));
+  t('W33e · talk camera walks the outside arc at human speed, lookAt centre',
+    /function walkCamOnRing/.test(introSrc)
+    && /CAM_WALK = 1\.35/.test(introSrc)
+    && /look\.set\(cx, LOOK_Y, cz\)/.test(introSrc)
+    && /RING_OUT/.test(introSrc));
+  t('W33f · a red billboard bang sits above the name tag for standing nominees',
+    /attachNomineeBang/.test(introSrc)
+    && /nomBang/.test(tagSrc)
+    && /BANG_RED/.test(tagSrc)
+    && /kind === 'noms'/.test(bedSrc)
+    && /function cueNominees/.test(hostSrc));
+  t('W33g · chairs still collide, persist through the run, and grip lock is untouched',
+    /function chairCollider/.test(introSrc)
+    && /holdForRun/.test(introSrc)
+    && /THE CIRCLE STAYS/.test(bedSrc)
+    && seatCircleRadius(8) <= 5.0);
+}
 
 console.log(`\nparty-warm: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

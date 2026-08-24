@@ -68,6 +68,7 @@ export default async function partyHost({ params }) {
     showUntil: null,
     /** Seated-circle cue after the run, so debrief is not an empty ballroom. */
     sitCued: false,
+    nomsKey: '',
   };
 
   /**
@@ -451,6 +452,17 @@ export default async function partyHost({ params }) {
     ui.sitCued = sendCue({ kind: 'intros', cast, talk: true });
   }
 
+  function cueNominees() {
+    const show = ui.beat;
+    const live = show === 'reckoning' || show === 'vote';
+    const standing = live
+      ? (client.noms || []).map((n) => ({ nominator: n.nominator, target: n.target }))
+      : [];
+    const key = `${show}|${standing.map((n) => n.target).join(',')}`;
+    if (key === ui.nomsKey) return;
+    if (sendCue({ kind: 'noms', standing })) ui.nomsKey = key;
+  }
+
   function startClockTick() {
     if (ui.clockTimer) return;
     ui.clockTimer = setInterval(() => {
@@ -735,6 +747,7 @@ export default async function partyHost({ params }) {
     // keep the seated-circle talk director on the same chairs.
     if (onStage || onRecap || (show === 'casting' && ui.introsDone)) cueSitDown();
     if (show === 'expedition') ui.sitCued = false;
+    cueNominees();
     mountFollow();
     placeFollow();
     startClockTick();

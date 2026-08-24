@@ -73,6 +73,32 @@ export function canLynchVote(voter, choice, standing) {
 }
 
 /**
+ * A nominator's lynch ballot is their nomination. Pre-cast on Vote enter so they
+ * cannot vote twice, and so a silent nominator still counts for their target.
+ *
+ * @param {Nomination[]} nominations
+ * @param {string[]|null} [living]  if set, skip dead nominators / fallen targets
+ * @returns {Record<string,string>}
+ */
+export function assumedLynchVotes(nominations, living = null) {
+  const live = living ? new Set(living) : null;
+  const votes = {};
+  for (const n of nominations || []) {
+    if (!n?.nominator || !n?.target) continue;
+    if (live && !live.has(n.nominator)) continue;
+    if (live && !live.has(n.target)) continue;
+    votes[n.nominator] = n.target;
+  }
+  return votes;
+}
+
+/** The locked lynch choice for a nominator, or null if they did not name anyone standing. */
+export function nominatorLockedChoice(nominations, voter) {
+  const n = (nominations || []).find((x) => x.nominator === voter);
+  return n?.target ?? null;
+}
+
+/**
  * One simultaneous ballot. Non-voters and timeouts are `NO_ONE`.
  *
  * @param {{living:string[], nominations:Nomination[]}} state

@@ -1214,7 +1214,7 @@ export async function buildFollowBed(engine, opts = {}) {
     /**
      * 🔁 **THE CUE CHANNEL'S LANDING POINT.** `src/party/follow.js` `cueViolations` has already
      * refused anything with a role, an alignment or the guide's map in it — by the time a cue
-     * reaches this switch it is one of five known shapes carrying only public fields.
+     * reaches this switch it is one of six known shapes carrying only public fields.
      */
     cue(c) {
       if (!c || typeof c !== 'object') return;
@@ -1223,6 +1223,10 @@ export async function buildFollowBed(engine, opts = {}) {
         runner.root.visible = false;
         intro?.releaseRun?.();
         intro?.setTalk?.(true);
+        return;
+      }
+      if (c.kind === 'noms') {
+        intro?.setNominees?.(c.standing || []);
         return;
       }
       if (c.kind === 'intros') {
