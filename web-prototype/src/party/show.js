@@ -5,9 +5,19 @@
  * sits on lobby/casting if `room.show` is only host-tab RAM. Welcome pushes
  * this beat; playEpisode pins expedition; the stub clock then pins recap.
  * "Watch the run" is a host workaround, not the clock.
+ *
+ * After a finished run the clock keeps walking: recap (20 s) → debrief (75 s)
+ * → casting for the next pair. Those holds are `phases.js` `SECONDS`, not a
+ * second table. The Recap *button* is gone; the beat is not.
  */
 
-export const SHOW_BEATS = ['lobby', 'casting', 'expedition', 'recap'];
+import { PHASE, SECONDS } from './phases.js';
+
+export const SHOW_BEATS = ['lobby', 'casting', 'expedition', 'recap', 'debrief'];
+
+/** Recap card, then seated talk. Same numbers as `phases.js`. */
+export const RECAP_HOLD_MS = SECONDS[PHASE.RECAP] * 1000;
+export const DEBRIEF_HOLD_MS = SECONDS[PHASE.DEBRIEF] * 1000;
 
 /**
  * Server-owned. Expedition is immediate so the TV is never waiting on a click.
@@ -23,7 +33,7 @@ export const SHOW_BEATS = ['lobby', 'casting', 'expedition', 'recap'];
  * The header this replaces already said the mechanism was wrong: *"the run should end when the
  * runner reaches the terminal or the hunter reaches the runner, not when a timer fires."* It is
  * now wired that way. `net/party/local.mjs`'s world handler flips the beat when the TV reports
- * `mission.phase === 'done'` — the gallery painting broken AND the runner home in the ballroom,
+ * `mission.phase === 'done'` — the armed smash target broken AND the runner home in the ballroom,
  * which is the only end condition the night currently has.
  *
  * ⚠️ **THE TIMER SURVIVES AND IS DELIBERATELY LONG.** A room whose runner wedges in a corner, or
@@ -37,10 +47,20 @@ export const SHOW_BEATS = ['lobby', 'casting', 'expedition', 'recap'];
  */
 export const RECAP_BACKSTOP_MS = 480000;
 
+/**
+ * Product order after a finished run. The recap step's `ms` is the expedition BACKSTOP
+ * (how long the room may sit on expedition before TIME). debrief/casting `ms` are the
+ * holds after the previous beat, not offsets from Send-them-in.
+ */
 export const STUB_SHOW_PLAN = [
   { beat: 'expedition', ms: 0 },
   { beat: 'recap', ms: RECAP_BACKSTOP_MS },
+  { beat: 'debrief', ms: RECAP_HOLD_MS },
+  { beat: 'casting', ms: DEBRIEF_HOLD_MS },
 ];
+
+/** Recap → Debrief → Casting. The live night must not soft-end on Recap. */
+export const AFTER_RUN_BEATS = ['recap', 'debrief', 'casting'];
 
 export function isShowBeat(beat) {
   return SHOW_BEATS.includes(String(beat || ''));
@@ -51,10 +71,23 @@ export function recapAfterMs(plan = STUB_SHOW_PLAN) {
   return Number.isFinite(step?.ms) ? step.ms : RECAP_BACKSTOP_MS;
 }
 
+export function holdMsFor(beat) {
+  if (beat === 'recap') return RECAP_HOLD_MS;
+  if (beat === 'debrief') return DEBRIEF_HOLD_MS;
+  return null;
+}
+
+/** What the clock walks to next after a finished run. Expedition is not in this chain. */
+export function nextShowBeat(beat) {
+  if (beat === 'recap') return 'debrief';
+  if (beat === 'debrief') return 'casting';
+  return null;
+}
+
 /**
  * The mission phases that END the expedition beat, as a set the server can test a report against.
  *
- * Exactly one entry, and the narrowness is the point: `return` means the painting is down and the
+ * Exactly one entry, and the narrowness is the point: `return` means the smash is down and the
  * runner still has to walk home, which is the most tense half of the run and precisely the moment
  * a beat change would be worst. `src/party/follow.js` `MISSION_PHASES` is the full list.
  */

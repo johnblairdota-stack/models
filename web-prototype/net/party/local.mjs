@@ -39,7 +39,9 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { createRoom } from '../../src/party/room.js';
 import { WARM_STAGES, moveViolations, warmPct, worldViolations } from '../../src/party/follow.js';
-import { isShowBeat, missionEndsRun, recapAfterMs, RUN_END } from '../../src/party/show.js';
+import {
+  isShowBeat, missionEndsRun, recapAfterMs, nextShowBeat, holdMsFor, RUN_END,
+} from '../../src/party/show.js';
 
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 export const MAX_PHONES = 8;
@@ -165,9 +167,55 @@ function startShowClock(room) {
     room.showClock = null;
     // The backstop firing means the mission never reached `done` — nobody smashed anything, the
     // clock ran out. That is TIME, not a made-up SMASHED.
-    if (room.show === 'expedition') setShow(room, 'recap', RUN_END.TIME);
+    if (room.show === 'expedition') {
+      setShow(room, 'recap', RUN_END.TIME);
+      room.game.enterRecap?.();
+      scheduleShowProgress(room);
+    }
   }, wait);
   room.showClock.unref?.();
+}
+
+/**
+ * Walk Recap → Debrief → Casting. The product path after a finished run.
+ *
+ * Gates call this directly so they do not sit 95 s. The timeouts call the same function.
+ */
+export function progressShow(room) {
+  if (!room) return null;
+  const next = nextShowBeat(room.show);
+  if (!next) return room.show;
+  if (next === 'debrief') {
+    setShow(room, 'debrief');
+    room.game.enterDebrief?.();
+    scheduleShowProgress(room);
+    return 'debrief';
+  }
+  if (next === 'casting') {
+    enterNextCasting(room);
+    return 'casting';
+  }
+  return room.show;
+}
+
+function scheduleShowProgress(room) {
+  const wait = holdMsFor(room.show);
+  if (!Number.isFinite(wait)) return;
+  clearShowClock(room);
+  room.showClock = setTimeout(() => {
+    room.showClock = null;
+    progressShow(room);
+  }, wait);
+  room.showClock.unref?.();
+}
+
+function enterNextCasting(room) {
+  clearShowClock(room);
+  room.ballots.clear();
+  room.game.beginCasting();
+  setShow(room, 'casting');
+  fanout(room, { t: 'ballots', votes: [] });
+  fanout(room, lobbySnapshot(room));
 }
 
 /**
@@ -187,6 +235,8 @@ function endRunOnMission(room, mission) {
   if (room.show !== 'expedition') return;
   clearShowClock(room);
   setShow(room, 'recap', RUN_END.SMASHED);
+  room.game.enterRecap?.();
+  scheduleShowProgress(room);
 }
 
 /**
@@ -542,9 +592,7 @@ function handleClient(room, bound, self, msg) {
     fanout(room, lobbySnapshot(room));
   }
   if (msg.t === 'casting') {
-    clearShowClock(room);
-    room.game.beginCasting();
-    setShow(room, 'casting');
+    enterNextCasting(room);
   }
   if (msg.t === 'episode') {
     const seated = seatedPlayerIds(room);

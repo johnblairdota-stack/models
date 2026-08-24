@@ -112,12 +112,13 @@ function connected(plan, ai, bi) {
  * slice exists to schedule earlier.
  *
  * ⚠️ **MEASURED, AND WEAKER THAN IT LOOKS: AT `rooms: 6` THE GUARD NEVER FIRES.** Every world seed
- * 0..23 passes on its first candidate (`harness/party-warm.mjs` W6c prints the worst case). That
- * is not evidence the guard is unnecessary — it is evidence that the two failure modes it covers
- * do not overlap. Room ABSENCE is impossible at six (the mandatory list is taken whole) and
- * plan-level DISCONNECTION is rare; the unreachability `genplan.js` measured happens one stage
- * later, when a corridor sliver fails to become a `SPACES` row, which this check cannot see
- * because that row does not exist yet. So the guard is cheap insurance against a `PLAN_OPTS`
+ * 0..23 passes on its first candidate (`harness/party-warm.mjs` W6c prints the worst case),
+ * including a chapel that can walk to the ballroom (re-measured when episode 2's smash moved
+ * there). That is not evidence the guard is unnecessary — it is evidence that the two failure
+ * modes it covers do not overlap. Room ABSENCE is impossible at six (the mandatory list is taken
+ * whole) and plan-level DISCONNECTION is rare; the unreachability `genplan.js` measured happens
+ * one stage later, when a corridor sliver fails to become a `SPACES` row, which this check cannot
+ * see because that row does not exist yet. So the guard is cheap insurance against a `PLAN_OPTS`
  * change, not a fix for the sliver bug, and `planPasses` is exported so W6d can prove it still
  * rejects a house that genuinely lacks a gallery rather than asserting on a loop that never runs.
  *
@@ -132,9 +133,13 @@ export function homeIsCorner(plan) {
 export function planPasses(plan) {
   const gal = regionsOfType(plan, MISSION_ROOM);
   const ball = regionsOfType(plan, HOME_ROOM);
-  if (!gal.length || !ball.length) return false;
+  const chapel = regionsOfType(plan, 'chapel');
+  if (!gal.length || !ball.length || !chapel.length) return false;
   if (!homeIsCorner(plan)) return false;
-  return connected(plan, plan.regions.indexOf(gal[0]), plan.regions.indexOf(ball[0]));
+  const gi = plan.regions.indexOf(gal[0]);
+  const bi = plan.regions.indexOf(ball[0]);
+  const ci = plan.regions.indexOf(chapel[0]);
+  return connected(plan, gi, bi) && connected(plan, ci, bi);
 }
 
 export function pickPlanSeed(worldSeed) {

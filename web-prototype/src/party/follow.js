@@ -374,7 +374,7 @@ export const CUE_KINDS = ['intros', 'run', 'move', 'shot', 'idle'];
 /** Per-kind closed allow-lists. A key not listed for its kind is a violation, not a pass. */
 export const CUE_KEYS = {
   intros: ['kind', 'cast'],
-  run: ['kind', 'runner', 'name', 'shell', 'accent'],
+  run: ['kind', 'runner', 'name', 'shell', 'accent', 'episode'],
   move: ['kind', 'x', 'y', 'lookX', 'lookY', 'run', 'swing', 'act'],
   shot: ['kind', 'shot'],
   idle: ['kind'],

@@ -8,10 +8,16 @@
  * This one proves a reviewer can open a host, two phones, see the lobby, and advance.
  */
 
-import { startServer, fanoutViolations, lobbySnapshot } from '../net/party/local.mjs';
+import { startServer, fanoutViolations, lobbySnapshot, progressShow } from '../net/party/local.mjs';
 import { recapFromEvents } from '../src/party/recap.js';
 import { qrMatrix } from '../src/party/qr.js';
-import { tokenKey, STUB_SHOW_PLAN, normalizeCodeDisplay, normalizeCodeWire } from '../src/party/night-client.js';
+import {
+  tokenKey, STUB_SHOW_PLAN, AFTER_RUN_BEATS, nextShowBeat, holdMsFor,
+  RECAP_HOLD_MS, DEBRIEF_HOLD_MS, normalizeCodeDisplay, normalizeCodeWire,
+} from '../src/party/night-client.js';
+import { PHASE, SECONDS } from '../src/party/phases.js';
+import { missionFor, MISSION_PAINTING, MISSION_TABLE } from '../src/party/mission.js';
+import { RUN_END } from '../src/party/show.js';
 import { ACCENTS, SHELLS, cleanLook } from '../src/party/look.js';
 import { applyCastLock, applyCastTap, ballotFromCast, castPrompt, freshCast, mergePublicNames, nominationPlayers } from '../src/party/cast-ui.js';
 import { createRoom } from '../src/party/room.js';
@@ -114,10 +120,22 @@ t('N1b · host and phone tokens are namespaced apart',
   tokenKey('test', 'tv') !== tokenKey('test', 'phone')
     && tokenKey('test', 'tv').endsWith('.tv.token')
     && tokenKey('test', 'phone').endsWith('.phone.token'));
-t('N1c · stub show plan ends on recap without a host click',
-  STUB_SHOW_PLAN.at(-1)?.beat === 'recap' && STUB_SHOW_PLAN.some((s) => s.beat === 'expedition'));
+t('N1c · stub show plan walks recap → debrief → casting after the run',
+  STUB_SHOW_PLAN.map((s) => s.beat).join(',') === 'expedition,recap,debrief,casting');
 t('N1c2 · expedition is immediate — the TV does not wait on Watch the run',
   (STUB_SHOW_PLAN.find((s) => s.beat === 'expedition')?.ms ?? 1) === 0);
+t('N1c3 · recap hold is 20s and debrief hold is 75s — the shooting schedule, not a new table',
+  RECAP_HOLD_MS === SECONDS[PHASE.RECAP] * 1000 && RECAP_HOLD_MS === 20000
+    && DEBRIEF_HOLD_MS === SECONDS[PHASE.DEBRIEF] * 1000 && DEBRIEF_HOLD_MS === 75000
+    && holdMsFor('recap') === RECAP_HOLD_MS && holdMsFor('debrief') === DEBRIEF_HOLD_MS);
+t('N1c4 · after a finished run the clock is Recap → Debrief → Casting',
+  AFTER_RUN_BEATS.join(',') === 'recap,debrief,casting'
+    && nextShowBeat('recap') === 'debrief' && nextShowBeat('debrief') === 'casting'
+    && nextShowBeat('expedition') == null);
+t('N1c5 · episode 1 is the gallery painting; episode 2+ is the chapel table',
+  missionFor(1) === MISSION_PAINTING && missionFor(2) === MISSION_TABLE
+    && missionFor(3).target === 'table-round' && MISSION_TABLE.catalogId === 'table-round'
+    && missionFor(undefined) === MISSION_PAINTING);
 
 const host = await open(`${base}&host=1`);
 t('N2 · host=1 is the TV spectator, not a robot',
@@ -361,6 +379,51 @@ t('N13b · catch-up is entitled replay, not a dump',
 t('N13c · a refresh resumes the server show beat, not casting',
   last(back, 'show')?.beat === 'expedition' || last(back, 'show')?.beat === 'recap',
   last(back, 'show')?.beat);
+
+{
+  const night = srv.rooms.get('night');
+  const before = night.game.state.episode;
+  host.send({
+    t: 'world',
+    runner: { room: 'r0.ballroom', x: 0, z: 0 },
+    hunter: { room: 'r1.gallery', x: 1, z: 1 },
+    mission: { phase: 'done', room: 'r0.ballroom' },
+  });
+  await sleep(50);
+  t('N17 · a finished smash run pins recap with SMASHED — it does not soft-end the night there',
+    last(host, 'show')?.beat === 'recap' && last(host, 'show')?.end === RUN_END.SMASHED
+      && last(b, 'show')?.beat === 'recap' && night.show === 'recap',
+    JSON.stringify(last(host, 'show')));
+  const phases = [];
+  phases.push(night.show);
+  const toDebrief = progressShow(night);
+  await sleep(40);
+  t('N17b · progressShow walks Recap → Debrief',
+    toDebrief === 'debrief' && night.show === 'debrief'
+      && last(host, 'show')?.beat === 'debrief',
+    JSON.stringify({ show: night.show, host: last(host, 'show')?.beat }));
+  phases.push(night.show);
+  const toCasting = progressShow(night);
+  await sleep(40);
+  t('N17c · and Debrief → Casting for the next pair (episode already bumped by playEpisode)',
+    toCasting === 'casting' && night.show === 'casting'
+      && last(host, 'show')?.beat === 'casting'
+      && night.game.state.phase === 'CASTING'
+      && night.game.state.airingEpisode === before
+      && night.game.state.pair.runner == null && night.game.state.pair.guide == null,
+    JSON.stringify({
+      show: night.show, phase: night.game.state.phase,
+      airing: night.game.state.airingEpisode, episode: night.game.state.episode,
+      pair: night.game.state.pair,
+    }));
+  phases.push(night.show);
+  t('N17d · the live beat order after a completed ep1 run is recap, debrief, casting — no Reckoning',
+    phases.join(',') === 'recap,debrief,casting'
+      && !host.msgs.some((m) => m.t === 'show' && m.beat === 'reckoning'),
+    phases.join(','));
+  t('N17e · episode 1 still skipped Reckoning in the phase machine',
+    !host.msgs.filter((m) => m.t === 'event').map((m) => m.ev).some((e) => e.type === 'phase.RECKONING'));
+}
 
 host.send({ t: 'show', beat: 'recap' });
 await sleep(40);

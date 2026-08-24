@@ -323,6 +323,7 @@ export default async function partyHost({ params }) {
       name: joinedName(names || players(), runnerId, 'The runner'),
       shell: look.shell,
       accent: look.accent,
+      episode: Number(client.frame?.airingEpisode ?? client.lobby?.airingEpisode ?? 1),
     });
     if (ok) ui.cuedRunner = runnerId;
     return ok;
@@ -420,7 +421,7 @@ export default async function partyHost({ params }) {
      * the follow layer stamped INTROS · WALK over the live run. Intros are a casting
      * beat — once the pair is walking, the run cue owns the camera.
      */
-    if (ui.beat === 'expedition' || ui.beat === 'recap') return;
+    if (ui.beat === 'expedition' || ui.beat === 'recap' || ui.beat === 'debrief') return;
     const cast = introCast();
     if (!cast.length) return;
     ui.introsSent = true;
@@ -487,9 +488,10 @@ export default async function partyHost({ params }) {
     const canStart = connected && nLive >= 2 && (phase === 'LOBBY' || show === 'lobby') && !ui.locked;
     const canLock = connected && (phase === 'CASTING' || show === 'casting')
       && (client.ballots || []).length >= 1
-      && !client.events.some((e) => e.type === 'cast.pair');
-    const hasPair = !!(pair.runner || recap.runner);
-    const onRun = show === 'expedition' || (hasPair && show !== 'recap' && show !== 'casting');
+      && !pair.runner;
+    const hasPair = !!pair.runner;
+    const onTalk = show === 'recap' || show === 'debrief';
+    const onRun = show === 'expedition' || (hasPair && !onTalk && show !== 'casting');
 
     let body = '';
     if (ui.err) body += `<div class="err">${esc(ui.err)}</div>`;
@@ -520,10 +522,15 @@ export default async function partyHost({ params }) {
        */
     } else if (show === 'recap') {
       body += recapBoard(recap, names, ui.runEnd);
-      body += `<div class="actions"><button class="btn ghost" id="to-cast">Ballots</button>
-        <button class="btn ghost" id="to-run">Run</button></div>`;
+      body += `<div class="actions"><button class="btn ghost" id="to-run">Run</button></div>`;
+      body += `<p class="hint" style="margin-top:16px">Phones down. Debrief is next.</p>`;
+    } else if (show === 'debrief') {
+      body += recapBoard(recap, names, ui.runEnd);
+      body += seatGrid(client.lobby);
       if (episode === 1 || phase === 'DEBRIEF' || phase === 'VERDICT') {
         body += `<p class="hint" style="margin-top:16px">No eviction this episode. Phones down — talk.</p>`;
+      } else {
+        body += `<p class="hint" style="margin-top:16px">Phones down — talk. The next ballot is coming.</p>`;
       }
     } else if (show === 'casting') {
       const showingIntros = ui.introsSent && !ui.introsDone;
@@ -620,6 +627,10 @@ export default async function partyHost({ params }) {
     const runnerId = pair.runner || recap.runner;
     follow.mode = onRun && runnerId ? 'run'
       : (show === 'casting' && ui.introsSent && !ui.introsDone ? 'intros' : 'warm');
+    if ((show === 'debrief' || show === 'casting') && ui.cuedRunner) {
+      sendCue({ kind: 'idle' });
+      ui.cuedRunner = null;
+    }
     mountFollow();
     placeFollow();
 
