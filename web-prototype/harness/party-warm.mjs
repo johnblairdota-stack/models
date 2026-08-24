@@ -1457,7 +1457,29 @@ console.log('\nparty-warm — the lobby-warm night');
     && /warmSlot\.textContent = ''/.test(hostSrc)
     && /followLive \? '' : 'camera warming'/.test(hostSrc));
 
+  t('W22c · hidden-tab intros watchdog is ~12s so 3·2·1 cannot hang forever',
+    /INTROS_DONE_MS = 12000/.test(hostSrc)
+    && /function armIntrosWatchdog/.test(hostSrc)
+    && /function markIntrosDone/.test(hostSrc)
+    && /visibilityState === 'hidden'/.test(hostSrc)
+    && /visibilityState === 'visible'/.test(hostSrc)
+    && /armSendCountdown/.test(hostSrc));
+  t('W22d · ballot board prints the existing cast tie-break chain, not a second resolver',
+    /previewCastTiebreaks/.test(hostSrc)
+    && /describeCastTiebreaks/.test(hostSrc)
+    && /ballot-why/.test(hostSrc)
+    && /\.ballot-why/.test(skin));
+  t('W22e · stock Robot N is a TV name, not The runner / The guide',
+    /publicName\(playerName/.test(hostSrc)
+    && !/\^Robot \\d\+\$\/i/.test(hostSrc));
 
+  const phoneCast = await readFile(new URL('../src/views/party-phone.js', import.meta.url), 'utf8');
+  const paintCast = phoneCast.match(/function paintCasting[\s\S]*?function patchCastSheet/)?.[0] || '';
+  t('W22f · casting stamp is phase + ids — names and the card tab do not rebuild #lock-pick',
+    /p\.id\)\.join/.test(paintCast)
+    && /function patchCastSheet/.test(phoneCast)
+    && !/hasCard\(\) \? 'card'/.test(paintCast)
+    && !/p\.id\}:\$\{p\.name/.test(paintCast));
 }
 
 // ---- W23 · YOU CAN SEE INTO THE NEXT ROOM THROUGH A DOOR ------------------------------------

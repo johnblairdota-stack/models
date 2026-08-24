@@ -21,7 +21,7 @@ import { PHASE, SECONDS } from '../src/party/phases.js';
 import { missionFor, MISSION_PAINTING, MISSION_TABLE } from '../src/party/mission.js';
 import { RUN_END } from '../src/party/show.js';
 import { ACCENTS, SHELLS, cleanLook } from '../src/party/look.js';
-import { applyCastLock, applyCastTap, ballotFromCast, castPrompt, freshCast, mergePublicNames, nominationPlayers } from '../src/party/cast-ui.js';
+import { applyCastLock, applyCastTap, ballotFromCast, castPrompt, freshCast, mergePublicNames, nominationPlayers, publicName } from '../src/party/cast-ui.js';
 import { createRoom } from '../src/party/room.js';
 import { NO_ONE } from '../src/party/vote.js';
 
@@ -62,6 +62,9 @@ function last(box, type) {
   const dark = recapFromEvents([{ type: 'player.taken', data: { id: 'p1', seat: 0 } }]);
   t('N0b · a take without a lit camera is STAYED DARK + TAKEN',
     dark.cameraLit === false && dark.taken[0].id === 'p1');
+  t('N0c · recap surfaces recorded cast.ballot tiebreaks and stays empty when none',
+    recap.tiebreaks.length === 0
+      && recapFromEvents([{ type: 'cast.ballot', data: { runner: 'p1', guide: 'p2', tiebreaks: ['runner:seeded'] } }]).tiebreaks[0] === 'runner:seeded');
 }
 
 {
@@ -117,6 +120,12 @@ t('N1a · join code field uppercases, strips spaces, keeps the no-ilo01 alphabet
     noms.map((p) => p.id).join(',') === 'p1,p2' && !noms.some((p) => p.id === 'p7'));
   t('N1a8 · a lobby name wins over a leftover Robot N on the state frame',
     mergePublicNames(framePlayers, lobby).find((p) => p.id === 'p1')?.name === 'Ellie');
+  t('N1a9 · stock Robot N is a name on the TV, not The runner / The guide',
+    publicName('Robot 1', 'p1', 'The runner') === 'Robot 1'
+      && publicName('Ellie', 'p1', 'The runner') === 'Ellie'
+      && publicName('—', 'p1', 'The runner') === 'The runner'
+      && publicName('p1', 'p1', 'The guide') === 'The guide'
+      && publicName('', 'p1', 'The guide') === 'The guide');
 }
 
 t('N1b · host and phone tokens are namespaced apart',

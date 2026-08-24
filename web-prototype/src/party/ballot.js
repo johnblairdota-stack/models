@@ -79,6 +79,66 @@ export function tallyCasting({ ballots, living, history, lastPair, ep, matchSeed
 }
 
 /**
+ * TV copy for the chain `tallyCasting` already ran. Not a second resolver.
+ * fewer-expeditions → lastEp (staleness) → seededPick.
+ */
+export const TIEBREAK_WHY = {
+  expeditions: 'fewer expeditions',
+  staleness: 'longest since last walk',
+  seeded: 'seeded pick',
+};
+
+export function describeCastTiebreaks(tiebreaks) {
+  return (tiebreaks || []).map((code) => {
+    const [slot, how] = String(code).split(':');
+    if (!slot || !how) return '';
+    const who = slot === STANDING.GUIDE ? 'Guide' : 'Runner';
+    const why = TIEBREAK_WHY[how];
+    return why ? `${who}: ${why}` : '';
+  }).filter(Boolean);
+}
+
+/**
+ * Rebuild the public history already written on `cast.ballot`. Display-only —
+ * `playEpisode` is still the only caller that locks a pair.
+ */
+export function historyFromCastEvents(events) {
+  const history = {};
+  let lastPair = { runner: null, guide: null };
+  for (const e of events || []) {
+    if (e?.type !== 'cast.ballot') continue;
+    const d = e.data || {};
+    for (const id of [d.runner, d.guide]) {
+      if (!id) continue;
+      const row = history[id] || (history[id] = { expeditions: 0, lastEp: null });
+      row.expeditions += 1;
+      if (d.episode != null) row.lastEp = d.episode;
+    }
+    lastPair = { runner: d.runner ?? null, guide: d.guide ?? null };
+  }
+  return { history, lastPair };
+}
+
+/**
+ * What the current ballots would resolve to, using the same `tallyCasting` the
+ * room will run at send-them-in. Returns only the public reason codes.
+ */
+export function previewCastTiebreaks({ ballots, living, events, ep, matchSeed }) {
+  if (!Array.isArray(ballots) || !ballots.length) return [];
+  if (!Array.isArray(living) || living.length < 2) return [];
+  if (matchSeed == null || matchSeed === '') return [];
+  if (!Number.isFinite(Number(matchSeed))) return [];
+  const seated = new Set(living);
+  const votes = ballots.filter((v) => v && seated.has(v.runner) && seated.has(v.guide) && v.runner !== v.guide);
+  if (!votes.length) return [];
+  const { history, lastPair } = historyFromCastEvents(events);
+  return tallyCasting({
+    ballots: votes, living, history, lastPair,
+    ep: Number(ep) || 1, matchSeed: Number(matchSeed) | 0,
+  }).tiebreaks || [];
+}
+
+/**
  * REFUSE THE CHAIR — once per game, public, attributed, permanent.
  *
  * The veto re-pointed: a statement about a job you were given rather than about somebody else's

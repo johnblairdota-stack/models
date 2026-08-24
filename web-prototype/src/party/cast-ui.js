@@ -53,6 +53,18 @@ export function isStockRobotName(name) {
 }
 
 /**
+ * What a shared screen may print for a joined player.
+ *
+ * Stock `Robot N` is a real name — prefer it over "The runner" / "The guide".
+ * Missing names, `playerName`'s `'—'` sentinel, and a raw id still fall back.
+ */
+export function publicName(name, id, fallback) {
+  const n = name == null ? '' : String(name);
+  if (!n || n === '—' || n === String(id || '')) return fallback;
+  return n;
+}
+
+/**
  * Joined phones only. Empty Robot N chairs cannot be nominated.
  * A dropped phone stays if they already have a human name.
  */

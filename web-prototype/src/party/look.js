@@ -277,6 +277,7 @@ export const SHOW_CHROME_CSS = `
     .talk-side .ballot.huge .pick { font-size:clamp(14px, 1.6vw, 20px); }
     .talk-side .pair-hero { font-size:clamp(16px, 2vw, 28px); margin:0 0 8px; }
     .talk-side .ballot .arrow { font-size:11px; }
+    .talk-side .ballot-why { font-size:11px; margin:0 0 8px; }
     /* Recap is a lower-third strip, one 16:9 viewport, no scroll. */
     .recap-stage { width:100%; display:flex; flex-direction:column; gap:8px; }
     .recap-head { display:flex; justify-content:flex-end; align-items:flex-end; }

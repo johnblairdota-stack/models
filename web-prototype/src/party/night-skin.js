@@ -83,6 +83,8 @@ export function injectNightSkin() {
     .ballot.huge .who { font-size:clamp(52px, 9vw, 96px); }
     .ballot.huge .pick { font-size:clamp(44px, 8vw, 84px); }
     .ballot .arrow { color:#f5a14a; letter-spacing:.2em; font-size:18px; text-transform:uppercase; }
+    .ballot-why { color:#a89884; font-size:13px; letter-spacing:.08em; text-transform:uppercase;
+      margin:0 0 12px; line-height:1.35; }
     .pair-hero { margin:18px 0 8px; font-size:clamp(48px, 10vw, 120px); font-weight:800; line-height:1.1; }
     /* THE FRAME IS THE SHOW, SO THE FRAME GETS THE SCREEN. PR #5 gave the pair-hero the whole
        lower half because there was nothing else on the TV during the run — a still and two names.
