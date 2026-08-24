@@ -303,16 +303,25 @@ const CLIPS = {
 };
 
 /**
- * Where the hammer sits in the hand.
+ * Where the hammer sits in the hand — locked to the `char.grip` bench, not eyeballed.
  *
- * ⚠️ EYEBALLED, AND LABELLED AS SUCH. `GRIP_LO` and `GRIP_SEP` in `sledge.js` say where the two
- * hands sat on the haft under the old IK solve, so the distance from the prop's origin to the
- * drive hand is derived — `(GRIP_LO + GRIP_SEP) * height` along the haft, which is the prop's own
- * +Y. What is NOT derived is the ROLL of the haft in the fist: the generated hand has no landmark
- * that says which way its palm faces, and the attack clip was authored for an empty hand. So the
- * hammer is laid along the hand bone's own down-limb axis and rolled by hand until it reads.
+ * `GRIP_LO` and `GRIP_SEP` in `sledge.js` say where the two hands sat on the haft under the old
+ * IK solve, so the distance from the prop's origin to the drive hand is derived —
+ * `(GRIP_LO + GRIP_SEP) * height` along the haft, which is the prop's own +Y. The ROLL of the
+ * haft in the fist has no landmark on the generated hand; `char.grip` compares five rolls around
+ * this centre and `window.__grip` publishes the paste-ready degrees. Product `mountProp` and the
+ * bench both call `mountInHand`, so they cannot silently diverge.
  */
-const GRIP_ALONG_HAFT = 0.060 + 0.145;      // GRIP_LO + GRIP_SEP, from sledge.js
+export const GRIP_ALONG_HAFT = 0.060 + 0.145;      // GRIP_LO + GRIP_SEP, from sledge.js
+/**
+ * Shipped roll of the haft in the RightHand fist, radians. Centre of the five-roll
+ * `char.grip` bench. 2.37 is 0.8 + pi/2: the old idle-eyeballed 0.8 was a quarter-turn out at
+ * the strike (89.6 deg edge-on, a spade); this lands 11.5 deg from face-on on
+ * `Heavy_Hammer_Swing`. Tolerance about +/-0.25. Degrees: 2.37 * 180/pi = 135.8.
+ */
+export const GRIP_SHIPPED = 2.37;
+/** @deprecated use GRIP_SHIPPED — kept so older critics that name the default still compile. */
+export const GRIP_ROLL_DEFAULT = GRIP_SHIPPED;
 /**
  * ===================== THE SWING SET =====================
  *
@@ -327,6 +336,7 @@ const GRIP_ALONG_HAFT = 0.060 + 0.145;      // GRIP_LO + GRIP_SEP, from sledge.j
  *              travels through. It has to be solved against THAT clip's velocity at ITS strike.
  *              Measured on `Heavy_Hammer_Swing`: 0.8 gives 89.6 deg (dead edge-on, reads as a
  *              spade); 2.37 gives 11.5 deg (reads as a hammer). Tolerance about +/-0.25.
+ *              Locked to `GRIP_SHIPPED` from the `char.grip` bench — do not restale it here.
  *
  *   `contact`  where in the clip the head actually arrives. `CONTACT_PHASE` 0.60 was derived for
  *              the retired procedural swing; `Heavy_Hammer_Swing` is still OVERHEAD at 0.60 and
@@ -334,13 +344,14 @@ const GRIP_ALONG_HAFT = 0.060 + 0.145;      // GRIP_LO + GRIP_SEP, from sledge.j
  *
  * ⚠️ A NEW ENTRY IS NOT DONE UNTIL BOTH ARE MEASURED ON IT. Copying another clip's numbers is
  * exactly the mistake that shipped a spade — `harness/scenarios/_critic-swingface1.mjs` and
- * `_critic-swingface2.mjs` are the instruments that solve them.
+ * `_critic-swingface2.mjs` are the instruments that solve them. Sharing `GRIP_SHIPPED` is the
+ * bench lock, not a copied guess: both clips currently share one mount, so they share one roll.
  *
  * ⚠️ `Heavy_Hammer_Swing` IS A GROUND CHOP and is flagged: its head passes 27 cm BELOW the floor
  * and the robot ends bent double. It is kept because John asked for variety, but it is the weaker
  * of the two against a vertical wall and should be replaced when a real wall-swing exists.
  */
-const SWINGS = [
+export const SWINGS = [
   /*
    * ⚠️ NEITHER OF THESE IS A WALL SWING, AND BOTH ARE MEASURED, NOT GUESSED AT. John asked for
    * variety with both looking correct; that is not deliverable from this clip set, and saying so
@@ -357,16 +368,15 @@ const SWINGS = [
    * The real fix is a purpose-made clip — Meshy's Text-to-Motion, asked for a horizontal swing
    * into a vertical wall at chest height. Until then this set is the best available, not good.
    *
-   * ⚠️ `Attack.grip` IS STILL UNSOLVED and deliberately carries Heavy's value as a KNOWN
-   * PLACEHOLDER. Two measurement runs failed their own control (face angle span 57.0 and 51.7
-   * against a 60 threshold) and the metric read 24 degrees bimodal between identical runs,
-   * because its reference direction is contaminated by that same discontinuity. Copying a solved
-   * grip across clips is exactly what shipped a spade; this one is labelled rather than trusted.
+   * ⚠️ `Attack`'s FACE ANGLE is still unsolved as a per-clip measurement (two runs failed their
+   * own control because the clip teleports). The ROLL it carries is no longer a placeholder
+   * copied by hand: it is `GRIP_SHIPPED`, the same lock `Heavy_Hammer_Swing` and `mountProp`
+   * use, so live play cannot pick Attack and silently roll a different hammer than the bench.
    */
-  { clip: 'Attack', grip: 2.37, contact: 0.381,
-    note: 'contact measured (noise 0.000); grip UNSOLVED, placeholder; 0.37 m under floor; has a 0.8 m jump at p0.37' },
-  { clip: 'Heavy_Hammer_Swing', grip: 2.37, contact: 0.85,
-    note: 'grip and contact both measured; ground chop, 0.27 m under floor' },
+  { clip: 'Attack', grip: GRIP_SHIPPED, contact: 0.381,
+    note: 'grip locked to char.grip GRIP_SHIPPED; contact measured; face-angle unsolved (clip teleports at p0.37); 0.37 m under floor' },
+  { clip: 'Heavy_Hammer_Swing', grip: GRIP_SHIPPED, contact: 0.85,
+    note: 'grip locked to char.grip GRIP_SHIPPED; contact measured; ground chop, 0.27 m under floor' },
 ];
 
 /*
@@ -385,22 +395,19 @@ const SWINGS = [
  *
  * This is what the old `SledgeRig._fitProp` guaranteed by construction — "a hammer that arrives
  * face-on reads as a hammer and one that arrives edge-on reads as a stick". Parenting the prop to
- * a hand bone threw that guarantee away; this constant buys it back for one clip only, and would
- * have to be re-derived if the swing clip changes.
+ * a hand bone threw that guarantee away; `GRIP_SHIPPED` buys it back, and `char.grip` is the
+ * place to re-derive it if the swing clip changes. Do not restale the number in this file.
  */
-const GRIP_ROLL_DEFAULT = 2.37;
-
 
 /*
- * ⚠️ `?grip=` AND `?griplen=` EXIST BECAUSE THESE TWO ARE THE ONLY EYEBALLED NUMBERS HERE, and
- * John is the one who can judge them. Shipping them as live knobs beats shipping a question:
- * the roll of the haft in the fist has no landmark to derive it from, and how far down the haft
- * the hand sits is inherited from a solve that no longer runs. Both default to what is in this
- * file, so the address bar changes nothing unless it is used.
+ * ⚠️ `?grip=` AND `?griplen=` OVERRIDE THE BENCH LOCK, they do not replace it. Address-bar
+ * knobs stay so John can A/B a candidate against `GRIP_SHIPPED` without a rebuild. Both default
+ * to the locked constants, so the address bar changes nothing unless it is used.
  *
- *   ?grip=0.8       roll of the haft in the fist, radians
+ *   ?grip=2.37      roll of the haft in the fist, radians (GRIP_SHIPPED)
  *   ?griplen=0.205  how far the hand sits from the prop's origin, as a fraction of height
-
+ *   ?swingpick=0    force SWINGS[N] in playAttack instead of a random pick
+ *
  */
 const urlNum = (name, fallback) => {
   if (typeof location === 'undefined') return fallback;
@@ -408,6 +415,85 @@ const urlNum = (name, fallback) => {
   const n = v === null ? NaN : Number(v);
   return Number.isFinite(n) ? n : fallback;
 };
+
+/**
+ * Hang a held prop off a hand bone. This is the ONE mount: product `mountProp` and the
+ * `char.grip` bench both call it, so the roll and the hand-on-haft offset cannot silently
+ * drift apart.
+ *
+ * The prop's +Y is its haft (`sledge.js` builds it that way). Align +Y with the forearm-to-hand
+ * vector (measured, not an axis convention), then roll about that haft, then slide the grip
+ * point back onto the bone origin. The bone's world scale is divided out so a 0.95 m hammer
+ * does not inherit the GLB's 0.01 and vanish inside the fist.
+ *
+ * @param {THREE.Object3D} obj
+ * @param {object} opts
+ * @param {THREE.Bone} opts.bone
+ * @param {number} opts.height        character height in metres
+ * @param {number} [opts.roll]        haft roll, radians — defaults to GRIP_SHIPPED
+ * @param {number} [opts.alongHaft]   hand station as a fraction of height — defaults to GRIP_ALONG_HAFT
+ * @returns {{ align: THREE.Quaternion, dirLocal: THREE.Vector3, k: number, roll: number, alongHaft: number } | null}
+ */
+export function mountInHand(obj, {
+  bone,
+  height,
+  roll = GRIP_SHIPPED,
+  alongHaft = GRIP_ALONG_HAFT,
+} = {}) {
+  if (!bone || !obj) return null;
+  obj.removeFromParent();
+  bone.updateWorldMatrix(true, false);
+
+  const s = bone.getWorldScale(new THREE.Vector3());
+  const k = 1 / (((s.x + s.y + s.z) / 3) || 1);
+
+  const forearm = bone.parent;
+  const hw = bone.getWorldPosition(new THREE.Vector3());
+  const dirWorld = forearm
+    ? hw.clone().sub(forearm.getWorldPosition(new THREE.Vector3()))
+    : new THREE.Vector3(0, -1, 0);
+  if (dirWorld.lengthSq() < 1e-9) dirWorld.set(0, -1, 0);
+  dirWorld.normalize();
+  const dirLocal = dirWorld.clone()
+    .applyQuaternion(bone.getWorldQuaternion(new THREE.Quaternion()).invert()).normalize();
+
+  bone.add(obj);
+  obj.scale.setScalar(k);
+  const align = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dirLocal);
+  obj.quaternion.copy(align)
+    .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), roll));
+  obj.position.copy(dirLocal).multiplyScalar(-alongHaft * height * k);
+
+  obj.updateWorldMatrix(true, true);
+  const size = new THREE.Box3().setFromObject(obj).getSize(new THREE.Vector3()).length();
+  if (size < height * 0.2) {
+    throw new Error(`mesh-avatar: the mounted prop measures ${size.toFixed(4)} m on a ` +
+      `${height} m character — the bone's own scale has not been divided out, so it is ` +
+      'parented, visible and far too small to see.');
+  }
+  return { align, dirLocal, k, roll, alongHaft };
+}
+
+/**
+ * Perpendicular distance from a world point to the prop's haft (local +Y through the origin).
+ * The `char.grip` bench publishes this for the off-hand so a miss is a number, not a screenshot
+ * argument. Zero means the point sits on the shaft.
+ */
+export function haftDistance(obj, worldPoint) {
+  if (!obj || !worldPoint) return null;
+  obj.updateWorldMatrix(true, false);
+  const origin = new THREE.Vector3().setFromMatrixPosition(obj.matrixWorld);
+  const axis = new THREE.Vector3().setFromMatrixColumn(obj.matrixWorld, 1);
+  if (axis.lengthSq() < 1e-12) return null;
+  axis.normalize();
+  const to = worldPoint.clone().sub(origin);
+  return to.addScaledVector(axis, -to.dot(axis)).length();
+}
+
+/** Degrees, one decimal — the paste-ready form `window.__grip` prints for SWINGS. */
+export function gripDeg(rad) {
+  return +(rad * 180 / Math.PI).toFixed(1);
+}
 
 /**
  * ===================== `aBoneLocal` / `aBoneId` — WHERE A VERTEX SITS INSIDE ITS OWN BONE =====
@@ -899,6 +985,8 @@ export async function createMeshAvatar(opts = {}) {
   let current = 'idle';
   let mounted = null;
   let mountAlign = null;
+  let mountDirLocal = null;
+  let mountScaleK = 1;
   let activeSwing = SWINGS[0];
   /*
    * ⚠️ COLLAPSED BONES ARE RE-APPLIED EVERY FRAME, AFTER THE MIXER, AND THAT IS THE WHOLE POINT.
@@ -976,81 +1064,31 @@ export async function createMeshAvatar(opts = {}) {
     get clip() { return current; },
 
     /**
-     * Hang a held prop off the hand bone.
+     * Hang a held prop off the hand bone via `mountInHand` — the same primitive `char.grip`
+     * uses, so product play cannot silently restale the roll.
      *
      * ⚠️ THIS REPLACES `SledgeRig`'s IK PLACEMENT RATHER THAN COMPETING WITH IT. The caller must
      * also stop the rig owning the transform (`sledge.ownsProp = false`), or the two write
      * `root.position` in different frames on alternate lines of the same tick and the hammer
      * jitters between a hand and a chest.
-     *
-     * The prop's +Y is its haft (`sledge.js` builds it that way), so aligning +Y with the hand
-     * bone's own down-limb axis puts the head out past the fingers. The offset back along the
-     * haft is `(GRIP_LO + GRIP_SEP) * height` — where the drive hand sat under the old solve, so
-     * that part is inherited rather than invented.
      */
     mountProp(obj, { hand = 'RightHand' } = {}) {
       const b = bones[hand];
       if (!b || !obj) return false;
-      obj.removeFromParent();
-      b.updateWorldMatrix(true, false);
-
       /*
-       * ⚠️ THE BONE CARRIES THE SCALE THE GLB WAS LOADED WITH, AND FOR THIS ASSET THAT IS 0.01.
-       * A prop parented to it inherits that, so a 0.95 m sledgehammer renders as a 9.5 mm one
-       * inside the fist — present, parented, `visible === true`, and invisible on screen. Exactly
-       * the trap `mesh-identity.js` divides out for every part of the kit; it arrives again here
-       * the moment something outside that file hangs off a bone.
-       *
-       * The first build of this mount hit it: the scenario passed "hammer is parented to the hand
-       * bone" and "within 0.85 m of the hand" while the capture showed a robot holding nothing.
+       * Product play uses the SAME primitive as `char.grip`. `?grip=` / `?griplen=` override
+       * the bench lock for an A/B; absent, this is GRIP_SHIPPED / GRIP_ALONG_HAFT.
        */
-      const s = b.getWorldScale(new THREE.Vector3());
-      const k = 1 / (((s.x + s.y + s.z) / 3) || 1);
-
-      /*
-       * ⚠️ WHICH WAY THE HAFT POINTS IS MEASURED, NOT ASSUMED. The first build laid it along the
-       * hand bone's local +Y on the reasoning that +Y runs down the limb — which is true of the
-       * ARM bone, measured, and the hand's own frame is a different question. It rendered as a
-       * hammer skewered diagonally through the robot's chest.
-       *
-       * The forearm-to-hand vector IS the limb's direction and needs no assumption about anyone's
-       * axis convention, so the haft is aligned to that: the prop's +Y (its haft, by
-       * `buildSledgeProp`) is rotated onto it, in the hand bone's own frame.
-       */
-      const forearm = b.parent;
-      const hw = b.getWorldPosition(new THREE.Vector3());
-      const dirWorld = forearm
-        ? hw.clone().sub(forearm.getWorldPosition(new THREE.Vector3()))
-        : new THREE.Vector3(0, -1, 0);
-      if (dirWorld.lengthSq() < 1e-9) dirWorld.set(0, -1, 0);
-      dirWorld.normalize();
-      // Into the hand bone's local frame — a DIRECTION, so only the rotation applies.
-      const dirLocal = dirWorld.clone()
-        .applyQuaternion(b.getWorldQuaternion(new THREE.Quaternion()).invert()).normalize();
-
-      b.add(obj);
-      obj.scale.setScalar(k);
-      /*
-       * The ALIGN half is stored so the roll can be changed per swing without re-deriving the
-       * forearm direction. `setGrip()` below rebuilds `align * rollY(r)`, which is bit-identical
-       * to what this line produces — the swing critic verified that equivalence 24 times out of 24.
-       */
-      mountAlign = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dirLocal);
-      obj.quaternion.copy(mountAlign)
-        .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), urlNum('grip', GRIP_ROLL_DEFAULT)));
-      obj.position.copy(dirLocal).multiplyScalar(-urlNum('griplen', GRIP_ALONG_HAFT) * H * k);
-
-      /*
-       * THE CONTROL. A mounted hammer must still BE a hammer: its world box has to be the size of
-       * the prop, not of a scale factor. This is the check the render needed a human to make.
-       */
-      obj.updateWorldMatrix(true, true);
-      const size = new THREE.Box3().setFromObject(obj).getSize(new THREE.Vector3()).length();
-      if (size < H * 0.2) {
-        throw new Error(`mesh-avatar: the mounted prop measures ${size.toFixed(4)} m on a ` +
-          `${H} m character — the bone's own scale has not been divided out, so it is ` +
-          'parented, visible and far too small to see.');
-      }
+      const placed = mountInHand(obj, {
+        bone: b,
+        height: H,
+        roll: urlNum('grip', GRIP_SHIPPED),
+        alongHaft: urlNum('griplen', GRIP_ALONG_HAFT),
+      });
+      if (!placed) return false;
+      mountAlign = placed.align;
+      mountDirLocal = placed.dirLocal;
+      mountScaleK = placed.k;
       mounted = obj;
       return true;
     },
@@ -1060,6 +1098,23 @@ export async function createMeshAvatar(opts = {}) {
     },
 
     get propMounted() { return !!mounted; },
+
+    /**
+     * Rebuild `align * rollY(r)` on the mounted prop without re-deriving the forearm.
+     * Bit-identical to the roll half of `mountInHand` — the swing critic verified that
+     * equivalence 24/24. `alongHaft` is optional; omit it to leave the hand station alone.
+     */
+    setGrip(roll, alongHaft) {
+      if (!mounted || !mountAlign) return false;
+      const r = roll ?? urlNum('grip', activeSwing.grip);
+      mounted.quaternion.copy(mountAlign)
+        .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), r));
+      if (alongHaft != null && mountDirLocal) {
+        mounted.position.copy(mountDirLocal).multiplyScalar(-alongHaft * H * mountScaleK);
+      }
+      mounted.updateWorldMatrix(true, true);
+      return true;
+    },
 
     /**
      * Start the swing. `dur` is the game's own swing length, and the clip is retimed to match it
@@ -1075,13 +1130,15 @@ export async function createMeshAvatar(opts = {}) {
        * swing without re-rolling the hammer would put one clip's solved face angle on another
        * clip's arc — which is exactly how a 90-degree error ships without anyone touching a
        * constant.
+       *
+       * `?swingpick=N` forces SWINGS[N] so a harness can freeze Heavy vs Attack instead of
+       * hoping the random pick landed on the clip it named.
        */
-      activeSwing = SWINGS[Math.floor(Math.random() * SWINGS.length)];
-      if (mounted && mountAlign) {
-        const roll = urlNum('grip', activeSwing.grip);
-        mounted.quaternion.copy(mountAlign)
-          .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), roll));
-      }
+      const pick = urlNum('swingpick', -1);
+      activeSwing = (pick >= 0 && pick < SWINGS.length)
+        ? SWINGS[pick]
+        : SWINGS[Math.floor(Math.random() * SWINGS.length)];
+      this.setGrip(urlNum('grip', activeSwing.grip));
       const a = actions[activeSwing.clip];
       a.reset();
       a.setLoop(THREE.LoopOnce, 1);
