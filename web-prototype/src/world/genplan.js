@@ -1,5 +1,6 @@
 import { buildPlan, measure, W_MIN_S, WALL_T, L_DOOR, wallRuns } from '../../harness/genspike.mjs';
 import { CONNECTOR, DOORWAY_W, DOORWAY_H, CONNECTOR_W, CONNECTOR_H } from '../game/connectors.js';
+import { portalFacesPlayable } from '../game/portal-clearance.js';
 
 /**
  * genplan.js — task-plangen-1. THE ONLY PLACE `harness/genspike.mjs`'S OUTPUT BECOMES
@@ -217,6 +218,16 @@ function corridorRows(region, mustKeep) {
 const widthAxisOf = (normalAxis) => (normalAxis === 'x' ? 'z' : 'x');
 const rotYFor = (normalAxis) => (normalAxis === 'x' ? Math.PI / 2 : 0);
 
+/** Connector row in the shape `portalFacesPlayable` reads, from a genspike wall run. */
+function openingAt(a, b, run) {
+  return {
+    a, b, axis: widthAxisOf(run.axis),
+    x: run.axis === 'x' ? run.at : (run.lo + run.hi) / 2,
+    z: run.axis === 'x' ? (run.lo + run.hi) / 2 : run.at,
+    w: DOORWAY_W,
+  };
+}
+
 /**
  * `generatedTables(seed, opts)` — everything `spaces.js` needs under `GEN`.
  *
@@ -370,6 +381,7 @@ export function generatedTables(seed, opts = {}) {
   const panels = [];
   const pushDoor = (a, b, run) => {
     if (run.clear < CONNECTOR_W + 1e-6) return;      // no room for the leaf the builder will make
+    if (!portalFacesPlayable(rows, openingAt(a, b, run))) return;
     panels.push({
       id: `D.g${gi++}`, state: CONNECTOR.BREACHABLE, a, b,
       x: run.axis === 'x' ? run.at : (run.lo + run.hi) / 2,
@@ -380,6 +392,7 @@ export function generatedTables(seed, opts = {}) {
   const pushPortal = (a, b, run, state = OPEN) => {
     const w = Math.min(DOORWAY_W, run.clear);
     if (w <= MIN_PASSABLE) return;                            // too narrow to ever pass — drop it
+    if (!portalFacesPlayable(rows, openingAt(a, b, run))) return;
     portals.push({
       id: `D.g${gi++}`, state, a, b, axis: widthAxisOf(run.axis),
       x: run.axis === 'x' ? run.at : (run.lo + run.hi) / 2,
@@ -396,6 +409,8 @@ export function generatedTables(seed, opts = {}) {
     if (!a || !b) continue;                                   // the door run touched a dropped alcove
     // a door BETWEEN REGIONS — this is the one John wants shut. Shut = a PANEL (a leaf with a
     // collider); open = a PORTAL (a hole). Never the same row with a different `state`.
+    // 🚪 And it is not a door if either landing is void / a sliver. Playtest: John walked
+    // out of the mansion through an OPEN hole on a leftover envelope run.
     if (SHUT_DOORS) pushDoor(a, b, run); else pushPortal(a, b, run, OPEN);
   }
 

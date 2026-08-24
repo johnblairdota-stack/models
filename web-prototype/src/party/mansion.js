@@ -25,6 +25,7 @@
  */
 
 import { buildPlan, roomAtEnvCorner } from '../../harness/genspike.mjs';
+import { portalFacesPlayable } from '../game/portal-clearance.js';
 
 /** The two rooms the night's mission needs. Both are `genspike.mjs` `LIBRARY` types. */
 export const MISSION_ROOM = 'gallery';
@@ -217,13 +218,23 @@ export function planRegions(seedish) {
     }
   });
   const doors = [];
+  const floor = [...rooms, ...corridors];
   for (const e of plan.edges) {
     if (!e.canDoor) continue;
     const run = e.runs[e.doorRun];
     if (!run) continue;
-    doors.push({
+    // Width axis is the OTHER one from genspike's wall-normal `run.axis` — same as genplan.
+    const opening = {
       x: run.axis === 'x' ? run.at : (run.lo + run.hi) / 2,
       z: run.axis === 'x' ? (run.lo + run.hi) / 2 : run.at,
+      axis: run.axis === 'x' ? 'z' : 'x',
+      w: 1.9,
+    };
+    // A mark on leftover envelope / a sliver is a door the house does not have.
+    if (!portalFacesPlayable(floor, opening)) continue;
+    doors.push({
+      x: opening.x,
+      z: opening.z,
       axis: run.axis,
     });
   }

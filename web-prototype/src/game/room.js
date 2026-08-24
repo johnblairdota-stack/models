@@ -13,6 +13,7 @@ import { PASS_H } from './rules.js';
 import { estateMode } from './estate-spike.js';
 import { buildSkin } from './skin.js';
 import { furnDressEnabled } from '../destruction/furnprop.js';
+import { MIN_LANDING_SPAN, uHitsAnyOpening } from './portal-clearance.js';
 
 /**
  * THE PLAYABLE SPACE — built from the floor-plan table in `spaces.js`.
@@ -2319,7 +2320,7 @@ export async function buildTestRoom(engine, o = {}) {
     const pitch = 3.2;
     const clearOfCuts = (side, u) => {
       for (const c of cutsOnWall(sp, side === 'xmin' || side === 'xmax' ? 'x' : 'z', side, WALL_T)) {
-        if (Math.abs(u - c.u) < c.w / 2 + 0.25 + 0.17) return false;
+        if (Math.abs(u - c.u) < c.w / 2 + 0.35 + 0.17) return false;
       }
       return true;
     };
@@ -2500,6 +2501,22 @@ export async function buildTestRoom(engine, o = {}) {
       portraits: 8,                         // 27.2 m of wall, not 27.0 with a stair in it
       sconces: 7,
     });
+    /**
+     * 🚪 **PILASTERS MUST NOT STAND IN A DOORWAY.** The bay rhythm is 3.02 m and the
+     * connectors are wherever the generator put them. A 0.50 m fluted pier in a 1.90 m
+     * opening is the white vertical trim in John's RRR CAM 01 chase still. `uHitsAnyOpening`
+     * is the same keep-out the furniture dresser uses, in this wall's local z.
+     */
+    {
+      const alongLong = alongX ? 'z' : 'x';
+      const longSides = alongX ? ['zmin', 'zmax'] : ['xmin', 'xmax'];
+      const cuts = longSides.flatMap((side) => cutsOnWall(sp, alongLong, side, WALL_T));
+      const centre = alongX ? sp.cx : sp.cz;
+      const localCuts = cuts.map((c) => ({ u: c.u - centre, w: c.w }));
+      const PIL_HALF = 0.50 / 2;
+      plan.pilasterZ = plan.pilasterZ.filter((z) => !uHitsAnyOpening(z, PIL_HALF, localCuts, 0.16));
+      plan.archPiers = !uHitsAnyOpening(plan.archZ, 0.78 / 2, localCuts, 0.16);
+    }
     const base = new THREE.Matrix4().makeRotationY(alongX ? Math.PI / 2 : 0)
       .premultiply(new THREE.Matrix4().makeTranslation(sp.cx, 0, sp.cz));
     // World sites for FurnProp dress (portraits / urns / candelabra) — local → world via `base`.
@@ -3320,6 +3337,19 @@ export async function buildTestRoom(engine, o = {}) {
       if (d.a !== sp.id && d.b !== sp.id) continue;
       if (d.a === d.b) continue;
       if (axis === 'z' ? !inBand(d.z) : !inBand(d.x)) continue;
+      /**
+       * 🚪 **AN OPEN HOLE MUST LAND IN A WALKABLE ROOM ON BOTH SIDES.** Playtest: John walked
+       * out of the mansion through a doorway whose named neighbour did not cover this `u` —
+       * leftover envelope, or a 5 cm corridor sliver. Seal it: no cut, the wall stays wall.
+       * Closed connectors (exit / chained / breachable / dig) still cut; a panel fills them.
+       * `b: 'outside'` EXIT sites stay sealed-by-panel, not open-to-void.
+       */
+      if ((d.state ?? CONNECTOR.BREACHABLE) === CONNECTOR.OPEN) {
+        const farOutside = d.a === 'outside' || d.b === 'outside';
+        if (farOutside) continue;
+        const u = axis === 'z' ? d.x : d.z;
+        if (!walkableNeighbourAt(sp, side, u)) continue;
+      }
       const ap = aperture(d);
       // ⚠️ `dig` IS THE COLUMN KEY, NOT THE PANEL ID, AND THAT IS DELIBERATE. Both sides of one
       // segment (`d.<edge>.<i>.a` and `.b`) cut the SAME hole in the SAME two spaces' skins and
@@ -3350,6 +3380,28 @@ export async function buildTestRoom(engine, o = {}) {
       if (side === 'zmax' && near(t.z0 - WALL_T, sp.z1) && span(t.x0, t.x1, sp.x0, sp.x1)) return t;
       if (side === 'xmin' && near(t.x1 + WALL_T, sp.x0) && span(t.z0, t.z1, sp.z0, sp.z1)) return t;
       if (side === 'xmax' && near(t.x0 - WALL_T, sp.x1) && span(t.z0, t.z1, sp.z0, sp.z1)) return t;
+    }
+    return null;
+  }
+
+  /**
+   * Neighbour that actually occupies THIS `u` on the wall, and is wide enough to walk into.
+   * `neighbourAcross` only asks "does any span overlap" — a corridor covering the north 3 m
+   * of a 15 m wall still made the whole wall interior-thin, and a door in the leftover south
+   * opened into void.
+   */
+  function walkableNeighbourAt(sp, side, u) {
+    for (const t of spaces) {
+      if (t === sp) continue;
+      if (Math.min(t.x1 - t.x0, t.z1 - t.z0) < MIN_LANDING_SPAN) continue;
+      if (side === 'zmin' && near(t.z1 + WALL_T, sp.z0)
+          && u >= Math.max(t.x0, sp.x0) - 1e-6 && u <= Math.min(t.x1, sp.x1) + 1e-6) return t;
+      if (side === 'zmax' && near(t.z0 - WALL_T, sp.z1)
+          && u >= Math.max(t.x0, sp.x0) - 1e-6 && u <= Math.min(t.x1, sp.x1) + 1e-6) return t;
+      if (side === 'xmin' && near(t.x1 + WALL_T, sp.x0)
+          && u >= Math.max(t.z0, sp.z0) - 1e-6 && u <= Math.min(t.z1, sp.z1) + 1e-6) return t;
+      if (side === 'xmax' && near(t.x0 - WALL_T, sp.x1)
+          && u >= Math.max(t.z0, sp.z0) - 1e-6 && u <= Math.min(t.z1, sp.z1) + 1e-6) return t;
     }
     return null;
   }

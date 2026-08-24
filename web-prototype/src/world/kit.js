@@ -631,7 +631,10 @@ export function wallRun(bin, o = {}) {
   const clashes = (a0, a1, b0, b1) => {
     if (o.autoSkip === false) return false;
     for (const p of ops) {
-      if (p.x1 > a0 && p.x0 < a1 && (p.y1 ?? 0) > b0 && (p.y0 ?? 0) < b1) return true;
+      // Floor-reaching openings (doorways) get a reveal pad so a stile / bolection
+      // cannot sit inside the aperture. High windows keep the exact overlap they had.
+      const pad = (p.y0 ?? 0) < 0.35 ? 0.14 : 0;
+      if (p.x1 + pad > a0 && p.x0 - pad < a1 && (p.y1 ?? 0) > b0 && (p.y0 ?? 0) < b1) return true;
     }
     return false;
   };

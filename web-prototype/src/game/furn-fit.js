@@ -8,9 +8,9 @@
  */
 
 import * as THREE from 'three';
+import { FURN_FIT_BOOST } from './furn-catalog.js';
 
-/** Extra uniform scale after targetH/maxSpan — Meshy native chairs read as toys next to UNIT-4H. */
-export const FURN_FIT_BOOST = 1.55;
+export { FURN_FIT_BOOST };
 
 function measure(scene) {
   scene.updateMatrixWorld(true);

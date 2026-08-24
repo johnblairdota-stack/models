@@ -8,6 +8,11 @@
  *   · Catalog dress (`furn-layout.js`) REFUSES a slot that overlaps an opening.
  *   · Authored kit dress (`furn-dress.js` `registerGroup`) SLIDES the prop along the wall,
  *     or drops it, so a later slice inherits the rule without restating it.
+ *   · `portalFacesPlayable` is the twin for the HOLE itself: an OPEN doorway whose far
+ *     landing is leftover envelope, `outside`, or a sliver corridor is not a door — it is
+ *     a hole out of the house. Genplan will not emit it; `cutsOnWall` will not cut it.
+ *   · `uHitsAnyOpening` is what architecture (gallery pilasters, wall-run trim) asks so a
+ *     beam or stile cannot occupy the aperture even when pathing is free.
  *
  * Pure (no THREE, no `spaces.js`) so `party-warm` can assert it. Accepts both authored
  * `{ x, z, w, axis }` rows and live `room.portals()` objects (`centre: { x, z }`).
@@ -157,6 +162,72 @@ export function blockedByOpenings(x, z, halfW, halfD, openings = [], opts) {
     if (overlapsOpening(x, z, halfW, halfD, opening, opts)) return opening;
   }
   return null;
+}
+
+/**
+ * How far to step through a doorway, along the opening normal, to ask "is there a room here?"
+ * Wall centre sits 0.15 m outside each clear extent; 0.45 m lands ~0.30 m inside a real room
+ * and well into void when the far side is leftover envelope / a dropped alcove.
+ */
+export const LANDING_DIST = 0.45;
+
+/**
+ * A landing space thinner than a stage-1 body (r=0.42 → 0.84 m of clear) is not a room.
+ * Seed 23's `c1.3` is a 5 cm corridor sliver: a doorway into it is a doorway into black.
+ */
+export const MIN_LANDING_SPAN = 0.84;
+
+export function spaceAtPoint(spaces = [], x, z) {
+  for (const s of spaces) {
+    if (x >= s.x0 && x <= s.x1 && z >= s.z0 && z <= s.z1) return s;
+  }
+  return null;
+}
+
+export function spaceIsWalkable(s, minSpan = MIN_LANDING_SPAN) {
+  if (!s) return false;
+  return (s.x1 - s.x0) >= minSpan && (s.z1 - s.z0) >= minSpan;
+}
+
+/**
+ * Two points, one in each room, a `dist` metres along the opening normal from the hole.
+ * `axis` is the WIDTH axis (same as `openingFootprint`).
+ */
+export function portalLandings(opening, dist = LANDING_DIST) {
+  const { x, z } = openingCentre(opening);
+  if (!Number.isFinite(x) || !Number.isFinite(z)) return [];
+  if (openingAxis(opening) === 'x') return [{ x, z: z - dist }, { x, z: z + dist }];
+  return [{ x: x - dist, z }, { x: x + dist, z }];
+}
+
+/**
+ * True when BOTH sides of this opening are walkable floor. False for `outside`, envelope
+ * leftover, dropped alcoves, and sliver corridors you would fall out of the house through.
+ */
+export function portalFacesPlayable(spaces = [], opening, opts = {}) {
+  if (!opening) return false;
+  if (opening.a === 'outside' || opening.b === 'outside') return false;
+  const lands = portalLandings(opening, opts.dist);
+  if (lands.length < 2) return false;
+  return lands.every((p) => spaceIsWalkable(spaceAtPoint(spaces, p.x, p.z), opts.minSpan));
+}
+
+/**
+ * World-`u` on a wall (the coordinate along the run) vs an opening on that same wall.
+ * Architecture (pilasters, trim) uses this so a pier cannot stand in the aperture.
+ */
+export function uHitsOpening(u, half, openingU, openingW, pad = 0.12) {
+  if (!Number.isFinite(u) || !Number.isFinite(openingU)) return false;
+  const w = openingW > 0 ? openingW : 1.90;
+  return Math.abs(u - openingU) < w / 2 + half + pad;
+}
+
+export function uHitsAnyOpening(u, half, openings = [], pad = 0.12) {
+  for (const o of openings) {
+    const ou = Number.isFinite(o?.u) ? o.u : (Number.isFinite(o?.x) ? o.x : o?.z);
+    if (uHitsOpening(u, half, ou, o?.w, pad)) return true;
+  }
+  return false;
 }
 
 /**
