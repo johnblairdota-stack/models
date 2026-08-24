@@ -9,10 +9,12 @@
  *
  * WHAT IT ASSERTS, from the SCENE (`window.__grip`), not from pixels:
  *   1. the view booted (ready + no page error)
- *   2. five stations, centre roll === GRIP_SHIPPED === product Heavy_Hammer_Swing.grip
- *   3. Attack shares that same lock (they share SWINGS / mountInHand)
+ *   2. five stations, centre roll === GRIP_MOUNT.roll === product Heavy_Hammer_Swing.grip
+ *   3. Attack shares that same roll (they share SWINGS / mountInHand)
  *   4. every prop is parented to RightHand
- *   5. the frame is not blank
+ *   5. pickup baselines match John's readout: off-wrist 13.3 cm, up-shaft 31.0 cm,
+ *      shaft angle 89.8 deg (epsilon is his one-decimal rounding, see below)
+ *   6. the frame is not blank
  *
  * Writes harness/out/grip/ (gitignored): the PNG, plus readout.json ready to paste into SWINGS.
  */
@@ -21,6 +23,10 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import * as THREE from 'three';
+import {
+  applyGripLocal, measureGrip, GRIP_MOUNT, GRIP_BASELINE,
+} from '../src/characters/mesh-avatar.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 5189;
@@ -29,6 +35,42 @@ const argv = process.argv.slice(2);
 const opt = (n, d = null) => { const i = argv.indexOf(`--${n}`); return i >= 0 && argv[i + 1] ? argv[i + 1] : d; };
 const has = (f) => argv.includes(f);
 const log = (...a) => console.log(' ', ...a);
+
+/*
+ * Geometry of GRIP_MOUNT, no GLB / no GPU. Catches a restale of applyGripLocal before the
+ * 4-minute view boot. Dummy bone at the GLB's 0.01 scale, k=100 — same compensation product
+ * mountProp uses. The pickup numbers are pose-invariant for a parented local transform.
+ */
+{
+  const bone = new THREE.Bone();
+  bone.scale.setScalar(0.01);
+  const obj = new THREE.Object3D();
+  bone.add(obj);
+  applyGripLocal(obj, { k: 100, height: 1.7, ...GRIP_MOUNT });
+  obj.updateWorldMatrix(true, true);
+  bone.updateWorldMatrix(true, true);
+  const g = measureGrip(obj, bone);
+  const EPS_M = 0.0015;
+  const EPS_DEG = 0.15;
+  const miss = [];
+  if (Math.abs(g.offWristM - GRIP_BASELINE.offWristM) > EPS_M) {
+    miss.push(`offWrist ${g.offWristM} want ${GRIP_BASELINE.offWristM}`);
+  }
+  if (Math.abs(g.upShaftM - GRIP_BASELINE.upShaftM) > EPS_M) {
+    miss.push(`upShaft ${g.upShaftM} want ${GRIP_BASELINE.upShaftM}`);
+  }
+  if (Math.abs(g.shaftAngleDeg - GRIP_BASELINE.shaftAngleDeg) > EPS_DEG) {
+    miss.push(`shaftAngle ${g.shaftAngleDeg} want ${GRIP_BASELINE.shaftAngleDeg}`);
+  }
+  if (miss.length) {
+    console.error('GRIP_MOUNT geometry does not match pickup baselines:');
+    miss.forEach((m) => console.error('  ' + m));
+    process.exit(1);
+  }
+  log('GRIP_MOUNT geometry',
+    `off ${(g.offWristM * 100).toFixed(2)} cm  up ${(g.upShaftM * 100).toFixed(2)} cm  `
+    + `${g.shaftAngleDeg.toFixed(2)} deg`);
+}
 
 fs.mkdirSync(OUT, { recursive: true });
 
@@ -179,9 +221,49 @@ if (!grip) {
   const along = grip.shipped?.alongHaft;
   const liveAlong = grip.live?.alongHaft;
   if (along != null && liveAlong != null && Math.abs(along - liveAlong) < 1e-6) {
-    pass('hand-on-haft (griplen) matches product', String(along));
+    pass('along-haft slider matches product', String(along));
   } else {
-    fail('hand-on-haft (griplen) matches product', `shipped=${along} live=${liveAlong}`);
+    fail('along-haft slider matches product', `shipped=${along} live=${liveAlong}`);
+  }
+
+  const mountKeys = ['roll', 'tilt', 'yaw', 'palm', 'reach', 'depth'];
+  const mountMiss = mountKeys.filter((k) => {
+    const a = grip.shipped?.[k];
+    const b = grip.live?.[k];
+    return a == null || b == null || Math.abs(a - b) > 1e-6;
+  });
+  if (!mountMiss.length) {
+    pass('fist-frame mount (roll/tilt/yaw/palm/reach/depth) matches GRIP_MOUNT',
+      `roll ${grip.live.roll}  tilt ${grip.live.tilt}  yaw ${grip.live.yaw}`);
+  } else {
+    fail('fist-frame mount matches GRIP_MOUNT', `drift on ${mountMiss.join(',')}`);
+  }
+
+  /*
+   * John's pickup readout is one decimal (13.3 cm, 31.0 cm, 89.8 deg). The geometry of
+   * GRIP_MOUNT yields 13.29 cm / 31.01 cm / 89.75 deg — tilt -1.5664 rad is 89.75 deg, and
+   * he printed 89.8. Epsilon is that rounding, not a second guess at the lock.
+   */
+  const PICKUP = { offWristM: 0.133, upShaftM: 0.310, shaftAngleDeg: 89.8 };
+  const EPS_M = 0.0015;   // 1.5 mm — tighter than 0.1 cm of his print
+  const EPS_DEG = 0.15;   // 89.75 vs 89.8
+  const off = grip.live?.offWristM;
+  const up = grip.live?.upShaftM;
+  const ang = grip.live?.shaftAngleDeg;
+  if (off != null && Math.abs(off - PICKUP.offWristM) <= EPS_M) {
+    pass('pickup off-the-wrist', `${(off * 100).toFixed(2)} cm  (want 13.3)`);
+  } else {
+    fail('pickup off-the-wrist', `live=${off} want=${PICKUP.offWristM}`);
+  }
+  if (up != null && Math.abs(up - PICKUP.upShaftM) <= EPS_M) {
+    pass('pickup up-the-shaft', `${(up * 100).toFixed(2)} cm  (want 31.0)`);
+  } else {
+    fail('pickup up-the-shaft', `live=${up} want=${PICKUP.upShaftM}`);
+  }
+  if (ang != null && Math.abs(ang - PICKUP.shaftAngleDeg) <= EPS_DEG) {
+    pass('pickup shaft angle', `${ang} deg  (want 89.8)`);
+  } else {
+    fail('pickup shaft angle', `live=${ang} want=${PICKUP.shaftAngleDeg}`);
   }
 
   const parents = (grip.stations ?? []).map((s) => s.parent);
@@ -208,5 +290,5 @@ if (fails) {
   console.error(`\n!! ${fails} failed\n`);
   process.exit(1);
 }
-console.log('\n  OK — product hammer grip matches the char.grip bench lock\n');
+console.log('\n  OK — product hammer grip matches the pickup lock (not the retired 2.37 roll)\n');
 process.exit(0);
