@@ -169,38 +169,42 @@ export function injectNightSkin() {
     .intro-hint { text-align:center; color:var(--night-dim); font-size:13px;
       letter-spacing:.16em; text-transform:uppercase; margin-top:8px; }
     /* Talk beats (debrief / reckoning / vote / execution): the ballroom is the picture,
-       the recap is a strip, the clock is the thing you can read from the sofa.
-       No backticks in this comment — this block lives in a template literal. */
-    .night.on-talk .night-top { padding:8px 22px 4px; }
-    .night.on-talk .night-line { display:none; }
+       chrome sits in reserved bands around it so the seated chairs cannot cover text.
+       Recap is a no-scroll lower-third on its own beat. No backticks in this comment. */
+    .night.on-talk .night-top, .night.on-recap .night-top { padding:8px 22px 4px; }
+    .night.on-talk .night-line, .night.on-recap .night-line { display:none; }
     .night.on-talk .night-main { padding:0 16px 10px; overflow:hidden;
-      display:flex; flex-direction:column; justify-content:center; }
-    .talk-stage { position:relative; display:flex; flex-direction:column; align-items:center; }
-    .talk-frame { height:min(${INTRO_FRAME_PCT}vh, calc(${INTRO_FRAME_PCT}vw * 9 / 16)); }
-    .talk-overlay { position:absolute; inset:0; pointer-events:none;
-      display:flex; flex-direction:column; justify-content:space-between; padding:14px 16px; }
-    .recap-mini { align-self:flex-start; display:flex; flex-wrap:wrap; gap:10px 16px;
-      padding:8px 12px; border-radius:8px; background:rgba(12,10,8,.72);
-      border:1px solid rgba(var(--night-accent-rgb), .28); font-size:13px;
+      display:flex; flex-direction:column; min-height:0; }
+    .night.on-recap .night-main { padding:4px 22px 14px; overflow:hidden;
+      display:flex; flex-direction:column; justify-content:flex-end; min-height:0; }
+    .night.on-recap .actions { margin-top:10px; }
+    .night.on-recap .actions .btn { padding:8px 14px; font-size:12px; }
+    .night.on-recap .hint.spaced { margin-top:8px; }
+    .talk-stage { position:relative; display:flex; flex-direction:column; align-items:stretch;
+      width:100%; height:100%; min-height:0; flex:1; pointer-events:none; }
+    .night.on-talk .intro-frame.talk-frame { height:100%; width:100%; max-width:100%;
+      max-height:100%; aspect-ratio:auto; margin:0; }
+    .recap-mini { align-self:flex-start; display:flex; flex-wrap:wrap; gap:6px 12px;
+      padding:6px 10px; border-radius:6px; background:rgba(12,10,8,.72);
+      border:1px solid rgba(var(--night-accent-rgb), .28); font-size:12px;
       letter-spacing:.14em; text-transform:uppercase; font-weight:700; }
     .recap-mini .mini-v.ok { color:var(--night-live); }
     .recap-mini .mini-v.bad { color:var(--night-bad); }
-    .talk-clock { align-self:flex-end; font-size:clamp(48px, 10vw, 96px); font-weight:800;
+    .talk-clock { align-self:flex-end; font-size:clamp(32px, 5vw, 56px); font-weight:800;
       line-height:1; font-variant-numeric:tabular-nums; color:var(--night-ink);
       text-shadow:0 4px 24px rgba(0,0,0,.85); }
     ${SHOW_CHROME_CSS}
     .phone .talk-clock, .phone-clock { font-size:clamp(36px, 14vw, 64px); align-self:flex-start;
       text-shadow:none; margin:8px 0 12px; }
-    .talk-kicker { margin:8px 0 0; text-align:center; color:var(--night-dim); font-size:14px;
+    .talk-kicker { margin:4px 0 0; text-align:left; color:var(--night-dim); font-size:12px;
       letter-spacing:.12em; text-transform:uppercase; }
-    .nom-board { margin-top:10px; display:flex; flex-direction:column; gap:8px; max-width:720px;
-      margin-left:auto; margin-right:auto; }
-    .nom-row { display:grid; grid-template-columns:auto 1fr auto; gap:14px; align-items:center;
-      padding:12px 16px; border-radius:8px; background:rgba(18,14,10,.82);
+    .nom-board { margin-top:0; display:flex; flex-direction:column; gap:6px; max-width:none; }
+    .nom-row { display:grid; grid-template-columns:auto 1fr auto; gap:10px; align-items:center;
+      padding:8px 10px; border-radius:6px; background:rgba(18,14,10,.82);
       border:1px solid rgba(var(--night-accent-rgb), .2); }
-    .nom-n { color:var(--night-accent); font-weight:800; letter-spacing:.16em; }
-    .nom-who { font-size:clamp(22px, 4vw, 40px); font-weight:800; line-height:1.05; }
-    .nom-by { color:var(--night-dim); font-size:12px; letter-spacing:.1em; text-transform:uppercase; }
+    .nom-n { color:var(--night-accent); font-weight:800; letter-spacing:.16em; font-size:12px; }
+    .nom-who { font-size:clamp(16px, 2vw, 24px); font-weight:800; line-height:1.05; }
+    .nom-by { color:var(--night-dim); font-size:11px; letter-spacing:.1em; text-transform:uppercase; }
     /* '.night' is opaque by design — it is the show's own black. While the mansion is warming
        behind it, it becomes a scrim instead, and 'party-host.js' sets 'rrr-warming' on <body> only
        once the layer is live so the lobby never fades toward a frame that has not rendered. */
@@ -228,13 +232,6 @@ export function injectNightSkin() {
     .run-face .bot-face { width:min(42vw, 220px); height:auto; }
     .run-tag { font-size:clamp(28px, 5vw, 56px); font-weight:800; letter-spacing:.04em; color:#f3ece3; }
     .run-slot { letter-spacing:.28em; text-transform:uppercase; color:#f5a14a; font-size:13px; font-weight:700; }
-    .recap { display:grid; grid-template-columns:1fr; gap:16px; max-width:900px; }
-    .recap .fact { padding:28px 30px; border-radius:10px; background:rgba(18,14,10,.85);
-      border:1px solid rgba(245,161,74,.2); }
-    .recap .k { letter-spacing:.22em; text-transform:uppercase; color:#f5a14a; font-size:14px; }
-    .recap .v { font-size:clamp(40px, 8vw, 84px); font-weight:800; line-height:1; margin-top:8px; }
-    .recap .v.bad { color:#ff8a7a; }
-    .recap .v.ok { color:#9ff2c8; }
     .phone { padding:16px 16px 24px; overflow:auto; }
     .phone-top { display:flex; justify-content:space-between; color:#8a7d70; font-size:12px;
       letter-spacing:.16em; text-transform:uppercase; margin-bottom:14px; }
