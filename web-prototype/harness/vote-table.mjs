@@ -19,7 +19,7 @@
  * a proof.
  */
 
-import { tallyVote, nominate, canNominate, canBeNominated, executioner, reckoningClosed, STANDING_CAP, NO_ONE, SHOWRUNNER } from '../src/party/vote.js';
+import { tallyVote, nominate, canNominate, canBeNominated, canLynchVote, executioner, reckoningClosed, STANDING_CAP, NO_ONE, SHOWRUNNER } from '../src/party/vote.js';
 
 let pass = 0, fail = 0;
 const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' · ' + d : ''}`); } else { fail++; console.log(`  FAIL ${n}${d ? ' · ' + d : ''}`); } return c; };
@@ -99,6 +99,23 @@ function* distributions(living, choices) {
     nominate(state, 'p2', 'p1').why);
   t('V2f · a nominee may counter-nominate their accuser',
     canBeNominated({ living: ids(6), nominations: [{ nominator: 'p1', target: 'p2' }] }, 'p2', 'p1').ok);
+}
+
+// ---------------------------------------------------------------- V8 · no self-vote on the lynch ballot (John 2026-08-24)
+{
+  const standing = ['p2', 'p4'];
+  const self = canLynchVote('p2', 'p2', standing);
+  t('V8a · a standing nominee cannot vote for themselves',
+    !self.ok && self.why === 'no self-vote', self.why);
+  t('V8b · they may vote another standing nominee or NO_ONE',
+    canLynchVote('p2', 'p4', standing).ok && canLynchVote('p2', NO_ONE, standing).ok);
+  t('V8c · a non-nominee may vote any standing id, never themselves',
+    canLynchVote('p1', 'p2', standing).ok
+    && canLynchVote('p1', 'p4', standing).ok
+    && !canLynchVote('p1', 'p1', standing).ok);
+  t('V8d · a choice that is not standing is refused',
+    !canLynchVote('p1', 'p9', standing).ok
+    && canLynchVote('p1', 'p9', standing).why === 'not standing');
 }
 
 // ---------------------------------------------------------------- V5 · the sledgehammer

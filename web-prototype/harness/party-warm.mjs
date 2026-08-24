@@ -1596,6 +1596,9 @@ console.log('\nparty-warm — the lobby-warm night');
     && /\[0, 45, 55, 120\]/.test(phoneSrc));
   t('W28i · TV empty standing says waiting on phones, not a silent skip',
     /Waiting on phones — nominate/.test(hostSrc));
+  t('W28j · nominated players do not see themselves on the lynch ballot',
+    /function paintLynchVote/.test(phoneSrc)
+    && /n\.target !== me\.playerId/.test(phoneSrc));
 }
 
 // ---- W26 · DUAL-STICK TV CHASE — no phone embed; look cue + camera-relative move ------------

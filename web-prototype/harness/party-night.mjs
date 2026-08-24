@@ -23,6 +23,7 @@ import { RUN_END } from '../src/party/show.js';
 import { ACCENTS, SHELLS, cleanLook } from '../src/party/look.js';
 import { applyCastLock, applyCastTap, ballotFromCast, castPrompt, freshCast, mergePublicNames, nominationPlayers } from '../src/party/cast-ui.js';
 import { createRoom } from '../src/party/room.js';
+import { NO_ONE } from '../src/party/vote.js';
 
 const PORT = 5198;
 let pass = 0, fail = 0;
@@ -158,6 +159,17 @@ t('N1c5 · episode 1 is the gallery painting; episode 2+ is the chapel table',
     nom.ok && r.state.nominations.length === 1
       && !r.nominatePlayer(living[0], living[2], living).ok
       && !r.nominatePlayer(living[1], living[1], living).ok);
+  r.enterVote(living);
+  const selfVote = r.castLynchVote(living[1], living[1], living);
+  t('N18c · a nominated player cannot vote for themselves — coerce to NO_ONE',
+    selfVote.choice === NO_ONE && selfVote.why === 'no self-vote'
+      && r.state.lynchVotes[living[1]] === NO_ONE,
+    JSON.stringify(selfVote));
+  const otherVote = r.castLynchVote(living[0], living[1], living);
+  t('N18d · another living player can still vote the nominee',
+    otherVote.ok && otherVote.choice === living[1]
+      && r.state.lynchVotes[living[0]] === living[1],
+    JSON.stringify(otherVote));
 }
 
 const host = await open(`${base}&host=1`);

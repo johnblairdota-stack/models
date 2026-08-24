@@ -1193,7 +1193,8 @@ export default async function partyPhone({ params }) {
   }
 
   function paintLynchVote(players, me, c) {
-    const standing = standingNames(players, c);
+    // John (2026-08-24): you shouldn't be able to vote for yourself after being nominated.
+    const standing = standingNames(players, c).filter((n) => n.target !== me.playerId);
     let html = `<h1>Vote.</h1>${phoneClock(c)}`;
     if (c.lynchResult) {
       html += `<p class="hint">${c.lynchResult.executed ? 'The vote is in.' : 'Nobody cleared.'}</p>`;
