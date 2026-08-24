@@ -127,8 +127,8 @@ t('N1c · stub show plan walks recap → debrief → reckoning → vote → exec
   STUB_SHOW_PLAN.map((s) => s.beat).join(',') === 'expedition,recap,debrief,reckoning,vote,execution,casting');
 t('N1c2 · expedition is immediate — the TV does not wait on Watch the run',
   (STUB_SHOW_PLAN.find((s) => s.beat === 'expedition')?.ms ?? 1) === 0);
-t('N1c3 · recap hold is 20s and debrief hold is 75s — the shooting schedule, not a new table',
-  RECAP_HOLD_MS === SECONDS[PHASE.RECAP] * 1000 && RECAP_HOLD_MS === 20000
+t('N1c3 · recap hold is 10s and debrief hold is 75s — the shooting schedule, not a new table',
+  RECAP_HOLD_MS === SECONDS[PHASE.RECAP] * 1000 && RECAP_HOLD_MS === 10000
     && DEBRIEF_HOLD_MS === SECONDS[PHASE.DEBRIEF] * 1000 && DEBRIEF_HOLD_MS === 75000
     && holdMsFor('recap') === RECAP_HOLD_MS && holdMsFor('debrief') === DEBRIEF_HOLD_MS);
 t('N1c4 · after a finished run the clock is Recap → Debrief → Reckoning → Vote → Execution → Casting',

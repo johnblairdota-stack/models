@@ -23,6 +23,7 @@ import {
   SEAT_MAX, seatCircleRadius, sitIdleClip, sitPhase, sitRootXZ, expectedPelvis,
   seatPoint, assertSeatedPose, SIT_IDLE_CLIPS, SIT_DOWN_CLIPS, SIT_CLIP_ALLOW,
   SIT_IDLE_SHIP, SIT_IN, SIT_HIPS_BACK, SIT_F_HIPS_BACK, SIT_PELVIS_ABOVE,
+  SIT_IN_THROUGH_BACK,
   rugSpanForSeats, RUG_CATALOG_SPAN, RUG_OVER_CHAIR,
 } from '../src/game/chair-seats.js';
 
@@ -231,7 +232,7 @@ t('S7 · the allow-list only names real Meshy sit clips',
   t('S9b · sunk-into-cushion (John shot) fails the sit pose check',
     !sunk.ok, sunk.notes[0] || 'did not reject sunk pelvis');
 
-  // Idle_F hip-back on the M attach: pelvis 0.56-0.24 = 0.32 m through the splat.
+  // Idle_F hip-back on the M attach: pelvis 0.56-0.34 = 0.22 m through the splat.
   const through = {
     x: chair.x + ux * (SIT_F_HIPS_BACK - SIT_IN),
     y: seat.y + SIT_PELVIS_ABOVE,
@@ -242,6 +243,20 @@ t('S7 · the allow-list only names real Meshy sit clips',
   });
   t('S9c · Idle_F through-the-back on the M attach fails',
     !fPose.ok, fPose.notes[0] || 'did not reject F-clip hip-back');
+
+  // Pre-nudge attach: SIT_IN === hip-back parked the pelvis on the chair origin
+  // and the back panel in the splat cutouts.
+  const throughBack = {
+    x: chair.x + ux * (SIT_HIPS_BACK - SIT_IN_THROUGH_BACK),
+    y: seat.y + SIT_PELVIS_ABOVE,
+    z: chair.z + uz * (SIT_HIPS_BACK - SIT_IN_THROUGH_BACK),
+  };
+  const oldBack = assertSeatedPose({
+    seated: true, seatIndex: 0, pelvis: throughBack, chair, clip: SIT_IDLE_SHIP, cx, cz,
+  });
+  t('S9d · the old through-backrest attach (SIT_IN 0.24) fails',
+    !oldBack.ok && SIT_IN > SIT_IN_THROUGH_BACK && SIT_IN > SIT_HIPS_BACK,
+    oldBack.notes[0] || `SIT_IN=${SIT_IN} still equals hip-back`);
 }
 
 {
@@ -265,6 +280,12 @@ t('S7 · the allow-list only names real Meshy sit clips',
     /sitIdle = sitIdleM \|\| sitIdleF/.test(avatarSrc)
     && /Always skip the stand-to-sit/.test(avatarSrc)
     && !/seatIndex % 2/.test(avatarSrc));
+  t('S12 · shipped Idle_M freezes torso lean at the sit-back frame',
+    /SIT_UPRIGHT_T = 0/.test(avatarSrc)
+    && /SIT_LEAN_BONES/.test(avatarSrc)
+    && /captureLean/.test(avatarSrc)
+    && /applyLean/.test(avatarSrc)
+    && /Spine02/.test(avatarSrc));
 }
 
 console.log(`\nsit-in-chair: ${pass} passed, ${fail} failed`);

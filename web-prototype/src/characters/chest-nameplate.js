@@ -10,7 +10,8 @@ import * as THREE from 'three';
  * 📺 LOW QUALITY / DISTANCE, take 2: a 512×128 LinearFilter plate still smeared at
  * ringside on `?quality=low`. This plate is a **chunky no-mip atlas**: 256×64,
  * `NearestFilter` so minification stays block pixels instead of bilinear mush; short
- * labels; fat ink-field glyphs; high-contrast STYLE_CONTRACT colours. World scale is
+ * ink-field glyphs with a black outline under the white letters (same language
+ * as the bang). High-contrast STYLE_CONTRACT plate colours. World scale is
  * larger, and `onBeforeRender` grows the sprite when the camera is far so a ringside
  * LQ cast stays legible without filling the frame up close.
  *
@@ -21,6 +22,8 @@ export const INK = '#054E84';
 export const SHELL = '#EDEFF0';
 export const CHROME = '#B9BEC2';
 export const NAME_CAP = 8;
+/** Black outline under white glyphs — same language as the bang's dark stroke. */
+export const GLYPH_OUTLINE = '#000000';
 
 /** Saturated reckoning bang — reads on gilt chairs and navy ink tags. */
 export const BANG_RED = '#E10600';
@@ -48,6 +51,7 @@ export const NAMEPLATE_SPEC = Object.freeze({
   ink: INK,
   shell: SHELL,
   chrome: CHROME,
+  outline: GLYPH_OUTLINE,
   tagW: TAG_W,
   tagH: TAG_H,
   nameCap: NAME_CAP,
@@ -106,10 +110,7 @@ function paintPlate(label) {
   }
   const cx = W * 0.5, cy = H * 0.54;
   g.lineWidth = NAMEPLATE_SPEC.strokePx;
-  g.strokeStyle = INK;
-  g.strokeText(text, cx, cy);
-  g.lineWidth = Math.max(5, NAMEPLATE_SPEC.strokePx * 0.45);
-  g.strokeStyle = CHROME;
+  g.strokeStyle = GLYPH_OUTLINE;
   g.strokeText(text, cx, cy);
   g.fillStyle = SHELL;
   g.fillText(text, cx, cy);

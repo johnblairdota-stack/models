@@ -52,7 +52,7 @@ export function seatCircleRadius(count, shortAxis = 15.3) {
  *
  * Mixamo local −Z is the character's back. Player yaw faces the circle centre, so −Z
  * points at the splat. Root sits `SIT_IN` inward of the chair origin so the clip's
- * hip-back lands ON the cushion centre.
+ * hip-back lands ON the cushion, forward of the splat cutouts.
  *
  * Seat slab centre 0.46 m (box 0.048 → top 0.484). Cushion centre 0.494 m (box 0.028
  * → top 0.508). Sit hips y 0.528 sits ~20 mm above the cushion top.
@@ -67,10 +67,14 @@ export const SEAT_W = 0.50;
 export const SEAT_D = 0.55;
 export const SEAT_BOX_H = 1.55;
 /**
- * Inward of the chair origin, metres. Equals |Idle_M hips.z| so seated hips land on
- * the cushion, not 0.12 m in front (old guess) or through the splat (Idle_F).
+ * Inward of the chair origin, metres. Idle_M |hips.z| is 0.24, which parked the
+ * back panel in the splat cutouts (John, Casting: Ellie through the two round
+ * holes). Larger SIT_IN slides the root toward the circle centre — forward in
+ * the seat, off the backrest — without leaving the 0.55 m cushion.
  */
-export const SIT_IN = 0.24;
+export const SIT_IN = 0.34;
+/** Pre-nudge attach that put the back through the splat. Harness fixture: must fail. */
+export const SIT_IN_THROUGH_BACK = 0.24;
 /** Clip hip-back along the outward radial, metres — Idle_M |hips.z|. */
 export const SIT_HIPS_BACK = 0.24;
 /** Idle_M hips.y (0.528) minus cushion centre (0.494). */
@@ -209,6 +213,15 @@ export function assertSeatedPose({
     const drift = Math.hypot(px - expect.x, pz - expect.z);
     if (drift > driftTol) {
       notes.push(`seat ${seatIndex}: pelvis ${drift.toFixed(3)} m from expected sit attach`);
+    }
+    if (cx != null && cz != null && chair) {
+      const { ux, uz } = radial(chair, cx, cz);
+      const alongOut = (px - (chair.x ?? 0)) * ux + (pz - (chair.z ?? 0)) * uz;
+      if (alongOut > -0.05) {
+        notes.push(
+          `seat ${seatIndex}: pelvis ${alongOut.toFixed(3)} m toward backrest (need 0.05 m toward centre)`,
+        );
+      }
     }
   }
   return { ok: notes.length === 0, notes };
