@@ -28,7 +28,7 @@ import { readFile } from 'node:fs/promises';
 import {
   CUE_CAST_KEYS, CUE_KEYS, CUE_KINDS, FOLLOW_FORBIDDEN, FOLLOW_KEYS, FOLLOW_VIEW,
   IDENTITY_SECRETS, INTRO_FOV, INTRO_FRAME_PCT, MISSION_PHASES, MOVE_KEYS, SPATIAL_WORDS,
-  STICK_DEADZONE, STICK_RELEASE, STICK_TURN, TV_FRAME_PCT,
+  STICK_DEADZONE, STICK_RELEASE, STICK_TURN, TALK_FOV, TV_FRAME_PCT,
   WARM_KEYS, WARM_STAGES, WORLD_KEYS, chaseOrbitOffset, cueViolations, followParams, followUrl,
   liveRunShot, LOOK_PITCH_MAX, LOOK_PITCH_MIN, lookYaw, moveViolations, stepLookOrbit,
   stickCamMove, stickHeading, stickMag, stickRef, warmLabel, warmPct,
@@ -204,6 +204,10 @@ console.log('\nparty-warm — the lobby-warm night');
   const extra = CUE_CAST_KEYS.filter((k) => !FANOUT_KEYS.lobbySeat.includes(k));
   t('W3g · the intro cast carries nothing the public lobby snapshot does not already carry',
     extra.length === 0, extra.join(',') || CUE_CAST_KEYS.join(','));
+  t('W3h · talk is an optional intros key — debrief may sit without a walk-in',
+    cueViolations({ kind: 'intros', cast: CAST, talk: true }).length === 0
+    && CUE_KEYS.intros.includes('talk')
+    && cueViolations({ kind: 'intros', cast: CAST, talk: true, hunter: 1 }).length > 0);
 }
 
 // ---- W4 · the pad and the world report -------------------------------------------------------
@@ -1376,9 +1380,12 @@ console.log('\nparty-warm — the lobby-warm night');
 // background during CASTING." Two defects, one picture: the body was unit4h, and CASTING kept
 // the follow layer as the warm backdrop (blurred, behind the ballot board) so a 62° plate of
 // the ballroom leaked around the left edge.
+//
+// A later playtest over-corrected the other way: 38° at 1.75 m filled the visor and hid every
+// other contestant. W21 now pins a medium-wide debrief plate, not a passport photo.
 {
-  t('W21 · the intro lens is a portrait, not the run\'s 62° plate',
-    INTRO_FOV >= 34 && INTRO_FOV <= 42, `${INTRO_FOV}°`);
+  t('W21 · the intro lens is a medium-wide, not a visor portrait and not the run\'s 62° plate',
+    INTRO_FOV >= 46 && INTRO_FOV <= 56 && INTRO_FOV < 62, `${INTRO_FOV}°`);
   t('W21a · and the CASTING picture is a centred frame, not a full-bleed strip',
     INTRO_FRAME_PCT >= 70 && INTRO_FRAME_PCT < TV_FRAME_PCT, `${INTRO_FRAME_PCT}%`);
 
@@ -1604,6 +1611,44 @@ console.log('\nparty-warm — the lobby-warm night');
   t('W28j · nominated players do not see themselves on the lynch ballot',
     /function paintLynchVote/.test(phoneSrc)
     && /n\.target !== me\.playerId/.test(phoneSrc));
+}
+
+// ---- W31 · BALLROOM DEBRIEF CAM + CHEST NAME TAGS ------------------------------------------
+//
+// Live playtest: intro/debrief lens sat on the visor; chair cam was locked; names floated off
+// the face. Medium-wide + sweeping talk director + a plate under 4Humanity.
+{
+  const introSrc = await readFile(new URL('../src/game/intro-bed.js', import.meta.url), 'utf8');
+  const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
+  const bedSrc = await readFile(new URL('../src/game/follow-bed.js', import.meta.url), 'utf8');
+  const tagSrc = await readFile(new URL('../src/characters/chest-nameplate.js', import.meta.url), 'utf8');
+
+  t('W31 · talk beats sit wider than intros, still under the run\'s 62°',
+    TALK_FOV >= INTRO_FOV && TALK_FOV < 62 && TALK_FOV <= 58, `${TALK_FOV}°`);
+  t('W31a · debrief sit cue is a talk intros, not a second visor walk-in',
+    /function cueSitDown/.test(hostSrc)
+    && /talk:\s*true/.test(hostSrc)
+    && /talk: !!c\.talk/.test(bedSrc));
+  t('W31b · intro-bed has a talk director with several named sweeping shots',
+    /TALK_SHOTS/.test(introSrc)
+    && /name: 'orbit'/.test(introSrc)
+    && /name: 'across'/.test(introSrc)
+    && /name: 'pair'/.test(introSrc)
+    && /function talkFrame/.test(introSrc)
+    && /if \(talk\)/.test(introSrc));
+  t('W31c · casting intros keep the snap-to-new-robot path; talk does not steal it',
+    /if \(i !== focusI\)/.test(introSrc) && /INTRO_FOV/.test(introSrc)
+    && /talk \? TALK_FOV : INTRO_FOV/.test(introSrc));
+  t('W31d · intro robots wear a chest name under the 4Humanity mark',
+    /attachChestNameTag/.test(introSrc)
+    && /chestName/.test(tagSrc)
+    && /wordmark/.test(tagSrc)
+    && /#054E84/.test(tagSrc)
+    && /#EDEFF0/.test(tagSrc));
+  t('W31e · a live run still locks chase — talk does not widen FOLLOW_BEATS',
+    liveRunShot('run') === 'chase'
+    && liveRunShot('intros') === null
+    && liveRunShot('warm') === null);
 }
 
 // ---- W26 · DUAL-STICK TV CHASE — no phone embed; look cue + camera-relative move ------------

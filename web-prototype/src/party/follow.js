@@ -266,15 +266,25 @@ export const TV_FRAME_PCT = 90;
  * ballot board. This number is the picture they get instead, a centred 16:9 frame, bright.
  *
  * Smaller than `TV_FRAME_PCT` because the phase strap and a one-line ballot hint still have
- * to fit; large enough that a Meshy body at `INTRO_FOV` 38 is the thing you are looking at.
+ * to fit; large enough that a Meshy body at `INTRO_FOV` is the thing you are looking at,
+ * with the neighbour still readable in the same plate.
  */
 export const INTRO_FRAME_PCT = 78;
 
 /**
- * The intro lens, degrees. The run camera is 62° (`engine.js`). A Meshy body at the old
- * standoff under that FOV is a strip; 38° is a portrait. `intro-bed.js` applies it.
+ * 🎥 **MEDIUM-WIDE, NOT A FACE PORTRAIT.** The run camera is 62° (`engine.js`). 38° at 1.75 m
+ * filled the frame with the visor — live playtest: "too tightly framed on the front of the
+ * robot face." Reality-TV debrief language is a medium-wide that keeps the subject and lets
+ * another contestant sit in the soft background. `intro-bed.js` applies it; the expedition
+ * still restores 62° on dispose.
  */
-export const INTRO_FOV = 38;
+export const INTRO_FOV = 52;
+
+/**
+ * Talk beats (Debrief / Reckoning / Vote / Execution) sit a touch wider so a slow sweep
+ * across the circle still reads as a room, not a head. Same restore-on-dispose rule.
+ */
+export const TALK_FOV = 54;
 
 /**
  * The `src` for the TV's follow iframe, or `null`.
@@ -374,7 +384,7 @@ export const CUE_KINDS = ['intros', 'run', 'move', 'shot', 'idle'];
 
 /** Per-kind closed allow-lists. A key not listed for its kind is a violation, not a pass. */
 export const CUE_KEYS = {
-  intros: ['kind', 'cast'],
+  intros: ['kind', 'cast', 'talk'],
   run: ['kind', 'runner', 'name', 'shell', 'accent', 'episode'],
   move: ['kind', 'x', 'y', 'lookX', 'lookY', 'run', 'swing', 'act'],
   shot: ['kind', 'shot'],

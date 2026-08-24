@@ -3,7 +3,8 @@ import { Player } from './player.js';
 import { chairCircle } from '../world/props.js';
 import { unit4hMaterials } from '../materials/surfaces/robot.js';
 import { cloneMeshAvatar } from '../characters/mesh-avatar.js';
-import { INTRO_FOV } from '../party/follow.js';
+import { INTRO_FOV, TALK_FOV } from '../party/follow.js';
+import { attachChestNameTag } from '../characters/chest-nameplate.js';
 
 /**
  * 🎬 **THE INTROS — the joined cast walking to their chairs in the ballroom, one at a time.**
@@ -45,22 +46,106 @@ const ARRIVE = 0.42;
 /** How far in front of its chair a robot stands. See the note on `at` below. */
 const STAND_IN = 0.62;
 /**
- * 🎥 **THE INTRO LENS IS A PORTRAIT, NOT THE RUN'S WIDE PLATE.**
+ * 🎥 **MEDIUM-WIDE 3/4, NOT A VISOR PORTRAIT.**
  *
- * The engine's default FOV is 62° (`engine.js`). At that angle a 1.7 m Meshy body standing
- * 3.2 m from the lens occupies about half the frame, and during the walk-in — when the body
- * is still outside the circle — it collapses to a thin strip on one side of a dim ballroom.
- * John, after the playtest: the intros used the old robot, "framed far left / thin strip /
- * looks background during CASTING."
+ * The engine's default FOV is 62° (`engine.js`). An earlier intro pass used 38° at 1.75 m
+ * to stop the walk-in reading as a thin strip on a dim plate — and it over-corrected: live
+ * playtest, the lens sat on the front of the robot face and nobody else in the circle was
+ * in frame. Reality-TV debrief language is a medium-wide: the subject reads, a neighbour
+ * sits in the soft background, the room is still a room.
  *
- * 38° at 1.75 m in front of the stand-mark fills the frame with the body that just chose a
- * colour. Restored on `dispose` so the expedition keeps the run's 62°.
+ * 50° (`INTRO_FOV`) at ~2.55 m, offset along the tangent so the shot is a 3/4 rather than
+ * a passport photo. Restored on `dispose` so the expedition keeps the run's 62°.
  */
-/** Eye standoff in front of the stand-mark, metres. Was STAND_IN + 2.6. */
-const EYE_OUT = 1.75;
-/** Look-at height — chest of a 1.7 m Meshy, not the chair rail. */
-const LOOK_Y = 1.22;
-const EYE_Y = 1.48;
+/** Eye standoff is no longer a face-fill; the intro eye sits inside the ring, off-axis. */
+const EYE_OUT = 2.55;
+/** How far off the radial line the intro lens sits, so a neighbour can share the plate. */
+const EYE_SIDE = 1.25;
+/** Look-at height — upper chest of a 1.7 m Meshy, with enough floor that chairs read. */
+const LOOK_Y = 1.12;
+const EYE_Y = 1.56;
+/** Neighbour bias on the look-at, metres along the tangent. */
+const LOOK_SIDE = 0.85;
+
+/**
+ * 🎬 **TALK / DEBRIEF SHOTS — changing angles, slow sweeps, never a locked chair cam.**
+ *
+ * Debrief used to re-fire the intro portrait and hold. John: different angles, sweeping
+ * views, other contestants visible. Each shot is a few seconds of move, then the director
+ * eases onto the next; the run camera is not touched (`liveRunShot` still locks chase).
+ */
+const TALK_SHOTS = [
+  { name: 'pair', dur: 9.5 },
+  { name: 'orbit', dur: 13.0 },
+  { name: 'wide', dur: 11.0 },
+  { name: 'push', dur: 9.0 },
+  { name: 'across', dur: 12.0 },
+];
+
+const TALK_CYCLE = TALK_SHOTS.reduce((s, x) => s + x.dur, 0);
+
+/**
+ * One debrief plate. Eye and look are written into the caller's vectors so the step
+ * loop does not allocate. Always from inside the ring — faces, not chair backs.
+ */
+function talkFrame(robots, clock, cx, cz, radius, eye, look) {
+  const n = Math.max(1, robots.length);
+  const wraps = Math.floor(Math.max(0, clock) / TALK_CYCLE);
+  let t = Math.max(0, clock) - wraps * TALK_CYCLE;
+  let idx = 0;
+  for (let i = 0; i < TALK_SHOTS.length; i++) {
+    if (t < TALK_SHOTS[i].dur) { idx = i; break; }
+    t -= TALK_SHOTS[i].dur;
+  }
+  const shot = TALK_SHOTS[idx];
+  const u = THREE.MathUtils.clamp(t / shot.dur, 0, 1);
+  const focus = (wraps * TALK_SHOTS.length + idx) % n;
+  const a = robots[focus];
+  const b = robots[(focus + 1) % n];
+  const far = robots[(focus + Math.max(1, Math.floor(n / 2))) % n];
+  const ox = a.ux, oz = a.uz;
+  const tx = a.tx, tz = a.tz;
+
+  if (shot.name === 'pair') {
+    const back = Math.max(0.85, radius * 0.32);
+    const side = 1.05 + u * 0.35;
+    eye.set(cx - ox * back + tx * side, 1.54 + Math.sin(u * Math.PI) * 0.07, cz - oz * back + tz * side);
+    look.set(
+      a.body.pos.x * 0.58 + b.body.pos.x * 0.42,
+      1.18,
+      a.body.pos.z * 0.58 + b.body.pos.z * 0.42,
+    );
+  } else if (shot.name === 'orbit') {
+    const ang = clock * 0.10 + focus * ((Math.PI * 2) / n);
+    const r = Math.max(1.05, radius * 0.42);
+    eye.set(cx + Math.sin(ang) * r, 1.62 + Math.sin(clock * 0.21) * 0.08, cz + Math.cos(ang) * r);
+    look.set(
+      cx + Math.sin(ang + 0.95) * radius * 0.72,
+      1.16,
+      cz + Math.cos(ang + 0.95) * radius * 0.72,
+    );
+  } else if (shot.name === 'wide') {
+    eye.set(cx, 1.68, cz);
+    look.set(
+      a.body.pos.x * 0.40 + b.body.pos.x * 0.35 + far.body.pos.x * 0.25,
+      1.22,
+      a.body.pos.z * 0.40 + b.body.pos.z * 0.35 + far.body.pos.z * 0.25,
+    );
+  } else if (shot.name === 'push') {
+    const dist = THREE.MathUtils.lerp(radius * 0.48, radius * 0.28, u);
+    eye.set(cx - ox * dist + tx * 0.70, 1.50 + (1 - u) * 0.08, cz - oz * dist + tz * 0.70);
+    look.set(a.body.pos.x + tx * 0.42, 1.16, a.body.pos.z + tz * 0.42);
+  } else {
+    const inward = 1.15;
+    eye.set(a.at.x - ox * inward + tx * 0.55, 1.52, a.at.z - oz * inward + tz * 0.55);
+    look.set(
+      far.body.pos.x * 0.7 + b.body.pos.x * 0.3,
+      1.18,
+      far.body.pos.z * 0.7 + b.body.pos.z * 0.3,
+    );
+  }
+  return { index: focus, shot: shot.name };
+}
 
 /**
  * 🎨 **PER-ROBOT COLOUR BY CLONING A BAKED MATERIAL, NOT BY BAKING A NEW ONE.**
@@ -156,7 +241,7 @@ export function ballroomOf(room) {
  * @param {object} [o.avatar]    the runner's already-loaded Meshy body, cloned per seat
  * @param {(eye,at)=>void} [o.reelSight]  `follow-bed.js`'s sight reel — see its use below
  */
-export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight } = {}) {
+export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight, talk } = {}) {
   const scene = engine.scene;
   const rng = engine.rng;
   const space = ballroomOf(room);
@@ -237,21 +322,40 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       materials: tintedMaterials(base, seat.shell, seat.accent, ownedMaterials),
       avatar: twin,
     });
+    const tag = attachChestNameTag(body, seat.name);
+    if (tag?.material) ownedMaterials.push(tag.material);
+
+    const tx = -uz, tz = ux;
+    // Always offset toward the next seat so a neighbour can sit in the 3/4, not toward empty floor.
+    const side = EYE_SIDE;
+    const at = new THREE.Vector3(chair.x - ux * STAND_IN, room.floorY ?? 0, chair.z - uz * STAND_IN);
+    const face = Math.atan2(cx - chair.x, cz - chair.z);
+
     const start = new THREE.Vector3(cx + ux * (radius + ENTRY_OUT), room.floorY ?? 0, cz + uz * (radius + ENTRY_OUT));
     // Nudge the entry point back inside the house if the ballroom is not big enough to hold it.
     if (space) {
       start.x = THREE.MathUtils.clamp(start.x, space.x0 + 0.7, space.x1 - 0.7);
       start.z = THREE.MathUtils.clamp(start.z, space.z0 + 0.7, space.z1 - 0.7);
     }
-    body.pos.copy(start);
-    // Facing the chair it is about to walk to.
-    const inward = Math.atan2(chair.x - start.x, chair.z - start.z);
-    body.facing = inward;
-    body.aimYaw = inward;
-    body.root.visible = false;
+    /*
+     * Talk beats skip the walk-in: the circle is already the picture. Casting intros still
+     * process in from outside so the colour-and-flair beat has a beginning.
+     */
+    if (talk) {
+      body.pos.copy(at);
+      body.facing = face;
+      body.aimYaw = face;
+      body.root.visible = true;
+    } else {
+      body.pos.copy(start);
+      const inward = Math.atan2(chair.x - start.x, chair.z - start.z);
+      body.facing = inward;
+      body.aimYaw = inward;
+      body.root.visible = false;
+    }
 
     return {
-      seat, body, chair,
+      seat, body, chair, ux, uz, tx, tz, side,
       flair: FLAIRS[i % FLAIRS.length],
       /*
        * ⚠️ THE ROBOT STANDS *IN FRONT OF* ITS CHAIR, NOT ON IT, AND THE FIRST DRIVE PHOTOGRAPHED
@@ -261,12 +365,20 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
        * which reads as someone standing at their place about to sit down. (An actual seated pose
        * is a `Gait` this body does not have — see §9 of the slice.)
        */
-      at: new THREE.Vector3(chair.x - ux * STAND_IN, room.floorY ?? 0, chair.z - uz * STAND_IN),
-      // Portrait stand: inside the ring, close enough that a 38° lens fills on the body.
-      eye: new THREE.Vector3(chair.x - ux * (STAND_IN + EYE_OUT), EYE_Y, chair.z - uz * (STAND_IN + EYE_OUT)),
-      face: Math.atan2(cx - chair.x, cz - chair.z),
-      arrived: false,
-      t0: i * STAGGER,
+      at,
+      /*
+       * Interior 3/4: the lens sits near the circle centre, offset along the tangent, looking
+       * at the arriving robot. A radial passport-cam put the neighbour behind the camera;
+       * this one keeps another chair in the same plate.
+       */
+      eye: new THREE.Vector3(
+        cx + tx * Math.min(EYE_SIDE, radius * 0.48) - ux * Math.min(0.55, radius * 0.18),
+        EYE_Y,
+        cz + tz * Math.min(EYE_SIDE, radius * 0.48) - uz * Math.min(0.55, radius * 0.18),
+      ),
+      face,
+      arrived: !!talk,
+      t0: talk ? 0 : i * STAGGER,
     };
   });
 
@@ -279,9 +391,10 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
   const _look = new THREE.Vector3();
   const _eye = new THREE.Vector3();
   const fov0 = engine.camera.fov;
-  engine.camera.fov = INTRO_FOV;
+  engine.camera.fov = talk ? TALK_FOV : INTRO_FOV;
   engine.camera.updateProjectionMatrix();
   engine.camera.position.copy(robots[0]?.eye ?? new THREE.Vector3(cx, EYE_Y, cz + 3));
+  const _lookLive = new THREE.Vector3(cx, LOOK_Y, cz);
 
   function driveOne(r, dt, t) {
     if (clock < r.t0) return;                       // has not been called in yet
@@ -322,7 +435,9 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
   return {
     /** Which robot the camera is on, and what it is doing — for the lower-third and the drive. */
     focus() {
-      const i = Math.min(robots.length - 1, Math.max(0, Math.floor(clock / step)));
+      const i = talk
+        ? Math.min(robots.length - 1, Math.max(0, focusI < 0 ? 0 : focusI))
+        : Math.min(robots.length - 1, Math.max(0, Math.floor(clock / step)));
       const r = robots[i];
       return r ? {
         index: i, name: r.seat.name ?? null, shell: r.seat.shell, accent: r.seat.accent,
@@ -339,41 +454,81 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       for (const r of robots) driveOne(r, dt, t);
 
       /*
-       * 🎥 THE CAMERA IS POINTED AT THE ARRIVING ROBOT'S FRONT, WHICH IS WHY IT STANDS INSIDE THE
-       * RING. The chairs face the centre, so a camera outside the circle would spend the entire
-       * beat filming the backs of the heads of people who just chose a colour.
-       *
-       * It EASES between robots rather than cutting. A cut is the operator's instrument during the
-       * run (`follow-bed.js` `FollowOperator`); the intros are a single continuous move around a
-       * circle, which is what makes them read as one introduction rather than eight.
+       * 🎥 THE CAMERA STANDS INSIDE THE RING. The chairs face the centre, so a camera outside
+       * the circle would spend the beat filming the backs of the heads of people who just
+       * chose a colour. Talk beats do not lock to one chair — they sweep.
        */
-      const i = Math.min(robots.length - 1, Math.max(0, Math.floor(clock / step)));
-      const r = robots[i];
-      if (r) {
-        _look.set(r.body.pos.x, LOOK_Y, r.body.pos.z);
-        _eye.copy(r.eye);
-        /*
-         * ⚠️ THE REEL STAYS EVEN THOUGH PR A REMOVED THE BALLROOM COLONNADE. A chair circle still
-         * does not know what else is in the room (catalog piano, a wall). Same reel
-         * `follow-bed.js` uses for the run camera — the shot tightens rather than going crooked.
-         */
+      if (talk) {
+        const shot = talkFrame(robots, clock, cx, cz, radius, _eye, _look);
         reelSight?.(_eye, _look);
-        /*
-         * A new focus SNAPS; holding on one robot still eases. The warm camera is a dolly down
-         * the ballroom, and a 2.6-rate lerp from that eye left the first robot as a strip on
-         * the left of a wide plate for most of its hold — the "far left / thin strip" note.
-         */
-        if (i !== focusI) {
-          engine.camera.position.copy(_eye);
-          focusI = i;
-        } else {
-          engine.camera.position.lerp(_eye, 1 - Math.exp(-3.4 * dt));
-        }
+        engine.camera.position.lerp(_eye, 1 - Math.exp(-1.55 * dt));
+        _lookLive.lerp(_look, 1 - Math.exp(-2.1 * dt));
         engine.camera.up.set(0, 1, 0);
-        engine.camera.lookAt(_look);
-        engine.camera.rotateZ(Math.sin(t * 0.73) * 0.004);
+        engine.camera.lookAt(_lookLive);
+        engine.camera.rotateZ(Math.sin(t * 0.47) * 0.008);
+        if (shot) focusI = shot.index;
+      } else {
+        const i = Math.min(robots.length - 1, Math.max(0, Math.floor(clock / step)));
+        const r = robots[i];
+        if (r) {
+          const hold = Math.max(0, clock - i * step);
+          const sway = Math.sin(hold * 0.62) * 0.52;
+          const other = robots.find((o, j) => j !== i && o.body.root.visible);
+          if (other) {
+            _look.set(
+              r.body.pos.x * 0.62 + other.body.pos.x * 0.38,
+              LOOK_Y,
+              r.body.pos.z * 0.62 + other.body.pos.z * 0.38,
+            );
+          } else {
+            _look.set(
+              r.body.pos.x + r.tx * LOOK_SIDE,
+              LOOK_Y,
+              r.body.pos.z + r.tz * LOOK_SIDE,
+            );
+          }
+          if (!r.arrived) {
+            /*
+             * Track the walk-in from the same interior 3/4, not from the stand-mark. A 50°
+             * plate parked at the chair while the body was still outside the circle read as
+             * "tiny robot, empty ballroom".
+             */
+            _eye.set(
+              r.body.pos.x * 0.35 + r.eye.x * 0.65,
+              EYE_Y,
+              r.body.pos.z * 0.35 + r.eye.z * 0.65,
+            );
+          } else {
+            _eye.copy(r.eye);
+            _eye.x += r.tx * sway;
+            _eye.z += r.tz * sway;
+            _eye.y += Math.sin(hold * 0.41) * 0.07;
+          }
+          /*
+           * ⚠️ THE REEL STAYS EVEN THOUGH PR A REMOVED THE BALLROOM COLONNADE. A chair circle still
+           * does not know what else is in the room (catalog piano, a wall). Same reel
+           * `follow-bed.js` uses for the run camera — the shot tightens rather than going crooked.
+           */
+          reelSight?.(_eye, _look);
+          /*
+           * A new focus SNAPS; holding on one robot still eases. The warm camera is a dolly down
+           * the ballroom, and a 2.6-rate lerp from that eye left the first robot as a strip on
+           * the left of a wide plate for most of its hold — the "far left / thin strip" note.
+           */
+          if (i !== focusI) {
+            engine.camera.position.copy(_eye);
+            _lookLive.copy(_look);
+            focusI = i;
+          } else {
+            engine.camera.position.lerp(_eye, 1 - Math.exp(-3.4 * dt));
+            _lookLive.lerp(_look, 1 - Math.exp(-3.4 * dt));
+          }
+          engine.camera.up.set(0, 1, 0);
+          engine.camera.lookAt(_lookLive);
+          engine.camera.rotateZ(Math.sin(t * 0.73) * 0.004);
+        }
+        if (!done && clock >= total) done = true;
       }
-      if (!done && clock >= total) done = true;
     },
 
     /**
@@ -410,6 +565,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
         if (o.isMesh || o.isSkinnedMesh || o.isInstancedMesh || o.isLine || o.isPoints) {
           o.geometry?.dispose?.();
         }
+        if (o.name === 'chestName') o.userData?.ownedTex?.dispose?.();
       });
       for (const r of robots) r.body.avatar?.dispose?.();
       for (const m of ownedMaterials) m.dispose?.();
