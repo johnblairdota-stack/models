@@ -289,12 +289,16 @@ export function galleryOrder(bin, o = {}) {
   // ---- the transverse arch ------------------------------------------------
   if (parts.arch) {
     const cz = P.archZ;
-    for (const s of [-1, 1]) {
-      pilaster(B, {
-        x: s > 0 ? x1 - 0.26 : x0 + 0.26, y: 0.34, z: cz,
-        rotY: s > 0 ? -Math.PI / 2 : Math.PI / 2,
-        h: fieldTop + 0.55, w: 0.78, proj: 0.30, flutes: 3, keys: { shaft: 'stone', cap: 'gilt' },
-      });
+    // Vertical piers skip when a doorway occupies this bay (`plan.archPiers === false`).
+    // Showcase leaves `archPiers` undefined, so the locked gallery render is untouched.
+    if (P.archPiers !== false) {
+      for (const s of [-1, 1]) {
+        pilaster(B, {
+          x: s > 0 ? x1 - 0.26 : x0 + 0.26, y: 0.34, z: cz,
+          rotY: s > 0 ? -Math.PI / 2 : Math.PI / 2,
+          h: fieldTop + 0.55, w: 0.78, proj: 0.30, flutes: 3, keys: { shaft: 'stone', cap: 'gilt' },
+        });
+      }
     }
     // ⚠️ EMISSION ORDER IS THE SHOWCASE'S, TERM FOR TERM. `GeoBin` merges a bucket in insertion
     // order, so keeping the order keeps the merged buffer layout as well as the picture — which
@@ -305,8 +309,10 @@ export function galleryOrder(bin, o = {}) {
     B.add('gilt', extrudeProfile(corniceProfile(0.34, 0.20), wid, { x0 }),
       new THREE.Matrix4().makeScale(1, 1, -1)
         .premultiply(new THREE.Matrix4().makeTranslation(0, h - 1.60, cz - 0.24)));
-    for (const s of [-1, 1]) {
-      B.box('stone', 0.70, h - 1.62, 0.44, s > 0 ? x1 - 0.36 : x0 + 0.36, (h - 1.62) / 2, cz, 1.0);
+    if (P.archPiers !== false) {
+      for (const s of [-1, 1]) {
+        B.box('stone', 0.70, h - 1.62, 0.44, s > 0 ? x1 - 0.36 : x0 + 0.36, (h - 1.62) / 2, cz, 1.0);
+      }
     }
   }
 

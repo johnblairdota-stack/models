@@ -8,7 +8,15 @@
  * John / 2026-08-24: every non-rug row is ×0.7 of the previous fit (30% smaller).
  * `rug-circle` stays at catalog `maxSpan: 2.80` — ballroom chair-ring restale
  * (`rugScaleForSeats`) owns live rug diameter, not this table.
+ *
+ * `FURN_FIT_BOOST` is then applied on top (`furn-fit.js`) so Meshy native chairs read next
+ * to UNIT-4H. Doorway keep-out MUST use the boosted span — after ×0.7 a crate is authored
+ * at 0.63 m (~0.98 m on the floor). Pathing-only `maxSpan/2` is what left the old 0.90 m
+ * crate sitting in the opening.
  */
+
+/** Extra uniform scale after targetH/maxSpan. Same number `furn-fit.js` multiplies by. */
+export const FURN_FIT_BOOST = 1.55;
 
 export const FURN_SMASH_ASSETS = [
   { id: 'chair', file: 'rrr_prop_chair_v1.glb', kind: 'chair', targetH: 0.805, maxSpan: 0.595 },

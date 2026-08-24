@@ -26,7 +26,7 @@
  * follow-bed warm) go through that function. This file is the table + GLB loader it calls.
  */
 
-import { FURN_SMASH_ASSETS } from './furn-catalog.js';
+import { FURN_SMASH_ASSETS, FURN_FIT_BOOST } from './furn-catalog.js';
 import {
   blockedByOpenings,
   openingsFromRoom,
@@ -116,7 +116,10 @@ function halfSpan(spec) {
 export function walkHalf(spec) {
   if ((spec?.liftY ?? 0) >= 2.0) return 0;
   if (spec?.thin) return Math.min(0.28, halfSpan(spec) * 0.18);
-  return halfSpan(spec);
+  // Visual occupancy, not the catalog's pre-boost span. `fitCatalogProp` multiplies
+  // non-thin meshes by `FURN_FIT_BOOST`; a keep-out that ignores it leaves a crate
+  // (catalog maxSpan 0.63 after ×0.7 → ~0.98 m on the floor) filling a 1.90 m door.
+  return halfSpan(spec) * FURN_FIT_BOOST;
 }
 
 function wallSlot(s, wall, t, inset) {

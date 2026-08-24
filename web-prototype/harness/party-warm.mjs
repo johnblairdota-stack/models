@@ -50,10 +50,11 @@ import {
   LAYOUT_CATALOG_IDS, CATALOG_ROOM_ASSIGN, catalogPlacements, catalogUrl,
   CATALOG_URL_PREFIX, spaceKind, placementsClearOfOpenings, walkHalf,
 } from '../src/game/furn-layout.js';
-import { FURN_SMASH_ASSETS } from '../src/game/furn-catalog.js';
+import { FURN_SMASH_ASSETS, FURN_FIT_BOOST } from '../src/game/furn-catalog.js';
 import {
   PORTAL_SIDE_PAD, blockedBy, blockedByOpenings, clearOfPortals,
   footprintRect, openingFootprint, overlapsOpening, portalKeepout, portalKeepouts,
+  portalFacesPlayable, uHitsAnyOpening, MIN_LANDING_SPAN,
 } from '../src/game/portal-clearance.js';
 import { generatedTables } from '../src/world/genplan.js';
 import {
@@ -2071,6 +2072,92 @@ console.log('\nparty-warm — the lobby-warm night');
   t('W33j · sitLock pins the model so gait offset cannot unseat the clip',
     /if \(this\.sitLock\) \{[\s\S]*?this\.model\.position\.set\(0, 0, 0\)/.test(playerSrc)
     && /sitIdle = sitIdleM \|\| sitIdleF/.test(await readFile(new URL('../src/characters/mesh-avatar.js', import.meta.url), 'utf8')));
+}
+
+// ---- W34 · NO DOORWAY INTO VOID, AND NOTHING OCCUPIES THE APERTURE --------------------------
+//
+// John, playtest 2026-08-24, procedural mansion:
+//   1. Doorways on the outside border opened off the playable plan into black.
+//   2. A crate sat in a doorway; white pilasters / trim stuck into another.
+//
+// Cause (1): genplan emitted OPEN portals onto leftover envelope / 5 cm corridor slivers
+// because `rowIdAtRun` named a neighbour that did not cover that `u`. Seed 23 `D.g6`.
+// Cause (2): `walkHalf` used pre-boost `maxSpan/2` while `fitCatalogProp` draws at ×1.55,
+// and gallery pilasters were a bay rhythm with no opening test.
+{
+  const roomA = { id: 'a', x0: 0, x1: 8, z0: 0, z1: 8 };
+  const roomB = { id: 'b', x0: 8.3, x1: 16, z0: 0, z1: 8 };
+  const thin = { id: 's', x0: 8.3, x1: 10, z0: 3.9, z1: 4.1 };
+  const shared = { id: 'd', a: 'a', b: 'b', x: 8.15, z: 4, w: 1.9, axis: 'z' };
+  const border = { id: 'e', a: 'a', b: 'outside', x: 0, z: 4, w: 1.9, axis: 'z' };
+  const intoThin = { id: 'f', a: 'a', b: 's', x: 8.15, z: 4, w: 1.9, axis: 'z' };
+  t('W34 · a door between two walkable rooms faces playable floor',
+    portalFacesPlayable([roomA, roomB], shared));
+  t('W34a · a door whose far side is outside is not a playable opening',
+    !portalFacesPlayable([roomA], border) && !portalFacesPlayable([roomA], shared));
+  t('W34b · a door into a sliver thinner than a body is not a playable opening',
+    !portalFacesPlayable([roomA, thin], intoThin)
+    && MIN_LANDING_SPAN >= 0.84);
+
+  let voidOpen = 0, outsideOpen = 0, visualHit = 0, placed = 0;
+  const specOf = new Map(FURN_SMASH_ASSETS.map((a) => [a.id, a]));
+  for (let ws = 0; ws < 24; ws++) {
+    const tables = generatedTables(pickPlanSeed(ws).seed, PLAN_OPTS);
+    for (const p of tables.portals) {
+      if (p.a === 'outside' || p.b === 'outside') outsideOpen++;
+      if (!portalFacesPlayable(tables.spaces, p)) voidOpen++;
+    }
+    const after = catalogPlacements(tables.spaces, { portals: tables.portals });
+    placed += after.length;
+    for (const slot of after) {
+      const spec = specOf.get(slot.catalogId);
+      const half = walkHalf(spec);
+      if (half > 0 && blockedByOpenings(slot.x, slot.z, half, half, tables.portals)) visualHit++;
+    }
+  }
+  t('W34c · no OPEN portal on 24 world seeds faces void, a sliver, or outside',
+    voidOpen === 0 && outsideOpen === 0, `${voidOpen} void / ${outsideOpen} outside`);
+  // PR #44 scaled catalog spans ×0.7 (crate 0.90 → 0.63). Keep-out is still boosted:
+  // unboosted half is 0.315 m; visual half is 0.63/2 × 1.55 ≈ 0.49 m.
+  const crateSpec = specOf.get('crate');
+  const crateHalf = walkHalf(crateSpec);
+  t('W34d · catalog dress (boosted visual half, crate included) stays out of every opening',
+    visualHit === 0 && FURN_FIT_BOOST === 1.55
+    && crateSpec.maxSpan === 0.63
+    && crateHalf > crateSpec.maxSpan * 0.5
+    && Math.abs(crateHalf - crateSpec.maxSpan * 0.5 * FURN_FIT_BOOST) < 1e-9,
+    `${visualHit} overlaps · crate half ${crateHalf.toFixed(2)} m · n=${placed}`);
+
+  // Control: a crate just outside the unboosted AABB still occupies the aperture once
+  // Meshy ×1.55 is applied. Pathing-only keep-out is what shipped the playtest crate.
+  const door = { id: 'd', x: 0, z: 0, w: 1.9, axis: 'x' };
+  const crateX = 1.86;
+  const rawHalf = 0.90 * 0.5;
+  const visHalf = rawHalf * FURN_FIT_BOOST;
+  t('W34e control · unboosted crate AABB misses a door the boosted mesh still fills',
+    !blockedByOpenings(crateX, 0, rawHalf, rawHalf, [door])
+    && !!blockedByOpenings(crateX, 0, visHalf, visHalf, [door]));
+
+  t('W34f · a pilaster in a doorway is a hit, one a metre off is not',
+    uHitsAnyOpening(0, 0.25, [{ u: 0, w: 1.9 }], 0.16)
+    && !uHitsAnyOpening(3, 0.25, [{ u: 0, w: 1.9 }], 0.16));
+
+  const here = dirname(fileURLToPath(import.meta.url));
+  const src = (rel) => readFileSync(join(here, '..', rel), 'utf8');
+  t('W34g · genplan refuses a hole that does not land in two walkable rooms',
+    /portalFacesPlayable\(rows/.test(src('src/world/genplan.js')));
+  t('W34h · cutsOnWall does not cut an OPEN hole without a walkable neighbour at that u',
+    /walkableNeighbourAt\(sp, side, u\)/.test(src('src/game/room.js'))
+    && /OPEN/.test(src('src/game/room.js')));
+  t('W34i · gallery pilasters / arch piers skip door bays; wall-run trim pads floor openings',
+    /uHitsAnyOpening/.test(src('src/game/room.js'))
+    && /archPiers !== false/.test(src('src/world/gallery-order.js'))
+    && /\(p\.y0 \?\? 0\) < 0\.35 \? 0\.14/.test(src('src/world/kit.js')));
+  t('W34j · walkHalf uses the smash-lab boost so a crate cannot hide behind maxSpan',
+    /FURN_FIT_BOOST/.test(src('src/game/furn-layout.js'))
+    && /halfSpan\(spec\) \* FURN_FIT_BOOST/.test(src('src/game/furn-layout.js')));
+  t('W34k · the guide map drops the same unplayable doors the house no longer cuts',
+    /portalFacesPlayable\(floor/.test(src('src/party/mansion.js')));
 }
 
 console.log(`\nparty-warm: ${pass} passed, ${fail} failed`);
