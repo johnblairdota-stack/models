@@ -57,6 +57,22 @@ export const reckoningClosed = (state) =>
   state.living.every((id) => state.nominations.some((n) => n.nominator === id));
 
 /**
+ * May `voter` pick `choice` on the lynch ballot?
+ * Design §3: one standing nominee or `NO_ONE`. John (2026-08-24): no self-vote.
+ *
+ * @param {string} voter
+ * @param {string} choice
+ * @param {string[]} standing
+ * @returns {{ok:boolean, why?:string}}
+ */
+export function canLynchVote(voter, choice, standing) {
+  if (choice === voter) return { ok: false, why: 'no self-vote' };
+  if (choice === NO_ONE) return { ok: true };
+  if (!choice || !standing.includes(choice)) return { ok: false, why: 'not standing' };
+  return { ok: true };
+}
+
+/**
  * One simultaneous ballot. Non-voters and timeouts are `NO_ONE`.
  *
  * @param {{living:string[], nominations:Nomination[]}} state

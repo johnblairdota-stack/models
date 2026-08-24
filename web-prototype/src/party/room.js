@@ -23,7 +23,7 @@ import { createLog, visibleTo } from './log.js';
 import { hunterVisibleToGuide, ROOMS } from './coverage.js';
 import { applyTake, resolveContact, MODE, PLATE } from './taken.js';
 import { tallyCasting } from './ballot.js';
-import { tallyVote, executioner, nominate, reckoningClosed, NO_ONE } from './vote.js';
+import { tallyVote, executioner, nominate, reckoningClosed, canLynchVote, NO_ONE } from './vote.js';
 import { foldWin, OUTCOME } from './win.js';
 import { PHASE, orderFor, EPISODE_CAP } from './phases.js';
 import { cleanLook } from './look.js';
@@ -666,7 +666,9 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     },
     /**
      * One simultaneous ballot. Choice is a standing nominee or NO_ONE.
-     * Votes stay on the room until `closeVote` airs them (design §4).
+     * Self-vote is illegal (John 2026-08-24): coerce to NO_ONE so a malicious
+     * client cannot record a vote for themselves. Votes stay on the room until
+     * `closeVote` airs them (design §4).
      */
     castLynchVote(voter, choice, livingOpt = null) {
       if (state.phase !== 'VOTE') return { ok: false, why: 'not vote' };
@@ -674,9 +676,12 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       const living = episodeLiving();
       if (!living.includes(voter)) return { ok: false, why: 'not living' };
       const standing = state.nominations.map((n) => n.target);
-      const pick = (choice && standing.includes(choice)) ? choice : NO_ONE;
+      const allowed = canLynchVote(voter, choice, standing);
+      const pick = (allowed.ok && choice !== NO_ONE) ? choice : NO_ONE;
       state.lynchVotes[voter] = pick;
-      return { ok: true, choice: pick };
+      return allowed.ok
+        ? { ok: true, choice: pick }
+        : { ok: true, choice: pick, why: allowed.why };
     },
     closeVote,
     enterExecution() {

@@ -23,6 +23,7 @@ import { RUN_END } from '../src/party/show.js';
 import { ACCENTS, SHELLS, cleanLook } from '../src/party/look.js';
 import { applyCastLock, applyCastTap, ballotFromCast, castPrompt, freshCast, mergePublicNames, nominationPlayers } from '../src/party/cast-ui.js';
 import { createRoom } from '../src/party/room.js';
+import { NO_ONE } from '../src/party/vote.js';
 
 const PORT = 5198;
 let pass = 0, fail = 0;
@@ -158,6 +159,17 @@ t('N1c5 · episode 1 is the gallery painting; episode 2+ is the chapel table',
     nom.ok && r.state.nominations.length === 1
       && !r.nominatePlayer(living[0], living[2], living).ok
       && !r.nominatePlayer(living[1], living[1], living).ok);
+  r.enterVote(living);
+  const selfVote = r.castLynchVote(living[1], living[1], living);
+  t('N18c · a nominated player cannot vote for themselves — coerce to NO_ONE',
+    selfVote.choice === NO_ONE && selfVote.why === 'no self-vote'
+      && r.state.lynchVotes[living[1]] === NO_ONE,
+    JSON.stringify(selfVote));
+  const otherVote = r.castLynchVote(living[0], living[1], living);
+  t('N18d · another living player can still vote the nominee',
+    otherVote.ok && otherVote.choice === living[1]
+      && r.state.lynchVotes[living[0]] === living[1],
+    JSON.stringify(otherVote));
 }
 
 const host = await open(`${base}&host=1`);
@@ -474,18 +486,27 @@ t('N13c · a refresh resumes the server show beat, not casting',
     JSON.stringify({ show: night.show, n: night.game.state.nominations.length }));
   phases.push(night.show);
 
+  // Two seated living cannot clear a strict majority without a self-vote. Seat a
+  // third phone during Vote so the live execute path still has a legal majority.
+  const extra = await open(base);
+  await sleep(40);
   back.send({ t: 'lynchVote', choice: nomB });
   b.send({ t: 'lynchVote', choice: nomB });
+  extra.send({ t: 'lynchVote', choice: nomB });
   await sleep(20);
   const toExec = progressShow(night);
   await sleep(40);
-  t('N17g · living-majority vote executes; nominator swings; votes air after tally',
+  const aired = last(host, 'lynch');
+  t('N17g · living-majority vote executes; nominee self-vote is coerced to NO_ONE',
     toExec === 'execution' && night.show === 'execution'
+      && extra.welcome?.playerId
       && night.game.state.voteResult?.executed === nomB
-      && last(host, 'lynch')?.result?.executed === nomB
-      && (last(host, 'lynch')?.votes || []).length === 2
+      && aired?.result?.executed === nomB
+      && (aired?.votes || []).some((v) => v.voter === nomB && v.choice === NO_ONE)
+      && (aired?.votes || []).filter((v) => v.choice === nomB).length >= 2
       && night.game.state.players.find((p) => p.id === nomB)?.alive === false,
-    JSON.stringify(last(host, 'lynch')));
+    JSON.stringify(aired));
+  extra.close();
   phases.push(night.show);
 
   const toCasting = progressShow(night);
