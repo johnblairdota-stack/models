@@ -93,9 +93,10 @@ export function injectNightSkin() {
        television for everything else, so on the run beat the top strip, the main padding and the
        strapline all shrink together and the one remaining control floats out of flow. Off the run
        beat nothing here applies and the lobby is exactly the screen it was. */
-    .night.on-run .night-top { padding:6px 22px 2px; }
+    .night.on-run .night-top { padding:4px 22px 0; }
     .night.on-run .night-brand { font-size:11px; }
     .night.on-run .night-phase { font-size:11px; }
+    .night.on-run .show-rail { padding:0 22px 2px; }
     .night.on-run .night-main { padding:0 12px 4px; overflow:hidden;
       display:flex; flex-direction:column; justify-content:center; }
     /* Bottom-right, not top-right: the top strip already ends in the phase readout and the two
@@ -341,7 +342,7 @@ export function injectNightSkin() {
     @keyframes night-rise { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform:none; } }
     @keyframes night-breathe { 0%,100% { opacity:.55; } 50% { opacity:1; } }
     @media (max-width:720px) {
-      .night-top, .night-line, .night-main { padding-left:16px; padding-right:16px; }
+      .night-top, .night-line, .night-main, .show-rail { padding-left:16px; padding-right:16px; }
       .seats { grid-template-columns:repeat(2, 1fr); }
       .ballot .row { grid-template-columns:1fr; }
       .ballot .pick { text-align:left; }

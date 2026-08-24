@@ -11,12 +11,34 @@
  * `SECONDS`, not a second table. The Recap *button* is gone; the beat is not.
  */
 
-import { PHASE, SECONDS, reckoningSeconds } from './phases.js';
+import { PHASE, SECONDS, reckoningSeconds, EPISODE_ORDER } from './phases.js';
 
 export const SHOW_BEATS = [
   'lobby', 'casting', 'expedition', 'recap', 'debrief',
   'reckoning', 'vote', 'execution',
 ];
+
+/**
+ * The TV rundown — Lobby plus `phases.js` `EPISODE_ORDER`. Live SHOW beats light up;
+ * Verdict sits on the rail as the designed closer even though the wire has not grown it yet.
+ * Reunion is session-end, not an episode beat; leave it off until that product exists.
+ */
+export const RUNDOWN_BEATS = ['lobby', ...EPISODE_ORDER.map((p) => String(p).toLowerCase())];
+
+/** Ribbon when the chase picture is up; expanded on lobby and the talk beats. */
+export function rundownRibbon(beat) {
+  return String(beat || '') === 'expedition';
+}
+
+/**
+ * How full the current rail segment still is. `null` when there is no `until` — the bar
+ * stays lit, and the mast prints no fake 0s clock. 100 = just opened; 0 = drained.
+ */
+export function railDrainPct(until, holdMs, now = Date.now()) {
+  const left = remainingMs(until, now);
+  if (left == null || !Number.isFinite(holdMs) || holdMs <= 0) return null;
+  return Math.max(0, Math.min(100, (left / holdMs) * 100));
+}
 
 /** Recap card, then seated talk, then the designed lynching. Same numbers as `phases.js`. */
 export const RECAP_HOLD_MS = SECONDS[PHASE.RECAP] * 1000;

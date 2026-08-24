@@ -5,6 +5,8 @@
  * The face is one SVG (Grok-Bot wedge energy, not a second 3D pipeline).
  */
 
+import { RUNDOWN_BEATS, SHOW_BEATS, railDrainPct, rundownRibbon } from './show.js';
+
 /**
  * 🎨 **TWELVE AND TWELVE, AND THE FIRST SIX ARE FROZEN IN PLACE.**
  *
@@ -157,6 +159,41 @@ export function verdictPlateHtml({ kicker = 'VERDICT READY', line, sub = '' } = 
   </div>`;
 }
 
+/**
+ * Direction B — the shooting schedule across the top of the TV.
+ *
+ * `phases.js` / live SHOW beats ARE the schedule. Current beat is lit; its bar drains
+ * with `show.until` when the server published one. Expedition / chase is a ~22px ribbon
+ * so the picture stays king. Lobby and talk beats open the labels.
+ */
+export function rundownRailHtml({
+  beat = 'lobby',
+  until = null,
+  holdMs = null,
+  ribbon = false,
+  now = Date.now(),
+  beats = RUNDOWN_BEATS,
+} = {}) {
+  const current = String(beat || 'lobby').toLowerCase();
+  const idx = beats.indexOf(current);
+  const drain = railDrainPct(until, holdMs, now);
+  const fillPct = drain == null ? 100 : drain;
+  const holdAttr = Number.isFinite(holdMs) && holdMs > 0 ? String(holdMs) : '';
+  const mode = ribbon || rundownRibbon(current) ? 'ribbon' : 'open';
+  const segs = beats.map((id, i) => {
+    const live = SHOW_BEATS.includes(id);
+    const state = i === idx ? 'on' : (i < idx ? 'past' : (live ? 'next' : 'stub'));
+    const fill = i === idx
+      ? `<div class="show-rail-fill" data-rail-drain data-rail-hold="${escHtml(holdAttr)}" style="width:${fillPct}%"></div>`
+      : '';
+    return `<div class="show-rail-seg ${state}" data-rail-seg="${escHtml(id)}"${i === idx ? ' aria-current="step"' : ''}>
+      <div class="show-rail-k">${escHtml(id)}</div>
+      <div class="show-rail-track">${fill}</div>
+    </div>`;
+  }).join('');
+  return `<nav class="show-rail ${mode}" data-show-rail data-beat="${escHtml(current)}" aria-label="Night rundown">${segs}</nav>`;
+}
+
 export const SHOW_CHROME_CSS = `
     /* Shared show dressing. Photographic black only — matte, plate, shadow. */
     .show-rec { display:flex; align-items:center; gap:9px; letter-spacing:.24em;
@@ -220,5 +257,38 @@ export const SHOW_CHROME_CSS = `
     .pick-list.buzz button { animation: night-rise .35s ease; }
     .night.on-run .show-rec, .night.on-talk .show-rec, .night.on-intro .show-rec { font-size:10px; }
     .night.on-run .show-dot, .night.on-talk .show-dot { width:8px; height:8px; }
+    /* Direction B rundown rail. Tokens only. No backticks in this comment. */
+    .night-phase { display:flex; align-items:baseline; gap:14px; }
+    .show-ep { color:var(--night-dim); font-size:12px; letter-spacing:.18em; font-weight:700; }
+    .show-mast-clock { color:var(--night-ink); font-size:clamp(22px, 3vw, 36px); font-weight:800;
+      letter-spacing:.04em; font-variant-numeric:tabular-nums; line-height:1; }
+    .show-rail { display:flex; align-items:stretch; gap:6px; width:100%;
+      padding:2px 28px 10px; pointer-events:none; }
+    .show-rail-seg { flex:1 1 0; min-width:0; display:flex; flex-direction:column;
+      align-items:center; justify-content:flex-end; gap:5px; }
+    .show-rail-k { font-size:11px; font-weight:700; letter-spacing:.16em; text-transform:uppercase;
+      color:var(--night-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+      width:100%; text-align:center; line-height:1.2; }
+    .show-rail-track { width:100%; height:2px; background:rgba(var(--night-accent-rgb), .16);
+      overflow:hidden; }
+    .show-rail-fill { height:100%; width:100%; background:var(--night-accent); }
+    .show-rail-seg.on .show-rail-k { color:var(--night-accent);
+      box-shadow: inset 0 1px 0 var(--night-accent), inset 0 -1px 0 var(--night-accent);
+      padding:4px 0; }
+    .show-rail-seg.on .show-rail-track { height:3px; background:rgba(var(--night-accent-rgb), .28); }
+    .show-rail-seg.past .show-rail-track { background:rgba(var(--night-accent-rgb), .28); }
+    .show-rail-seg.stub { opacity:.5; }
+    .show-rail.ribbon { height:22px; padding:0 28px; box-sizing:border-box; }
+    .show-rail.ribbon .show-rail-seg { gap:2px; }
+    .show-rail.ribbon .show-rail-k { font-size:8px; letter-spacing:.2em; line-height:10px;
+      height:0; opacity:0; overflow:hidden; box-shadow:none; padding:0; }
+    .show-rail.ribbon .show-rail-seg.on .show-rail-k { height:10px; opacity:1; }
+    .show-rail.ribbon .show-rail-track { height:3px; }
+    .show-rail.ribbon .show-rail-seg.on .show-rail-track { height:4px; }
+    .night.on-run .show-rail { padding:0 22px 2px; }
+    .night.on-run .show-rail.ribbon { padding:0 22px; }
+    .night.on-run .show-ep { font-size:10px; }
+    .night.on-run .show-mast-clock { font-size:18px; }
+    .night.on-talk .show-rail, .night.on-intro .show-rail { padding:2px 22px 8px; }
     @keyframes fl-rec { 0%,100% { opacity:.25; } 50% { opacity:1; } }
 `;

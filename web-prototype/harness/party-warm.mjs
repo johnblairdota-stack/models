@@ -58,7 +58,8 @@ import {
 import { generatedTables } from '../src/world/genplan.js';
 import {
   AFTER_RUN_BEATS, DEBRIEF_HOLD_MS, RECAP_BACKSTOP_MS, RECAP_HOLD_MS, SHOW_BEATS,
-  missionEndsRun, nextShowBeat, recapAfterMs, RUN_END,
+  RUNDOWN_BEATS, holdMsFor, missionEndsRun, nextShowBeat, railDrainPct, recapAfterMs,
+  remainingMs, rundownRibbon, RUN_END,
 } from '../src/party/show.js';
 import { missionFor, MISSION_TABLE } from '../src/party/mission.js';
 import { ROOMS, hunterVisibleToGuide } from '../src/party/coverage.js';
@@ -67,7 +68,8 @@ import { DROP_RATE, GRADES, STALE_MAX, gradeFor, intelFor, intelLine } from '../
 import { GUIDE_MAP_CSS, guideMapSvg } from '../src/party/guidemap.js';
 import {
   ACCENTS, SHELLS, SHOW_CAM, SHOW_CHROME_CSS, SHOW_LINE, SHOW_TITLE,
-  cleanLook, codeBugHtml, nameplateHtml, recBugHtml, showCam, titlePlateHtml, verdictPlateHtml,
+  cleanLook, codeBugHtml, nameplateHtml, recBugHtml, rundownRailHtml, showCam,
+  titlePlateHtml, verdictPlateHtml,
 } from '../src/party/look.js';
 import { COMPOSITION, dealCast } from '../src/party/cast.js';
 import { isNightToken } from '../src/party/palette.js';
@@ -1753,7 +1755,8 @@ console.log('\nparty-warm — the lobby-warm night');
     && /recBugHtml\(/.test(hostSrc)
     && /nameplateHtml\(/.test(hostSrc)
     && /countdownHtml\(/.test(hostSrc)
-    && /verdictPlateHtml\(/.test(hostSrc));
+    && /verdictPlateHtml\(/.test(hostSrc)
+    && /rundownRailHtml\(/.test(hostSrc));
   t('W29f · lobby still exposes .night-code and the QR — the join is the picture',
     /night-code/.test(codeBugHtml({ code: 'RB42' }))
     && /night-qr/.test(hostSrc) && /qrSvg\(/.test(hostSrc));
@@ -1776,6 +1779,72 @@ console.log('\nparty-warm — the lobby-warm night');
     && titlePlateHtml().includes(SHOW_LINE)
     && codeBugHtml({ code: 'RB42', url: 'http://x' }).includes('RB42')
     && showCam('expedition') === 'RRR CAM 01');
+}
+
+// ---- W30 · DIRECTION B RUNDOWN RAIL — the shooting schedule on the TV -------------------
+//
+// Claude Code /design locked B. phases.js / live SHOW beats ARE the schedule. Current beat
+// lights; its bar drains with show.until. Expedition is a 22px ribbon; lobby + talk open up.
+{
+  const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
+  t('W30 · the rail is lobby plus phases.js EPISODE_ORDER — not a second table',
+    RUNDOWN_BEATS.join(',') === 'lobby,casting,expedition,recap,debrief,reckoning,vote,execution,verdict'
+      && RUNDOWN_BEATS[0] === 'lobby'
+      && RUNDOWN_BEATS.includes('verdict')
+      && !RUNDOWN_BEATS.includes('reunion')
+      && !SHOW_BEATS.includes('verdict'));
+
+  const lobby = rundownRailHtml({ beat: 'lobby' });
+  const debrief = rundownRailHtml({ beat: 'debrief' });
+  const chase = rundownRailHtml({ beat: 'expedition', ribbon: true });
+  t('W30a · every night beat is drawn, and the live SHOW beat is the one that is on',
+    RUNDOWN_BEATS.every((id) => lobby.includes(`data-rail-seg="${id}"`))
+      && lobby.includes('aria-current="step"')
+      && /data-rail-seg="lobby"[^>]*aria-current="step"/.test(lobby)
+      && /data-rail-seg="debrief"[^>]*aria-current="step"/.test(debrief)
+      && /data-beat="expedition"/.test(chase));
+
+  t('W30b · expedition / chase is a 22px ribbon; lobby and talk stay open',
+    rundownRibbon('expedition') && !rundownRibbon('debrief') && !rundownRibbon('lobby')
+      && chase.includes('show-rail ribbon')
+      && lobby.includes('show-rail open')
+      && debrief.includes('show-rail open')
+      && /height:22px/.test(SHOW_CHROME_CSS));
+
+  const now = 1_700_000_000_000;
+  const hold = holdMsFor('debrief');
+  const mid = rundownRailHtml({ beat: 'debrief', until: now + hold / 2, holdMs: hold, now });
+  t('W30c · the current bar drains from show.until when a hold is known',
+    hold === DEBRIEF_HOLD_MS
+      && railDrainPct(now + hold, hold, now) === 100
+      && railDrainPct(now + hold / 2, hold, now) === 50
+      && railDrainPct(now, hold, now) === 0
+      && /data-rail-drain/.test(mid)
+      && /style="width:50%"/.test(mid));
+
+  t('W30d · no until means a full current fill — remainingMs(null) still paints no fake 0s clock',
+    remainingMs(null) === null && remainingMs('') === null
+      && railDrainPct(null, hold, now) === null
+      && /style="width:100%"/.test(lobby)
+      && !/data-show-clock/.test(lobby));
+
+  t('W30e · the TV host paints the rail on lobby, the chase, and the talk beats',
+    /rundownRailHtml\(/.test(hostSrc)
+    && /holdMsFor\(show/.test(hostSrc)
+    && /rundownRibbon\(show\)/.test(hostSrc)
+    && /data-rail-drain/.test(hostSrc)
+    && /ON AIR/.test(hostSrc));
+
+  t('W30f · guide map is still never on the TV, and verdict is a stub on the rail',
+    !/guideMapSvg/.test(hostSrc) && !/GUIDE_MAP/.test(hostSrc)
+      && lobby.includes('class="show-rail-seg stub" data-rail-seg="verdict"')
+      && debrief.includes('class="show-rail-seg on" data-rail-seg="debrief"'));
+
+  t('W30g · rail CSS stays inside the shared chrome string — tokens, no hex, no backticks',
+    /data-show-rail/.test(lobby)
+      && SHOW_CHROME_CSS.includes('.show-rail')
+      && !SHOW_CHROME_CSS.includes('`')
+      && !(SHOW_CHROME_CSS.match(/#[0-9a-f]{3,8}\b/gi) || []).length);
 }
 
 
