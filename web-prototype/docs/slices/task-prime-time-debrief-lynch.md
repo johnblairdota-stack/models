@@ -180,3 +180,25 @@ npm run build
 Live path after smash/TIME: Recap (~20s) → Debrief (mini recap, ballroom
 seated, countdown) → Reckoning (phones nominate, TV standing, timer extends)
 → Vote (living-majority) → Execution or nobody → Casting for the next pair.
+
+---
+
+## 7. Playtest fix — nominate window John never saw (after #32 / `0ccb3d6`)
+
+John, after PR #32: *"there was no way to nominate a player for the lynching."*
+The wire was fine (`{t:'nominate'}`, vote.js, TV `noms`). The table never got
+an affordance they could use.
+
+1. **Phones down for 75s, then a 45s window.** Debrief copy told everyone to
+   put the pad down. Reckoning is 45s and used to auto-advance with zero noms.
+2. **Paint gate.** `beat === 'lobby' || phase === 'LOBBY'` (and
+   `frame?.phase || 'LOBBY'`) could steal the sheet. Talk/lynch beats
+   (`debrief|reckoning|vote|execution`) now match **before** the lobby branch.
+3. **Empty Reckoning hold.** The timer path (`expireShowHold`) re-arms 45s
+   up to `EMPTY_RECKONING_EXTEND_CAP` (3) when `nominations.length === 0`.
+   `progressShow` still walks for gates. After the cap: Vote → Execution
+   "nobody cleared" → Casting. ≥1 nom keeps early close + timer-to-vote.
+4. **Wake-up.** Reckoning buzzes the pad (same smash pattern). Late debrief
+   (`remainingMs ≤ LATE_DEBRIEF_MS` = 20s) shows the pick-list; first tap
+   enters Reckoning then applies vote.js. TV empty standing:
+   "Waiting on phones — nominate."

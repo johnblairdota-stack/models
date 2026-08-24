@@ -1570,14 +1570,32 @@ console.log('\nparty-warm — the lobby-warm night');
     && /function cueSitDown/.test(hostSrc)
     && /data-show-clock/.test(hostSrc)
     && !/No eviction this episode/.test(hostSrc));
-  t('W28d · phones nominate and vote; debrief stays phones-down with a countdown',
+  t('W28d · phones nominate and vote; early debrief is phones-down, late debrief opens the pick-list',
     /paintNominate/.test(phoneSrc)
     && /paintLynchVote/.test(phoneSrc)
     && /data-show-clock/.test(phoneSrc)
     && /t: 'nominate'/.test(phoneSrc)
-    && /t: 'lynchVote'/.test(phoneSrc));
+    && /t: 'lynchVote'/.test(phoneSrc)
+    && /Talk's ending — name someone/.test(phoneSrc)
+    && /Phones down\. Talk/.test(phoneSrc));
   t('W28e · CAUGHT is still reserved — hunter take is still the next slice',
     !/RUN_END\.CAUGHT/.test(localSrc));
+  const talkIdx = phoneSrc.search(/isTalkBeat\(beat\)/);
+  const lobbyIdx = phoneSrc.search(/beat === 'lobby' \|\| phase === 'LOBBY'/);
+  t('W28f · talk/lynch beats are matched before the lobby sheet',
+    talkIdx >= 0 && lobbyIdx >= 0 && talkIdx < lobbyIdx,
+    `talk@${talkIdx} lobby@${lobbyIdx}`);
+  t('W28g · empty Reckoning hold is the timer path — progressShow still walks for gates',
+    /export function expireShowHold/.test(localSrc)
+    && /reckoningEmptyExtends/.test(localSrc)
+    && /EMPTY_RECKONING_EXTEND_CAP/.test(localSrc)
+    && /export function applyNominate/.test(localSrc));
+  t('W28h · Reckoning buzzes the pad so a face-down phone wakes',
+    /beat === 'reckoning'/.test(phoneSrc)
+    && /padFx\('Reckoning\.'/.test(phoneSrc)
+    && /\[0, 45, 55, 120\]/.test(phoneSrc));
+  t('W28i · TV empty standing says waiting on phones, not a silent skip',
+    /Waiting on phones — nominate/.test(hostSrc));
 }
 
 // ---- W26 · DUAL-STICK TV CHASE — no phone embed; look cue + camera-relative move ------------

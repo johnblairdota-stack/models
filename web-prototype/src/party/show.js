@@ -25,6 +25,18 @@ export const RECKONING_HOLD_MS = SECONDS[PHASE.RECKONING] * 1000;
 export const VOTE_HOLD_MS = SECONDS[PHASE.VOTE] * 1000;
 export const EXECUTION_HOLD_MS = SECONDS[PHASE.EXECUTION] * 1000;
 
+/**
+ * Last slice of Debrief — phones wake and may name someone before Reckoning proper.
+ * John, after #32: a 75s "phones down" then a 45s window they never saw.
+ */
+export const LATE_DEBRIEF_MS = 20000;
+
+/**
+ * Empty Reckoning may re-arm this many times. Then the clock walks (nobody nominated)
+ * so a broken table cannot softlock forever.
+ */
+export const EMPTY_RECKONING_EXTEND_CAP = 3;
+
 /** Debrief and the lynching beats — ballroom is the picture, chase is off. Recap is not this. */
 export const TALK_BEATS = ['debrief', 'reckoning', 'vote', 'execution'];
 export const isTalkBeat = (beat) => TALK_BEATS.includes(String(beat || ''));

@@ -870,7 +870,7 @@ function nomBoard(standing, names) {
       <div class="nom-who">${esc(joinedName(names, n.target, 'Someone'))}</div>
       <div class="nom-by">named by ${esc(joinedName(names, n.nominator, 'a player'))}</div>
     </div>`).join('');
-  return `<div class="nom-board">${rows || '<p class="hint">No standing nominations yet.</p>'}</div>`;
+  return `<div class="nom-board">${rows || '<p class="hint">Waiting on phones — nominate.</p>'}</div>`;
 }
 
 function lynchBoard(votes, result, names) {
