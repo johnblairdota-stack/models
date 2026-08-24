@@ -1480,6 +1480,22 @@ console.log('\nparty-warm — the lobby-warm night');
     && /function patchCastSheet/.test(phoneCast)
     && !/hasCard\(\) \? 'card'/.test(paintCast)
     && !/p\.id\}:\$\{p\.name/.test(paintCast));
+  t('W22g · 3·2·1 arms on all-in or the 20s backstop, not the first ballot',
+    /shouldArmCastSend/.test(hostSrc)
+    && /firstBallotAt/.test(hostSrc)
+    && /maybeArmFromBackstop/.test(hostSrc)
+    && /CAST_BACKSTOP_MS/.test(await readFile(new URL('../src/party/ballot.js', import.meta.url), 'utf8'))
+    && !/\(client\.ballots \|\| \[\]\)\.length >= 1/.test(hostSrc));
+  t('W22h · lockout is disabled + dashed, pointer-events none — no phantom tap',
+    /pointer-events:none/.test(skin)
+    && /button\.locked-out/.test(skin)
+    && /castRowBlock/.test(phoneCast)
+    && /castRowMark/.test(phoneCast)
+    && /ran last/.test(await readFile(new URL('../src/party/cast-ui.js', import.meta.url), 'utf8')));
+  t('W22i · self-pick state is named on the phone; applyCastTap still allows it',
+    /You named yourself/.test(phoneCast)
+    && /cast-note/.test(phoneCast)
+    && /self-pick/.test(skin));
 }
 
 // ---- W23 · YOU CAN SEE INTO THE NEXT ROOM THROUGH A DOOR ------------------------------------

@@ -79,6 +79,36 @@ export function tallyCasting({ ballots, living, history, lastPair, ep, matchSeed
 }
 
 /**
+ * Same one-way lock `tallyCasting` uses. Last runner may not run; last guide may
+ * not guide; they may swap. Void below four alive. Display-only on the phone —
+ * the tally is still the authority if a ballot names a barred chair.
+ */
+export function castLockoutId(lastPair, livingCount, slot) {
+  if (!lastPair || livingCount < 4) return null;
+  if (slot !== STANDING.RUNNER && slot !== STANDING.GUIDE) return null;
+  return lastPair[slot] || null;
+}
+
+/**
+ * TV 3·2·1 arms when every living phone has a ballot, or ~20s after the first
+ * one lands. Empty lists never arm — that is empty-never-invent, not a stall
+ * that synthesizes a pair.
+ */
+export const CAST_BACKSTOP_MS = 20000;
+
+export function shouldArmCastSend({ livingIds, votes, firstBallotAt, now = Date.now() } = {}) {
+  const ballots = Array.isArray(votes) ? votes : [];
+  if (!ballots.length) return false;
+  const living = (Array.isArray(livingIds) ? livingIds : []).filter(Boolean);
+  if (living.length) {
+    const voters = new Set(ballots.map((v) => v.voter).filter(Boolean));
+    if (living.every((id) => voters.has(id))) return true;
+  }
+  if (!firstBallotAt) return false;
+  return (Number(now) - Number(firstBallotAt)) >= CAST_BACKSTOP_MS;
+}
+
+/**
  * TV copy for the chain `tallyCasting` already ran. Not a second resolver.
  * fewer-expeditions → lastEp (staleness) → seededPick.
  */

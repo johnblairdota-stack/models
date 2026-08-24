@@ -261,7 +261,20 @@ export function injectNightSkin() {
       background:#161310; color:#f3ece3; font-size:18px; font-weight:700;
       transition: border-color .25s ease, background .25s ease, transform .2s ease, opacity .25s ease; }
     .pick-list button.on { border-color:#f5a14a; background:#3a2614; transform: scale(1.01); }
-    .pick-list button.locked-out { opacity:.4; cursor:not-allowed; }
+    .pick-list button.self-pick { border-color:#e8c36a; box-shadow: inset 0 0 0 1px rgba(232,195,106,.5); }
+    .pick-list button.locked-out,
+    .pick-list button.locked-out:disabled {
+      opacity:1; cursor:not-allowed; pointer-events:none; transform:none;
+      background:#0e0c0a; color:#6a5f54; border-color:rgba(138,125,112,.28);
+      border-style:dashed; -webkit-tap-highlight-color:transparent;
+      box-shadow:none; filter:none; }
+    .pick-list button.locked-out.on,
+    .pick-list button.locked-out:active,
+    .pick-list button.locked-out:hover {
+      transform:none; background:#0e0c0a; border-color:rgba(138,125,112,.28); }
+    .cast-note { min-height:20px; margin:0 0 8px; color:#e8c36a; font-size:14px;
+      font-weight:700; line-height:1.35; }
+    .cast-note[hidden] { visibility:hidden; display:block; }
     .cast-step { animation: night-rise .4s ease; }
     .lock-slot { margin-top:8px; min-height:58px; }
     .lock-slot[hidden] { display:none; }

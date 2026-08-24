@@ -12,7 +12,8 @@ import { PartyNightClient, defaultWsUrl, tokenKey, normalizeCodeDisplay, normali
 import { recapFromEvents } from '../party/recap.js';
 import { injectNightSkin, markPartyReady, playerName } from '../party/night-skin.js';
 import { ACCENTS, DEFAULT_LOOK, SHELLS, cleanLook, robotFaceSvg } from '../party/look.js';
-import { applyCastLock, applyCastTap, ballotFromCast, castPrompt, freshCast, mergePublicNames, nominationPlayers, padlockSvg } from '../party/cast-ui.js';
+import { applyCastLock, applyCastTap, ballotFromCast, CAST_BLOCK_WHY, castPrompt, castRowBlock, castRowMark, freshCast, mergePublicNames, nominationPlayers, padlockSvg } from '../party/cast-ui.js';
+import { historyFromCastEvents } from '../party/ballot.js';
 import { cardFor, faceDownHtml, mountRoleCard, premiereHtml } from '../party/rolecard.js';
 import { EVIL } from '../party/cast.js';
 import { guideMapSvg } from '../party/guidemap.js';
@@ -74,6 +75,8 @@ export default async function partyPhone({ params }) {
     clockTimer: 0,
     /** Late-debrief pick-list has been painted / buzzed this hold. */
     lateNomShown: false,
+    /** Visible cast rejection / self-pick line. Not a second rule. */
+    castNote: '',
   };
 
   /**
@@ -424,6 +427,7 @@ export default async function partyPhone({ params }) {
     if (beat !== 'casting') {
       state.cast = freshCast();
       state.castEpisode = null;
+      state.castNote = '';
     }
 
     if (state.stage) {
@@ -1018,19 +1022,24 @@ export default async function partyPhone({ params }) {
     if (state.castEpisode !== ep) {
       state.castEpisode = ep;
       state.cast = freshCast();
+      state.castNote = '';
     }
     const cast = state.cast;
     const phase = cast.phase;
     const living = (players || []).filter((p) => p.alive !== false);
+    const { lastPair } = historyFromCastEvents(state.client?.events);
+    const lockCtx = { lastPair, livingCount: living.length, selfId: me.playerId };
     /*
      * Stamp is the sheet's SHAPE: step + who can be picked. Names and the role-card
      * tab arriving used to live here, so a lobby fanout mid-thumb rebuilt `#lock-pick`
-     * and dropped the tap. Patch those in place instead.
+     * and dropped the tap. Patch those in place instead. Lockout ids belong here
+     * because they change which rows are buttons.
      */
-    const stamp = `${phase}:${living.map((p) => p.id).join(',')}`;
+    const lockId = (slot) => (living.length >= 4 ? (lastPair?.[slot] || '') : '');
+    const stamp = `${phase}:${living.map((p) => p.id).join(',')}:${lockId('runner')}:${lockId('guide')}`;
     if (root.dataset.castUi === stamp) {
-      syncCastHighlight(cast);
-      patchCastSheet(players, me, cast);
+      syncCastHighlight(cast, me.playerId);
+      patchCastSheet(players, me, cast, lockCtx);
       return;
     }
 
@@ -1039,15 +1048,21 @@ export default async function partyPhone({ params }) {
     if (phase === 'sent') {
       const runnerName = playerName(players, cast.runner);
       const guideName = playerName(players, cast.guide);
+      const selfSent = cast.runner === me.playerId || cast.guide === me.playerId;
       body += `<h1>Sent.</h1>
-        <p class="hint">You sent ${esc(runnerName)} to walk and ${esc(guideName)} to talk. The TV has the ballot.</p>`;
+        <p class="hint">You sent ${esc(runnerName)} to walk and ${esc(guideName)} to talk. The TV has the ballot.</p>
+        ${selfSent ? `<p class="cast-note">You named yourself. That ballot is public.</p>` : ''}`;
     } else {
       const slot = phase === 'guide' ? 'guide' : 'runner';
+      const lockHint = living.length >= 4 && (lastPair?.runner || lastPair?.guide)
+        ? ' Dashed names ran or guided last time — they may swap chairs.'
+        : '';
       body += `<h1>${esc(castPrompt(slot, ep))}</h1>
         <p class="hint">${phase === 'guide'
           ? `${esc(playerName(players, cast.runner))} walks. Pick someone else — nothing is sent until you lock it.`
-          : 'Tap a name. Nothing is sent until you lock it.'}</p>
-        ${castList(players, me.playerId, cast)}
+          : `Tap a name. Nothing is sent until you lock it.${lockHint}`}</p>
+        ${castList(players, me.playerId, cast, lockCtx)}
+        <p class="cast-note" id="cast-note" ${state.castNote ? '' : 'hidden'}>${esc(state.castNote || ' ')}</p>
         <div class="lock-slot" id="lock-slot" ${cast.draft ? '' : 'hidden'}>
           <button class="btn wide lock-btn${cast.draft ? ' in' : ''}" id="lock-pick">${padlockSvg()} Lock ${slot}</button>
         </div>`;
@@ -1058,18 +1073,21 @@ export default async function partyPhone({ params }) {
       <div class="cast-step">${body}</div>
       ${cardTab()}`;
     root.dataset.castUi = stamp;
-    bindCast(players, me);
+    bindCast(players, me, lockCtx);
     bindCardTab();
   }
 
-  function patchCastSheet(players, me, cast) {
+  function patchCastSheet(players, me, cast, lockCtx) {
     for (const b of root.querySelectorAll('[data-pick]')) {
       const p = (players || []).find((x) => x.id === b.dataset.pick);
       if (!p) continue;
-      const blocked = cast.phase === 'guide' && p.id === cast.runner;
-      const mark = blocked ? ' · runner' : (p.id === me.playerId ? ' (you)' : '');
+      const blocked = castRowBlock(p.id, cast, lockCtx);
+      const mark = castRowMark(p, cast, { ...lockCtx, selfId: me.playerId });
       const label = `${p.name || p.id}${mark}`;
       if (b.textContent !== label) b.textContent = label;
+      b.classList.toggle('locked-out', !!blocked);
+      b.toggleAttribute('disabled', !!blocked);
+      b.setAttribute('aria-disabled', blocked ? 'true' : 'false');
     }
     const mine = root.querySelector('.phone-top span:last-child');
     if (mine) {
@@ -1087,12 +1105,28 @@ export default async function partyPhone({ params }) {
     }
   }
 
-  function bindCast(players, me) {
+  function bindCast(players, me, lockCtx) {
     for (const b of root.querySelectorAll('[data-pick]')) {
-      b.addEventListener('click', () => {
-        if (b.disabled || b.classList.contains('locked-out')) return;
+      b.addEventListener('pointerdown', (ev) => {
+        if (b.disabled || b.classList.contains('locked-out') || b.getAttribute('aria-disabled') === 'true') {
+          ev.preventDefault();
+          ev.stopPropagation();
+          const why = CAST_BLOCK_WHY[castRowBlock(b.dataset.pick, state.cast, lockCtx)];
+          if (why) showCastNote(why);
+        }
+      });
+      b.addEventListener('click', (ev) => {
+        if (b.disabled || b.classList.contains('locked-out') || b.getAttribute('aria-disabled') === 'true') {
+          ev.preventDefault();
+          return;
+        }
         state.cast = applyCastTap(state.cast, b.dataset.pick);
-        syncCastHighlight(state.cast);
+        if (b.dataset.pick === me.playerId) {
+          showCastNote('You named yourself. That ballot is public.');
+        } else if (state.castNote && state.castNote.startsWith('You named yourself')) {
+          showCastNote('');
+        }
+        syncCastHighlight(state.cast, me.playerId);
       });
     }
     root.querySelector('#lock-pick')?.addEventListener('click', () => {
@@ -1109,9 +1143,19 @@ export default async function partyPhone({ params }) {
     });
   }
 
-  function syncCastHighlight(cast) {
+  function showCastNote(text) {
+    state.castNote = text || '';
+    const el = root.querySelector('#cast-note');
+    if (!el) return;
+    el.textContent = state.castNote || ' ';
+    el.hidden = !state.castNote;
+  }
+
+  function syncCastHighlight(cast, selfId) {
     for (const b of root.querySelectorAll('[data-pick]')) {
-      b.classList.toggle('on', b.dataset.pick === cast.draft);
+      const on = !b.classList.contains('locked-out') && b.dataset.pick === cast.draft;
+      b.classList.toggle('on', on);
+      b.classList.toggle('self-pick', on && b.dataset.pick === selfId);
     }
     const slot = root.querySelector('#lock-slot');
     const btn = root.querySelector('#lock-pick');
@@ -1127,12 +1171,13 @@ export default async function partyPhone({ params }) {
     }
   }
 
-  function castList(players, me, cast) {
+  function castList(players, me, cast, lockCtx) {
     return `<div class="pick-list">${(players || []).filter((p) => p.alive !== false).map((p) => {
-      const blocked = cast.phase === 'guide' && p.id === cast.runner;
-      const on = !blocked && cast.draft === p.id ? 'on' : '';
-      const mark = blocked ? ' · runner' : (p.id === me ? ' (you)' : '');
-      return `<button class="${on}${blocked ? ' locked-out' : ''}" data-pick="${esc(p.id)}" ${blocked ? 'disabled' : ''}>${esc(p.name || p.id)}${esc(mark)}</button>`;
+      const blocked = castRowBlock(p.id, cast, lockCtx);
+      const mark = castRowMark(p, cast, { ...lockCtx, selfId: me });
+      const on = !blocked && cast.draft === p.id;
+      const selfOn = on && p.id === me;
+      return `<button type="button" class="${on ? 'on' : ''}${blocked ? ' locked-out' : ''}${selfOn ? ' self-pick' : ''}" data-pick="${esc(p.id)}" ${blocked ? 'disabled aria-disabled="true"' : 'aria-disabled="false"'}>${esc(p.name || p.id)}${esc(mark)}</button>`;
     }).join('')}</div>`;
   }
 

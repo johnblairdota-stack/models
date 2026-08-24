@@ -21,7 +21,7 @@ import { PHASE, SECONDS } from '../src/party/phases.js';
 import { missionFor, MISSION_PAINTING, MISSION_TABLE } from '../src/party/mission.js';
 import { RUN_END } from '../src/party/show.js';
 import { ACCENTS, SHELLS, cleanLook } from '../src/party/look.js';
-import { applyCastLock, applyCastTap, ballotFromCast, castPrompt, freshCast, mergePublicNames, nominationPlayers, publicName } from '../src/party/cast-ui.js';
+import { applyCastLock, applyCastTap, ballotFromCast, CAST_BLOCK_WHY, castPrompt, castRowBlock, castRowMark, freshCast, mergePublicNames, nominationPlayers, publicName } from '../src/party/cast-ui.js';
 import { createRoom } from '../src/party/room.js';
 import { NO_ONE } from '../src/party/vote.js';
 
@@ -99,6 +99,17 @@ t('N1a · join code field uppercases, strips spaces, keeps the no-ilo01 alphabet
     cast.phase === 'guide' && cast.runner === 'p1' && cast.draft == null && ballotFromCast(cast, 'me') === null);
   t('N1a5 · the locked runner cannot be picked as guide',
     applyCastTap(cast, 'p1').draft == null && applyCastTap(cast, 'p1').phase === 'guide');
+  t('N1a5b · rotation lockout is one-way and looks blocked, not a phantom tap',
+    castRowBlock('p1', { phase: 'runner' }, { lastPair: { runner: 'p1', guide: 'p2' }, livingCount: 6 }) === 'ran'
+      && castRowBlock('p2', { phase: 'guide', runner: 'p3' }, { lastPair: { runner: 'p1', guide: 'p2' }, livingCount: 6 }) === 'guided'
+      && castRowBlock('p1', { phase: 'guide', runner: 'p3' }, { lastPair: { runner: 'p1', guide: 'p2' }, livingCount: 6 }) == null
+      && castRowBlock('p2', { phase: 'runner' }, { lastPair: { runner: 'p1', guide: 'p2' }, livingCount: 6 }) == null
+      && castRowBlock('p1', { phase: 'runner' }, { lastPair: { runner: 'p1', guide: 'p2' }, livingCount: 3 }) == null
+      && CAST_BLOCK_WHY.ran.includes('cannot run'));
+  t('N1a5c · self-pick stays legal on the padlock; the phone only names the state',
+    applyCastTap(freshCast(), 'me').draft === 'me'
+      && castRowBlock('me', freshCast(), { lastPair: null, livingCount: 6 }) == null
+      && castRowMark({ id: 'me', name: 'Ada' }, freshCast(), { selfId: 'me' }) === ' (you)');
   cast = applyCastLock(applyCastTap(cast, 'p2'));
   t('N1a6 · locking the guide produces today\'s {voter, runner, guide}',
     JSON.stringify(ballotFromCast(cast, 'me')) === JSON.stringify({ voter: 'me', runner: 'p1', guide: 'p2' }));

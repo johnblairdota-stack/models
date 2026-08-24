@@ -22,9 +22,9 @@ import { mergePublicNames, publicName } from '../party/cast-ui.js';
 import { cueViolations, warmLabel, warmPct, warmUrl } from '../party/follow.js';
 import { formatRemain, holdMsFor, isTalkBeat, remainingMs, rundownRibbon } from '../party/show.js';
 import { NO_ONE, SHOWRUNNER } from '../party/vote.js';
-import { describeCastTiebreaks, previewCastTiebreaks } from '../party/ballot.js';
+import { describeCastTiebreaks, previewCastTiebreaks, shouldArmCastSend } from '../party/ballot.js';
 
-/** TV chrome 3·2·1 after ballots can lock a pair, then `{ t: 'episode' }`. */
+/** TV chrome 3·2·1 after every living ballot (or the 20s backstop), then `{ t: 'episode' }`. */
 const SEND_COUNTDOWN_MS = 3000;
 /**
  * Follow introsDone arrives from the iframe's rAF loop, which stops when the TV
@@ -65,9 +65,11 @@ export default async function partyHost({ params }) {
     runEnd: null,
     err: '',
     locked: false,
-    /** 3 s auto-send after a casting pair is decidable. Host tap is gone. */
+    /** 3 s auto-send after every living phone has voted, or the 20s backstop. */
     sendArmed: false,
     sendUntil: 0,
+    /** Epoch ms of the first ballot this casting window. Backstop is 20s from here. */
+    firstBallotAt: 0,
     /** The mansion's own progress, straight off the slot. `''` until the iframe says anything. */
     warm: '',
     warmPct: 0,
@@ -508,6 +510,7 @@ export default async function partyHost({ params }) {
   function startClockTick() {
     if (ui.clockTimer) return;
     ui.clockTimer = setInterval(() => {
+      maybeArmFromBackstop();
       const sendLeft = sendCountdownLeft();
       if (sendLeft != null) {
         if (sendLeft <= 0) { sendThemIn(); return; }
@@ -540,6 +543,7 @@ export default async function partyHost({ params }) {
     ui.locked = true;
     ui.sendArmed = false;
     ui.sendUntil = 0;
+    ui.firstBallotAt = 0;
     client.send({ t: 'episode', opts: {} });
     // Optimistic — the server fans expedition to every socket including this TV.
     ui.beat = 'expedition';
@@ -547,16 +551,16 @@ export default async function partyHost({ params }) {
   }
 
   /**
-   * Once ballots can lock a runner+guide pair, count 3·2·1 on the TV and send
-   * `{ t: 'episode' }` — the same path as the old Send them in button. Intros
-   * keep the picture until they finish; a live expedition / already-counting
-   * TV must not double-fire.
+   * 3·2·1 after every living phone has balloted, or ~20s after the first ballot.
+   * Not after the first ballot alone — copy-last/herding stays on the board
+   * while late phones still pick. Empty never arms (empty-never-invent).
    */
   function armSendCountdown(canLock, show) {
     if (ui.locked || show === 'expedition' || ui.beat === 'expedition') return;
     if (show !== 'casting') {
       ui.sendArmed = false;
       ui.sendUntil = 0;
+      ui.firstBallotAt = 0;
       return;
     }
     if (ui.introsSent && !ui.introsDone) return;
@@ -565,6 +569,34 @@ export default async function partyHost({ params }) {
     if (ui.sendArmed) return;
     ui.sendArmed = true;
     ui.sendUntil = Date.now() + SEND_COUNTDOWN_MS;
+  }
+
+  function noteFirstBallot(votes, show) {
+    if (show !== 'casting' || !(votes || []).length) {
+      ui.firstBallotAt = 0;
+      return;
+    }
+    if (!ui.firstBallotAt) ui.firstBallotAt = Date.now();
+  }
+
+  /** Clock tick — the 20s backstop must fire without a new socket message. */
+  function maybeArmFromBackstop() {
+    if (ui.locked || ui.sendArmed) return;
+    if (ui.beat !== 'casting') return;
+    const phase = client.frame?.phase || client.lobby?.phase || '';
+    const votes = client.ballots || [];
+    noteFirstBallot(votes, 'casting');
+    const canLock = (phase === 'CASTING' || ui.beat === 'casting')
+      && shouldArmCastSend({
+        livingIds: seatedLivingIds(),
+        votes,
+        firstBallotAt: ui.firstBallotAt,
+        now: Date.now(),
+      })
+      && !client.frame?.pair?.runner;
+    if (!canLock) return;
+    armSendCountdown(true, 'casting');
+    if (ui.sendArmed) paint();
   }
 
   function sendCountdownLeft() {
@@ -629,8 +661,14 @@ export default async function partyHost({ params }) {
     const connected = client.connected && client.welcome && !client.full;
     const nLive = livePhones().length;
     const canStart = connected && nLive >= 2 && (phase === 'LOBBY' || show === 'lobby') && !ui.locked;
+    noteFirstBallot(votes, show);
     const canLock = connected && (phase === 'CASTING' || show === 'casting')
-      && (client.ballots || []).length >= 1
+      && shouldArmCastSend({
+        livingIds: seatedLivingIds(),
+        votes,
+        firstBallotAt: ui.firstBallotAt,
+        now: Date.now(),
+      })
       && !pair.runner;
     const hasPair = !!pair.runner;
     armSendCountdown(canLock, show);
