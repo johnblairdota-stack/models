@@ -40,7 +40,8 @@ import crypto from 'node:crypto';
 import { createRoom } from '../../src/party/room.js';
 import { WARM_STAGES, moveViolations, warmPct, worldViolations } from '../../src/party/follow.js';
 import {
-  isShowBeat, missionEndsRun, recapAfterMs, nextShowBeat, holdMsFor, RUN_END,
+  isShowBeat, missionEndsRun, recapAfterMs, nextShowBeat, holdMsFor, remainingMs,
+  RUN_END, LATE_DEBRIEF_MS, EMPTY_RECKONING_EXTEND_CAP,
 } from '../../src/party/show.js';
 import { reckoningSeconds } from '../../src/party/phases.js';
 
@@ -128,6 +129,8 @@ function getRoom(code, opts) {
     /** Epoch ms deadline for the current timed beat. Fanned as `show.until`. */
     showUntil: null,
     reckoningStartedAt: null,
+    /** How many times an empty Reckoning window has been re-armed. Capped. */
+    reckoningEmptyExtends: 0,
   };
   rooms.set(code, r);
   return r;
@@ -234,9 +237,64 @@ function scheduleShowProgress(room, waitOpt = null) {
   clearShowClock(room);
   room.showClock = setTimeout(() => {
     room.showClock = null;
-    progressShow(room);
+    expireShowHold(room);
   }, wait);
   room.showClock.unref?.();
+}
+
+/**
+ * What the shooting-schedule timer does when it fires.
+ *
+ * 🚨 **AN EMPTY RECKONING MUST NOT SILENTLY DENY THE LYNCH.** John's playtest after #32:
+ * Debrief said phones down, Reckoning lasted 45s with zero noms, and the clock walked
+ * Vote → Execution → Casting. From the sofa that is "there was no way to nominate."
+ *
+ * `progressShow` is still the gate walk — tests call it to skip holds. This is only
+ * the timeout path. With ≥1 standing nom the existing timer-to-vote stays.
+ */
+export function expireShowHold(room) {
+  if (!room) return null;
+  if (room.show === 'reckoning') {
+    const n = room.game?.state?.nominations?.length ?? 0;
+    if (n === 0) {
+      const used = room.reckoningEmptyExtends || 0;
+      if (used < EMPTY_RECKONING_EXTEND_CAP) {
+        room.reckoningEmptyExtends = used + 1;
+        room.reckoningStartedAt = Date.now();
+        scheduleShowProgress(room, holdMsFor('reckoning', 0));
+        return room.show;
+      }
+    }
+  }
+  return progressShow(room);
+}
+
+function isLateDebrief(room) {
+  if (room.show !== 'debrief') return false;
+  const left = remainingMs(room.showUntil);
+  if (left == null) return true;
+  return left <= LATE_DEBRIEF_MS;
+}
+
+/**
+ * Live nominate. Reckoning is the designed window; late Debrief is the wake-up
+ * so a face-down phone can name someone instead of missing a 45s clock.
+ * First late-debrief tap enters Reckoning, then vote.js applies the nom.
+ */
+export function applyNominate(room, playerId, target) {
+  if (!room || !playerId) return { ok: false, why: 'no player' };
+  if (room.show === 'debrief') {
+    if (!isLateDebrief(room)) return { ok: false, why: 'debrief is still talk' };
+    enterReckoningLive(room);
+  }
+  if (room.show !== 'reckoning') return { ok: false, why: 'not reckoning' };
+  const living = livingSeatedIds(room);
+  const result = room.game.nominatePlayer(playerId, target, living.length ? living : null);
+  if (!result.ok) return result;
+  fanout(room, nomsPayload(room));
+  if (result.closed) progressShow(room);
+  else extendReckoning(room);
+  return result;
 }
 
 function enterDebriefLive(room) {
@@ -247,8 +305,12 @@ function enterDebriefLive(room) {
 
 function enterReckoningLive(room) {
   const living = livingSeatedIds(room);
+  // enterReckoning is the live path (clears standing, setPhase RECKONING, broadcast).
+  // Payloads below are already stripped to FANOUT_KEYS — do not widen the allow-list
+  // if something throws; fix the payload.
   room.game.enterReckoning(living);
   room.reckoningStartedAt = Date.now();
+  room.reckoningEmptyExtends = 0;
   setShow(room, 'reckoning');
   fanout(room, nomsPayload(room));
   fanout(room, lynchPayload(room));
@@ -297,6 +359,7 @@ function enterNextCasting(room) {
   room.game.beginCasting();
   room.showUntil = null;
   room.reckoningStartedAt = null;
+  room.reckoningEmptyExtends = 0;
   setShow(room, 'casting');
   fanout(room, { t: 'ballots', votes: [] });
   fanout(room, nomsPayload(room));
@@ -640,13 +703,7 @@ function handleClient(room, bound, self, msg) {
     return;
   }
   if (msg.t === 'nominate' && self && !isTV && self.playerId) {
-    if (room.show !== 'reckoning') return;
-    const living = livingSeatedIds(room);
-    const result = room.game.nominatePlayer(self.playerId, msg.target, living);
-    if (!result.ok) return;
-    fanout(room, nomsPayload(room));
-    if (result.closed) progressShow(room);
-    else extendReckoning(room);
+    applyNominate(room, self.playerId, msg.target);
     return;
   }
   if (msg.t === 'lynchVote' && self && !isTV && self.playerId) {

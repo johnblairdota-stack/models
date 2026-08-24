@@ -20,7 +20,7 @@ import { pickPlanSeed, planRoomLabels, roomLabel } from '../party/mansion.js';
 import { missionFor } from '../party/mission.js';
 import { intelLine } from '../party/intel.js';
 import { STICK_DEADZONE, warmLabel } from '../party/follow.js';
-import { formatRemain, remainingMs } from '../party/show.js';
+import { formatRemain, isTalkBeat, LATE_DEBRIEF_MS, remainingMs } from '../party/show.js';
 import { NO_ONE } from '../party/vote.js';
 
 export default async function partyPhone({ params }) {
@@ -72,6 +72,8 @@ export default async function partyPhone({ params }) {
     nominated: false,
     voted: false,
     clockTimer: 0,
+    /** Late-debrief pick-list has been painted / buzzed this hold. */
+    lateNomShown: false,
   };
 
   /**
@@ -346,9 +348,14 @@ export default async function partyPhone({ params }) {
     // 🚨 THE CARD PUTS ITSELF AWAY WHEN THE SHOW MOVES. Nobody has to remember to. The premiere
     // stage ends with it, so a phone that was still holding its card when the pair locked lands
     // on the pad rather than on a card it now has to dismiss.
-    if (state.lastBeat !== null && beat !== state.lastBeat) {
+    const prevBeat = state.lastBeat;
+    if (prevBeat !== null && beat !== prevBeat) {
       if (state.stage === 'premiere') state.stage = null;
       if (card.isOpen()) card.closeCard();
+    }
+    // Face-down phones after Debrief. Same smash pattern — two beats, not a drone.
+    if (beat === 'reckoning' && prevBeat !== 'reckoning') {
+      padFx('Reckoning.', 'smash', [0, 45, 55, 120]);
     }
     state.lastBeat = beat;
 
@@ -426,6 +433,30 @@ export default async function partyPhone({ params }) {
     } else if (beat === 'casting' && !pair.runner) {
       paintCasting(nominees, me, frame?.airingEpisode || c.lobby?.airingEpisode || frame?.episode || 1);
       return;
+    } else if (isTalkBeat(beat)) {
+      /*
+       * 🚨 **TALK / LYNCH BEATS BEFORE THE LOBBY SHEET.** `phase === 'LOBBY'` (and the
+       * `frame?.phase || 'LOBBY'` default) used to steal this branch whenever the state
+       * frame was late or still on LOBBY. From John's seat that is a pad that never
+       * offered a name. Match the beat first.
+       */
+      if (beat === 'debrief') {
+        if (c.runEnd) body += `<h1>${esc(c.runEnd)}</h1>`;
+        body += `<h1>Debrief.</h1>${phoneClock(c)}`;
+        if (debriefNominateOpen(c)) {
+          body += paintNominate(nominees, me, c, { late: true });
+        } else {
+          body += `<p class="hint">Phones down. Talk. Nominate when the clock says Reckoning.</p>`;
+        }
+        body += padFxHtml();
+      } else if (beat === 'reckoning') {
+        body += paintNominate(nominees, me, c);
+        body += padFxHtml();
+      } else if (beat === 'vote') {
+        body += paintLynchVote(nominees, me, c);
+      } else if (beat === 'execution') {
+        body += paintExecution(nominees, c);
+      }
     } else if (beat === 'lobby' || phase === 'LOBBY') {
       body += `<h1>${esc(myName)}</h1>
         <p class="hint">Seat ${me.seat != null ? me.seat + 1 : '—'} · waiting for the host. The TV is the show — this is a pad.</p>
@@ -553,21 +584,8 @@ export default async function partyPhone({ params }) {
        * slice). Missing end omits the word — same honesty as TV `recapBoard` — rather than
        * inventing TIME before the room has said so.
        */
-      if (beat === 'debrief') {
-        if (c.runEnd) body += `<h1>${esc(c.runEnd)}</h1>`;
-        body += `<h1>Debrief.</h1>
-          ${phoneClock(c)}
-          <p class="hint">Phones down. Talk. Nominate when the clock says Reckoning.</p>`;
-      } else if (beat === 'reckoning') {
-        body += paintNominate(nominees, me, c);
-      } else if (beat === 'vote') {
-        body += paintLynchVote(nominees, me, c);
-      } else if (beat === 'execution') {
-        body += paintExecution(nominees, c);
-      } else {
-        if (c.runEnd) body += `<h1>${esc(c.runEnd)}</h1>`;
-        body += `<p class="hint">Phones down. Debrief is next.</p>`;
-      }
+      if (c.runEnd) body += `<h1>${esc(c.runEnd)}</h1>`;
+      body += `<p class="hint">Phones down. Debrief is next.</p>`;
     }
 
     // 🚨 §2.3: *"a persistent ROLE tab … reopens it in any phase"*. It used to be a static CLEAR
@@ -590,7 +608,7 @@ export default async function partyPhone({ params }) {
      */
     window.__rrrPhone = { frame, beat, seat: me.seat, iAmRunner, iAmGuide, showUntil: c.showUntil };
 
-    if (beat !== 'reckoning') state.nominated = false;
+    if (beat !== 'reckoning' && beat !== 'debrief') state.nominated = false;
     if (beat !== 'vote') state.voted = false;
     startPhoneClock();
     bindNominate(c);
@@ -1114,9 +1132,21 @@ export default async function partyPhone({ params }) {
     if (state.clockTimer) return;
     state.clockTimer = setInterval(() => {
       const c = state.client;
-      const label = formatRemain(remainingMs(c?.showUntil));
+      const left = remainingMs(c?.showUntil);
+      const label = formatRemain(left);
       for (const el of root.querySelectorAll('[data-show-clock]')) el.textContent = label;
+      if (c?.beat === 'debrief' && debriefNominateOpen(c) && !state.lateNomShown) {
+        state.lateNomShown = true;
+        padFx('Name someone', 'smash', [0, 45, 55, 120]);
+        paint();
+      }
+      if (c?.beat !== 'debrief') state.lateNomShown = false;
     }, 250);
+  }
+
+  function debriefNominateOpen(c) {
+    const left = remainingMs(c?.showUntil);
+    return Number.isFinite(left) && left <= LATE_DEBRIEF_MS;
   }
 
   function standingNames(players, client) {
@@ -1132,12 +1162,15 @@ export default async function partyPhone({ params }) {
     return (players || []).some((p) => p.id === me.playerId && p.alive !== false);
   }
 
-  function paintNominate(players, me, c) {
+  function paintNominate(players, me, c, opts = {}) {
+    const late = !!opts.late;
     const standing = standingNames(players, c);
     const already = standing.some((n) => n.nominator === me.playerId) || state.nominated;
     const targets = (players || []).filter((p) => p.id !== me.playerId && p.alive !== false
       && !standing.some((n) => n.target === p.id));
-    let html = `<h1>Reckoning.</h1>${phoneClock(c)}`;
+    let html = late
+      ? `<p class="hint">Talk's ending — name someone</p>`
+      : `<h1>Reckoning.</h1>${phoneClock(c)}<p class="hint">Tap who you name</p>`;
     if (standing.length) {
       html += `<p class="hint">Standing: ${esc(standing.map((n) => n.name).join(', '))}</p>`;
     }
@@ -1153,7 +1186,7 @@ export default async function partyPhone({ params }) {
       html += `<p class="hint">Nobody left to name — the cap or the list is spent.</p>`;
       return html;
     }
-    html += `<p class="hint">Tap a living player. First tap stands. No self-nom.</p>
+    html += `<p class="hint">First tap stands. No self-nom.</p>
       <div class="pick-list">${targets.map((p) =>
         `<button type="button" data-nom="${esc(p.id)}">${esc(p.name)}</button>`).join('')}</div>`;
     return html;

@@ -8,12 +8,13 @@
  * This one proves a reviewer can open a host, two phones, see the lobby, and advance.
  */
 
-import { startServer, fanoutViolations, lobbySnapshot, progressShow } from '../net/party/local.mjs';
+import { startServer, fanoutViolations, lobbySnapshot, progressShow, expireShowHold, applyNominate } from '../net/party/local.mjs';
 import { recapFromEvents } from '../src/party/recap.js';
 import { qrMatrix } from '../src/party/qr.js';
 import {
   tokenKey, STUB_SHOW_PLAN, AFTER_RUN_BEATS, nextShowBeat, holdMsFor,
   RECAP_HOLD_MS, DEBRIEF_HOLD_MS, RECKONING_HOLD_MS, VOTE_HOLD_MS, EXECUTION_HOLD_MS,
+  LATE_DEBRIEF_MS, EMPTY_RECKONING_EXTEND_CAP,
   remainingMs, formatRemain, normalizeCodeDisplay, normalizeCodeWire,
 } from '../src/party/night-client.js';
 import { PHASE, SECONDS } from '../src/party/phases.js';
@@ -442,6 +443,13 @@ t('N13c · a refresh resumes the server show beat, not casting',
     JSON.stringify(last(host, 'show')));
   phases.push(night.show);
 
+  const emptyHold = expireShowHold(night);
+  t('N17d2 · empty Reckoning timer does not jump to Vote on first expiry',
+    emptyHold === 'reckoning' && night.show === 'reckoning'
+      && (night.game.state.nominations || []).length === 0
+      && night.game.state.phase === 'RECKONING',
+    JSON.stringify({ show: night.show, n: night.game.state.nominations.length }));
+
   const nomA = a.welcome.playerId;
   const nomB = b.welcome.playerId;
   // N13 closed `a` and reclaimed the seat as `back`.
@@ -497,6 +505,62 @@ t('N13c · a refresh resumes the server show beat, not casting',
   t('N17i · the live beat order after a completed run is recap, debrief, reckoning, vote, execution, casting',
     phases.join(',') === 'recap,debrief,reckoning,vote,execution,casting',
     phases.join(','));
+}
+
+function showRoom() {
+  const game = createRoom({ count: 4, castSeed: 1, worldSeed: 1, send: () => {}, emit: () => {} });
+  game.start();
+  game.playEpisode();
+  return {
+    game, conns: new Map(), show: 'recap', showClock: null, showUntil: null,
+    reckoningStartedAt: null, reckoningEmptyExtends: 0, runEnd: RUN_END.SMASHED,
+    ballots: new Map(),
+  };
+}
+
+{
+  t('N19 · late-debrief window is the last 20s of the 75s talk hold',
+    LATE_DEBRIEF_MS === 20000 && EMPTY_RECKONING_EXTEND_CAP === 3);
+  const early = showRoom();
+  t('N19a · progressShow still walks recap → debrief → reckoning',
+    progressShow(early) === 'debrief' && progressShow(early) === 'reckoning'
+      && early.show === 'reckoning' && early.game.state.phase === 'RECKONING');
+  t('N19b · empty Reckoning timer stays (extends) on first expiry',
+    expireShowHold(early) === 'reckoning' && early.show === 'reckoning'
+      && early.reckoningEmptyExtends === 1
+      && (early.game.state.nominations || []).length === 0);
+  expireShowHold(early);
+  expireShowHold(early);
+  t('N19c · three empty extensions still hold Reckoning',
+    early.show === 'reckoning' && early.reckoningEmptyExtends === 3);
+  t('N19d · after the cap, empty Reckoning progresses so a table cannot softlock',
+    expireShowHold(early) === 'vote' && early.show === 'vote'
+      && (early.game.state.nominations || []).length === 0);
+
+  const named = showRoom();
+  progressShow(named);
+  progressShow(named);
+  expireShowHold(named);
+  const living = named.game.episodeLiving();
+  const nom = named.game.nominatePlayer(living[0], living[1], living);
+  t('N19e · after one nominate, the clock can proceed to Vote',
+    nom.ok && named.game.state.nominations.length === 1
+      && expireShowHold(named) === 'vote' && named.show === 'vote');
+
+  const talk = showRoom();
+  progressShow(talk);
+  talk.showUntil = Date.now() + 60000;
+  const livingTalk = talk.game.episodeLiving();
+  const tooSoon = applyNominate(talk, livingTalk[0], livingTalk[1]);
+  t('N19f · early Debrief still refuses nominate — talk time is phones-down',
+    !tooSoon.ok && talk.show === 'debrief' && (talk.game.state.nominations || []).length === 0,
+    JSON.stringify(tooSoon));
+  talk.showUntil = Date.now() + 15000;
+  const late = applyNominate(talk, livingTalk[0], livingTalk[1]);
+  t('N19g · late Debrief first tap enters Reckoning and stands the nom',
+    late.ok && talk.show === 'reckoning' && talk.game.state.phase === 'RECKONING'
+      && talk.game.state.nominations.some((n) => n.nominator === livingTalk[0] && n.target === livingTalk[1]),
+    JSON.stringify({ show: talk.show, n: talk.game.state.nominations.length, late }));
 }
 
 host.send({ t: 'show', beat: 'recap' });
