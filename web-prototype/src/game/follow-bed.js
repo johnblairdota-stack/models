@@ -1244,6 +1244,7 @@ export async function buildFollowBed(engine, opts = {}) {
             talk: !!c.talk,
           });
         }
+        intro?.setNominees?.([]);
         mode = 'intros';
         runner.root.visible = false;
         return;

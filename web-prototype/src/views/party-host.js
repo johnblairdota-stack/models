@@ -23,6 +23,9 @@ import { cueViolations, warmLabel, warmPct, warmUrl } from '../party/follow.js';
 import { formatRemain, holdMsFor, isTalkBeat, remainingMs, rundownRibbon } from '../party/show.js';
 import { NO_ONE, SHOWRUNNER } from '../party/vote.js';
 
+/** TV chrome 3·2·1 after ballots can lock a pair, then `{ t: 'episode' }`. */
+const SEND_COUNTDOWN_MS = 3000;
+
 export default async function partyHost({ params }) {
   injectNightSkin();
   markPartyReady();
@@ -54,6 +57,9 @@ export default async function partyHost({ params }) {
     runEnd: null,
     err: '',
     locked: false,
+    /** 3 s auto-send after a casting pair is decidable. Host tap is gone. */
+    sendArmed: false,
+    sendUntil: 0,
     /** The mansion's own progress, straight off the slot. `''` until the iframe says anything. */
     warm: '',
     warmPct: 0,
@@ -466,6 +472,12 @@ export default async function partyHost({ params }) {
   function startClockTick() {
     if (ui.clockTimer) return;
     ui.clockTimer = setInterval(() => {
+      const sendLeft = sendCountdownLeft();
+      if (sendLeft != null) {
+        if (sendLeft <= 0) { sendThemIn(); return; }
+        const n = String(Math.max(1, Math.ceil(sendLeft / 1000)));
+        for (const el of root.querySelectorAll('[data-send-count]')) el.textContent = n;
+      }
       const left = remainingMs(ui.showUntil);
       const label = formatRemain(left);
       for (const el of root.querySelectorAll('[data-show-clock]')) el.textContent = label;
@@ -486,13 +498,43 @@ export default async function partyHost({ params }) {
   }
 
   function sendThemIn() {
+    if (ui.locked) return;
     if (!(client.ballots || []).length) return;
     ui.sitCued = false;
     ui.locked = true;
+    ui.sendArmed = false;
+    ui.sendUntil = 0;
     client.send({ t: 'episode', opts: {} });
     // Optimistic — the server fans expedition to every socket including this TV.
     ui.beat = 'expedition';
     paint();
+  }
+
+  /**
+   * Once ballots can lock a runner+guide pair, count 3·2·1 on the TV and send
+   * `{ t: 'episode' }` — the same path as the old Send them in button. Intros
+   * keep the picture until they finish; a live expedition / already-counting
+   * TV must not double-fire.
+   */
+  function armSendCountdown(canLock, show) {
+    if (ui.locked || show === 'expedition' || ui.beat === 'expedition') return;
+    if (show !== 'casting') {
+      ui.sendArmed = false;
+      ui.sendUntil = 0;
+      return;
+    }
+    if (ui.introsSent && !ui.introsDone) return;
+    if (!ui.introsSent && ui.warm !== 'ready') return;
+    if (!canLock) return;
+    if (ui.sendArmed) return;
+    ui.sendArmed = true;
+    ui.sendUntil = Date.now() + SEND_COUNTDOWN_MS;
+  }
+
+  function sendCountdownLeft() {
+    if (!ui.sendArmed || ui.locked) return null;
+    if (ui.beat !== 'casting') return null;
+    return Math.max(0, ui.sendUntil - Date.now());
   }
 
   /**
@@ -540,6 +582,8 @@ export default async function partyHost({ params }) {
       && (client.ballots || []).length >= 1
       && !pair.runner;
     const hasPair = !!pair.runner;
+    armSendCountdown(canLock, show);
+    const sendLeft = sendCountdownLeft();
     const onTalk = show === 'recap' || show === 'debrief' || show === 'reckoning'
       || show === 'vote' || show === 'execution';
     const onStage = isTalkBeat(show);
@@ -632,7 +676,7 @@ export default async function partyHost({ params }) {
       } else if (ui.introsSent) {
         body += talkStage({
           recap, names, lobby: client.lobby, runEnd: ui.runEnd, clock,
-          kicker: 'Ballots land here. Lock when the room has spoken.', beat: 'casting',
+          kicker: 'Ballots land here. A pair goes in after a short count.', beat: 'casting',
           who: joinedName(names, pair.runner || recap.runner, 'The circle'),
           whoSub: 'live · casting',
           whoId: pair.runner || recap.runner,
@@ -642,7 +686,11 @@ export default async function partyHost({ params }) {
         body += ballotBoard(votes, names, pair, recap, episode);
       }
       body += `<div class="actions">`;
-      if (canLock) body += `<button class="btn" id="lock">Send them in</button>`;
+      if (sendLeft != null) {
+        const n = Math.max(1, Math.ceil(sendLeft / 1000));
+        body += `<div class="send-go"><div class="send-go-k">they go in</div>
+          <div class="send-count" data-send-count>${n}</div></div>`;
+      }
       if (hasPair) body += `<button class="btn ghost" id="to-run">Watch the run</button>`;
       body += `</div>`;
       if (episode === 1 && !showingIntros && !ui.introsSent) {
@@ -718,10 +766,11 @@ export default async function partyHost({ params }) {
       worldSent: ui.worldSent,
       showUntil: ui.showUntil,
       sitCued: ui.sitCued,
+      sendArmed: ui.sendArmed,
+      sendUntil: ui.sendUntil,
     };
 
     root.querySelector('#go')?.addEventListener('click', startNight);
-    root.querySelector('#lock')?.addEventListener('click', sendThemIn);
     root.querySelector('#to-run')?.addEventListener('click', () => setBeat('expedition'));
     root.querySelector('#to-cast')?.addEventListener('click', () => setBeat('casting'));
 
@@ -908,7 +957,7 @@ function ballotBoard(votes, names, pair, recap, episode) {
   const guide = pair.guide || recap.guide;
   const hero = runner
     ? `<div class="pair-hero">${esc(joinedName(names, runner, 'The runner'))} walks · ${esc(joinedName(names, guide, 'The guide'))} talks</div>`
-    : `<p class="hint">Ballots land here, huge. Lock when the room has spoken.</p>`;
+    : `<p class="hint">Ballots land here, huge. A pair goes in on its own.</p>`;
   // playEpisode increments episode after the premiere; recap.episode stays 1.
   const huge = Number(episode) === 1 || recap.episode === 1;
   return `${hero}<div class="ballot${huge ? ' huge' : ''}">${rows || '<p class="hint">No ballots yet — phones pick a runner and a guide.</p>'}</div>`;

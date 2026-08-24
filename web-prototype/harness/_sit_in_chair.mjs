@@ -5,8 +5,13 @@
  *   node harness/_sit_in_chair.mjs
  *
  * THREE-free / browser-free so it can live on `gates:party` (CI has no `npm install`).
- * It reads clip names out of the GLB JSON chunk, then asserts sit-attach maths from
- * `src/game/chair-seats.js` for N = 4 and N = 8.
+ * It reads clip names AND Hips.translation means out of the GLB JSON chunk, then asserts
+ * sit-attach maths from `src/game/chair-seats.js` for N = 4 and N = 8.
+ *
+ * John's live shot (one twin sunk into the cushion, one standing on the floor in front)
+ * is a fixture that MUST fail. The old harness fed `expectedPelvis` to `assertSeatedPose`,
+ * so a wrong attach still passed. Bad poses are now explicit; a correct Idle_M attach
+ * still has to pass.
  *
  * Fail notes are one line per seat so a red CI log is a punch list, not a stack.
  */
@@ -17,13 +22,15 @@ import { fileURLToPath } from 'node:url';
 import {
   SEAT_MAX, seatCircleRadius, sitIdleClip, sitPhase, sitRootXZ, expectedPelvis,
   seatPoint, assertSeatedPose, SIT_IDLE_CLIPS, SIT_DOWN_CLIPS, SIT_CLIP_ALLOW,
-  rugSpanForSeats, RUG_CATALOG_SPAN,
+  SIT_IDLE_SHIP, SIT_IN, SIT_HIPS_BACK, SIT_F_HIPS_BACK, SIT_PELVIS_ABOVE,
+  rugSpanForSeats, RUG_CATALOG_SPAN, RUG_OVER_CHAIR,
 } from '../src/game/chair-seats.js';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const ANIM = join(ROOT, '..', 'public', 'models', 'anim');
 const BODY = join(ANIM, 'friendly_all38.glb');
 const SEATED = join(ANIM, 'friendly_seated20.glb');
+const ARMATURE_SCALE = 0.01;
 
 let pass = 0, fail = 0;
 const t = (n, c, d = '') => {
@@ -32,7 +39,7 @@ const t = (n, c, d = '') => {
   return c;
 };
 
-function glbClipNames(path) {
+function glbJson(path) {
   if (!existsSync(path)) return null;
   const buf = readFileSync(path);
   if (buf.length < 20 || buf.toString('ascii', 0, 4) !== 'glTF') {
@@ -40,7 +47,43 @@ function glbClipNames(path) {
   }
   const chunkLen = buf.readUInt32LE(12);
   const json = JSON.parse(buf.subarray(20, 20 + chunkLen).toString('utf8'));
-  return (json.animations || []).map((a) => a.name);
+  const binStart = 20 + chunkLen;
+  const chunk2Len = buf.readUInt32LE(binStart);
+  const bin = buf.subarray(binStart + 8, binStart + 8 + chunk2Len);
+  return { json, bin };
+}
+
+function glbClipNames(path) {
+  const g = glbJson(path);
+  if (!g) return null;
+  if (g.error) return { error: g.error };
+  return (g.json.animations || []).map((a) => a.name);
+}
+
+function readAccessor(g, i) {
+  const acc = g.json.accessors[i];
+  const view = g.json.bufferViews[acc.bufferView];
+  const start = (view.byteOffset || 0) + (acc.byteOffset || 0);
+  const n = acc.count * (acc.type === 'VEC3' ? 3 : acc.type === 'VEC4' ? 4 : 1);
+  const slice = g.bin.subarray(start, start + n * 4);
+  return Array.from(new Float32Array(slice.buffer, slice.byteOffset, n));
+}
+
+/** Mean Hips.translation for one clip, in metres (armature scale 0.01). */
+function hipsMeanM(g, clipName) {
+  const nodes = g.json.nodes || [];
+  const hipIdx = nodes.findIndex((n) => n.name === 'Hips');
+  const anim = (g.json.animations || []).find((a) => a.name === clipName);
+  if (hipIdx < 0 || !anim) return null;
+  const ch = anim.channels.find((c) => c.target.node === hipIdx && c.target.path === 'translation');
+  if (!ch) return null;
+  const vals = readAccessor(g, anim.samplers[ch.sampler].output);
+  let sx = 0, sy = 0, sz = 0, n = 0;
+  for (let k = 0; k + 2 < vals.length; k += 3) {
+    sx += vals[k]; sy += vals[k + 1]; sz += vals[k + 2]; n++;
+  }
+  if (!n) return null;
+  return { x: (sx / n) * ARMATURE_SCALE, y: (sy / n) * ARMATURE_SCALE, z: (sz / n) * ARMATURE_SCALE };
 }
 
 function seatsFor(n, shortAxis = 15.3) {
@@ -59,6 +102,12 @@ function seatsFor(n, shortAxis = 15.3) {
     });
   }
   return { count, radius, cx, cz, seats };
+}
+
+function radialOf(chair, cx, cz) {
+  const ox = chair.x - cx, oz = chair.z - cz;
+  const len = Math.hypot(ox, oz) || 1;
+  return { ux: ox / len, uz: oz / len };
 }
 
 console.log('\nsit-in-chair — robots lock onto chairs and SIT\n');
@@ -102,9 +151,13 @@ for (const n of [4, 6, 8]) {
     const root = sitRootXZ(chair, cx, cz);
     const seat = seatPoint(chair);
     const horiz = Math.hypot(pelvis.x - seat.x, pelvis.z - seat.z);
-    if (horiz > 0.22) notes.push(`seat ${chair.index}: pelvis ${horiz.toFixed(3)} m from seat point`);
-    if (Math.hypot(root.x - chair.x, root.z - chair.z) > 0.20) {
-      notes.push(`seat ${chair.index}: sit root drifted from chair origin`);
+    if (horiz > 0.16) notes.push(`seat ${chair.index}: pelvis ${horiz.toFixed(3)} m from seat point`);
+    const rootIn = Math.hypot(root.x - chair.x, root.z - chair.z);
+    if (Math.abs(rootIn - SIT_IN) > 0.02) {
+      notes.push(`seat ${chair.index}: sit root ${rootIn.toFixed(3)} m from chair (want SIT_IN ${SIT_IN})`);
+    }
+    if (clip !== SIT_IDLE_SHIP) {
+      notes.push(`seat ${chair.index}: shipped sit is ${SIT_IDLE_SHIP}, got ${clip}`);
     }
   }
   t(`S4 · N=${count} every robot is marked seated with pelvis on the cushion`,
@@ -113,11 +166,13 @@ for (const n of [4, 6, 8]) {
   if (notes.length) {
     for (const line of notes) console.log(`       ${line}`);
   }
-  t(`S5 · N=${count} rug span sits just inside the chair ring (not the 2.80 toy disc)`,
-    rugSpanForSeats(radius) > RUG_CATALOG_SPAN
-    && rugSpanForSeats(radius) <= radius * 2
-    && rugSpanForSeats(radius) >= 2 * (radius - 0.5),
-    `rug ${rugSpanForSeats(radius).toFixed(2)} m · ring ${radius.toFixed(2)} m`);
+  const span = rugSpanForSeats(radius);
+  const want = 2 * radius * RUG_OVER_CHAIR;
+  t(`S5 · N=${count} rug radius is 1.40 × chair circle radius`,
+    span > RUG_CATALOG_SPAN
+    && Math.abs(span - want) < 1e-6
+    && span === 2 * radius * 1.40,
+    `rug ${span.toFixed(2)} m · ring ${radius.toFixed(2)} m · want ${want.toFixed(2)} m`);
 }
 
 t('S6 · per-seat idle phases are not all identical',
@@ -139,6 +194,77 @@ t('S7 · the allow-list only names real Meshy sit clips',
   t('S8 · Player.update defines mv/mlen before sitLock so seated facing cannot TDZ',
     updStart >= 0 && facingAt > updStart
     && mvAt >= 0 && mlenAt >= 0 && sitAt > mlenAt && mvAt < sitAt);
+  t('S8a · sitLock zeroes gait model offset so a walk-plant cannot shove the sit',
+    /if \(this\.sitLock\) \{[\s\S]*?this\.model\.position\.set\(0, 0, 0\)/.test(playerSrc));
+}
+
+{
+  const { cx, cz, seats } = seatsFor(4);
+  const chair = seats[0];
+  const { ux, uz } = radialOf(chair, cx, cz);
+  const seat = seatPoint(chair);
+  const good = assertSeatedPose({
+    seated: true, seatIndex: 0, pelvis: expectedPelvis(chair, cx, cz),
+    chair, clip: SIT_IDLE_SHIP, cx, cz,
+  });
+  t('S9 · the measured Idle_M attach passes',
+    good.ok, good.notes[0] || `SIT_IN=${SIT_IN} hips-back=${SIT_HIPS_BACK} pelvis-above=${SIT_PELVIS_ABOVE}`);
+
+  // Standing / crouching ON THE FLOOR in front of the chair (walk-in stand-mark, clip not applied).
+  const front = {
+    x: chair.x - ux * 0.78,
+    y: 0.90,
+    z: chair.z - uz * 0.78,
+  };
+  const standing = assertSeatedPose({
+    seated: true, seatIndex: 0, pelvis: front, chair, clip: SIT_IDLE_SHIP, cx, cz,
+  });
+  t('S9a · standing-in-front (John shot) fails the sit pose check',
+    !standing.ok, standing.notes[0] || 'did not reject standing-in-front');
+
+  // Sunk / clipped deep into the cushion (hips at floor-ish Y on the chair origin).
+  const sunk = assertSeatedPose({
+    seated: true, seatIndex: 0,
+    pelvis: { x: chair.x, y: 0.12, z: chair.z },
+    chair, clip: SIT_IDLE_SHIP, cx, cz,
+  });
+  t('S9b · sunk-into-cushion (John shot) fails the sit pose check',
+    !sunk.ok, sunk.notes[0] || 'did not reject sunk pelvis');
+
+  // Idle_F hip-back on the M attach: pelvis 0.56-0.24 = 0.32 m through the splat.
+  const through = {
+    x: chair.x + ux * (SIT_F_HIPS_BACK - SIT_IN),
+    y: seat.y + SIT_PELVIS_ABOVE,
+    z: chair.z + uz * (SIT_F_HIPS_BACK - SIT_IN),
+  };
+  const fPose = assertSeatedPose({
+    seated: true, seatIndex: 1, pelvis: through, chair, clip: 'Chair_Sit_Idle_F', cx, cz,
+  });
+  t('S9c · Idle_F through-the-back on the M attach fails',
+    !fPose.ok, fPose.notes[0] || 'did not reject F-clip hip-back');
+}
+
+{
+  const g = glbJson(BODY);
+  const m = g && !g.error ? hipsMeanM(g, 'Chair_Sit_Idle_M') : null;
+  const f = g && !g.error ? hipsMeanM(g, 'Chair_Sit_Idle_F') : null;
+  t('S10 · Idle_M hips.z matches SIT_HIPS_BACK (measured, not guessed)',
+    !!m && Math.abs(Math.abs(m.z) - SIT_HIPS_BACK) < 0.03,
+    m ? `z=${m.z.toFixed(3)} y=${m.y.toFixed(3)}` : 'no hips track');
+  t('S10a · Idle_F hips.z is the 0.56 m through-back class we must not ship',
+    !!f && Math.abs(Math.abs(f.z) - SIT_F_HIPS_BACK) < 0.04 && Math.abs(f.z) > Math.abs(m?.z || 0) * 1.6,
+    f ? `F z=${f.z.toFixed(3)} vs M z=${m?.z.toFixed(3)}` : 'no F hips track');
+  t('S10b · every seat ships Idle_M, never F',
+    sitIdleClip(0) === SIT_IDLE_SHIP && sitIdleClip(1) === SIT_IDLE_SHIP
+    && SIT_IDLE_SHIP === 'Chair_Sit_Idle_M');
+}
+
+{
+  const avatarSrc = readFileSync(join(ROOT, '..', 'src', 'characters', 'mesh-avatar.js'), 'utf8');
+  t('S11 · playSit does not play a stand-to-sit transition at the sit attach',
+    /sitIdle = sitIdleM \|\| sitIdleF/.test(avatarSrc)
+    && /Always skip the stand-to-sit/.test(avatarSrc)
+    && !/seatIndex % 2/.test(avatarSrc));
 }
 
 console.log(`\nsit-in-chair: ${pass} passed, ${fail} failed`);

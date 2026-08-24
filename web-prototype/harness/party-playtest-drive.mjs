@@ -262,8 +262,10 @@ try {
     console.log(`  ${name} cast a runner and a guide`);
   }
   await sleep(600);
-  await tv.waitForSelector('#lock:not([disabled])', { timeout: 20000 });
-  await tv.click('#lock', { timeout: 20000 });
+  await tv.waitForSelector('[data-send-count]', { timeout: 60000 });
+  console.log('  TV counting down to auto-send');
+  await tv.waitForSelector('.run-frame', { timeout: 20000 });
+  console.log('  host auto-sent them in');
   console.log('  host sent them in');
   await tv.waitForSelector('.run-frame', { timeout: 15000 });
 

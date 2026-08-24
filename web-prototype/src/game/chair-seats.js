@@ -38,29 +38,50 @@ export function seatCircleRadius(count, shortAxis = 15.3) {
 }
 
 /**
- * 🪑 **SIT ATTACH — where a robot's root and pelvis belong once they occupy a chair.**
+ * 🪑 **SIT ATTACH — measured from `friendly_all38.glb` + `ornateChairGeometry`, not guessed.**
  *
- * `ornateChairGeometry` seat slab is 0.46 m; the cushion sits 0.034 m on top. The Meshy
- * `Chair_Sit_Idle_*` clips drop the hips ~0.18 m and tuck them ~0.16–0.28 m toward the
- * chair back (local −Z). The root parks a sliver inward of the chair origin so that
- * unpinned hip translation lands on the cushion rather than through the splat.
+ * Armature scale is 0.01, so Hips.translation is centimetres → metres. The bind mesh is
+ * already 1.70 m tall, so `createMeshAvatar` does not restale the hips.
+ *
+ *   Chair_Sit_Idle_M mean Hips  x 0.184  y 0.528  z -0.243
+ *   Rest / Alert Hips           x 0.004  y 0.720  z  0.028
+ *   Chair_Sit_Idle_F mean Hips  x 0.216  y 0.510  z -0.556
+ *
+ * F tucks more than twice as far back as M. Alternating M/F was the live shot: one
+ * twin through the cushion/splat, the other standing in front. Every seat plays Idle_M.
+ *
+ * Mixamo local −Z is the character's back. Player yaw faces the circle centre, so −Z
+ * points at the splat. Root sits `SIT_IN` inward of the chair origin so the clip's
+ * hip-back lands ON the cushion centre.
+ *
+ * Seat slab centre 0.46 m (box 0.048 → top 0.484). Cushion centre 0.494 m (box 0.028
+ * → top 0.508). Sit hips y 0.528 sits ~20 mm above the cushion top.
  *
  * THREE-free so `harness/_sit_in_chair.mjs` and `party-warm` can assert the numbers.
  */
 export const SEAT_H = 0.46;
 export const SEAT_CUSHION = 0.034;
+/** Cushion top = slab centre + cushion lift + half cushion thickness. */
+export const SEAT_CUSHION_TOP = SEAT_H + SEAT_CUSHION + 0.014;
 export const SEAT_W = 0.50;
 export const SEAT_D = 0.55;
 export const SEAT_BOX_H = 1.55;
-/** Inward of the chair origin, metres — the walk-in stand-mark stays further in (`STAND_IN`). */
-export const SIT_IN = 0.12;
-/** Clip hip-back along the outward radial, metres, after the 1.7 m scale. */
-export const SIT_HIPS_BACK = 0.16;
-/** Pelvis sits this far above the cushion plane — hips bone, not the sit-contact mesh. */
-export const SIT_PELVIS_ABOVE = 0.08;
+/**
+ * Inward of the chair origin, metres. Equals |Idle_M hips.z| so seated hips land on
+ * the cushion, not 0.12 m in front (old guess) or through the splat (Idle_F).
+ */
+export const SIT_IN = 0.24;
+/** Clip hip-back along the outward radial, metres — Idle_M |hips.z|. */
+export const SIT_HIPS_BACK = 0.24;
+/** Idle_M hips.y (0.528) minus cushion centre (0.494). */
+export const SIT_PELVIS_ABOVE = 0.034;
+/** Idle_F |hips.z| — a pose that uses this with the M attach is the sunk/through-back class. */
+export const SIT_F_HIPS_BACK = 0.56;
 
 /** Looped seated idles already inside `friendly_all38.glb`. */
 export const SIT_IDLE_CLIPS = Object.freeze(['Chair_Sit_Idle_M', 'Chair_Sit_Idle_F']);
+/** The shipped sit. F stays on the allow-list so a GLB check can still see it. */
+export const SIT_IDLE_SHIP = 'Chair_Sit_Idle_M';
 /** Sit-down transitions in the same file (and `friendly_seated20.glb`). */
 export const SIT_DOWN_CLIPS = Object.freeze([
   'Stand_to_Sit_Transition_M',
@@ -71,8 +92,8 @@ export const SIT_DOWN_CLIPS = Object.freeze([
 ]);
 export const SIT_CLIP_ALLOW = Object.freeze([...SIT_IDLE_CLIPS, ...SIT_DOWN_CLIPS]);
 
-export function sitIdleClip(seatIndex = 0) {
-  return SIT_IDLE_CLIPS[(seatIndex | 0) % SIT_IDLE_CLIPS.length];
+export function sitIdleClip(_seatIndex = 0) {
+  return SIT_IDLE_SHIP;
 }
 
 /** Per-seat mixer time so eight clones do not breathe in lockstep. Seconds. */
@@ -147,7 +168,7 @@ function chairAabb(chair) {
  */
 export function assertSeatedPose({
   seated, seatIndex, pelvis, chair, clip, cx, cz,
-  horizTol = 0.22, yLo = -0.06, yHi = 0.34, overlapMax = 0.048,
+  horizTol = 0.16, yLo = -0.04, yHi = 0.22, overlapMax = 0.048, driftTol = 0.14,
 } = {}) {
   const notes = [];
   if (!seated) notes.push(`seat ${seatIndex}: not marked seated`);
@@ -157,6 +178,8 @@ export function assertSeatedPose({
   const clipName = String(clip || '');
   if (!SIT_CLIP_ALLOW.includes(clipName)) {
     notes.push(`seat ${seatIndex}: clip "${clipName || '(none)'}" is not a seated allow-list name`);
+  } else if (clipName === 'Chair_Sit_Idle_F') {
+    notes.push(`seat ${seatIndex}: Chair_Sit_Idle_F tucks 0.56 m — shipped sit is Idle_M only`);
   }
   const seat = seatPoint(chair || {});
   const expect = (cx != null && cz != null && chair)
@@ -184,7 +207,7 @@ export function assertSeatedPose({
       notes.push(`seat ${seatIndex}: torso/chair overlap ${vol.toFixed(4)} m³ (max ${overlapMax})`);
     }
     const drift = Math.hypot(px - expect.x, pz - expect.z);
-    if (drift > 0.32) {
+    if (drift > driftTol) {
       notes.push(`seat ${seatIndex}: pelvis ${drift.toFixed(3)} m from expected sit attach`);
     }
   }
@@ -192,15 +215,18 @@ export function assertSeatedPose({
 }
 
 /**
- * Ballroom rug diameter so the disc sits just inside the live chair ring — not the
- * catalog's toy `maxSpan: 2.80`. Thin rugs do not grow doorway keep-outs (`walkHalf`
- * caps them); this is the visual span only.
+ * Ballroom rug diameter: rug radius is 1.40 × the live chair circle radius, so the
+ * disc reads under and past the chairs rather than merely touching the ring. Thin
+ * rugs do not grow doorway keep-outs (`walkHalf` caps them); this is the visual
+ * span only.
  */
 export const RUG_CATALOG_SPAN = 2.80;
+/** Rug radius / chair-circle radius. Diameter = 2 × 1.40 × r. */
+export const RUG_OVER_CHAIR = 1.40;
 
 export function rugSpanForSeats(radius) {
   const r = Math.max(0, +radius || 0);
-  return Math.max(2.4, 2 * Math.max(1.2, r - 0.42));
+  return Math.max(2.4, 2 * r * RUG_OVER_CHAIR);
 }
 
 export function rugScaleForSeats(radius, catalogSpan = RUG_CATALOG_SPAN) {

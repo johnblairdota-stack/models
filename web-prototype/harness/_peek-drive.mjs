@@ -248,8 +248,9 @@ await tv.screenshot({ path: `${SHOTS}/07-ballots-tv.png` });
     ['Ellie', 'Hai', 'Ada', 'Bea'].every((n) => board.includes(n)) && !board.includes('No ballots yet'));
 }
 
-await tv.click('#lock');
-await sleep(2600);
+await tv.waitForSelector('[data-send-count]', { timeout: 60000 });
+await tv.waitForSelector('.run-frame', { timeout: 20000 });
+await sleep(400);
 
 t('run · the room is on the expedition beat', (await beat(by('Ellie'))).includes('expedition'),
   await beat(by('Ellie')));

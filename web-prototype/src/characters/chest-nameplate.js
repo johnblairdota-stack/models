@@ -7,11 +7,12 @@ import * as THREE from 'three';
  * John: bigger, clearer, floating ABOVE the head, and a billboard so every ballroom
  * angle still reads the name.
  *
- * 📺 LOW QUALITY / DISTANCE: a 1024×256 CanvasTexture with thin glyphs mips into a
- * smear on `?quality=low` (pixel ratio 1, far ringside). This plate is a **crisp
- * no-mip atlas**: 512×128, `LinearFilter` + `generateMipmaps = false` so minification
- * is one bilinear sample, not a blurry mip; fat round-joined strokes; high-contrast
- * ink field and shell letters. STYLE_CONTRACT colours only.
+ * 📺 LOW QUALITY / DISTANCE, take 2: a 512×128 LinearFilter plate still smeared at
+ * ringside on `?quality=low`. This plate is a **chunky no-mip atlas**: 256×64,
+ * `NearestFilter` so minification stays block pixels instead of bilinear mush; short
+ * labels; fat ink-field glyphs; high-contrast STYLE_CONTRACT colours. World scale is
+ * larger, and `onBeforeRender` grows the sprite when the camera is far so a ringside
+ * LQ cast stays legible without filling the frame up close.
  *
  * `THREE.Sprite` faces the rendering camera for free.
  */
@@ -19,34 +20,48 @@ import * as THREE from 'three';
 export const INK = '#054E84';
 export const SHELL = '#EDEFF0';
 export const CHROME = '#B9BEC2';
-export const NAME_CAP = 12;
+export const NAME_CAP = 8;
 
 /** Saturated reckoning bang — reads on gilt chairs and navy ink tags. */
 export const BANG_RED = '#E10600';
 
-/** World metres. Larger than the old 0.21 × 0.048 chest plate so a ringside TV can read it. */
-export const TAG_W = 0.56;
-export const TAG_H = 0.16;
+/** World metres at the close-up reference distance. */
+export const TAG_W = 0.92;
+export const TAG_H = 0.26;
 /** Gap from the crown of a 1.7 m body to the plate centre. */
 const ABOVE = 0.22;
 /** Bang sits this far above the name plate's top so the two never overlap. */
-export const BANG_GAP = 0.10;
-export const BANG_SIZE = 0.28;
+export const BANG_GAP = 0.18;
+export const BANG_SIZE = 0.62;
+/** Distance (m) at which the plate is 1×. Further than this, scale up to TAG_FAR_K. */
+export const TAG_REF_DIST = 4.0;
+export const TAG_FAR_K = 2.0;
 
 /** What the sit / name-tag harness asserts — no GPU required. */
 export const NAMEPLATE_SPEC = Object.freeze({
-  canvasW: 512,
-  canvasH: 128,
+  canvasW: 256,
+  canvasH: 64,
   mipmaps: false,
-  minFilter: 'linear',
-  magFilter: 'linear',
-  strokePx: 18,
+  minFilter: 'nearest',
+  magFilter: 'nearest',
+  strokePx: 10,
   ink: INK,
   shell: SHELL,
   chrome: CHROME,
   tagW: TAG_W,
   tagH: TAG_H,
+  nameCap: NAME_CAP,
+  refDist: TAG_REF_DIST,
+  farK: TAG_FAR_K,
 });
+
+const _world = new THREE.Vector3();
+
+function distK(sprite, camera) {
+  sprite.getWorldPosition(_world);
+  const d = _world.distanceTo(camera.position);
+  return THREE.MathUtils.clamp(d / TAG_REF_DIST, 1, TAG_FAR_K);
+}
 
 function paintPlate(label) {
   if (typeof document === 'undefined') return null;
@@ -57,6 +72,7 @@ function paintPlate(label) {
   c.height = H;
   const g = c.getContext('2d');
   g.clearRect(0, 0, W, H);
+  g.imageSmoothingEnabled = false;
 
   const round = (x, y, w, h, r) => {
     const rr = Math.min(r, w / 2, h / 2);
@@ -70,10 +86,10 @@ function paintPlate(label) {
   };
 
   g.fillStyle = CHROME;
-  round(0, 0, W, H, 18);
+  round(0, 0, W, H, 8);
   g.fill();
   g.fillStyle = INK;
-  round(8, 8, W - 16, H - 16, 14);
+  round(4, 4, W - 8, H - 8, 6);
   g.fill();
 
   const text = String(label || '').trim().slice(0, NAME_CAP).toUpperCase();
@@ -82,17 +98,17 @@ function paintPlate(label) {
   g.textBaseline = 'middle';
   g.lineJoin = 'round';
   g.miterLimit = 2;
-  let size = 72;
+  let size = 44;
   g.font = `900 ${size}px ui-sans-serif, system-ui, sans-serif`;
-  while (size > 28 && g.measureText(text).width > W - 48) {
-    size -= 4;
+  while (size > 22 && g.measureText(text).width > W - 24) {
+    size -= 2;
     g.font = `900 ${size}px ui-sans-serif, system-ui, sans-serif`;
   }
-  const cx = W * 0.5, cy = H * 0.52;
+  const cx = W * 0.5, cy = H * 0.54;
   g.lineWidth = NAMEPLATE_SPEC.strokePx;
   g.strokeStyle = INK;
   g.strokeText(text, cx, cy);
-  g.lineWidth = Math.max(8, NAMEPLATE_SPEC.strokePx * 0.45);
+  g.lineWidth = Math.max(5, NAMEPLATE_SPEC.strokePx * 0.45);
   g.strokeStyle = CHROME;
   g.strokeText(text, cx, cy);
   g.fillStyle = SHELL;
@@ -101,8 +117,8 @@ function paintPlate(label) {
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.generateMipmaps = false;
-  tex.minFilter = THREE.LinearFilter;
-  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.NearestFilter;
+  tex.magFilter = THREE.NearestFilter;
   tex.anisotropy = 1;
   tex.needsUpdate = true;
   return tex;
@@ -110,26 +126,41 @@ function paintPlate(label) {
 
 function paintBang() {
   if (typeof document === 'undefined') return null;
-  const S = 256;
+  const S = 128;
   const c = document.createElement('canvas');
   c.width = S;
   c.height = S;
   const g = c.getContext('2d');
   g.clearRect(0, 0, S, S);
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.font = '900 210px ui-sans-serif, system-ui, sans-serif';
-  g.lineJoin = 'round';
-  g.lineWidth = 28;
-  g.strokeStyle = '#3B0000';
-  g.strokeText('!', S * 0.5, S * 0.56);
-  g.fillStyle = BANG_RED;
-  g.fillText('!', S * 0.5, S * 0.56);
+  g.imageSmoothingEnabled = false;
+  // Block glyph, not a thin font stroke: a fat bar + a fat dot, pure saturated red
+  // with a dark outline so it survives LQ bilinear-that-is-now-nearest at ringside.
+  const stroke = (draw) => {
+    g.fillStyle = '#3B0000';
+    g.save();
+    g.translate(0, 0);
+    g.beginPath();
+    draw(8);
+    g.fill();
+    g.restore();
+    g.fillStyle = BANG_RED;
+    g.beginPath();
+    draw(0);
+    g.fill();
+  };
+  stroke((pad) => {
+    const x = S * 0.34 - pad, y = S * 0.06 - pad;
+    const w = S * 0.32 + pad * 2, h = S * 0.58 + pad * 2;
+    g.rect(x, y, w, h);
+  });
+  stroke((pad) => {
+    g.arc(S * 0.5, S * 0.84, S * 0.14 + pad, 0, Math.PI * 2);
+  });
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.generateMipmaps = false;
-  tex.minFilter = THREE.LinearFilter;
-  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.NearestFilter;
+  tex.magFilter = THREE.NearestFilter;
   tex.needsUpdate = true;
   return tex;
 }
@@ -202,13 +233,18 @@ export function attachHeadNameTag(player, name) {
   const y = headTagY(player);
   sprite.position.set(0, y, 0);
   sprite.userData.tagTop = y + TAG_H;
+  sprite.onBeforeRender = (_r, _s, camera) => {
+    const k = distK(sprite, camera);
+    sprite.scale.set(TAG_W * k, TAG_H * k, 1);
+    sprite.userData.tagTop = sprite.position.y + TAG_H * k;
+  };
   parent.add(sprite);
   return sprite;
 }
 
 /**
  * Large red "!" above the name tag. Billboard sprite, not a DOM overlay.
- * Hidden until `setNomineeBang(sprite, true)`.
+ * Hidden until `setNomineeBang(sprite, true)`. Only Reckoning/Vote should turn it on.
  */
 export function attachNomineeBang(player, nameTag) {
   if (!player?.root) return null;
@@ -234,6 +270,16 @@ export function attachNomineeBang(player, nameTag) {
   const top = nameTag?.userData?.tagTop
     ?? ((nameTag?.position?.y ?? (player.height || 1.7)) + TAG_H);
   sprite.position.set(0, top + BANG_GAP, 0);
+  sprite.userData.nameTag = nameTag || null;
+  sprite.onBeforeRender = (_r, _s, camera) => {
+    if (!sprite.visible) return;
+    const k = distK(sprite, camera);
+    sprite.scale.set(BANG_SIZE * k, BANG_SIZE * k, 1);
+    const tag = sprite.userData.nameTag;
+    const tagTop = tag?.userData?.tagTop
+      ?? ((tag?.position?.y ?? sprite.position.y) + TAG_H * k);
+    sprite.position.y = tagTop + BANG_GAP;
+  };
   player.root.add(sprite);
   return sprite;
 }
