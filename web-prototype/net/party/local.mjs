@@ -42,6 +42,7 @@ import { WARM_STAGES, moveViolations, warmPct, worldViolations } from '../../src
 import {
   isShowBeat, missionEndsRun, recapAfterMs, nextShowBeat, holdMsFor, RUN_END,
 } from '../../src/party/show.js';
+import { reckoningSeconds } from '../../src/party/phases.js';
 
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 export const MAX_PHONES = 8;
@@ -124,6 +125,9 @@ function getRoom(code, opts) {
     // How the LAST live run ended — SMASHED / TIME, never invented. Cleared when a fresh
     // expedition starts; read by `recapBoard` so the recap card can post it. `show.js`'s `RUN_END`.
     runEnd: null,
+    /** Epoch ms deadline for the current timed beat. Fanned as `show.until`. */
+    showUntil: null,
+    reckoningStartedAt: null,
   };
   rooms.set(code, r);
   return r;
@@ -143,12 +147,24 @@ function clearShowClock(room) {
  * run. A fresh expedition clears whatever the last run's outcome was — the TV must not carry
  * yesterday's SMASHED into a recap for a run that has not happened yet.
  */
+function showPayload(room) {
+  return {
+    t: 'show',
+    beat: room.show,
+    ...(room.runEnd ? { end: room.runEnd } : {}),
+    ...(Number.isFinite(room.showUntil) ? { until: room.showUntil } : {}),
+  };
+}
+
 function setShow(room, beat, end = null) {
   if (!isShowBeat(beat)) return;
   room.show = beat;
-  if (beat === 'expedition') room.runEnd = null;
-  else if (end) room.runEnd = end;
-  fanout(room, { t: 'show', beat: room.show, ...(room.runEnd ? { end: room.runEnd } : {}) });
+  if (beat === 'expedition' || beat === 'lobby' || beat === 'casting') {
+    if (beat === 'expedition') room.runEnd = null;
+    room.showUntil = null;
+    room.reckoningStartedAt = null;
+  } else if (end) room.runEnd = end;
+  fanout(room, showPayload(room));
 }
 
 /**
@@ -177,19 +193,30 @@ function startShowClock(room) {
 }
 
 /**
- * Walk Recap → Debrief → Casting. The product path after a finished run.
+ * Walk Recap → Debrief → Reckoning → Vote → Execution → Casting.
  *
- * Gates call this directly so they do not sit 95 s. The timeouts call the same function.
+ * Gates call this directly so they do not sit the shooting-schedule holds.
+ * The timeouts call the same function.
  */
 export function progressShow(room) {
   if (!room) return null;
   const next = nextShowBeat(room.show);
   if (!next) return room.show;
   if (next === 'debrief') {
-    setShow(room, 'debrief');
-    room.game.enterDebrief?.();
-    scheduleShowProgress(room);
+    enterDebriefLive(room);
     return 'debrief';
+  }
+  if (next === 'reckoning') {
+    enterReckoningLive(room);
+    return 'reckoning';
+  }
+  if (next === 'vote') {
+    enterVoteLive(room);
+    return 'vote';
+  }
+  if (next === 'execution') {
+    enterExecutionLive(room);
+    return 'execution';
   }
   if (next === 'casting') {
     enterNextCasting(room);
@@ -198,9 +225,12 @@ export function progressShow(room) {
   return room.show;
 }
 
-function scheduleShowProgress(room) {
-  const wait = holdMsFor(room.show);
+function scheduleShowProgress(room, waitOpt = null) {
+  const noms = room.game?.state?.nominations?.length ?? 0;
+  const wait = Number.isFinite(waitOpt) ? waitOpt : holdMsFor(room.show, noms);
   if (!Number.isFinite(wait)) return;
+  room.showUntil = Date.now() + wait;
+  fanout(room, showPayload(room));
   clearShowClock(room);
   room.showClock = setTimeout(() => {
     room.showClock = null;
@@ -209,13 +239,94 @@ function scheduleShowProgress(room) {
   room.showClock.unref?.();
 }
 
+function enterDebriefLive(room) {
+  setShow(room, 'debrief');
+  room.game.enterDebrief?.();
+  scheduleShowProgress(room);
+}
+
+function enterReckoningLive(room) {
+  const living = livingSeatedIds(room);
+  room.game.enterReckoning(living);
+  room.reckoningStartedAt = Date.now();
+  setShow(room, 'reckoning');
+  fanout(room, nomsPayload(room));
+  fanout(room, lynchPayload(room));
+  scheduleShowProgress(room, holdMsFor('reckoning', 0));
+}
+
+function extendReckoning(room) {
+  const n = room.game.state.nominations.length;
+  const started = room.reckoningStartedAt || Date.now();
+  const until = started + reckoningSeconds(n) * 1000;
+  const left = until - Date.now();
+  if (left <= 0) {
+    progressShow(room);
+    return;
+  }
+  room.showUntil = until;
+  fanout(room, showPayload(room));
+  clearShowClock(room);
+  room.showClock = setTimeout(() => {
+    room.showClock = null;
+    progressShow(room);
+  }, left);
+  room.showClock.unref?.();
+}
+
+function enterVoteLive(room) {
+  const living = livingSeatedIds(room);
+  room.game.enterVote(living);
+  setShow(room, 'vote');
+  fanout(room, nomsPayload(room));
+  fanout(room, lynchPayload(room));
+  scheduleShowProgress(room, holdMsFor('vote'));
+}
+
+function enterExecutionLive(room) {
+  if (!room.game.state.voteResult) room.game.closeVote();
+  room.game.enterExecution();
+  setShow(room, 'execution');
+  fanout(room, lynchPayload(room));
+  scheduleShowProgress(room, holdMsFor('execution'));
+}
+
 function enterNextCasting(room) {
   clearShowClock(room);
   room.ballots.clear();
   room.game.beginCasting();
+  room.showUntil = null;
+  room.reckoningStartedAt = null;
   setShow(room, 'casting');
   fanout(room, { t: 'ballots', votes: [] });
+  fanout(room, nomsPayload(room));
+  fanout(room, lynchPayload(room));
   fanout(room, lobbySnapshot(room));
+}
+
+function nomsPayload(room) {
+  return {
+    t: 'noms',
+    standing: (room.game.state.nominations || []).map((n) => ({
+      nominator: n.nominator, target: n.target,
+    })),
+  };
+}
+
+function lynchPayload(room) {
+  const r = room.game.state.voteResult;
+  if (!r) return { t: 'lynch', votes: [] };
+  return {
+    t: 'lynch',
+    votes: Object.entries(r.votes || {}).map(([voter, choice]) => ({ voter, choice })),
+    result: {
+      executed: r.executed ?? null,
+      counts: r.counts || {},
+      threshold: r.threshold ?? 0,
+      abstained: r.abstained ?? 0,
+      executioner: r.executioner ?? null,
+    },
+  };
 }
 
 /**
@@ -297,7 +408,12 @@ export const FANOUT_KEYS = {
   lobbySeat: ['id', 'playerId', 'isTV', 'name', 'seat', 'joined', 'connected', 'shell', 'accent'],
   ballots: ['t', 'votes'],
   ballotVote: ['voter', 'runner', 'guide'],
-  show: ['t', 'beat', 'end'],
+  show: ['t', 'beat', 'end', 'until'],
+  noms: ['t', 'standing'],
+  nomRow: ['nominator', 'target'],
+  lynch: ['t', 'votes', 'result'],
+  lynchVote: ['voter', 'choice'],
+  lynchResult: ['executed', 'counts', 'threshold', 'abstained', 'executioner'],
   /*
    * 🔥 How far along the TV's mansion bake is. Public, because it is the ROOM's wait, not the
    * TV's: `docs/slices/task-prime-time-lobby-warm-night.md` §3.4, and John's playtest note that
@@ -328,6 +444,17 @@ export function fanoutViolations(msg) {
     for (let i = 0; i < (msg.votes || []).length; i++) extraKeys(msg.votes[i], FANOUT_KEYS.ballotVote, `ballots.votes[${i}]`, bad);
   } else if (msg.t === 'show') {
     extraKeys(msg, FANOUT_KEYS.show, 'show', bad);
+  } else if (msg.t === 'noms') {
+    extraKeys(msg, FANOUT_KEYS.noms, 'noms', bad);
+    for (let i = 0; i < (msg.standing || []).length; i++) {
+      extraKeys(msg.standing[i], FANOUT_KEYS.nomRow, `noms.standing[${i}]`, bad);
+    }
+  } else if (msg.t === 'lynch') {
+    extraKeys(msg, FANOUT_KEYS.lynch, 'lynch', bad);
+    for (let i = 0; i < (msg.votes || []).length; i++) {
+      extraKeys(msg.votes[i], FANOUT_KEYS.lynchVote, `lynch.votes[${i}]`, bad);
+    }
+    if (msg.result) extraKeys(msg.result, FANOUT_KEYS.lynchResult, 'lynch.result', bad);
   } else if (msg.t === 'warm') {
     extraKeys(msg, FANOUT_KEYS.warm, 'warm', bad);
   } else {
@@ -451,7 +578,11 @@ export function startServer({ port = 5181, count = 8, castSeed = null, worldSeed
     }
     // A refreshed or resuming TV gets the outcome along with the beat, not just the word "recap" —
     // otherwise a reload during recap loses the SMASHED/TIME fact until the next run.
-    push(room, bound.id, { t: 'show', beat: room.show, ...(room.runEnd ? { end: room.runEnd } : {}) });
+    push(room, bound.id, showPayload(room));
+    if (room.show === 'reckoning' || room.show === 'vote' || room.show === 'execution') {
+      push(room, bound.id, nomsPayload(room));
+      push(room, bound.id, lynchPayload(room));
+    }
     fanout(room, lobbySnapshot(room));
 
     let buf = Buffer.alloc(0);
@@ -489,6 +620,12 @@ export function seatedPlayerIds(room) {
     .map((s) => s.playerId);
 }
 
+/** Seated and still alive — the live lynching denominator, not the eight-chair deal. */
+export function livingSeatedIds(room) {
+  const seated = new Set(seatedPlayerIds(room));
+  return room.game.state.players.filter((p) => p.alive && seated.has(p.id)).map((p) => p.id);
+}
+
 function handleClient(room, bound, self, msg) {
   const isTV = !!self?.isTV;
   if (msg.t === 'name' && self && !isTV) {
@@ -500,6 +637,21 @@ function handleClient(room, bound, self, msg) {
   if (msg.t === 'look' && self && !isTV) {
     room.game.setLook(self.playerId, { shell: msg.shell, accent: msg.accent });
     fanout(room, lobbySnapshot(room));
+    return;
+  }
+  if (msg.t === 'nominate' && self && !isTV && self.playerId) {
+    if (room.show !== 'reckoning') return;
+    const living = livingSeatedIds(room);
+    const result = room.game.nominatePlayer(self.playerId, msg.target, living);
+    if (!result.ok) return;
+    fanout(room, nomsPayload(room));
+    if (result.closed) progressShow(room);
+    else extendReckoning(room);
+    return;
+  }
+  if (msg.t === 'lynchVote' && self && !isTV && self.playerId) {
+    if (room.show !== 'vote') return;
+    room.game.castLynchVote(self.playerId, msg.choice, livingSeatedIds(room));
     return;
   }
   if (msg.t === 'ballot' && self && !isTV && self.playerId) {

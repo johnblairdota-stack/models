@@ -23,7 +23,7 @@ import { createLog, visibleTo } from './log.js';
 import { hunterVisibleToGuide, ROOMS } from './coverage.js';
 import { applyTake, resolveContact, MODE, PLATE } from './taken.js';
 import { tallyCasting } from './ballot.js';
-import { tallyVote, executioner, NO_ONE } from './vote.js';
+import { tallyVote, executioner, nominate, reckoningClosed, NO_ONE } from './vote.js';
 import { foldWin, OUTCOME } from './win.js';
 import { PHASE, orderFor, EPISODE_CAP } from './phases.js';
 import { cleanLook } from './look.js';
@@ -78,6 +78,11 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     lastPair: { runner: null, guide: null },
     history: Object.fromEntries(deal.seats.map((s) => [s.id, { expeditions: 0, lastEp: null }])),
     nominations: [],
+    lynchVotes: {},
+    voteResult: null,
+    execution: null,
+    liveLiving: null,
+    takenThisEpisode: [],
     outcome: null,
     // ⚠️ THE SHOW STARTS WITH ONE CAMERA LIVE, AND IT IS NOT A FREEBIE. At zero cameras the
     // guide's coverage is 0 and their honest error rate is 50% — a coin, not a game, and a
@@ -296,6 +301,48 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     state.tick += 1;
     record(makeEvent(`phase.${p}`, VIS.PUBLIC, {}));
     broadcast();
+  }
+
+  /**
+   * Living ids for the live lynching clock. Transport passes seated phones so empty
+   * Robot N chairs are not a vote. Gates omit it and use every alive player.
+   */
+  function episodeLiving() {
+    if (Array.isArray(state.liveLiving) && state.liveLiving.length) {
+      return state.liveLiving.filter((id) => state.players.some((p) => p.id === id && p.alive));
+    }
+    return state.players.filter((p) => p.alive).map((p) => p.id);
+  }
+
+  function closeVote() {
+    const living = episodeLiving();
+    const ballotBox = Object.fromEntries(living.map((id) => [id, state.lynchVotes[id] || NO_ONE]));
+    const result = tallyVote({ living, nominations: state.nominations }, ballotBox);
+    for (const [voter, choice] of Object.entries(ballotBox)) {
+      record(makeEvent('vote.cast', VIS.PUBLIC, { voter, choice }));
+    }
+    record(makeEvent('vote.tallied', VIS.PUBLIC, { counts: result.counts, executed: result.executed }));
+    let swinger = null;
+    if (result.executed) {
+      const victim = state.players.find((p) => p.id === result.executed);
+      if (victim && victim.alive) {
+        swinger = executioner(
+          { living, nominations: state.nominations },
+          result.executed,
+          state.takenThisEpisode || [],
+        );
+        const { player, events } = applyTake(victim);
+        Object.assign(victim, player);
+        record(makeEvent('player.executed', VIS.PUBLIC, { id: victim.id, seat: victim.seat, executioner: swinger }));
+        for (const e of events.filter((e) => e.type !== 'player.taken')) record(makeEvent(e.type, e.vis, e.data));
+      }
+    }
+    state.voteResult = { ...result, votes: ballotBox, executioner: swinger };
+    state.execution = result.executed
+      ? { id: result.executed, executioner: swinger }
+      : { id: null, executioner: null };
+    broadcast();
+    return state.voteResult;
   }
 
   /**
@@ -564,6 +611,8 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       // Next ballot is for state.episode (already bumped after the last playEpisode).
       state.airingEpisode = state.episode;
       state.pair = { runner: null, guide: null };
+      state.liveLiving = null;
+      state.lynchVotes = {};
       for (const s of sockets) {
         if (s.isTV) continue;
         s.seatRole = null;
@@ -577,6 +626,62 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     /** Live clock: mission just finished. Show beat is recap; phase matches. */
     enterRecap() {
       setPhase('RECAP');
+    },
+    episodeLiving,
+    /**
+     * Live SHOW clock: open Reckoning. Clears standing noms for this episode.
+     * `playEpisode` still owns the premiere skip; this is the TV/phone path.
+     */
+    enterReckoning(livingOpt = null) {
+      state.nominations = [];
+      state.lynchVotes = {};
+      state.voteResult = null;
+      state.execution = null;
+      state.liveLiving = Array.isArray(livingOpt) && livingOpt.length ? livingOpt.slice() : null;
+      setPhase('RECKONING');
+    },
+    /**
+     * One public nomination. `vote.js` is the rule; this is the room applying it.
+     * @returns {{ok:boolean, why?:string, nomination?:object, closed?:boolean}}
+     */
+    nominatePlayer(nominator, target, livingOpt = null) {
+      if (state.phase !== 'RECKONING') return { ok: false, why: 'not reckoning' };
+      if (livingOpt && Array.isArray(livingOpt)) state.liveLiving = livingOpt.slice();
+      const living = episodeLiving();
+      const result = nominate({ living, nominations: state.nominations }, nominator, target);
+      if (!result.ok) return result;
+      state.nominations.push(result.nomination);
+      record(makeEvent('nom.made', VIS.PUBLIC, result.nomination));
+      broadcast();
+      return {
+        ok: true,
+        nomination: result.nomination,
+        closed: reckoningClosed({ living, nominations: state.nominations }),
+      };
+    },
+    enterVote(livingOpt = null) {
+      if (livingOpt && Array.isArray(livingOpt)) state.liveLiving = livingOpt.slice();
+      state.lynchVotes = {};
+      setPhase('VOTE');
+    },
+    /**
+     * One simultaneous ballot. Choice is a standing nominee or NO_ONE.
+     * Votes stay on the room until `closeVote` airs them (design §4).
+     */
+    castLynchVote(voter, choice, livingOpt = null) {
+      if (state.phase !== 'VOTE') return { ok: false, why: 'not vote' };
+      if (livingOpt && Array.isArray(livingOpt)) state.liveLiving = livingOpt.slice();
+      const living = episodeLiving();
+      if (!living.includes(voter)) return { ok: false, why: 'not living' };
+      const standing = state.nominations.map((n) => n.target);
+      const pick = (choice && standing.includes(choice)) ? choice : NO_ONE;
+      state.lynchVotes[voter] = pick;
+      return { ok: true, choice: pick };
+    },
+    closeVote,
+    enterExecution() {
+      if (!state.voteResult) closeVote();
+      setPhase('EXECUTION');
     },
     /**
      * Published nameplate. 12 chars, same cap as the phone spec's cheap join. Does not broadcast —

@@ -20,6 +20,8 @@ import { pickPlanSeed, planRoomLabels, roomLabel } from '../party/mansion.js';
 import { missionFor } from '../party/mission.js';
 import { intelLine } from '../party/intel.js';
 import { STICK_DEADZONE, warmLabel } from '../party/follow.js';
+import { formatRemain, remainingMs } from '../party/show.js';
+import { NO_ONE } from '../party/vote.js';
 
 export default async function partyPhone({ params }) {
   injectNightSkin();
@@ -67,6 +69,9 @@ export default async function partyPhone({ params }) {
     /** Dealt to, but the face picker still owns the screen. See `maybeRunDeal`. */
     dealPending: false,
     lastBeat: null,
+    nominated: false,
+    voted: false,
+    clockTimer: 0,
   };
 
   /**
@@ -551,7 +556,14 @@ export default async function partyPhone({ params }) {
       if (beat === 'debrief') {
         if (c.runEnd) body += `<h1>${esc(c.runEnd)}</h1>`;
         body += `<h1>Debrief.</h1>
-          <p class="hint">Phones down. Talk. The next ballot lands here when the clock says so.</p>`;
+          ${phoneClock(c)}
+          <p class="hint">Phones down. Talk. Nominate when the clock says Reckoning.</p>`;
+      } else if (beat === 'reckoning') {
+        body += paintNominate(nominees, me, c);
+      } else if (beat === 'vote') {
+        body += paintLynchVote(nominees, me, c);
+      } else if (beat === 'execution') {
+        body += paintExecution(nominees, c);
       } else {
         if (c.runEnd) body += `<h1>${esc(c.runEnd)}</h1>`;
         body += `<p class="hint">Phones down. Debrief is next.</p>`;
@@ -566,7 +578,7 @@ export default async function partyPhone({ params }) {
 
     delete root.dataset.castUi;
     root.innerHTML = `
-      <div class="phone-top"><span>${esc(state.code.toUpperCase())}</span><span>${esc(beat)} · ${esc(myName)}</span></div>
+      <div class="phone-top"><span>${esc(state.code.toUpperCase())}</span><span>${esc(beat)}${phoneClockInline(c)} · ${esc(myName)}</span></div>
       ${body}`;
     if (liveStamp) root.dataset.liveUi = liveStamp; else delete root.dataset.liveUi;
 
@@ -576,7 +588,13 @@ export default async function partyPhone({ params }) {
      * what the entitlement matrix already decided this socket may see, so exposing it cannot leak
      * anything a screenshot of this screen would not.
      */
-    window.__rrrPhone = { frame, beat, seat: me.seat, iAmRunner, iAmGuide };
+    window.__rrrPhone = { frame, beat, seat: me.seat, iAmRunner, iAmGuide, showUntil: c.showUntil };
+
+    if (beat !== 'reckoning') state.nominated = false;
+    if (beat !== 'vote') state.voted = false;
+    startPhoneClock();
+    bindNominate(c);
+    bindLynchVote(c);
 
     root.querySelector('#save-name')?.addEventListener('click', () => {
       const v = root.querySelector('#name')?.value || '';
@@ -1079,6 +1097,123 @@ export default async function partyPhone({ params }) {
     const seats = (lobby?.seats || []).filter((s) => !s.isTV && s.joined);
     if (!seats.length) return '';
     return `<p class="hint" style="margin-top:16px">${seats.map((s) => s.name).join(' · ')}</p>`;
+  }
+
+  function phoneClock(c) {
+    const label = formatRemain(remainingMs(c.showUntil));
+    if (!label) return '';
+    return `<div class="talk-clock phone-clock" data-show-clock>${esc(label)}</div>`;
+  }
+
+  function phoneClockInline(c) {
+    const label = formatRemain(remainingMs(c.showUntil));
+    return label ? ` · <span data-show-clock>${esc(label)}</span>` : '';
+  }
+
+  function startPhoneClock() {
+    if (state.clockTimer) return;
+    state.clockTimer = setInterval(() => {
+      const c = state.client;
+      const label = formatRemain(remainingMs(c?.showUntil));
+      for (const el of root.querySelectorAll('[data-show-clock]')) el.textContent = label;
+    }, 250);
+  }
+
+  function standingNames(players, client) {
+    const byId = new Map((players || []).map((p) => [p.id, p.name]));
+    return (client.noms || []).map((n) => ({
+      ...n,
+      name: byId.get(n.target) || n.target,
+      by: byId.get(n.nominator) || n.nominator,
+    }));
+  }
+
+  function iCanAct(players, me) {
+    return (players || []).some((p) => p.id === me.playerId && p.alive !== false);
+  }
+
+  function paintNominate(players, me, c) {
+    const standing = standingNames(players, c);
+    const already = standing.some((n) => n.nominator === me.playerId) || state.nominated;
+    const targets = (players || []).filter((p) => p.id !== me.playerId && p.alive !== false
+      && !standing.some((n) => n.target === p.id));
+    let html = `<h1>Reckoning.</h1>${phoneClock(c)}`;
+    if (standing.length) {
+      html += `<p class="hint">Standing: ${esc(standing.map((n) => n.name).join(', '))}</p>`;
+    }
+    if (!iCanAct(players, me)) {
+      html += `<p class="hint">The dead do not nominate.</p>`;
+      return html;
+    }
+    if (already) {
+      html += `<p class="hint">You have nominated. Watch the TV.</p>`;
+      return html;
+    }
+    if (!targets.length) {
+      html += `<p class="hint">Nobody left to name — the cap or the list is spent.</p>`;
+      return html;
+    }
+    html += `<p class="hint">Tap a living player. First tap stands. No self-nom.</p>
+      <div class="pick-list">${targets.map((p) =>
+        `<button type="button" data-nom="${esc(p.id)}">${esc(p.name)}</button>`).join('')}</div>`;
+    return html;
+  }
+
+  function paintLynchVote(players, me, c) {
+    const standing = standingNames(players, c);
+    let html = `<h1>Vote.</h1>${phoneClock(c)}`;
+    if (c.lynchResult) {
+      html += `<p class="hint">${c.lynchResult.executed ? 'The vote is in.' : 'Nobody cleared.'}</p>`;
+      return html;
+    }
+    if (!iCanAct(players, me)) {
+      html += `<p class="hint">The dead do not vote.</p>`;
+      return html;
+    }
+    if (state.voted) {
+      html += `<p class="hint">Ballot in. Non-voters count as NO ONE.</p>`;
+      return html;
+    }
+    html += `<p class="hint">Pick one standing nominee, or NO ONE.</p>
+      <div class="pick-list">
+        ${standing.map((n) => `<button type="button" data-lynch="${esc(n.target)}">${esc(n.name)}</button>`).join('')}
+        <button type="button" data-lynch="${NO_ONE}">NO ONE</button>
+      </div>`;
+    return html;
+  }
+
+  function paintExecution(players, c) {
+    const r = c.lynchResult;
+    let html = `<h1>Execution.</h1>${phoneClock(c)}`;
+    if (!r || !r.executed) {
+      html += `<p class="hint">Nobody cleared. Nameplates stay up. Casting is next.</p>`;
+      return html;
+    }
+    const who = playerName(players, r.executed);
+    html += `<p class="hint">${esc(who)} is out. The nameplate is face-down. Nothing about alignment.</p>`;
+    return html;
+  }
+
+  function bindNominate(c) {
+    for (const b of root.querySelectorAll('[data-nom]')) {
+      b.addEventListener('click', () => {
+        if (state.nominated) return;
+        state.nominated = true;
+        c.send({ t: 'nominate', target: b.dataset.nom });
+        paint();
+      });
+    }
+  }
+
+  function bindLynchVote(c) {
+    for (const b of root.querySelectorAll('[data-lynch]')) {
+      b.addEventListener('click', () => {
+        if (state.voted) return;
+        state.voted = true;
+        c.send({ t: 'lynchVote', choice: b.dataset.lynch });
+        paint();
+      });
+    }
   }
 
 }

@@ -7,17 +7,27 @@
  * "Watch the run" is a host workaround, not the clock.
  *
  * After a finished run the clock keeps walking: recap (20 s) → debrief (75 s)
- * → casting for the next pair. Those holds are `phases.js` `SECONDS`, not a
- * second table. The Recap *button* is gone; the beat is not.
+ * → reckoning → vote → execution → casting. Those holds are `phases.js`
+ * `SECONDS`, not a second table. The Recap *button* is gone; the beat is not.
  */
 
-import { PHASE, SECONDS } from './phases.js';
+import { PHASE, SECONDS, reckoningSeconds } from './phases.js';
 
-export const SHOW_BEATS = ['lobby', 'casting', 'expedition', 'recap', 'debrief'];
+export const SHOW_BEATS = [
+  'lobby', 'casting', 'expedition', 'recap', 'debrief',
+  'reckoning', 'vote', 'execution',
+];
 
-/** Recap card, then seated talk. Same numbers as `phases.js`. */
+/** Recap card, then seated talk, then the designed lynching. Same numbers as `phases.js`. */
 export const RECAP_HOLD_MS = SECONDS[PHASE.RECAP] * 1000;
 export const DEBRIEF_HOLD_MS = SECONDS[PHASE.DEBRIEF] * 1000;
+export const RECKONING_HOLD_MS = SECONDS[PHASE.RECKONING] * 1000;
+export const VOTE_HOLD_MS = SECONDS[PHASE.VOTE] * 1000;
+export const EXECUTION_HOLD_MS = SECONDS[PHASE.EXECUTION] * 1000;
+
+/** Debrief and the lynching beats — ballroom is the picture, chase is off. Recap is not this. */
+export const TALK_BEATS = ['debrief', 'reckoning', 'vote', 'execution'];
+export const isTalkBeat = (beat) => TALK_BEATS.includes(String(beat || ''));
 
 /**
  * Server-owned. Expedition is immediate so the TV is never waiting on a click.
@@ -56,11 +66,26 @@ export const STUB_SHOW_PLAN = [
   { beat: 'expedition', ms: 0 },
   { beat: 'recap', ms: RECAP_BACKSTOP_MS },
   { beat: 'debrief', ms: RECAP_HOLD_MS },
-  { beat: 'casting', ms: DEBRIEF_HOLD_MS },
+  { beat: 'reckoning', ms: DEBRIEF_HOLD_MS },
+  { beat: 'vote', ms: RECKONING_HOLD_MS },
+  { beat: 'execution', ms: VOTE_HOLD_MS },
+  { beat: 'casting', ms: EXECUTION_HOLD_MS },
 ];
 
-/** Recap → Debrief → Casting. The live night must not soft-end on Recap. */
-export const AFTER_RUN_BEATS = ['recap', 'debrief', 'casting'];
+/**
+ * Recap → Debrief → Reckoning → Vote → Execution → Casting.
+ * The live SHOW clock runs this on every episode, including the premiere.
+ * `playEpisode` still skips Reckoning+ on episode 1.
+ */
+export const AFTER_RUN_BEATS = ['recap', 'debrief', 'reckoning', 'vote', 'execution', 'casting'];
+
+const AFTER_RUN_NEXT = {
+  recap: 'debrief',
+  debrief: 'reckoning',
+  reckoning: 'vote',
+  vote: 'execution',
+  execution: 'casting',
+};
 
 export function isShowBeat(beat) {
   return SHOW_BEATS.includes(String(beat || ''));
@@ -71,17 +96,34 @@ export function recapAfterMs(plan = STUB_SHOW_PLAN) {
   return Number.isFinite(step?.ms) ? step.ms : RECAP_BACKSTOP_MS;
 }
 
-export function holdMsFor(beat) {
+export function holdMsFor(beat, noms = 0) {
   if (beat === 'recap') return RECAP_HOLD_MS;
   if (beat === 'debrief') return DEBRIEF_HOLD_MS;
+  if (beat === 'reckoning') return reckoningSeconds(noms) * 1000;
+  if (beat === 'vote') return VOTE_HOLD_MS;
+  if (beat === 'execution') return EXECUTION_HOLD_MS;
   return null;
 }
 
 /** What the clock walks to next after a finished run. Expedition is not in this chain. */
 export function nextShowBeat(beat) {
-  if (beat === 'recap') return 'debrief';
-  if (beat === 'debrief') return 'casting';
-  return null;
+  return AFTER_RUN_NEXT[beat] ?? null;
+}
+
+/** Server-authoritative remaining time. Clients tick from `until` (epoch ms). */
+export function remainingMs(until, now = Date.now()) {
+  const n = Number(until);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, n - now);
+}
+
+/** `1:05` or `12s` — the TV chrome and the phone pad share this. */
+export function formatRemain(ms) {
+  if (!Number.isFinite(ms)) return '';
+  const s = Math.ceil(Math.max(0, ms) / 1000);
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return m > 0 ? `${m}:${String(r).padStart(2, '0')}` : `${s}s`;
 }
 
 /**
