@@ -269,6 +269,14 @@ export const SHOW_CHROME_CSS = `
       width:44px; height:44px; }
     .talk-chrome-bot .show-third .who { font-size:clamp(20px, 2.8vw, 36px); }
     .talk-chrome-bot .show-third { padding:8px 16px 8px 8px; }
+    .talk-side .ballot { gap:6px; }
+    .talk-side .ballot .row { padding:8px 10px; gap:10px; }
+    .talk-side .ballot .who { font-size:clamp(16px, 1.8vw, 24px); }
+    .talk-side .ballot .pick { font-size:clamp(13px, 1.5vw, 18px); }
+    .talk-side .ballot.huge .who { font-size:clamp(18px, 2vw, 28px); }
+    .talk-side .ballot.huge .pick { font-size:clamp(14px, 1.6vw, 20px); }
+    .talk-side .pair-hero { font-size:clamp(16px, 2vw, 28px); margin:0 0 8px; }
+    .talk-side .ballot .arrow { font-size:11px; }
     /* Recap is a lower-third strip, one 16:9 viewport, no scroll. */
     .recap-stage { width:100%; display:flex; flex-direction:column; gap:8px; }
     .recap-head { display:flex; justify-content:flex-end; align-items:flex-end; }

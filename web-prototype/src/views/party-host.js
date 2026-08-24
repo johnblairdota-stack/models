@@ -532,6 +532,8 @@ export default async function partyHost({ params }) {
       || show === 'vote' || show === 'execution';
     const onStage = isTalkBeat(show);
     const onRecap = show === 'recap';
+    const onCastPicture = show === 'casting' && ui.introsSent;
+    const onCircle = onStage || onRecap || onCastPicture;
     const onRun = show === 'expedition' || (hasPair && !onTalk && show !== 'casting');
     const clock = formatRemain(remainingMs(ui.showUntil));
 
@@ -563,9 +565,14 @@ export default async function partyHost({ params }) {
        * refreshed TV can jump back onto the run; recap keeps "Run" for the same recovery.
        */
     } else if (show === 'recap') {
-      body += recapBoard(recap, names, ui.runEnd, clock);
+      body += talkStage({
+        recap, names, lobby: client.lobby, runEnd: ui.runEnd, clock,
+        kicker: 'Phones down. Debrief is next.', beat: 'recap',
+        who: joinedName(names, recap.runner, 'The circle'),
+        whoSub: 'live · recap',
+        whoId: recap.runner,
+      });
       body += `<div class="actions recap-actions"><button class="btn ghost" id="to-run">Run</button></div>`;
-      body += `<p class="hint spaced">Phones down. Debrief is next.</p>`;
     } else if (show === 'debrief') {
       body += talkStage({
         recap, names, lobby: client.lobby, runEnd: ui.runEnd, clock,
@@ -610,6 +617,15 @@ export default async function partyHost({ params }) {
       if (showingIntros) {
         body += `<div class="intro-frame" aria-label="Player intros"></div>
           <p class="intro-hint">the cast, walking in · phones are voting</p>`;
+      } else if (ui.introsSent) {
+        body += talkStage({
+          recap, names, lobby: client.lobby, runEnd: ui.runEnd, clock,
+          kicker: 'Ballots land here. Lock when the room has spoken.', beat: 'casting',
+          who: joinedName(names, pair.runner || recap.runner, 'The circle'),
+          whoSub: 'live · casting',
+          whoId: pair.runner || recap.runner,
+          aside: ballotBoard(votes, names, pair, recap, episode),
+        });
       } else {
         body += ballotBoard(votes, names, pair, recap, episode);
       }
@@ -617,7 +633,7 @@ export default async function partyHost({ params }) {
       if (canLock) body += `<button class="btn" id="lock">Send them in</button>`;
       if (hasPair) body += `<button class="btn ghost" id="to-run">Watch the run</button>`;
       body += `</div>`;
-      if (episode === 1 && !showingIntros) {
+      if (episode === 1 && !showingIntros && !ui.introsSent) {
         body += `<p class="hint spaced">Episode 1 airs every ballot. After the run the room nominates.</p>`;
       }
     } else {
@@ -649,9 +665,10 @@ export default async function partyHost({ params }) {
      * `show` (`ui.beat`); that is the only word this chrome may say.
      */
     const onIntro = show === 'casting' && ui.introsSent && !ui.introsDone;
+    const onTalkFrame = onStage || onRecap || (show === 'casting' && ui.introsSent && ui.introsDone);
     const ribbon = onRun || rundownRibbon(show);
     const hold = holdMsFor(show, client.noms?.length ?? 0);
-    root.className = `night${onRun ? ' on-run' : ''}${onIntro ? ' on-intro' : ''}${onStage ? ' on-talk' : ''}${onRecap ? ' on-recap' : ''}`;
+    root.className = `night${onRun ? ' on-run' : ''}${onIntro ? ' on-intro' : ''}${onTalkFrame ? ' on-talk' : ''}${onRecap ? ' on-recap' : ''}`;
     root.innerHTML = `
       <div class="night-top">
         <div class="night-brand-row">
@@ -709,13 +726,15 @@ export default async function partyHost({ params }) {
      */
     const runnerId = pair.runner || recap.runner;
     follow.mode = onRun && runnerId ? 'run'
-      : (onStage || (show === 'casting' && ui.introsSent && !ui.introsDone) ? 'intros' : 'warm');
-    if ((onStage || show === 'casting') && ui.cuedRunner) {
+      : (onCircle ? 'intros' : 'warm');
+    if (onCircle && ui.cuedRunner) {
       sendCue({ kind: 'idle' });
       ui.cuedRunner = null;
     }
-    if (onStage) cueSitDown();
-    if (show === 'expedition' || show === 'casting') ui.sitCued = false;
+    // Walk-in owns CASTING until it finishes; then Recap / Debrief / later Casting
+    // keep the seated-circle talk director on the same chairs.
+    if (onStage || onRecap || (show === 'casting' && ui.introsDone)) cueSitDown();
+    if (show === 'expedition') ui.sitCued = false;
     mountFollow();
     placeFollow();
     startClockTick();
@@ -889,7 +908,7 @@ function standingLead(standing, names) {
 
 function talkStage({
   recap, names, lobby, runEnd, clock, kicker, beat,
-  who, whoSub, whoId, standing, tally, verdict, executed,
+  who, whoSub, whoId, standing, tally, verdict, executed, aside,
 }) {
   const look = whoId ? seatLook(lobby, whoId) : null;
   const face = look ? robotFaceSvg(look.shell, look.accent, { size: 64 }) : '';
@@ -905,7 +924,7 @@ function talkStage({
         : '',
     })
     : '';
-  const side = `${nomBoard(standing, names, lobby)}${tally ? lynchBoard(tally.votes, tally.result, names) : ''}`;
+  const side = `${aside || ''}${nomBoard(standing, names, lobby)}${tally ? lynchBoard(tally.votes, tally.result, names) : ''}`;
   return `
     <div class="talk-stage${side ? ' has-side' : ''}">
       <div class="talk-chrome-top">
@@ -914,7 +933,7 @@ function talkStage({
       </div>
       <div class="talk-well">
         <div class="talk-picture">
-          <div class="intro-frame talk-frame" aria-label="Ballroom debrief"></div>
+          <div class="intro-frame talk-frame" aria-label="Ballroom circle"></div>
         </div>
         ${side ? `<aside class="talk-side">${side}</aside>` : ''}
       </div>
