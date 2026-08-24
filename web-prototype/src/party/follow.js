@@ -215,7 +215,8 @@ export const FOLLOW_CHROME_CSS = `
       color:var(--night-ink); text-shadow:0 2px 10px rgba(0,0,0,.9); }
     #fl .dot { width:11px; height:11px; border-radius:50%; background:var(--night-bad);
       box-shadow:0 0 12px var(--night-bad); animation: fl-rec 2s ease-in-out infinite; }
-    #fl .third { position:absolute; left:2.6%; bottom:10.5%; display:flex; align-items:flex-end; gap:14px; }
+    #fl .third { position:absolute; left:2.6%; bottom:10.5%; display:flex; align-items:flex-end; gap:14px;
+      padding:10px 22px 10px 10px; background:rgba(0,0,0,.62); border-radius:0 12px 12px 0; }
     #fl .third .face { width:64px; height:64px; filter: drop-shadow(0 8px 20px rgba(0,0,0,.8)); }
     #fl .third .who { font-size:clamp(30px, 4.6vw, 62px); font-weight:800; line-height:.98;
       text-shadow:0 3px 18px rgba(0,0,0,.95); }

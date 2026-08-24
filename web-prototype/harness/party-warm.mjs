@@ -65,7 +65,10 @@ import { ROOMS, hunterVisibleToGuide } from '../src/party/coverage.js';
 import { buildPlan } from './genspike.mjs';
 import { DROP_RATE, GRADES, STALE_MAX, gradeFor, intelFor, intelLine } from '../src/party/intel.js';
 import { GUIDE_MAP_CSS, guideMapSvg } from '../src/party/guidemap.js';
-import { ACCENTS, SHELLS, cleanLook } from '../src/party/look.js';
+import {
+  ACCENTS, SHELLS, SHOW_CAM, SHOW_CHROME_CSS, SHOW_LINE, SHOW_TITLE,
+  cleanLook, codeBugHtml, nameplateHtml, recBugHtml, showCam, titlePlateHtml, verdictPlateHtml,
+} from '../src/party/look.js';
 import { COMPOSITION, dealCast } from '../src/party/cast.js';
 import { isNightToken } from '../src/party/palette.js';
 import { leftoverRuns, barrierFillForEdge } from '../src/game/dig-policy.js';
@@ -1713,6 +1716,62 @@ console.log('\nparty-warm — the lobby-warm night');
     && !/kind: 'look'/.test(followSrc));
   t('W26r · a driven look release holds — followFacing is only the undriven fallback',
     /followFacing: !perf\.driven/.test(bedSrc));
+}
+
+// ---- W29 · PRIME TIME SHOW CHROME — one language, not host inline soup ----------------------
+//
+// Hypothesis: host chrome was fragmented across party-host.js inline styles. The chase overlay
+// is the look. Tokens and HTML builders live in look.js; night-skin interpolates the CSS.
+{
+  const hex = SHOW_CHROME_CSS.match(/#[0-9a-f]{3,8}\b/gi) || [];
+  t('W29 · show chrome CSS holds no hex of its own', hex.length === 0, hex.join(',') || 'no literals');
+
+  const colours = SHOW_CHROME_CSS.match(/rgba?\([^)]*\)/gi) || [];
+  const notBlack = colours.filter((c) => !/^rgba?\(\s*0\s*,\s*0\s*,\s*0\s*[,)]/i.test(c));
+  t('W29a · the only literal colours left are black — plate, matte, shadow',
+    notBlack.length === 0, notBlack.join(',') || `${colours.length} blacks`);
+
+  const used = [...new Set([...SHOW_CHROME_CSS.matchAll(/var\((--[a-z-]+)/g)].map((m) => m[1]))];
+  const orphans = used.filter((n) => !isNightToken(n));
+  t('W29b · every variable it reaches for is a palette name',
+    used.length >= 4 && orphans.length === 0, orphans.join(',') || `${used.length} tokens`);
+
+  t('W29c · no backticks in the chrome CSS string — that terminates the night-skin template',
+    !SHOW_CHROME_CSS.includes('`'));
+
+  const skin = await readFile(new URL('../src/party/night-skin.js', import.meta.url), 'utf8');
+  t('W29d · night-skin interpolates SHOW_CHROME_CSS rather than restating the rules',
+    /\$\{SHOW_CHROME_CSS\}/.test(skin));
+
+  const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
+  const phoneSrc = await readFile(new URL('../src/views/party-phone.js', import.meta.url), 'utf8');
+  t('W29e · the host paints from the shared builders, not a second set of inline plates',
+    /titlePlateHtml\(/.test(hostSrc)
+    && /codeBugHtml\(/.test(hostSrc)
+    && /recBugHtml\(/.test(hostSrc)
+    && /nameplateHtml\(/.test(hostSrc)
+    && /countdownHtml\(/.test(hostSrc)
+    && /verdictPlateHtml\(/.test(hostSrc));
+  t('W29f · lobby still exposes .night-code and the QR — the join is the picture',
+    /night-code/.test(hostSrc) && /night-qr/.test(hostSrc) && /qrSvg\(/.test(hostSrc));
+  t('W29g · the join URL is a class, not a one-off style attribute',
+    /night-url/.test(hostSrc)
+    && !/style="margin-top:14px;letter-spacing:\.03em/.test(hostSrc));
+  t('W29h · expedition chrome still never mounts a guide map on the TV',
+    !/guideMapSvg/.test(hostSrc) && !/GUIDE_MAP/.test(hostSrc));
+  t('W29i · phones keep Jackbox-scale nominate / lynch lists and still hide self',
+    /pick-list jackbox/.test(phoneSrc)
+    && /n\.target !== me\.playerId/.test(phoneSrc)
+    && /choice === meId\(\)/.test(phoneSrc));
+  t('W29j · a nameplate and a verdict plate actually emit the show words',
+    nameplateHtml({ name: 'Ellie', sub: 'live · expedition' }).includes('Ellie')
+    && nameplateHtml({ name: 'Ellie', sub: 'live · expedition' }).includes('live · expedition')
+    && verdictPlateHtml({ line: 'Ellie is out. Ozz swings.' }).includes('VERDICT READY')
+    && recBugHtml({ cam: showCam('lobby') }).includes(SHOW_CAM.lobby)
+    && titlePlateHtml().includes(SHOW_TITLE)
+    && titlePlateHtml().includes(SHOW_LINE)
+    && codeBugHtml({ code: 'RB42', url: 'http://x' }).includes('RB42')
+    && showCam('expedition') === 'RRR CAM 01');
 }
 
 
