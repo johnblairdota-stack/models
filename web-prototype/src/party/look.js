@@ -167,8 +167,8 @@ export const SHOW_CHROME_CSS = `
     .show-title { margin:0 0 18px; max-width:46rem; }
     .show-title-name { font-size:clamp(28px, 5vw, 56px); font-weight:800; letter-spacing:.2em;
       text-transform:uppercase; color:var(--night-accent); line-height:1; }
-    .show-title-name::before { content:''; display:inline-block; width:10px; height:10px;
-      margin-right:12px; margin-bottom:4px; background:var(--night-accent); transform:rotate(45deg); }
+    .show-title-name::before { content:''; display:inline-block; width:12px; height:12px;
+      margin-right:14px; vertical-align:0.12em; background:var(--night-accent); transform:rotate(45deg); }
     .show-title-line { margin-top:10px; color:var(--night-soft); font-size:16px; letter-spacing:.02em;
       line-height:1.4; }
     .show-bug { padding:14px 18px 12px; border:1px solid rgba(var(--night-accent-rgb), .35);

@@ -124,6 +124,7 @@ export function nextShowBeat(beat) {
 
 /** Server-authoritative remaining time. Clients tick from `until` (epoch ms). */
 export function remainingMs(until, now = Date.now()) {
+  if (until == null || until === '') return null;
   const n = Number(until);
   if (!Number.isFinite(n)) return null;
   return Math.max(0, n - now);
