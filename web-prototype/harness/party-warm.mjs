@@ -27,7 +27,7 @@
 import { readFile } from 'node:fs/promises';
 import {
   CUE_CAST_KEYS, CUE_KEYS, CUE_KINDS, FOLLOW_FORBIDDEN, FOLLOW_KEYS, FOLLOW_VIEW,
-  IDENTITY_SECRETS, INTRO_FOV, INTRO_FRAME_PCT, MISSION_PHASES, MOVE_KEYS, SPATIAL_WORDS,
+  IDENTITY_SECRETS, INTRO_FOV, INTRO_FRAME_PCT, MISSION_PHASES, MOVE_KEYS, RING_OUT, SPATIAL_WORDS,
   STICK_DEADZONE, STICK_RELEASE, STICK_TURN, TALK_FOV, TV_FRAME_PCT,
   WARM_KEYS, WARM_STAGES, WORLD_KEYS, chaseOrbitOffset, cueViolations, followParams, followUrl,
   liveRunShot, LOOK_PITCH_MAX, LOOK_PITCH_MIN, lookYaw, moveViolations, stepLookOrbit,
@@ -1385,7 +1385,7 @@ console.log('\nparty-warm — the lobby-warm night');
 // other contestant. W21 now pins a medium-wide debrief plate, not a passport photo.
 {
   t('W21 · the intro lens is a medium-wide, not a visor portrait and not the run\'s 62° plate',
-    INTRO_FOV >= 46 && INTRO_FOV <= 56 && INTRO_FOV < 62, `${INTRO_FOV}°`);
+    INTRO_FOV >= 52 && INTRO_FOV <= 60 && INTRO_FOV < 62, `${INTRO_FOV}°`);
   t('W21a · and the CASTING picture is a centred frame, not a full-bleed strip',
     INTRO_FRAME_PCT >= 70 && INTRO_FRAME_PCT < TV_FRAME_PCT, `${INTRO_FRAME_PCT}%`);
 
@@ -1624,7 +1624,7 @@ console.log('\nparty-warm — the lobby-warm night');
   const tagSrc = await readFile(new URL('../src/characters/chest-nameplate.js', import.meta.url), 'utf8');
 
   t('W31 · talk beats sit wider than intros, still under the run\'s 62°',
-    TALK_FOV >= INTRO_FOV && TALK_FOV < 62 && TALK_FOV <= 58, `${TALK_FOV}°`);
+    TALK_FOV >= INTRO_FOV && TALK_FOV < 62 && TALK_FOV <= 60, `${TALK_FOV}°`);
   t('W31a · debrief sit cue is a talk intros, not a second visor walk-in',
     /function cueSitDown/.test(hostSrc)
     && /talk:\s*true/.test(hostSrc)
@@ -1638,17 +1638,61 @@ console.log('\nparty-warm — the lobby-warm night');
     && /if \(talk\)/.test(introSrc));
   t('W31c · casting intros keep the snap-to-new-robot path; talk does not steal it',
     /if \(i !== focusI\)/.test(introSrc) && /INTRO_FOV/.test(introSrc)
-    && /talk \? TALK_FOV : INTRO_FOV/.test(introSrc));
-  t('W31d · intro robots wear a chest name under the 4Humanity mark',
-    /attachChestNameTag/.test(introSrc)
-    && /chestName/.test(tagSrc)
-    && /wordmark/.test(tagSrc)
+    && /talking \? TALK_FOV : INTRO_FOV/.test(introSrc));
+  t('W31d · intro robots wear a head billboard name, not a navy chest badge',
+    /attachHeadNameTag/.test(introSrc)
+    && /headName/.test(tagSrc)
+    && /Sprite/.test(tagSrc)
+    && /billboard/.test(tagSrc)
     && /#054E84/.test(tagSrc)
     && /#EDEFF0/.test(tagSrc));
   t('W31e · a live run still locks chase — talk does not widen FOLLOW_BEATS',
     liveRunShot('run') === 'chase'
     && liveRunShot('intros') === null
     && liveRunShot('warm') === null);
+}
+
+// ---- W32 · PLAYTEST: CHAIRS SOLID, CAMERA OUTSIDE, CIRCLE PERSISTS, HEAD NAMES -------------
+//
+// Live playtest after #39: robots walked through chairs; Casting/Recap blanked the 3D feed;
+// the lens was still inside the ring; expedition despawned the sit circle; chest badges
+// were the wrong name language.
+{
+  const introSrc = await readFile(new URL('../src/game/intro-bed.js', import.meta.url), 'utf8');
+  const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
+  const bedSrc = await readFile(new URL('../src/game/follow-bed.js', import.meta.url), 'utf8');
+  const tagSrc = await readFile(new URL('../src/characters/chest-nameplate.js', import.meta.url), 'utf8');
+  const roomSrc = await readFile(new URL('../src/game/room.js', import.meta.url), 'utf8');
+
+  t('W32 · the talk/intro eye sits outside the chair radius, not inside the ring',
+    RING_OUT >= 2.8 && RING_OUT <= 4.2 && TALK_FOV >= 56, `${RING_OUT} m · ${TALK_FOV}°`);
+  t('W32a · walk-in takes a tangent lane around the chair, and the chair is a collider',
+    /const LANE = /.test(introSrc)
+    && /function chairCollider/.test(introSrc)
+    && /_noSight/.test(introSrc)
+    && /space\.colliders\.push\(box\)/.test(introSrc)
+    && /r\.via/.test(introSrc)
+    && /c\._noSight/.test(roomSrc));
+  t('W32b · Casting and Recap keep the seated-circle talk picture, not a black plate',
+    /const onCircle = /.test(hostSrc)
+    && /onRecap \|\| onCastPicture/.test(hostSrc)
+    && /show === 'casting' && ui\.introsDone/.test(hostSrc)
+    && /beat: 'recap'/.test(hostSrc)
+    && /beat: 'casting'/.test(hostSrc)
+    && /aside: ballotBoard/.test(hostSrc));
+  t('W32c · expedition hides the runner twin and keeps the chairs — it does not dispose the circle',
+    /holdForRun/.test(bedSrc)
+    && /intro\?\.holdForRun\?/.test(bedSrc)
+    && /intro\?\.holdStep\?/.test(bedSrc)
+    && /holdForRun\(runnerId\)/.test(introSrc)
+    && /releaseRun\(\)/.test(introSrc)
+    && /THE CIRCLE STAYS/.test(bedSrc));
+  t('W32d · names are bigger head sprites that billboard toward the TV camera',
+    /attachHeadNameTag/.test(introSrc)
+    && /new THREE\.Sprite/.test(tagSrc)
+    && /headName/.test(tagSrc)
+    && /sizeAttenuation/.test(tagSrc)
+    && /TAG_W = 0\.56/.test(tagSrc));
 }
 
 // ---- W26 · DUAL-STICK TV CHASE — no phone embed; look cue + camera-relative move ------------
@@ -1914,8 +1958,8 @@ console.log('\nparty-warm — the lobby-warm night');
 
   t('W31a · recap hides the show line and locks night-main to one viewport',
     /onRun \|\| onStage \|\| onRecap \|\| show === 'lobby'/.test(hostSrc)
-      && /\.night\.on-recap \.night-main \{ padding:4px 22px 14px; overflow:hidden/.test(skin)
-      && /\.night\.on-recap \.night-line \{ display:none/.test(skin));
+      && /\.night\.on-talk \.night-main, \.night\.on-recap \.night-main \{ padding:0 16px 10px; overflow:hidden/.test(skin)
+      && /\.night\.on-talk \.night-line, \.night\.on-recap \.night-line \{ display:none/.test(skin));
 
   t('W31b · talk chrome sits in reserved bands outside the ballroom frame',
     /talk-chrome-top/.test(hostSrc)

@@ -1271,7 +1271,11 @@ export async function buildTestRoom(engine, o = {}) {
     dir.multiplyScalar(1 / dist);
     const seenP = new Set();
     for (const s of spacesOnSegment(a, b)) {
-      for (const c of s.colliders) { const h = rayBox(a, dir, c); if (h != null && h > 0 && h < dist) return true; }
+      for (const c of s.colliders) {
+        // Movement-only boxes (intro chairs) must not yank a ringside camera inside the ring.
+        if (c._noSight) continue;
+        const h = rayBox(a, dir, c); if (h != null && h > 0 && h < dist) return true;
+      }
       for (const p of s.panels) {
         if (seenP.has(p.id)) continue;
         seenP.add(p.id);

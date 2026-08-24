@@ -272,19 +272,25 @@ export const TV_FRAME_PCT = 90;
 export const INTRO_FRAME_PCT = 78;
 
 /**
- * 🎥 **MEDIUM-WIDE, NOT A FACE PORTRAIT.** The run camera is 62° (`engine.js`). 38° at 1.75 m
- * filled the frame with the visor — live playtest: "too tightly framed on the front of the
- * robot face." Reality-TV debrief language is a medium-wide that keeps the subject and lets
- * another contestant sit in the soft background. `intro-bed.js` applies it; the expedition
- * still restores 62° on dispose.
+ * 🎥 **OUTSIDE THE RING, LOOKING IN.** The run camera is 62° (`engine.js`). 38° at 1.75 m
+ * filled the visor; #39's 52° interior 3/4 was still too close / inside the chairs. Live
+ * playtest: pull FURTHER OUT so the circle of chairs is readable and the robots are smaller
+ * in frame. `intro-bed.js` applies it; the expedition still restores 62° on dispose.
  */
-export const INTRO_FOV = 52;
+export const INTRO_FOV = 56;
 
 /**
- * Talk beats (Debrief / Reckoning / Vote / Execution) sit a touch wider so a slow sweep
- * across the circle still reads as a room, not a head. Same restore-on-dispose rule.
+ * Talk beats (Debrief / Reckoning / Vote / Execution / Recap / post-walk Casting) sit
+ * wider so a slow sweep from OUTSIDE the chair ring still reads as a room. Same
+ * restore-on-dispose rule. Under the run's 62°.
  */
-export const TALK_FOV = 54;
+export const TALK_FOV = 60;
+
+/**
+ * Metres beyond the chair radius. Intro / talk eyes sit OUTSIDE the circle looking in,
+ * not ringside inside it. `intro-bed.js` applies it; the expedition still restores 62°.
+ */
+export const RING_OUT = 3.15;
 
 /**
  * The `src` for the TV's follow iframe, or `null`.

@@ -1165,6 +1165,7 @@ export async function buildFollowBed(engine, opts = {}) {
       lookY: perf.look.y,
       followFacing: !perf.driven,
     });
+    intro?.holdStep?.(dt, t);
 
     // The cam light rides just under and ahead of the lens, so it throws onto the runner rather
     // than flaring the lens it is attached to.
@@ -1218,31 +1219,39 @@ export async function buildFollowBed(engine, opts = {}) {
     cue(c) {
       if (!c || typeof c !== 'object') return;
       if (c.kind === 'idle') {
-        mode = 'warm';
+        mode = intro ? 'intros' : 'warm';
         runner.root.visible = false;
+        intro?.releaseRun?.();
+        intro?.setTalk?.(true);
         return;
       }
       if (c.kind === 'intros') {
         introCast = (c.cast || []).slice(0, 8);
         if (!introCast.length) return;
-        intro?.dispose();
-        intro = buildIntroBed(engine, {
-          room, cast: introCast, materials: botMats, avatar, reelSight: reelToSight,
-          // Debrief / reckoning / vote / execution: sweeping circle cam, no walk-in.
-          talk: !!c.talk,
-        });
+        const ids = introCast.map((s) => String(s.id)).join('\0');
+        const have = intro?.castIds?.()?.join('\0');
+        if (intro && have === ids) {
+          intro.releaseRun?.();
+          intro.setTalk?.(!!c.talk);
+        } else {
+          intro?.dispose();
+          intro = buildIntroBed(engine, {
+            room, cast: introCast, materials: botMats, avatar, reelSight: reelToSight,
+            talk: !!c.talk,
+          });
+        }
         mode = 'intros';
         runner.root.visible = false;
         return;
       }
       if (c.kind === 'run') {
         /*
-         * ⚠️ THE INTRO BODIES ARE TORN DOWN HERE AND NOT BEFORE. Disposing them when the intros
-         * merely FINISH would leave the ballroom empty for however long the room spends on
-         * ballots, which is the beat the seated circle exists to fill.
+         * ⚠️ THE CIRCLE STAYS. Disposing the intro bed on Send-them-in left an empty
+         * ballroom (no chairs, no seated cast) for the whole expedition. The runner's
+         * intro twin hides; everyone else keeps their chair. Recap / debrief reuse
+         * the same bodies via `setTalk` rather than rebuilding.
          */
-        intro?.dispose();
-        intro = null;
+        intro?.holdForRun?.(c.runner);
         mode = 'run';
         runnerName = c.name ?? null;
         runner.root.visible = true;

@@ -168,16 +168,15 @@ export function injectNightSkin() {
       background:var(--night-deep); }
     .intro-hint { text-align:center; color:var(--night-dim); font-size:13px;
       letter-spacing:.16em; text-transform:uppercase; margin-top:8px; }
-    /* Talk beats (debrief / reckoning / vote / execution): the ballroom is the picture,
-       chrome sits in reserved bands around it so the seated chairs cannot cover text.
-       Recap is a no-scroll lower-third on its own beat. No backticks in this comment. */
+    /* Talk beats (debrief / reckoning / vote / execution / recap / post-walk casting):
+       the ballroom is the picture. Chrome sits in reserved bands around it so the
+       seated chairs cannot cover text. Recap used to blank the 3D feed with a fact
+       card — it now uses the same talk well. No backticks in this comment. */
     .night.on-talk .night-top, .night.on-recap .night-top { padding:8px 22px 4px; }
     .night.on-talk .night-line, .night.on-recap .night-line { display:none; }
-    .night.on-talk .night-main { padding:0 16px 10px; overflow:hidden;
+    .night.on-talk .night-main, .night.on-recap .night-main { padding:0 16px 10px; overflow:hidden;
       display:flex; flex-direction:column; min-height:0; }
-    .night.on-recap .night-main { padding:4px 22px 14px; overflow:hidden;
-      display:flex; flex-direction:column; justify-content:flex-end; min-height:0; }
-    .night.on-recap .actions { margin-top:10px; }
+    .night.on-recap .actions { margin-top:8px; flex:0 0 auto; }
     .night.on-recap .actions .btn { padding:8px 14px; font-size:12px; }
     .night.on-recap .hint.spaced { margin-top:8px; }
     .talk-stage { position:relative; display:flex; flex-direction:column; align-items:stretch;
