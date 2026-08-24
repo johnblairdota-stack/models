@@ -444,14 +444,15 @@ t('N13c · a refresh resumes the server show beat, not casting',
 
   const nomA = a.welcome.playerId;
   const nomB = b.welcome.playerId;
-  a.send({ t: 'nominate', target: nomB });
+  // N13 closed `a` and reclaimed the seat as `back`.
+  back.send({ t: 'nominate', target: nomB });
   await sleep(40);
   t('N17e · a living phone can nominate once; TV sees the standing list',
     last(host, 'noms')?.standing?.some((n) => n.nominator === nomA && n.target === nomB)
       && night.game.state.nominations.length === 1
       && last(host, 'show')?.until > Date.now(),
     JSON.stringify(last(host, 'noms')));
-  a.send({ t: 'nominate', target: nomB });
+  back.send({ t: 'nominate', target: nomB });
   await sleep(20);
   t('N17e2 · second tap from the same nominator is ignored',
     night.game.state.nominations.length === 1);
@@ -465,7 +466,7 @@ t('N13c · a refresh resumes the server show beat, not casting',
     JSON.stringify({ show: night.show, n: night.game.state.nominations.length }));
   phases.push(night.show);
 
-  a.send({ t: 'lynchVote', choice: nomB });
+  back.send({ t: 'lynchVote', choice: nomB });
   b.send({ t: 'lynchVote', choice: nomB });
   await sleep(20);
   const toExec = progressShow(night);
