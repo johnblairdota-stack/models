@@ -23,7 +23,7 @@ import { createLog, visibleTo } from './log.js';
 import { hunterVisibleToGuide, ROOMS } from './coverage.js';
 import { applyTake, resolveContact, MODE, PLATE } from './taken.js';
 import { tallyCasting } from './ballot.js';
-import { tallyVote, executioner, nominate, reckoningClosed, canLynchVote, NO_ONE } from './vote.js';
+import { tallyVote, executioner, nominate, reckoningClosed, canLynchVote, assumedLynchVotes, nominatorLockedChoice, NO_ONE } from './vote.js';
 import { foldWin, OUTCOME } from './win.js';
 import { PHASE, orderFor, EPISODE_CAP } from './phases.js';
 import { cleanLook } from './look.js';
@@ -661,7 +661,9 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     },
     enterVote(livingOpt = null) {
       if (livingOpt && Array.isArray(livingOpt)) state.liveLiving = livingOpt.slice();
-      state.lynchVotes = {};
+      const living = episodeLiving();
+      // Nominators are already on the record for their target — they do not vote again.
+      state.lynchVotes = assumedLynchVotes(state.nominations, living);
       setPhase('VOTE');
     },
     /**
@@ -669,12 +671,21 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
      * Self-vote is illegal (John 2026-08-24): coerce to NO_ONE so a malicious
      * client cannot record a vote for themselves. Votes stay on the room until
      * `closeVote` airs them (design §4).
+     *
+     * A nominator of a standing target is locked to that target and cannot
+     * recast — `assumedLynchVotes` already wrote it on `enterVote`.
      */
     castLynchVote(voter, choice, livingOpt = null) {
       if (state.phase !== 'VOTE') return { ok: false, why: 'not vote' };
       if (livingOpt && Array.isArray(livingOpt)) state.liveLiving = livingOpt.slice();
       const living = episodeLiving();
       if (!living.includes(voter)) return { ok: false, why: 'not living' };
+      const locked = nominatorLockedChoice(state.nominations, voter);
+      if (locked) {
+        state.lynchVotes[voter] = locked;
+        if (choice !== locked) return { ok: false, why: 'nominator vote locked', choice: locked };
+        return { ok: true, choice: locked, locked: true };
+      }
       const standing = state.nominations.map((n) => n.target);
       const allowed = canLynchVote(voter, choice, standing);
       const pick = (allowed.ok && choice !== NO_ONE) ? choice : NO_ONE;

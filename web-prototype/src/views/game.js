@@ -3525,6 +3525,19 @@ export default async function view(args = {}) {
       engine.__furnDress = await dressLooseFurniture(room, { debris, dust, rng: engine.rng });
       engine.__rrrCams = engine.__furnDress?.cams ?? [];
       engine.__furnLayout = engine.__furnDress?.catalog ?? { placed: 0, missing: [], props: [] };
+      const ringR = engine.__chairCircle?.radius;
+      if (ringR) {
+        const { rugScaleForSeats, RUG_CATALOG_SPAN } = await import('../game/chair-seats.js');
+        const k = rugScaleForSeats(ringR, RUG_CATALOG_SPAN);
+        const sid = engine.__chairCircle.space;
+        for (const fp of room.furnProps || []) {
+          if (fp.kind !== 'rug') continue;
+          if (sid && fp.spaceId && fp.spaceId !== sid) continue;
+          const mesh = fp.mesh || fp.root;
+          if (mesh?.scale) mesh.scale.set(k, 1, k);
+        }
+        engine.__chairCircle.rugScale = true;
+      }
     })());
   }
   /** Meshy smash lineup — `?furnline=1` (see docs/slices/task-meshy-furn-lineup.md). */

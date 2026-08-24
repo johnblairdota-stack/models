@@ -4,7 +4,10 @@ import { chairCircle } from '../world/props.js';
 import { unit4hMaterials } from '../materials/surfaces/robot.js';
 import { cloneMeshAvatar } from '../characters/mesh-avatar.js';
 import { INTRO_FOV, RING_OUT, TALK_FOV } from '../party/follow.js';
-import { attachHeadNameTag } from '../characters/chest-nameplate.js';
+import { attachHeadNameTag, attachNomineeBang, setNomineeBang } from '../characters/chest-nameplate.js';
+import {
+  sitIdleClip, sitPhase, sitRootXZ, expectedPelvis, rugScaleForSeats, RUG_CATALOG_SPAN,
+} from './chair-seats.js';
 
 /**
  * 🎬 **THE INTROS — the joined cast walking to their chairs in the ballroom, one at a time.**
@@ -64,24 +67,22 @@ const LANE = 0.92;
  */
 const LOOK_Y = 1.08;
 const EYE_Y = 1.92;
-const WIDE_Y = 2.28;
-
 /**
- * 🎬 **TALK / DEBRIEF SHOTS — changing angles, slow sweeps, never a locked chair cam.**
+ * 🎬 **TALK / DEBRIEF SHOTS — a cameraman walking the outside of the ring.**
  *
- * Debrief used to re-fire the intro portrait and hold. John: different angles, sweeping
- * views, other contestants visible. Each shot is a few seconds of move, then the director
- * eases onto the next; the run camera is not touched (`liveRunShot` still locks chase).
+ * Eye stays on an outside arc (constant-ish radius = chair r + RING_OUT), lookAt the
+ * circle centre, and shot-to-shot motion walks the arc at human speed — never a
+ * cartesian lerp through the chairs, never a drone zoom that collapses the ring.
  */
 const TALK_SHOTS = [
-  { name: 'pair', dur: 9.5 },
-  { name: 'orbit', dur: 13.0 },
-  { name: 'wide', dur: 11.0 },
-  { name: 'push', dur: 9.0 },
-  { name: 'across', dur: 12.0 },
+  { name: 'pair', dur: 8.5, span: 0.62 },
+  { name: 'orbit', dur: 14.0, span: 1.45 },
+  { name: 'across', dur: 11.0, span: 1.20 },
 ];
 
 const TALK_CYCLE = TALK_SHOTS.reduce((s, x) => s + x.dur, 0);
+/** Metres / second around the ring — a person with a camera, not a drone. */
+const CAM_WALK = 1.35;
 
 /** Extra metres past the chairs — always outside, never ringside. */
 function ringOut(radius) {
@@ -99,6 +100,7 @@ function clampInSpace(v, space, pad = 0.85) {
 /**
  * One debrief plate. Eye and look are written into the caller's vectors so the step
  * loop does not allocate. Always from OUTSIDE the ring — the chairs read as a circle.
+ * Look is the circle centre; the eye walks an outside azimuth.
  */
 function talkFrame(robots, clock, cx, cz, radius, space, eye, look) {
   const n = Math.max(1, robots.length);
@@ -112,51 +114,43 @@ function talkFrame(robots, clock, cx, cz, radius, space, eye, look) {
   const shot = TALK_SHOTS[idx];
   const u = THREE.MathUtils.clamp(t / shot.dur, 0, 1);
   const focus = (wraps * TALK_SHOTS.length + idx) % n;
-  const a = robots[focus];
-  const b = robots[(focus + 1) % n];
-  const far = robots[(focus + Math.max(1, Math.floor(n / 2))) % n];
-  const ox = a.ux, oz = a.uz;
-  const tx = a.tx, tz = a.tz;
   const out = ringOut(radius);
-
-  if (shot.name === 'pair') {
-    const back = radius + out * (0.88 + u * 0.14);
-    const side = 1.35 + u * 0.45;
-    eye.set(cx + ox * back + tx * side, EYE_Y + Math.sin(u * Math.PI) * 0.08, cz + oz * back + tz * side);
-    look.set(
-      (a.body.pos.x + b.body.pos.x) * 0.38 + cx * 0.24,
-      LOOK_Y,
-      (a.body.pos.z + b.body.pos.z) * 0.38 + cz * 0.24,
-    );
-  } else if (shot.name === 'orbit') {
-    const ang = clock * 0.085 + focus * ((Math.PI * 2) / n);
-    const r = radius + out;
-    eye.set(cx + Math.sin(ang) * r, EYE_Y + Math.sin(clock * 0.19) * 0.10, cz + Math.cos(ang) * r);
-    look.set(cx, LOOK_Y - 0.06, cz);
-  } else if (shot.name === 'wide') {
-    const ang = clock * 0.045;
-    const r = radius + out * 1.18;
-    eye.set(cx + Math.sin(ang) * r, WIDE_Y, cz + Math.cos(ang) * r);
-    look.set(cx, LOOK_Y - 0.10, cz);
-  } else if (shot.name === 'push') {
-    const dist = THREE.MathUtils.lerp(radius + out * 1.12, radius + out * 0.72, u);
-    eye.set(cx + ox * dist + tx * 1.05, EYE_Y + (1 - u) * 0.16, cz + oz * dist + tz * 1.05);
-    look.set(
-      a.body.pos.x * 0.55 + cx * 0.45,
-      LOOK_Y,
-      a.body.pos.z * 0.55 + cz * 0.45,
-    );
-  } else {
-    const dist = radius + out * 0.95;
-    eye.set(cx + ox * dist + tx * 0.55, EYE_Y, cz + oz * dist + tz * 0.55);
-    look.set(
-      far.body.pos.x * 0.55 + cx * 0.45,
-      LOOK_Y,
-      far.body.pos.z * 0.55 + cz * 0.45,
-    );
-  }
+  const r = radius + out;
+  /*
+   * Continuous azimuth: each shot walks `span` radians along the same outside
+   * circle, then the next shot picks up. wrap * 2π/n keeps the path rotating
+   * around the group instead of looping one arc forever.
+   */
+  let walked = wraps * 1.15;
+  for (let i = 0; i < idx; i++) walked += TALK_SHOTS[i].span;
+  walked += shot.span * u;
+  const ang = walked + focus * ((Math.PI * 2) / n) * 0.08;
+  const bob = Math.sin(clock * 0.21) * 0.07;
+  eye.set(cx + Math.sin(ang) * r, EYE_Y + bob, cz + Math.cos(ang) * r);
+  look.set(cx, LOOK_Y, cz);
   clampInSpace(eye, space);
-  return { index: focus, shot: shot.name };
+  return { index: focus, shot: shot.name, ang, r };
+}
+
+/** Walk the camera along the outside arc at human speed; never lerp through the ring. */
+function walkCamOnRing(camera, lookLive, eye, look, cx, cz, dt) {
+  const haveX = camera.position.x - cx;
+  const haveZ = camera.position.z - cz;
+  const wantX = eye.x - cx;
+  const wantZ = eye.z - cz;
+  const rHave = Math.hypot(haveX, haveZ) || Math.hypot(wantX, wantZ) || 1;
+  const rWant = Math.hypot(wantX, wantZ) || rHave;
+  const aHave = Math.atan2(haveX, haveZ);
+  const aWant = Math.atan2(wantX, wantZ);
+  let d = aWant - aHave;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  const maxAng = (CAM_WALK / Math.max(1.4, rHave)) * dt;
+  const a = aHave + Math.sign(d) * Math.min(Math.abs(d), Math.max(maxAng, Math.abs(d) * (1 - Math.exp(-1.8 * dt))));
+  const r = THREE.MathUtils.lerp(rHave, rWant, 1 - Math.exp(-2.4 * dt));
+  const y = THREE.MathUtils.lerp(camera.position.y, eye.y, 1 - Math.exp(-2.4 * dt));
+  camera.position.set(cx + Math.sin(a) * r, y, cz + Math.cos(a) * r);
+  lookLive.lerp(look, 1 - Math.exp(-2.4 * dt));
 }
 
 /**
@@ -182,6 +176,36 @@ function chairCollider(seat) {
   );
   box._noSight = true;
   return box;
+}
+
+/** Restale the ballroom's centre rug to the live chair ring. Shared with `views/game.js`. */
+export function scaleBallroomRug(room, space, radius) {
+  if (!room?.furnProps || !(radius > 0)) return false;
+  const k = rugScaleForSeats(radius, RUG_CATALOG_SPAN);
+  const sid = space?.id;
+  let n = 0;
+  for (const fp of room.furnProps) {
+    if (fp.kind !== 'rug') continue;
+    if (sid && fp.spaceId && fp.spaceId !== sid) continue;
+    const mesh = fp.mesh || fp.root;
+    if (!mesh?.scale) continue;
+    mesh.scale.set(k, 1, k);
+    n++;
+  }
+  return n > 0;
+}
+
+function parkSit(r) {
+  r.body.pos.copy(r.sitAt);
+  r.body.facing = r.face;
+  r.body.aimYaw = r.face;
+  r.body.sitLock = true;
+  r.cleared = true;
+  r.arrived = true;
+  r.seated = true;
+  r.body.avatar?.playSit?.({
+    seatIndex: r.seatIndex, skipDown: true, phase: sitPhase(r.seatIndex),
+  });
 }
 
 /**
@@ -334,6 +358,13 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
   scene.add(group);
 
   /*
+   * 🧶 THE RUG MATCHES THE LIVE CHAIR RING, not the catalog's 2.80 m toy disc.
+   * Thin rugs do not grow doorway keep-outs (`walkHalf` caps them); we only restale
+   * the already-placed centre mesh. Same helper `game.js` uses after smash dress.
+   */
+  scaleBallroomRug(room, space, radius);
+
+  /*
    * 🪑 CHAIRS ARE SOLID. The InstancedMesh is a picture; without these boxes `Player.collide`
    * walks straight through the seat. `_noSight` keeps a ringside camera from reeling in
    * through the chair it is filming. Dropped on `dispose`.
@@ -374,10 +405,14 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     });
     const tag = attachHeadNameTag(body, seat.name);
     if (tag?.material) ownedMaterials.push(tag.material);
+    const bang = attachNomineeBang(body, tag);
+    if (bang?.material) ownedMaterials.push(bang.material);
 
     const tx = -uz, tz = ux;
     const at = new THREE.Vector3(chair.x - ux * STAND_IN, room.floorY ?? 0, chair.z - uz * STAND_IN);
-    const face = Math.atan2(cx - chair.x, cz - chair.z);
+    const sit = sitRootXZ(chair, cx, cz);
+    const sitAt = new THREE.Vector3(sit.x, room.floorY ?? 0, sit.z);
+    const face = sit.face;
     /*
      * Walk-in lane: start outside AND to the side, then a via beside the chair, then the
      * stand-mark in front. A radial walk from `ENTRY_OUT` through the chair was the clip.
@@ -399,10 +434,12 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
      * process in from outside so the colour-and-flair beat has a beginning.
      */
     if (talk) {
-      body.pos.copy(at);
+      body.pos.copy(sitAt);
       body.facing = face;
       body.aimYaw = face;
+      body.sitLock = true;
       body.root.visible = true;
+      body.avatar?.playSit?.({ seatIndex: i, skipDown: true, phase: sitPhase(i) });
     } else {
       body.pos.copy(start);
       const inward = Math.atan2(via.x - start.x, via.z - start.z);
@@ -416,16 +453,19 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     clampInSpace(eye, space);
 
     return {
-      seat, body, chair, ux, uz, tx, tz, tag,
+      seat, body, chair, ux, uz, tx, tz, tag, bang,
       flair: FLAIRS[i % FLAIRS.length],
+      seatIndex: i,
       /*
-       * ⚠️ THE ROBOT STANDS *IN FRONT OF* ITS CHAIR, NOT ON IT. The stand-mark is inward of
-       * the seat AABB so collision does not pin them in the cushion. An actual seated gait
-       * is still not on this body — they occupy their place without phasing through it.
+       * Walk target is still IN FRONT of the chair so collision does not pin them
+       * in the cushion. Once arrived they sitLock and occupy `sitAt` — hips on the
+       * seat, facing centre, seated clip playing.
        */
       at,
+      sitAt,
       via,
       cleared: !!talk,
+      seated: !!talk,
       eye,
       face,
       arrived: !!talk,
@@ -491,16 +531,27 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       return;
     }
 
-    // Arrived: turn to face the middle of the circle, then perform (or idle once held).
+    // Arrived at the stand-mark: lock into the seat, play sit, stay seated.
+    if (!r.seated) {
+      body.sitLock = true;
+      body.pos.copy(r.sitAt);
+      body.facing = r.face;
+      body.aimYaw = r.face;
+      r.seated = true;
+      body.avatar?.playSit?.({
+        seatIndex: r.seatIndex, skipDown: false, phase: sitPhase(r.seatIndex),
+      });
+    }
+    body.sitLock = true;
+    body.pos.copy(r.sitAt);
     const turn = Math.atan2(Math.sin(r.face - body.aimYaw), Math.cos(r.face - body.aimYaw));
     body.aimYaw += turn * (1 - Math.exp(-8.0 * dt));
-    const phase = THREE.MathUtils.clamp((clock - r.t0 - 1.1) / Math.max(0.5, step - 1.1), 0, 1);
-    const f = (talking || heldRunner != null) ? { yaw: 0, move: 0, pitch: 0 } : r.flair.drive(phase);
+    body.facing = r.face;
     body.update(dt, t, {
-      move: { x: 0, y: f.move ?? 0 },
+      move: { x: 0, y: 0 },
       run: false,
-      aimYaw: r.face + (f.yaw ?? 0),
-      aimPitch: f.pitch ?? 0,
+      aimYaw: r.face,
+      aimPitch: 0,
     });
   }
 
@@ -565,13 +616,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
         for (const r of robots) {
           if (heldRunner != null && String(r.seat.id) === String(heldRunner)) continue;
           r.body.root.visible = true;
-          if (!r.arrived) {
-            r.body.pos.copy(r.at);
-            r.body.facing = r.face;
-            r.body.aimYaw = r.face;
-            r.cleared = true;
-            r.arrived = true;
-          }
+          parkSit(r);
         }
       }
     },
@@ -585,13 +630,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       for (const r of robots) {
         const mine = heldRunner != null && String(r.seat.id) === String(heldRunner);
         r.body.root.visible = !mine;
-        if (!mine && !r.arrived) {
-          r.body.pos.copy(r.at);
-          r.body.facing = r.face;
-          r.body.aimYaw = r.face;
-          r.cleared = true;
-          r.arrived = true;
-        }
+        if (!mine) parkSit(r);
       }
     },
 
@@ -600,12 +639,47 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       heldRunner = null;
       for (const r of robots) {
         r.body.root.visible = true;
-        r.body.pos.copy(r.at);
-        r.body.facing = r.face;
-        r.body.aimYaw = r.face;
-        r.cleared = true;
-        r.arrived = true;
+        parkSit(r);
       }
+    },
+
+    /**
+     * Reckoning / Vote: a red "!" above each standing nominee's name tag.
+     * `standing` is FANOUT noms rows (`nominator`, `target`). Empty clears.
+     */
+    setNominees(standing) {
+      const ids = new Set((standing || []).map((n) => String(n.target ?? n)));
+      for (const r of robots) setNomineeBang(r.bang, ids.has(String(r.seat.id)));
+    },
+
+    /** Harness snapshot — logical sit flags, pelvis, clip names. */
+    sitReport() {
+      return robots.map((r) => {
+        const pelvis = expectedPelvis(r.chair, cx, cz);
+        const hips = (() => {
+          let found = null;
+          r.body.root?.traverse?.((o) => { if (o.isBone && o.name === 'Hips') found = o; });
+          return found;
+        })();
+        if (hips) {
+          r.body.root.updateWorldMatrix(true, true);
+          hips.updateWorldMatrix(true, false);
+          const w = new THREE.Vector3();
+          hips.getWorldPosition(w);
+          pelvis.x = w.x; pelvis.y = w.y; pelvis.z = w.z;
+        } else {
+          pelvis.x = r.body.pos.x;
+          pelvis.z = r.body.pos.z;
+        }
+        return {
+          id: String(r.seat.id),
+          seated: !!r.seated,
+          seatIndex: r.seatIndex,
+          clip: r.body.avatar?.clip ?? sitIdleClip(r.seatIndex),
+          pelvis,
+          chair: { x: r.chair.x, y: r.chair.y ?? 0, z: r.chair.z, boxW: r.chair.boxW, boxD: r.chair.boxD, boxH: r.chair.boxH },
+        };
+      });
     },
 
     /**
@@ -630,8 +704,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       if (useTalk) {
         const shot = fillTalkEye();
         reelSight?.(_eye, _look);
-        engine.camera.position.lerp(_eye, 1 - Math.exp(-1.55 * dt));
-        _lookLive.lerp(_look, 1 - Math.exp(-2.1 * dt));
+        walkCamOnRing(engine.camera, _lookLive, _eye, _look, cx, cz, dt);
         engine.camera.up.set(0, 1, 0);
         engine.camera.lookAt(_lookLive);
         engine.camera.rotateZ(Math.sin(t * 0.47) * 0.008);
@@ -700,7 +773,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
         if (o.isMesh || o.isSkinnedMesh || o.isInstancedMesh || o.isLine || o.isPoints) {
           o.geometry?.dispose?.();
         }
-        if (o.name === 'headName' || o.name === 'chestName') o.userData?.ownedTex?.dispose?.();
+        if (o.name === 'headName' || o.name === 'chestName' || o.name === 'nomBang') o.userData?.ownedTex?.dispose?.();
       });
       for (const r of robots) r.body.avatar?.dispose?.();
       for (const m of ownedMaterials) m.dispose?.();

@@ -161,6 +161,12 @@ t('N1c5 · episode 1 is the gallery painting; episode 2+ is the chapel table',
       && !r.nominatePlayer(living[0], living[2], living).ok
       && !r.nominatePlayer(living[1], living[1], living).ok);
   r.enterVote(living);
+  t('N18c0 · the nominator of standing X is already locked to X',
+    r.state.lynchVotes[living[0]] === living[1]
+    && r.castLynchVote(living[0], NO_ONE, living).ok === false
+    && r.castLynchVote(living[0], NO_ONE, living).why === 'nominator vote locked'
+    && r.state.lynchVotes[living[0]] === living[1],
+    JSON.stringify(r.state.lynchVotes));
   const selfVote = r.castLynchVote(living[1], living[1], living);
   t('N18c · a nominated player cannot vote for themselves — coerce to NO_ONE',
     selfVote.choice === NO_ONE && selfVote.why === 'no self-vote'
@@ -487,8 +493,11 @@ t('N13c · a refresh resumes the server show beat, not casting',
     JSON.stringify({ show: night.show, n: night.game.state.nominations.length }));
   phases.push(night.show);
 
-  // Two seated living cannot clear a strict majority without a self-vote. Seat a
-  // third phone during Vote so the live execute path still has a legal majority.
+  // Two seated living cannot clear a strict majority without a third ballot.
+  // Seat an extra phone during Vote so the live execute path still has a
+  // legal majority. Nominators are already locked to their nominee — a
+  // nominee who also nominated cannot overwrite that with a self-vote
+  // (self-coercion to NO_ONE is for non-nominators, N18c).
   const extra = await open(base);
   await sleep(40);
   back.send({ t: 'lynchVote', choice: nomB });
@@ -498,12 +507,14 @@ t('N13c · a refresh resumes the server show beat, not casting',
   const toExec = progressShow(night);
   await sleep(40);
   const aired = last(host, 'lynch');
-  t('N17g · living-majority vote executes; nominee self-vote is coerced to NO_ONE',
+  t('N17g · living-majority vote executes; nominator-nominees stay locked (self-vote refused)',
     toExec === 'execution' && night.show === 'execution'
       && extra.welcome?.playerId
       && night.game.state.voteResult?.executed === nomB
       && aired?.result?.executed === nomB
-      && (aired?.votes || []).some((v) => v.voter === nomB && v.choice === NO_ONE)
+      && (aired?.votes || []).some((v) => v.voter === nomA && v.choice === nomB)
+      && (aired?.votes || []).some((v) => v.voter === nomB && v.choice === nomA)
+      && !(aired?.votes || []).some((v) => v.voter === nomB && v.choice === NO_ONE)
       && (aired?.votes || []).filter((v) => v.choice === nomB).length >= 2
       && night.game.state.players.find((p) => p.id === nomB)?.alive === false,
     JSON.stringify(aired));

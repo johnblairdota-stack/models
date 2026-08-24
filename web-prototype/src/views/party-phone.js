@@ -1209,6 +1209,11 @@ export default async function partyPhone({ params }) {
       html += `<p class="hint">Ballot in. Non-voters count as NO ONE.</p>`;
       return html;
     }
+    const myNom = standingNames(players, c).find((n) => n.nominator === me.playerId);
+    if (myNom) {
+      html += `<p class="hint">Your nomination of ${esc(myNom.name)} is your vote — locked. You do not vote again.</p>`;
+      return html;
+    }
     html += `<p class="hint">Pick one standing nominee, or NO ONE. You are not on this ballot.</p>
       <div class="pick-list jackbox">
         ${standing.map((n) => `<button type="button" data-lynch="${esc(n.target)}">${esc(n.name)}</button>`).join('')}
@@ -1247,6 +1252,8 @@ export default async function partyPhone({ params }) {
         if (state.voted) return;
         const choice = b.dataset.lynch;
         if (choice === meId()) return;
+        const mine = (c.noms || []).find((n) => n.nominator === meId());
+        if (mine) return;
         state.voted = true;
         padFx('Locked in.', '', [0, 35]);
         c.send({ t: 'lynchVote', choice });

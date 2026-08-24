@@ -19,7 +19,7 @@
  * a proof.
  */
 
-import { tallyVote, nominate, canNominate, canBeNominated, canLynchVote, executioner, reckoningClosed, STANDING_CAP, NO_ONE, SHOWRUNNER } from '../src/party/vote.js';
+import { tallyVote, nominate, canNominate, canBeNominated, canLynchVote, assumedLynchVotes, nominatorLockedChoice, executioner, reckoningClosed, STANDING_CAP, NO_ONE, SHOWRUNNER } from '../src/party/vote.js';
 
 let pass = 0, fail = 0;
 const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' · ' + d : ''}`); } else { fail++; console.log(`  FAIL ${n}${d ? ' · ' + d : ''}`); } return c; };
@@ -116,6 +116,22 @@ function* distributions(living, choices) {
   t('V8d · a choice that is not standing is refused',
     !canLynchVote('p1', 'p9', standing).ok
     && canLynchVote('p1', 'p9', standing).why === 'not standing');
+}
+
+// ---------------------------------------------------------------- V9 · nominator vote is assumed
+{
+  const noms = [{ nominator: 'p1', target: 'p2' }, { nominator: 'p3', target: 'p4' }];
+  const locked = assumedLynchVotes(noms, ids(6));
+  t('V9a · each nominator is pre-cast onto their standing target',
+    locked.p1 === 'p2' && locked.p3 === 'p4' && Object.keys(locked).length === 2);
+  t('V9b · a dead nominator is not pre-cast',
+    assumedLynchVotes(noms, ['p2', 'p3', 'p4']).p1 == null
+    && assumedLynchVotes(noms, ['p2', 'p3', 'p4']).p3 === 'p4');
+  t('V9c · nominatorLockedChoice is the standing target, and nobody else is locked',
+    nominatorLockedChoice(noms, 'p1') === 'p2'
+    && nominatorLockedChoice(noms, 'p5') == null);
+  t('V9d · NO_ONE remains legal for non-nominators',
+    canLynchVote('p5', NO_ONE, ['p2', 'p4']).ok);
 }
 
 // ---------------------------------------------------------------- V5 · the sledgehammer

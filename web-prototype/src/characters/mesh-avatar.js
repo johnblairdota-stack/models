@@ -302,6 +302,13 @@ const CLIPS = {
   walkHold: 'Walking',
 };
 
+/** Optional seated clips — present on `friendly_all38.glb`, absent on the Lumi fallback. */
+const SIT_CLIPS = {
+  sitIdleM: 'Chair_Sit_Idle_M',
+  sitIdleF: 'Chair_Sit_Idle_F',
+  sitDown: 'Stand_to_Sit_Transition_M',
+};
+
 /**
  * Where the hammer sits in the hand — locked to John's 2026-08-24 grip-tool readout, not to
  * a single roll.
@@ -1057,6 +1064,15 @@ export async function createMeshAvatar(opts = {}) {
     a.play();
     actions[n] = a;
   });
+  for (const [k, name] of Object.entries(SIT_CLIPS)) {
+    const clip = byName.get(name);
+    if (!clip) continue;
+    const a = mixer.clipAction(clip);
+    a.enabled = true;
+    a.setEffectiveWeight(0);
+    a.play();
+    actions[k] = a;
+  }
   if (!actions.idle) throw new Error('mesh-avatar: the idle clip carries no animation');
 
   let current = 'idle';
@@ -1377,6 +1393,19 @@ export function cloneMeshAvatar(source, opts = {}) {
   idle.setEffectiveWeight(1); walk.setEffectiveWeight(0);
   idle.play(); walk.play();
 
+  const sitIdleM = source.actions.sitIdleM
+    ? mixer.clipAction(source.actions.sitIdleM.getClip()) : null;
+  const sitIdleF = source.actions.sitIdleF
+    ? mixer.clipAction(source.actions.sitIdleF.getClip()) : null;
+  const sitDown = source.actions.sitDown
+    ? mixer.clipAction(source.actions.sitDown.getClip()) : null;
+  for (const a of [sitIdleM, sitIdleF, sitDown]) {
+    if (!a) continue;
+    a.enabled = true;
+    a.setEffectiveWeight(0);
+    a.play();
+  }
+
   const hips = (() => {
     let found = null;
     rig.traverse((o) => { if (o.isBone && o.name === 'Hips') found = o; });
@@ -1384,18 +1413,68 @@ export function cloneMeshAvatar(source, opts = {}) {
   })();
   const hipsRest = hips ? hips.position.clone() : null;
 
+  let pose = 'loco';
+  let sitClipName = null;
+  let sitIdle = null;
+
   return {
     root: rig,
     sourceFile: source.sourceFile,
     cloned: true,
-    get clip() { return walk.getEffectiveWeight() > 0.5 ? 'walk' : 'idle'; },
+    get clip() {
+      if (pose === 'sit') return sitClipName || (sitIdle?.getClip?.().name ?? 'sit');
+      return walk.getEffectiveWeight() > 0.5 ? 'walk' : 'idle';
+    },
+    get seated() { return pose === 'sit'; },
     get swing() { return null; },
     get propMounted() { return false; },
     mountProp() { return false; },
     unmountProp() {},
     playAttack() {},
     setLimbVisible() {},
+    /**
+     * Loop a seated idle, with an optional sit-down transition. Per-seat `phase` so
+     * eight clones do not sync. Hips XZ are left to the clip (not in-place pinned).
+     */
+    playSit({ seatIndex = 0, skipDown = false, phase = 0 } = {}) {
+      sitIdle = (seatIndex % 2 === 0 ? sitIdleM : sitIdleF) || sitIdleM || sitIdleF;
+      if (!sitIdle) return false;
+      pose = 'sit';
+      sitClipName = sitIdle.getClip().name;
+      const dur = Math.max(0.1, sitIdle.getClip().duration);
+      sitIdle.time = ((phase % dur) + dur) % dur;
+      idle.setEffectiveWeight(0);
+      walk.setEffectiveWeight(0);
+      if (sitIdleM && sitIdleM !== sitIdle) sitIdleM.setEffectiveWeight(0);
+      if (sitIdleF && sitIdleF !== sitIdle) sitIdleF.setEffectiveWeight(0);
+      if (!skipDown && sitDown) {
+        sitDown.reset();
+        sitDown.setLoop(THREE.LoopOnce, 1);
+        sitDown.clampWhenFinished = true;
+        sitDown.setEffectiveWeight(1);
+        sitIdle.setEffectiveWeight(0);
+        sitClipName = sitDown.getClip().name;
+      } else {
+        if (sitDown) sitDown.setEffectiveWeight(0);
+        sitIdle.setEffectiveWeight(1);
+      }
+      return true;
+    },
     update(dt, state = {}) {
+      if (pose === 'sit') {
+        if (sitDown && sitIdle && sitDown.getEffectiveWeight() > 0.05) {
+          const done = sitDown.time >= sitDown.getClip().duration - 0.08;
+          if (done) {
+            const w = sitDown.getEffectiveWeight();
+            const next = Math.max(0, w - dt / 0.28);
+            sitDown.setEffectiveWeight(next);
+            sitIdle.setEffectiveWeight(1 - next);
+            if (next <= 0.02) sitClipName = sitIdle.getClip().name;
+          }
+        }
+        mixer.update(dt);
+        return;
+      }
       const speed = state.speed ?? 0;
       const runAt = state.runAt ?? 2.6;
       const still = speed < runAt * 0.10;

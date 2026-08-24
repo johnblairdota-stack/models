@@ -140,7 +140,7 @@ export default async function partyFollow({ params }) {
    *
    * The view still has NO SOCKET, and that is still the safety argument. What it now has is a
    * message channel from its own parent — which is `views/party-host.js`, same origin, and the
-   * only window that can reach it — carrying five known shapes. Everything a socket would have
+   * only window that can reach it — carrying six known shapes. Everything a socket would have
    * given it (a frame to mis-project, an event log to over-replay) is still absent.
    *
    * ⚠️ **`cueViolations` IS CHECKED HERE AS WELL AS AT THE SENDER, AND THAT IS NOT BELT AND
