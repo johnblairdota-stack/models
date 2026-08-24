@@ -7,7 +7,10 @@ import { CODE_ABC, normalizeCodeDisplay, normalizeCodeWire } from './look.js';
 import { STUB_SHOW_PLAN } from './show.js';
 
 export { CODE_ABC, normalizeCodeDisplay, normalizeCodeWire, STUB_SHOW_PLAN };
-export { SHOW_BEATS, isShowBeat, recapAfterMs } from './show.js';
+export {
+  SHOW_BEATS, AFTER_RUN_BEATS, isShowBeat, recapAfterMs, nextShowBeat,
+  holdMsFor, RECAP_HOLD_MS, DEBRIEF_HOLD_MS,
+} from './show.js';
 
 export function makeCode(rand = Math.random) {
   let s = '';

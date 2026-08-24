@@ -552,11 +552,31 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     dealRoles,
     /** Has the cast been drawn? A phone with no card is a phone that has not been dealt to. */
     isDealt: () => dealt,
-    /** Host-driven: open CASTING and wait for phone ballots. `playEpisode` still starts here too. */
+    /**
+     * Host-driven / show-clock: open CASTING and wait for phone ballots.
+     *
+     * ⚠️ **CLEARS THE LAST PAIR.** `playEpisode` leaves `state.pair` set so a recap card can
+     * still name who walked. The next ballot is a new nomination — if the pair stays, phones
+     * paint "Locked." and the host treats a historic `cast.pair` as already sent. Episode 2
+     * never starts.
+     */
     beginCasting() {
       // Next ballot is for state.episode (already bumped after the last playEpisode).
       state.airingEpisode = state.episode;
+      state.pair = { runner: null, guide: null };
+      for (const s of sockets) {
+        if (s.isTV) continue;
+        s.seatRole = null;
+      }
       setPhase('CASTING');
+    },
+    /** Live clock: Recap has aired; seated talk. `playEpisode` already walked this for gates. */
+    enterDebrief() {
+      setPhase('DEBRIEF');
+    },
+    /** Live clock: mission just finished. Show beat is recap; phase matches. */
+    enterRecap() {
+      setPhase('RECAP');
     },
     /**
      * Published nameplate. 12 chars, same cap as the phone spec's cheap join. Does not broadcast —
@@ -606,8 +626,9 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
        */
       for (const s of sockets) {
         if (s.isTV || !s.playerId) continue;
-        if (s.playerId === state.pair.runner) s.seatRole = 'runner';
-        else if (s.playerId === state.pair.guide) s.seatRole = 'guide';
+        if (s.playerId === state.pair?.runner) s.seatRole = 'runner';
+        else if (s.playerId === state.pair?.guide) s.seatRole = 'guide';
+        else s.seatRole = null;
       }
 
       const ageSeconds = 0.5;                       // the TV reports twice a second
@@ -629,7 +650,7 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
          * the pair is already public on `pair`.
          */
         record(makeEvent(`mission.${phase}`, VIS.PUBLIC, { room: mission?.room ?? null }));
-        if (phase === 'done') setPhase('DEBRIEF');
+        if (phase === 'done') setPhase('RECAP');
       }
       broadcast();
       return moved;

@@ -16,7 +16,8 @@ import { applyCastLock, applyCastTap, ballotFromCast, castPrompt, freshCast, mer
 import { cardFor, faceDownHtml, mountRoleCard, premiereHtml } from '../party/rolecard.js';
 import { EVIL } from '../party/cast.js';
 import { guideMapSvg } from '../party/guidemap.js';
-import { MISSION_ROOM, pickPlanSeed, planRoomLabels, roomLabel } from '../party/mansion.js';
+import { pickPlanSeed, planRoomLabels, roomLabel } from '../party/mansion.js';
+import { missionFor } from '../party/mission.js';
 import { intelLine } from '../party/intel.js';
 import { STICK_DEADZONE, warmLabel } from '../party/follow.js';
 
@@ -417,8 +418,8 @@ export default async function partyPhone({ params }) {
       // The premiere owns the sheet while the deal is landing. The ballot is one tap behind it,
       // and the beat that opens casting has usually already arrived.
       body += premiereHtml();
-    } else if (beat === 'casting' && !recap.runner && !pair.runner) {
-      paintCasting(nominees, me, frame?.episode || c.lobby?.episode || 1);
+    } else if (beat === 'casting' && !pair.runner) {
+      paintCasting(nominees, me, frame?.airingEpisode || c.lobby?.airingEpisode || frame?.episode || 1);
       return;
     } else if (beat === 'lobby' || phase === 'LOBBY') {
       body += `<h1>${esc(myName)}</h1>
@@ -509,7 +510,7 @@ export default async function partyPhone({ params }) {
             ? '<p class="hint gm-blind">Waiting for the house…</p>'
             : guideMapSvg({
               seed,
-              goal: MISSION_ROOM,
+              goal: missionFor(frame?.airingEpisode ?? 1).room,
               runner: meMark,
               flyover: hunterMark ? { hunter: hunterMark } : null,
               jam,
@@ -547,9 +548,13 @@ export default async function partyPhone({ params }) {
        * slice). Missing end omits the word — same honesty as TV `recapBoard` — rather than
        * inventing TIME before the room has said so.
        */
-      {
+      if (beat === 'debrief') {
         if (c.runEnd) body += `<h1>${esc(c.runEnd)}</h1>`;
-        body += `<p class="hint">Phones down. Talk. The next ballot comes to this screen when the room is ready.</p>`;
+        body += `<h1>Debrief.</h1>
+          <p class="hint">Phones down. Talk. The next ballot lands here when the clock says so.</p>`;
+      } else {
+        if (c.runEnd) body += `<h1>${esc(c.runEnd)}</h1>`;
+        body += `<p class="hint">Phones down. Debrief is next.</p>`;
       }
     }
 
@@ -797,9 +802,10 @@ export default async function partyPhone({ params }) {
     const evs = state.client?.events ?? [];
     const last = [...evs].reverse().find((e) => String(e.type ?? '').startsWith('mission.'));
     const phase = last ? String(last.type).slice('mission.'.length) : 'seek';
+    const spec = missionFor(frame?.airingEpisode ?? 1);
     if (phase === 'done') return `<p class="goal">Home. That is the run.</p>`;
-    if (phase === 'return') return `<p class="goal">The painting is down. Get back to the ballroom.</p>`;
-    return `<p class="goal">Find the ${esc(roomLabel(MISSION_ROOM).toLowerCase())}. Break the painting.</p>`;
+    if (phase === 'return') return `<p class="goal">${esc(spec.home)}</p>`;
+    return `<p class="goal">${esc(spec.seek)}</p>`;
   }
 
   /**

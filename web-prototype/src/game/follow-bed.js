@@ -11,6 +11,7 @@ import {
 } from '../party/follow.js';
 import { bleedCoolPos, bleedKeyAngle, facingPortal } from '../lighting/door-bleed.js';
 import { HOME_ROOM, MISSION_ROOM, PLAN_OPTS } from '../party/mansion.js';
+import { missionFor } from '../party/mission.js';
 import { createMeshAvatar } from '../characters/mesh-avatar.js';
 import { unit4hMaterials } from '../materials/surfaces/robot.js';
 import { buildIntroBed, ballroomOf } from './intro-bed.js';
@@ -472,6 +473,49 @@ function buildPainting(space, floorY) {
   return { group, pos, intact: true };
 }
 
+function spaceOfType(spaces, type) {
+  if (!type) return null;
+  return spaces.find((s) => s.roomType === type)
+    ?? spaces.find((s) => s.id === type)
+    ?? spaces.find((s) => String(s.id).endsWith(`.${type}`))
+    ?? null;
+}
+
+/**
+ * Chapel smash target — prefer the catalog `table-round` FurnProp already dressed
+ * into the chapel. If dress missed it, a plain mesh in the chapel centre so the
+ * night can still end. That fallback is approximate art; the catalog GLB is the
+ * real piece (`rrr_prop_table-round_v1.glb`).
+ */
+function findTableRound(room, chapel) {
+  const props = room.furnProps ?? [];
+  const inChapel = chapel
+    ? props.find((p) => /table-round/.test(String(p.id)) && p.spaceId === chapel.id)
+    : null;
+  if (inChapel) return { prop: inChapel, mesh: inChapel.mesh, fallback: false };
+  const any = props.find((p) => /table-round/.test(String(p.id)));
+  if (any) return { prop: any, mesh: any.mesh, fallback: false };
+  return null;
+}
+
+function buildFallbackTable(space, floorY) {
+  if (!space) return null;
+  const group = new THREE.Group();
+  group.name = 'mission-table-round';
+  const top = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.62, 0.62, 0.06, 20),
+    new THREE.MeshStandardMaterial({ color: 0x6b4a22, roughness: 0.48, metalness: 0.18 }));
+  const stem = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.09, 0.12, 0.68, 10),
+    new THREE.MeshStandardMaterial({ color: 0x4a3420, roughness: 0.62, metalness: 0.08 }));
+  top.position.y = 0.72;
+  stem.position.y = 0.34;
+  top.castShadow = true; stem.castShadow = true;
+  group.add(stem, top);
+  group.position.set((space.x0 + space.x1) / 2, floorY, (space.z0 + space.z1) / 2);
+  return { group, intact: true };
+}
+
 /**
  * 👁️ **THE HUNTER TOKEN — a body walking the house through its doorways.**
  *
@@ -612,8 +656,8 @@ export async function buildFollowBed(engine, opts = {}) {
   stage('house');
 
   const ballroom = ballroomOf(room);
-  const gallery = room.spaces.find((s) => s.roomType === MISSION_ROOM)
-    ?? room.spaces.find((s) => s.id === MISSION_ROOM) ?? null;
+  const gallery = spaceOfType(room.spaces, MISSION_ROOM);
+  const chapel = spaceOfType(room.spaces, 'chapel');
 
   /*
    * ⚠️ THE NIGHT STARTS IN THE BALLROOM, NOT AT THE PLAN'S SPAWN. John: *"Always start seated in
@@ -697,6 +741,16 @@ export async function buildFollowBed(engine, opts = {}) {
 
   const painting = buildPainting(gallery, room.floorY ?? 0);
   if (painting) scene.add(painting.group);
+
+  let table = findTableRound(room, chapel);
+  let tableFallback = null;
+  if (!table?.mesh && chapel) {
+    tableFallback = buildFallbackTable(chapel, room.floorY ?? 0);
+    if (tableFallback) {
+      scene.add(tableFallback.group);
+      table = { prop: null, mesh: tableFallback.group, fallback: true };
+    }
+  }
 
   // ---------------------------------------------------------------- lighting
   // Same five as `game.play`, same constructor values, and read `followRig`'s header before
@@ -786,7 +840,11 @@ export async function buildFollowBed(engine, opts = {}) {
   let intro = null;
   let introCast = null;
   let runnerName = null;
-  const mission = { phase: painting ? 'seek' : 'none', room: gallery?.id ?? null };
+  const mission = {
+    phase: painting ? 'seek' : 'none',
+    room: gallery?.id ?? null,
+    spec: missionFor(1),
+  };
   runner.root.visible = mode === 'run';
 
   const _dir = new THREE.Vector3();
@@ -900,32 +958,81 @@ export async function buildFollowBed(engine, opts = {}) {
   const _paintRay = new THREE.Raycaster();
   const PAINTING_REACH = WEAPON_RANGE.sledge + 0.35;
 
-  function swingHitPainting() {
-    if (!painting?.intact) return false;
+  function swingHitObject(obj) {
+    if (!obj) return false;
     _paintRay.set(runner.eye, runner.aimDir);
     _paintRay.near = 0;
     _paintRay.far = PAINTING_REACH;
-    return _paintRay.intersectObject(painting.group, true).length > 0;
+    return _paintRay.intersectObject(obj, true).length > 0;
+  }
+
+  function smashCurrentTarget() {
+    const spec = mission.spec ?? missionFor(1);
+    if (spec.target === 'painting') {
+      if (!painting?.intact) return false;
+      if (!swingHitObject(painting.group)) return false;
+      painting.intact = false;
+      painting.group.visible = false;
+      return true;
+    }
+    const mesh = table?.mesh ?? tableFallback?.group;
+    if (!mesh) return false;
+    const already = table?.prop?.isShattered || (tableFallback && !tableFallback.intact);
+    if (already) return true;
+    if (!swingHitObject(mesh) && !table?.prop?.isShattered) return false;
+    if (table?.prop && !table.prop.isShattered) {
+      table.prop.applyHit?.(runner.eye?.clone?.() ?? runner.pos, 8);
+    }
+    if (tableFallback) {
+      tableFallback.intact = false;
+      tableFallback.group.visible = false;
+    }
+    return true;
+  }
+
+  /**
+   * Arm the smash for this expedition. Episode 1 is the gallery painting; 2+ is
+   * the chapel table. Must reset `done` or the next Send-them-in reports home
+   * on the first world tick and the clock yanks recap again.
+   */
+  function armMission(episode) {
+    const spec = missionFor(episode);
+    mission.spec = spec;
+    if (spec.target === 'painting') {
+      mission.phase = painting ? 'seek' : 'none';
+      mission.room = gallery?.id ?? spec.room;
+      return;
+    }
+    if (table?.prop?.isShattered) table.prop.reset?.();
+    if (tableFallback) {
+      tableFallback.intact = true;
+      tableFallback.group.visible = true;
+    }
+    const ready = !!(table?.mesh || tableFallback?.group);
+    mission.phase = ready ? 'seek' : 'none';
+    mission.room = chapel?.id ?? table?.prop?.spaceId ?? spec.room;
   }
 
   /**
    * 🖼️ The mission, in three states.
    *
-   * `seek` -> the painting is up. A swing AIMED at it breaks it; a swing at anything else does not.
-   * `return` -> the painting is down and the runner is told to go home.
+   * `seek` -> the armed target is up. A swing AIMED at it breaks it; a swing at anything else does not.
+   * `return` -> the smash is down and the runner is told to go home.
    * `done` -> the runner is inside the ballroom. `src/party/room.js` `setWorld` turns that into
-   *           the DEBRIEF phase, and `net/party/local.mjs` `endRunOnMission` turns it into the
+   *           the RECAP phase, and `net/party/local.mjs` `endRunOnMission` turns it into the
    *           recap beat — which is the ONLY thing that ends an episode short of the backstop
-   *           clock in `src/party/show.js`.
+   *           clock in `src/party/show.js`. The clock then walks Recap → Debrief → Casting.
    */
   function missionTick(t) {
-    if (mission.phase === 'seek' && painting?.intact && perf.contactAt >= 0 && t >= perf.contactAt) {
-      perf.contactAt = -1;
-      if (swingHitPainting()) {
-        painting.intact = false;
-        painting.group.visible = false;
+    if (mission.phase === 'seek') {
+      const spec = mission.spec ?? missionFor(1);
+      const smashed = spec.target === 'table-round' && table?.prop?.isShattered;
+      if (smashed || (perf.contactAt >= 0 && t >= perf.contactAt && smashCurrentTarget())) {
+        perf.contactAt = -1;
         mission.phase = 'return';
         mission.room = ballroom?.id ?? null;
+      } else if (perf.contactAt >= 0 && t >= perf.contactAt) {
+        perf.contactAt = -1;
       }
     }
     if (mission.phase === 'return' && ballroom) {
@@ -1146,6 +1253,7 @@ export async function buildFollowBed(engine, opts = {}) {
         // Put the runner back on its feet in the ballroom — the pair is sent in from the circle.
         runner.pos.set(start.x, room.floorY ?? 0, start.z);
         runner.vel.set(0, 0, 0);
+        armMission(c.episode ?? 1);
         return;
       }
       if (c.kind === 'shot' && SHOTS.includes(c.shot)) {

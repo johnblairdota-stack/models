@@ -56,7 +56,11 @@ import {
   footprintRect, openingFootprint, overlapsOpening, portalKeepout, portalKeepouts,
 } from '../src/game/portal-clearance.js';
 import { generatedTables } from '../src/world/genplan.js';
-import { RECAP_BACKSTOP_MS, missionEndsRun, recapAfterMs, RUN_END } from '../src/party/show.js';
+import {
+  AFTER_RUN_BEATS, DEBRIEF_HOLD_MS, RECAP_BACKSTOP_MS, RECAP_HOLD_MS, SHOW_BEATS,
+  missionEndsRun, nextShowBeat, recapAfterMs, RUN_END,
+} from '../src/party/show.js';
+import { missionFor, MISSION_TABLE } from '../src/party/mission.js';
 import { ROOMS, hunterVisibleToGuide } from '../src/party/coverage.js';
 import { buildPlan } from './genspike.mjs';
 import { DROP_RATE, GRADES, STALE_MAX, gradeFor, intelFor, intelLine } from '../src/party/intel.js';
@@ -1309,10 +1313,12 @@ console.log('\nparty-warm — the lobby-warm night');
    * for the wall — so a swing at a crate beside it, facing the other way, does not finish a night.
    */
   const bedSrc = await readFile(new URL('../src/game/follow-bed.js', import.meta.url), 'utf8');
-  t('W19d · the painting is broken by a swing AIMED at it, not by one that landed nearby',
-    /function swingHitPainting/.test(bedSrc)
+  t('W19d · the smash is broken by a swing AIMED at it, not by one that landed nearby',
+    /function swingHitObject/.test(bedSrc)
     && /_paintRay\.set\(runner\.eye, runner\.aimDir\)/.test(bedSrc)
     && !/d <= 1\.9/.test(bedSrc));
+  t('W19e · a new run cue re-arms the mission so episode 2 does not start already done',
+    /armMission\(c\.episode\)/.test(bedSrc) && /function armMission/.test(bedSrc));
 }
 
 // ---- W20 · WORD FROM THE HOUSE IS FOR THE CHAIRS ---------------------------------------------
@@ -1396,7 +1402,7 @@ console.log('\nparty-warm — the lobby-warm night');
   t('W21g control · the lobby warm layer is still the dim blurred backdrop',
     /filter: blur\(2px\)/.test(skin) && /\.run-cam-layer\.warm \{/.test(skin));
   t('W21h — late bake must not fire cast intros once the expedition owns the TV',
-    /ui\.beat === 'expedition' \|\| ui\.beat === 'recap'/.test(hostSrc)
+    /ui\.beat === 'expedition' \|\| ui\.beat === 'recap' \|\| ui\.beat === 'debrief'/.test(hostSrc)
     && /maybeIntros/.test(hostSrc));
 
   t('W22 — live expedition does not paint a Watch the run button', (() => {
@@ -1496,6 +1502,47 @@ console.log('\nparty-warm — the lobby-warm night');
     && !/c\.runEnd \|\| 'TIME'/.test(phoneSrc)
     && /THE OUTCOME WORD IS THE ONE FACT/.test(phoneSrc)
     && /same honesty as TV/.test(phoneSrc));
+}
+
+// ---- W27 — NIGHT LOOP: RECAP → DEBRIEF → CASTING, CHAPEL TABLE ON EP2 ----------------------
+{
+  t('W27 · debrief is a show beat — Recap is not the end of the night',
+    SHOW_BEATS.includes('debrief') && AFTER_RUN_BEATS.join(',') === 'recap,debrief,casting'
+      && nextShowBeat('recap') === 'debrief' && nextShowBeat('debrief') === 'casting');
+  t('W27a · holds are the shooting-schedule seconds, not a silent second table',
+    RECAP_HOLD_MS === 20000 && DEBRIEF_HOLD_MS === 75000);
+  const localSrc = await readFile(new URL('../net/party/local.mjs', import.meta.url), 'utf8');
+  t('W27b · the server clock walks the chain; gates can call the same function',
+    /export function progressShow/.test(localSrc)
+    && /function enterNextCasting/.test(localSrc)
+    && /scheduleShowProgress\(room\)/.test(localSrc)
+    && /function endRunOnMission/.test(localSrc));
+  t('W27c · mission done still posts SMASHED and then schedules the walk, not a soft end',
+    /setShow\(room, 'recap', RUN_END\.SMASHED\)/.test(localSrc)
+    && /scheduleShowProgress\(room\)/.test(localSrc));
+  t('W27d · CAUGHT is still reserved — hunter take is still the next slice',
+    !/RUN_END\.CAUGHT/.test(localSrc));
+  const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
+  t('W27e · debrief is not painted as a run, and the host canLock looks at this pair not last episode\'s',
+    /const onTalk = show === 'recap' \|\| show === 'debrief'/.test(hostSrc)
+    && /!pair\.runner/.test(hostSrc)
+    && /show === 'debrief'/.test(hostSrc));
+  t('W27f · episode 2+ smashes the chapel catalog table-round, not a invented GLB',
+    missionFor(1).target === 'painting' && missionFor(2).target === 'table-round'
+      && missionFor(2).room === 'chapel'
+      && missionFor(undefined).target === 'painting'
+      && MISSION_TABLE.catalogId === 'table-round'
+      && FURN_SMASH_ASSETS.some((a) => a.id === 'table-round' && a.file === 'rrr_prop_table-round_v1.glb')
+      && CATALOG_ROOM_ASSIGN['table-round'].rooms[0] === 'chapel');
+  const bedSrc = await readFile(new URL('../src/game/follow-bed.js', import.meta.url), 'utf8');
+  t('W27g · the follow bed finds the dressed table-round and keeps the ep1 painting',
+    /function findTableRound/.test(bedSrc)
+    && /buildPainting\(gallery/.test(bedSrc)
+    && /armMission/.test(bedSrc)
+    && /missionFor/.test(bedSrc));
+  t('W27h · beginCasting clears the last pair so episode 2 can ballot',
+    /state\.pair = \{ runner: null, guide: null \}/.test(
+      await readFile(new URL('../src/party/room.js', import.meta.url), 'utf8')));
 }
 
 // ---- W26 · DUAL-STICK TV CHASE — no phone embed; look cue + camera-relative move ------------
