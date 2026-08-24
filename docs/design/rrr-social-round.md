@@ -25,7 +25,7 @@ An **episode** is one round. The show never leaves the air; the phases are a sho
 
 **Base round 325 s (5:25), worst case 370 s (6:10).** **Episode 1 skips phases 5–8** — no eviction in the premiere, because nobody has anything to go on and the first round's job is teaching the loop. Premiere episode = 3:40.
 
-**Session budget.** `PREMIERE` (join, seat the circle, deal roles, read the rules) 2:30 + episode 1 3:40 + episodes 2..N at 5:25 + `REUNION` 4:00 → 4 episodes **26:25** · 5 **31:50** · 6 **37:25**. `EPISODE_CAP = 5` is what keeps the worst case inside 40 minutes. The match ends the moment a win predicate fires (§6), so most sessions land at 4–5.
+**Session budget.** `PREMIERE` (join, seat the circle, deal roles, read the rules) 2:30 + episode 1 3:40 + episodes 2..N at 5:25 + `REUNION` 4:00 → 4 episodes **26:25** · 5 **31:50** · 6 **37:15**. `EPISODE_CAP = 5` is what keeps the worst case inside 40 minutes. The match ends the moment a win predicate fires (§6), so most sessions land at 4–5.
 
 ---
 
