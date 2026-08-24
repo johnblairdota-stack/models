@@ -178,13 +178,18 @@ export const SLEDGE_POWER = 1.0;
 /**
  * Where the two fists sit on the haft, as prop-local Y in body heights.
  *
- * `GRIP_LO` is the BUTT hand and `GRIP_LO + GRIP_SEP` the nominal upper hand. The upper hand's
- * exact station is allowed to drift along the haft (see `_fitProp`): the two wrist targets are
- * each clamped into their own arm's reach sphere, and when a clamp bites, the distance between
- * the hands changes by a centimetre or two. Rather than let that pull a hand off the haft, the
- * prop is fitted to whatever the hands actually did and the upper hand simply grips a little
- * higher or lower — which is what a real top hand does anyway. The upper wrap is therefore
- * authored LONG enough to cover the whole drift band.
+ * These two numbers place the DECORATIVE WRAPS on the prop, and they still feed the
+ * retired procedural `_fitProp` path. The LIVE mesh-avatar mount is `GRIP_MOUNT` in
+ * `mesh-avatar.js` — John's 2026-08-24 grip-tool lock (roll/tilt/yaw + palm/reach/depth).
+ * Do not re-derive the fist-frame offsets from these wrap stations.
+ *
+ * `GRIP_LO` is the BUTT wrap and `GRIP_LO + GRIP_SEP` the nominal upper wrap. The upper
+ * hand's exact station is allowed to drift along the haft (see `_fitProp`): the two wrist
+ * targets are each clamped into their own arm's reach sphere, and when a clamp bites, the
+ * distance between the hands changes by a centimetre or two. Rather than let that pull a
+ * hand off the haft, the prop is fitted to whatever the hands actually did and the upper
+ * hand simply grips a little higher or lower — which is what a real top hand does anyway.
+ * The upper wrap is therefore authored LONG enough to cover the whole drift band.
  */
 const GRIP_LO = 0.060;
 const GRIP_SEP = 0.145;

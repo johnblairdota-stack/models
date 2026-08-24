@@ -303,23 +303,54 @@ const CLIPS = {
 };
 
 /**
- * Where the hammer sits in the hand — locked to the `char.grip` bench, not eyeballed.
+ * Where the hammer sits in the hand — locked to John's 2026-08-24 grip-tool readout, not to
+ * a single roll.
  *
- * `GRIP_LO` and `GRIP_SEP` in `sledge.js` say where the two hands sat on the haft under the old
- * IK solve, so the distance from the prop's origin to the drive hand is derived —
- * `(GRIP_LO + GRIP_SEP) * height` along the haft, which is the prop's own +Y. The ROLL of the
- * haft in the fist has no landmark on the generated hand; `char.grip` compares five rolls around
- * this centre and `window.__grip` publishes the paste-ready degrees. Product `mountProp` and the
- * bench both call `mountInHand`, so they cannot silently diverge.
+ * PR #38 baked `GRIP_SHIPPED = 2.37` rad and `griplen` 0.205, then `mountInHand` ALIGNED the
+ * haft to the forearm and rolled about that axis. That primitive puts the shaft THROUGH the
+ * wrist (off-wrist 0). Recap CAM still read as a hand glued to the butt of the handle,
+ * because a fist-frame mount is six numbers plus the along-haft slider, not one radian.
+ *
+ * The numbers below are the raw offsets John measured on the live pickup (grip tool sliders
+ * + in-game readout). They are applied in the RightHand / fist frame:
+ *
+ *   rotation.order XYZ, rotation.set(roll, tilt, yaw)
+ *   position.set(palm, reach, depth) metres
+ *   then translateY(-alongHaft * height) along the now-rotated haft
+ *
+ * `alongHaft` 0.2059 is the slider unit (UI ~35 cm = 0.2059 * 1.7 m). Physical "up the shaft"
+ * is 31.0 cm because the offsets live in the fist frame while the shaft is swung ~90 deg —
+ * slider length is not shaft length. Guard the three pickup baselines, not the slider.
+ *
+ * `sledge.js` `GRIP_LO` / `GRIP_SEP` still place the decorative wraps on the prop. They are
+ * not the live mount.
  */
-export const GRIP_ALONG_HAFT = 0.060 + 0.145;      // GRIP_LO + GRIP_SEP, from sledge.js
+export const GRIP_MOUNT = Object.freeze({
+  roll: 5.2446,
+  tilt: -1.5664,
+  yaw: 0.5279,
+  palm: 0.04662,
+  reach: 0.12458,
+  depth: -0.03953,
+  alongHaft: 0.2059,
+});
 /**
- * Shipped roll of the haft in the RightHand fist, radians. Centre of the five-roll
- * `char.grip` bench. 2.37 is 0.8 + pi/2: the old idle-eyeballed 0.8 was a quarter-turn out at
- * the strike (89.6 deg edge-on, a spade); this lands 11.5 deg from face-on on
- * `Heavy_Hammer_Swing`. Tolerance about +/-0.25. Degrees: 2.37 * 180/pi = 135.8.
+ * In-game pickup baselines. `char.grip` / `harness/_grip_shot.mjs` assert these. A restale
+ * of GRIP_MOUNT that does not move the hammer will still pass a roll-only check — these
+ * three will not.
+ *
+ * Geometry vs John's one-decimal print: off-wrist 13.29 cm / 13.3 cm, up-shaft 31.01 cm /
+ * 31.0 cm, shaft angle 89.75 deg / 89.8 deg (tilt -1.5664 rad). Epsilon in the harness is
+ * that rounding, not a second guess.
  */
-export const GRIP_SHIPPED = 2.37;
+export const GRIP_BASELINE = Object.freeze({
+  offWristM: 0.133,
+  upShaftM: 0.310,
+  shaftAngleDeg: 89.8,
+});
+/** Roll component of GRIP_MOUNT — what SWINGS[].grip still names. 2.37 is retired. */
+export const GRIP_SHIPPED = GRIP_MOUNT.roll;
+export const GRIP_ALONG_HAFT = GRIP_MOUNT.alongHaft;
 /** @deprecated use GRIP_SHIPPED — kept so older critics that name the default still compile. */
 export const GRIP_ROLL_DEFAULT = GRIP_SHIPPED;
 /**
@@ -331,12 +362,9 @@ export const GRIP_ROLL_DEFAULT = GRIP_SHIPPED;
  * ⚠️ BOTH NUMBERS ARE PROPERTIES OF THE CLIP, NOT OF THE HAMMER, WHICH IS WHY THEY CANNOT BE
  * SHARED:
  *
- *   `grip`     the roll of the haft in the fist. The prop's striking face is its local +X and
- *              `grip` rolls about the haft, so grip IS the face's angle in the plane the swing
- *              travels through. It has to be solved against THAT clip's velocity at ITS strike.
- *              Measured on `Heavy_Hammer_Swing`: 0.8 gives 89.6 deg (dead edge-on, reads as a
- *              spade); 2.37 gives 11.5 deg (reads as a hammer). Tolerance about +/-0.25.
- *              Locked to `GRIP_SHIPPED` from the `char.grip` bench — do not restale it here.
+ *   `grip`     the ROLL of GRIP_MOUNT (fist-frame Euler x). Tilt/yaw/palm/reach/depth are the
+ *              shared pickup lock, not per-clip. A per-clip restale of roll still turns the
+ *              face; do not restale the other five offsets here.
  *
  *   `contact`  where in the clip the head actually arrives. `CONTACT_PHASE` 0.60 was derived for
  *              the retired procedural swing; `Heavy_Hammer_Swing` is still OVERHEAD at 0.60 and
@@ -344,8 +372,8 @@ export const GRIP_ROLL_DEFAULT = GRIP_SHIPPED;
  *
  * ⚠️ A NEW ENTRY IS NOT DONE UNTIL BOTH ARE MEASURED ON IT. Copying another clip's numbers is
  * exactly the mistake that shipped a spade — `harness/scenarios/_critic-swingface1.mjs` and
- * `_critic-swingface2.mjs` are the instruments that solve them. Sharing `GRIP_SHIPPED` is the
- * bench lock, not a copied guess: both clips currently share one mount, so they share one roll.
+ * `_critic-swingface2.mjs` are the instruments that solve them. Sharing `GRIP_MOUNT` is the
+ * bench lock: both clips currently share one fist-frame mount, so they share the same roll.
  *
  * ⚠️ `Heavy_Hammer_Swing` IS A GROUND CHOP and is flagged: its head passes 27 cm BELOW the floor
  * and the robot ends bent double. It is kept because John asked for variety, but it is the weaker
@@ -369,44 +397,38 @@ export const SWINGS = [
    * into a vertical wall at chest height. Until then this set is the best available, not good.
    *
    * ⚠️ `Attack`'s FACE ANGLE is still unsolved as a per-clip measurement (two runs failed their
-   * own control because the clip teleports). The ROLL it carries is no longer a placeholder
-   * copied by hand: it is `GRIP_SHIPPED`, the same lock `Heavy_Hammer_Swing` and `mountProp`
-   * use, so live play cannot pick Attack and silently roll a different hammer than the bench.
+   * own control because the clip teleports). The ROLL it carries is `GRIP_MOUNT.roll`, the
+   * same lock `Heavy_Hammer_Swing` and `mountProp` use, so live play cannot pick Attack and
+   * silently restale a different hammer than the bench.
    */
   { clip: 'Attack', grip: GRIP_SHIPPED, contact: 0.381,
-    note: 'grip locked to char.grip GRIP_SHIPPED; contact measured; face-angle unsolved (clip teleports at p0.37); 0.37 m under floor' },
+    note: 'grip locked to GRIP_MOUNT.roll; contact measured; face-angle unsolved (clip teleports at p0.37); 0.37 m under floor' },
   { clip: 'Heavy_Hammer_Swing', grip: GRIP_SHIPPED, contact: 0.85,
-    note: 'grip locked to char.grip GRIP_SHIPPED; contact measured; ground chop, 0.27 m under floor' },
+    note: 'grip locked to GRIP_MOUNT.roll; contact measured; ground chop, 0.27 m under floor' },
 ];
 
 /*
- * ⚠️ 0.8 WAS JUDGED ON A STANDING POSE AND WAS A QUARTER TURN OUT AT THE STRIKE.
+ * ⚠️ 2.37 WAS A SINGLE-ROLL LOCK AND IT DID NOT MATCH THE LIVE PICKUP.
  *
- * John picked 0.8 from a static idle, which was the wrong frame to judge a swing on — my error in
- * asking. The prop's striking face is its local +X and `grip` rolls about the haft (+Y), so grip
- * IS the face's angle in the plane the swing travels through. Measured at the strike:
- *
- *     grip 0.8    89.6 deg between face normal and head velocity — dead EDGE-ON, the worst
- *                 achievable value; the head reads as a spade blade continuing the haft
- *     grip 2.37   11.5 deg — a block CROSSING the haft, unmistakably a sledgehammer
- *
- * and it is edge-on for the WHOLE downstroke at 0.8, never below 75 deg. 2.37 is exactly
- * 0.8 + pi/2. Anything in 2.08-2.58 stays under 20 deg, so this is not a knife edge.
- *
- * This is what the old `SledgeRig._fitProp` guaranteed by construction — "a hammer that arrives
- * face-on reads as a hammer and one that arrives edge-on reads as a stick". Parenting the prop to
- * a hand bone threw that guarantee away; `GRIP_SHIPPED` buys it back, and `char.grip` is the
- * place to re-derive it if the swing clip changes. Do not restale the number in this file.
+ * The 0.8 idle eyeball was a quarter-turn out at the strike (edge-on, a spade). PR #38 replaced
+ * it with 2.37 (0.8 + pi/2) and aligned the haft to the forearm. That is the primitive Recap
+ * CAM still judged as hand-on-butt: the shaft ran through the wrist. John's grip-tool lock
+ * (GRIP_MOUNT) is the live mount — roll 5.2446 / tilt -1.5664 / yaw 0.5279 plus palm/reach/depth.
+ * char.grip re-derives it if the clip or the body changes. Do not restale 2.37 here.
  */
 
 /*
- * ⚠️ `?grip=` AND `?griplen=` OVERRIDE THE BENCH LOCK, they do not replace it. Address-bar
- * knobs stay so John can A/B a candidate against `GRIP_SHIPPED` without a rebuild. Both default
- * to the locked constants, so the address bar changes nothing unless it is used.
+ * ⚠️ ADDRESS-BAR KNOBS OVERRIDE THE BENCH LOCK, they do not replace it. Defaults are
+ * GRIP_MOUNT, so the address bar changes nothing unless it is used.
  *
- *   ?grip=2.37      roll of the haft in the fist, radians (GRIP_SHIPPED)
- *   ?griplen=0.205  how far the hand sits from the prop's origin, as a fraction of height
- *   ?swingpick=0    force SWINGS[N] in playAttack instead of a random pick
+ *   ?grip=5.2446     fist-frame Euler x, radians (GRIP_MOUNT.roll)
+ *   ?tilt=-1.5664    fist-frame Euler y
+ *   ?yaw=0.5279      fist-frame Euler z
+ *   ?palm=0.04662    metres, fist x
+ *   ?reach=0.12458   metres, fist y
+ *   ?depth=-0.03953  metres, fist z
+ *   ?griplen=0.2059  along-haft slider (fraction of height; UI ~35 cm, shaft ~31 cm)
+ *   ?swingpick=0     force SWINGS[N] in playAttack instead of a random pick
  *
  */
 const urlNum = (name, fallback) => {
@@ -417,28 +439,52 @@ const urlNum = (name, fallback) => {
 };
 
 /**
- * Hang a held prop off a hand bone. This is the ONE mount: product `mountProp` and the
- * `char.grip` bench both call it, so the roll and the hand-on-haft offset cannot silently
- * drift apart.
+ * Apply John's fist-frame lock to a prop already parented to the hand bone.
  *
- * The prop's +Y is its haft (`sledge.js` builds it that way). Align +Y with the forearm-to-hand
- * vector (measured, not an axis convention), then roll about that haft, then slide the grip
- * point back onto the bone origin. The bone's world scale is divided out so a 0.95 m hammer
- * does not inherit the GLB's 0.01 and vanish inside the fist.
+ * ⚠️ NO FOREARM ALIGN. The #38 primitive (`align * rollY`) forced the shaft through the
+ * wrist. These offsets are in the hand bone's own frame, matching the grip-tool sliders:
+ * Object3D default XYZ Euler (x=roll, y=tilt, z=yaw), position metres (x=palm, y=reach,
+ * z=depth), then slide along the rotated haft. `k` divides out the GLB's 0.01 bone scale
+ * so metres in the lock stay metres in the world.
+ */
+export function applyGripLocal(obj, {
+  k = 1,
+  height = 1.7,
+  roll = GRIP_MOUNT.roll,
+  tilt = GRIP_MOUNT.tilt,
+  yaw = GRIP_MOUNT.yaw,
+  palm = GRIP_MOUNT.palm,
+  reach = GRIP_MOUNT.reach,
+  depth = GRIP_MOUNT.depth,
+  alongHaft = GRIP_MOUNT.alongHaft,
+} = {}) {
+  obj.scale.setScalar(k);
+  obj.rotation.order = 'XYZ';
+  obj.rotation.set(roll, tilt, yaw);
+  obj.position.set(palm * k, reach * k, depth * k);
+  obj.translateY(-alongHaft * height * k);
+}
+
+/**
+ * Hang a held prop off a hand bone. This is the ONE mount: product `mountProp` and the
+ * `char.grip` bench both call it, so the live pickup cannot silently diverge from the sheet.
  *
  * @param {THREE.Object3D} obj
  * @param {object} opts
  * @param {THREE.Bone} opts.bone
  * @param {number} opts.height        character height in metres
- * @param {number} [opts.roll]        haft roll, radians — defaults to GRIP_SHIPPED
- * @param {number} [opts.alongHaft]   hand station as a fraction of height — defaults to GRIP_ALONG_HAFT
- * @returns {{ align: THREE.Quaternion, dirLocal: THREE.Vector3, k: number, roll: number, alongHaft: number } | null}
+ * @returns {object | null} k plus the applied offsets plus measureGrip()
  */
 export function mountInHand(obj, {
   bone,
   height,
-  roll = GRIP_SHIPPED,
-  alongHaft = GRIP_ALONG_HAFT,
+  roll = GRIP_MOUNT.roll,
+  tilt = GRIP_MOUNT.tilt,
+  yaw = GRIP_MOUNT.yaw,
+  palm = GRIP_MOUNT.palm,
+  reach = GRIP_MOUNT.reach,
+  depth = GRIP_MOUNT.depth,
+  alongHaft = GRIP_MOUNT.alongHaft,
 } = {}) {
   if (!bone || !obj) return null;
   obj.removeFromParent();
@@ -447,22 +493,8 @@ export function mountInHand(obj, {
   const s = bone.getWorldScale(new THREE.Vector3());
   const k = 1 / (((s.x + s.y + s.z) / 3) || 1);
 
-  const forearm = bone.parent;
-  const hw = bone.getWorldPosition(new THREE.Vector3());
-  const dirWorld = forearm
-    ? hw.clone().sub(forearm.getWorldPosition(new THREE.Vector3()))
-    : new THREE.Vector3(0, -1, 0);
-  if (dirWorld.lengthSq() < 1e-9) dirWorld.set(0, -1, 0);
-  dirWorld.normalize();
-  const dirLocal = dirWorld.clone()
-    .applyQuaternion(bone.getWorldQuaternion(new THREE.Quaternion()).invert()).normalize();
-
   bone.add(obj);
-  obj.scale.setScalar(k);
-  const align = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dirLocal);
-  obj.quaternion.copy(align)
-    .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), roll));
-  obj.position.copy(dirLocal).multiplyScalar(-alongHaft * height * k);
+  applyGripLocal(obj, { k, height, roll, tilt, yaw, palm, reach, depth, alongHaft });
 
   obj.updateWorldMatrix(true, true);
   const size = new THREE.Box3().setFromObject(obj).getSize(new THREE.Vector3()).length();
@@ -471,7 +503,7 @@ export function mountInHand(obj, {
       `${height} m character — the bone's own scale has not been divided out, so it is ` +
       'parented, visible and far too small to see.');
   }
-  return { align, dirLocal, k, roll, alongHaft };
+  return { k, roll, tilt, yaw, palm, reach, depth, alongHaft, ...measureGrip(obj, bone) };
 }
 
 /**
@@ -490,9 +522,54 @@ export function haftDistance(obj, worldPoint) {
   return to.addScaledVector(axis, -to.dot(axis)).length();
 }
 
+/**
+ * In-game pickup readout — the three numbers John's grip tool prints, measured from the
+ * SCENE so the bench cannot invent them. Pose-invariant while the prop is parented to
+ * `bone` with a fixed local transform.
+ *
+ *   offWristM      wrist origin to the haft, metres (want 0.133)
+ *   upShaftM       butt to the closest point on the haft to the wrist, metres (want 0.310)
+ *   shaftAngleDeg  angle between the haft and the hand bone's +Y (want 89.8)
+ */
+export function measureGrip(obj, bone) {
+  if (!obj || !bone) return { offWristM: null, upShaftM: null, shaftAngleDeg: null };
+  obj.updateWorldMatrix(true, false);
+  bone.updateWorldMatrix(true, false);
+  const origin = new THREE.Vector3().setFromMatrixPosition(obj.matrixWorld);
+  const shaft = new THREE.Vector3().setFromMatrixColumn(obj.matrixWorld, 1);
+  if (shaft.lengthSq() < 1e-12) return { offWristM: null, upShaftM: null, shaftAngleDeg: null };
+  shaft.normalize();
+  const wrist = new THREE.Vector3().setFromMatrixPosition(bone.matrixWorld);
+  const toWrist = wrist.clone().sub(origin);
+  const upShaftM = toWrist.dot(shaft);
+  const closest = origin.clone().addScaledVector(shaft, upShaftM);
+  const offWristM = closest.distanceTo(wrist);
+  const boneY = new THREE.Vector3().setFromMatrixColumn(bone.matrixWorld, 1);
+  if (boneY.lengthSq() < 1e-12) {
+    return { offWristM, upShaftM, shaftAngleDeg: null };
+  }
+  boneY.normalize();
+  const shaftAngleDeg = THREE.MathUtils.radToDeg(
+    Math.acos(THREE.MathUtils.clamp(Math.abs(shaft.dot(boneY)), -1, 1)));
+  return { offWristM, upShaftM, shaftAngleDeg };
+}
+
 /** Degrees, one decimal — the paste-ready form `window.__grip` prints for SWINGS. */
 export function gripDeg(rad) {
   return +(rad * 180 / Math.PI).toFixed(1);
+}
+
+/** URL overrides of GRIP_MOUNT. Missing params keep the lock. */
+export function gripFromUrl() {
+  return {
+    roll: urlNum('grip', GRIP_MOUNT.roll),
+    tilt: urlNum('tilt', GRIP_MOUNT.tilt),
+    yaw: urlNum('yaw', GRIP_MOUNT.yaw),
+    palm: urlNum('palm', GRIP_MOUNT.palm),
+    reach: urlNum('reach', GRIP_MOUNT.reach),
+    depth: urlNum('depth', GRIP_MOUNT.depth),
+    alongHaft: urlNum('griplen', GRIP_MOUNT.alongHaft),
+  };
 }
 
 /**
@@ -984,9 +1061,8 @@ export async function createMeshAvatar(opts = {}) {
 
   let current = 'idle';
   let mounted = null;
-  let mountAlign = null;
-  let mountDirLocal = null;
   let mountScaleK = 1;
+  let mountGrip = { ...GRIP_MOUNT };
   let activeSwing = SWINGS[0];
   /*
    * ⚠️ COLLAPSED BONES ARE RE-APPLIED EVERY FRAME, AFTER THE MIXER, AND THAT IS THE WHOLE POINT.
@@ -1065,7 +1141,7 @@ export async function createMeshAvatar(opts = {}) {
 
     /**
      * Hang a held prop off the hand bone via `mountInHand` — the same primitive `char.grip`
-     * uses, so product play cannot silently restale the roll.
+     * uses, so product play cannot silently restale the pickup lock.
      *
      * ⚠️ THIS REPLACES `SledgeRig`'s IK PLACEMENT RATHER THAN COMPETING WITH IT. The caller must
      * also stop the rig owning the transform (`sledge.ownsProp = false`), or the two write
@@ -1076,19 +1152,18 @@ export async function createMeshAvatar(opts = {}) {
       const b = bones[hand];
       if (!b || !obj) return false;
       /*
-       * Product play uses the SAME primitive as `char.grip`. `?grip=` / `?griplen=` override
-       * the bench lock for an A/B; absent, this is GRIP_SHIPPED / GRIP_ALONG_HAFT.
+       * Product play uses the SAME primitive as `char.grip`. Address-bar knobs override
+       * GRIP_MOUNT for an A/B; absent, this is John's pickup lock.
        */
-      const placed = mountInHand(obj, {
-        bone: b,
-        height: H,
-        roll: urlNum('grip', GRIP_SHIPPED),
-        alongHaft: urlNum('griplen', GRIP_ALONG_HAFT),
-      });
+      const g = gripFromUrl();
+      const placed = mountInHand(obj, { bone: b, height: H, ...g });
       if (!placed) return false;
-      mountAlign = placed.align;
-      mountDirLocal = placed.dirLocal;
       mountScaleK = placed.k;
+      mountGrip = {
+        roll: placed.roll, tilt: placed.tilt, yaw: placed.yaw,
+        palm: placed.palm, reach: placed.reach, depth: placed.depth,
+        alongHaft: placed.alongHaft,
+      };
       mounted = obj;
       return true;
     },
@@ -1100,19 +1175,22 @@ export async function createMeshAvatar(opts = {}) {
     get propMounted() { return !!mounted; },
 
     /**
-     * Rebuild `align * rollY(r)` on the mounted prop without re-deriving the forearm.
-     * Bit-identical to the roll half of `mountInHand` — the swing critic verified that
-     * equivalence 24/24. `alongHaft` is optional; omit it to leave the hand station alone.
+     * Rebuild the fist-frame Euler + offsets on the mounted prop. `roll` / `alongHaft` are
+     * the historical two-arg form (playAttack restales roll per clip); omit them to keep
+     * the current lock. Extra keys overlay GRIP_MOUNT.
      */
-    setGrip(roll, alongHaft) {
-      if (!mounted || !mountAlign) return false;
-      const r = roll ?? urlNum('grip', activeSwing.grip);
-      mounted.quaternion.copy(mountAlign)
-        .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), r));
-      if (alongHaft != null && mountDirLocal) {
-        mounted.position.copy(mountDirLocal).multiplyScalar(-alongHaft * H * mountScaleK);
-      }
+    setGrip(roll, alongHaft, extra = {}) {
+      if (!mounted) return false;
+      const g = {
+        ...GRIP_MOUNT,
+        ...mountGrip,
+        roll: roll ?? urlNum('grip', activeSwing.grip),
+        alongHaft: alongHaft ?? mountGrip.alongHaft ?? GRIP_MOUNT.alongHaft,
+        ...extra,
+      };
+      applyGripLocal(mounted, { k: mountScaleK, height: H, ...g });
       mounted.updateWorldMatrix(true, true);
+      mountGrip = g;
       return true;
     },
 
