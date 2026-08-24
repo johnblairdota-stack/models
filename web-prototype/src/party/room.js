@@ -25,7 +25,7 @@ import { applyTake, resolveContact, MODE, PLATE } from './taken.js';
 import { tallyCasting } from './ballot.js';
 import { tallyVote, executioner, nominate, reckoningClosed, canLynchVote, assumedLynchVotes, nominatorLockedChoice, NO_ONE } from './vote.js';
 import { foldWin, OUTCOME } from './win.js';
-import { PHASE, orderFor, EPISODE_CAP } from './phases.js';
+import { PHASE, EPISODE_CAP } from './phases.js';
 import { cleanLook } from './look.js';
 import { STALE_MAX, intelFor } from './intel.js';
 import { coverageRoomOf } from './mansion.js';
@@ -531,11 +531,10 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     setPhase('RECAP');
     setPhase('DEBRIEF');
 
-    // ---- RECKONING / VOTE / EXECUTION. Episode 1 skips them: nobody has anything to go on,
-    // and an eviction decided on nothing teaches a table that the vote is arbitrary.
-    if (!orderFor(state.episode).includes(PHASE.RECKONING)) {
-      setPhase('VERDICT');
-    } else {
+    // ---- RECKONING / VOTE / EXECUTION, on EVERY episode including the premiere.
+    // The skip that used to sit here disagreed with the live SHOW clock, which never had one.
+    // `phases.js` `orderFor` carries the decision and the 105s it costs the night.
+    {
       setPhase('RECKONING');
       const living = state.players.filter((p) => p.alive).map((p) => p.id);
       state.nominations = (nominations || []).filter((n) => living.includes(n.nominator) && living.includes(n.target));

@@ -171,8 +171,9 @@ t('N1c5 · episode 1 is the gallery painting; episode 2+ is the chapel table',
   r.start();
   r.playEpisode();
   const playPhases = r.log.all().filter((e) => e.type.startsWith('phase.')).map((e) => e.type.slice(6));
-  t('N18 · playEpisode premiere skip is intact — gates that only call it stay green',
-    !playPhases.includes('RECKONING') && playPhases.includes('VERDICT'));
+  // Inverted 2026-08-25 with `orderFor`: there is no premiere skip on either machine now.
+  t('N18 · playEpisode runs the full order on the premiere, same as the live clock',
+    playPhases.includes('RECKONING') && playPhases.includes('VOTE') && playPhases.includes('VERDICT'));
   r.enterReckoning();
   const living = r.episodeLiving();
   const nom = r.nominatePlayer(living[0], living[1], living);
@@ -495,14 +496,16 @@ t('N13c · a refresh resumes the server show beat, not casting',
       && last(host, 'show')?.beat === 'debrief',
     JSON.stringify({ show: night.show, host: last(host, 'show')?.beat }));
   phases.push(night.show);
-  const playEpSkippedReckoning = !host.msgs.filter((m) => m.t === 'event')
+  // 🚨 INVERTED 2026-08-25 with `orderFor`. This asserted the premiere skip; the live clock
+  // below (N17d) never had one, and the skip was the half that went. Both halves now agree.
+  const playEpRanReckoning = host.msgs.filter((m) => m.t === 'event')
     .map((m) => m.ev).some((e) => e.type === 'phase.RECKONING');
-  t('N17c · playEpisode still skipped Reckoning on episode 1 (gate/sim premiere skip)',
-    playEpSkippedReckoning);
+  t('N17c · playEpisode runs Reckoning on episode 1 too — no premiere skip either side',
+    playEpRanReckoning);
 
   const toReckoning = progressShow(night);
   await sleep(40);
-  t('N17d · live clock walks Debrief → Reckoning on every episode, including ep1',
+  t('N17d · live clock walks Debrief → Reckoning on every episode, premiere included',
     toReckoning === 'reckoning' && night.show === 'reckoning'
       && last(host, 'show')?.beat === 'reckoning'
       && night.game.state.phase === 'RECKONING'

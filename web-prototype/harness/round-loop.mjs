@@ -56,8 +56,11 @@ const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' �
 // ---------------------------------------------------------------- R2 · the session budget
 {
   const mins = (n) => sessionSeconds(n) / 60;
-  t('R2 · 4/5/6 episodes land on the budgeted 26:25 / 31:50 / 37:15',
-    Math.abs(sessionSeconds(4) - 1585) < 1 && Math.abs(sessionSeconds(5) - 1910) < 1 && Math.abs(sessionSeconds(6) - 2235) < 1,
+  // ⚠️ These three moved on 2026-08-25 when the premiere stopped skipping the vote: +105s on
+  // ep1, so 26:25/31:50/37:15 became 28:10/33:35/39:00. The decision and the arithmetic are in
+  // `phases.js` `orderFor`. R2c below is the assertion that says the new numbers still fit.
+  t('R2 · 4/5/6 episodes land on the budgeted 28:10 / 33:35 / 39:00',
+    Math.abs(sessionSeconds(4) - 1690) < 1 && Math.abs(sessionSeconds(5) - 2015) < 1 && Math.abs(sessionSeconds(6) - 2340) < 1,
     `${mins(4).toFixed(1)} / ${mins(5).toFixed(1)} / ${mins(6).toFixed(1)} min`);
   const worst = sessionSeconds(EPISODE_CAP, 3) / 60;
   t('R2b · the base case fits the window at the episode cap', mins(EPISODE_CAP) <= 40,
@@ -70,16 +73,25 @@ const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' �
 
 // ---------------------------------------------------------------- R3 · the premiere is different
 {
-  t('R3 · episode 1 skips the reckoning and everything after it',
-    !orderFor(1).includes(PHASE.RECKONING) && orderFor(2).includes(PHASE.RECKONING),
+  // 🚨 INVERTED 2026-08-25. This block asserted the premiere skip for as long as `orderFor` had
+  // one; the live clock never did, and John kept the live behaviour. It now asserts the opposite,
+  // which is the only reason to keep the block: the premiere is the episode most likely to grow
+  // a special case again by accident.
+  t('R3 · the premiere runs the same order as every other episode',
+    orderFor(1).includes(PHASE.RECKONING) && orderFor(2).includes(PHASE.RECKONING)
+      && orderFor(1).join() === orderFor(2).join(),
     `ep1 ${orderFor(1).length} phases, ep2 ${orderFor(2).length}`);
-  t('R3b · and it is shorter for it', episodeSeconds(1) < episodeSeconds(2),
+  t('R3b · and it is exactly as long for it', episodeSeconds(1) === episodeSeconds(2),
     `${episodeSeconds(1)}s vs ${episodeSeconds(2)}s`);
 
   const r = createRoom({ count: 8, castSeed: 2, worldSeed: 2, send: () => {}, emit: () => {} });
   r.start(); r.playEpisode({ hunterRoom: 'cellar' });
   const seen = r.log.all().filter((e) => e.type.startsWith('phase.')).map((e) => e.type.slice(6));
-  t('R3c · and the room honours it', !seen.includes('RECKONING') && seen.includes('VERDICT'), seen.join('/'));
+  // Inverted with R3: the premiere's first episode must now reach the vote like any other.
+  // EXECUTION is absent here and that is correct — the default ballot is all NO_ONE, so nobody
+  // is taken; R4 is the gate that proves an execution runs end to end.
+  t('R3c · and the room honours it — the premiere reaches Reckoning and Vote',
+    seen.includes('RECKONING') && seen.includes('VOTE') && seen.includes('VERDICT'), seen.join('/'));
 }
 
 // ---------------------------------------------------------------- R4 · an execution runs end to end

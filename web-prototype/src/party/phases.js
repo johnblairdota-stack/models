@@ -48,12 +48,37 @@ export const EPISODE_ORDER = [
 ];
 
 /**
- * 🚨 EPISODE 1 SKIPS THE RECKONING AND EVERYTHING AFTER IT. Nobody has anything to go on in the
- * premiere, and an eviction decided on nothing is the fastest way to teach a table that the vote
- * is arbitrary. Episode 1's job is to teach the loop.
+ * 🚨 **EVERY EPISODE RUNS THE FULL ORDER, PREMIERE INCLUDED.** John's call, 2026-08-25.
+ *
+ * This file used to stop episode 1 after Debrief, on the argument that nobody has anything to go
+ * on in the premiere and an eviction decided on nothing teaches a table that the vote is
+ * arbitrary. **The live SHOW clock never implemented that skip** — `show.js` walked
+ * `debrief → reckoning` on every episode and `party-night` N17d gated it that way — so the two
+ * machines disagreed for as long as both existed, and the premiere behaved differently depending
+ * on whether you were reading `playEpisode` or watching a real room.
+ *
+ * Asked which was right, John kept the vote: *"I don't know why we would skip it."* The live
+ * behaviour was already the shipped one, and a premiere that teaches the loop without ever
+ * showing the vote teaches half of it.
+ *
+ * ⚠️ **The old argument is overruled, not refuted.** It is a table-feel question and it is
+ * answered by playtesting a premiere, not by reading this file. If an episode-1 eviction turns
+ * out to feel arbitrary at a real table, THIS is the line to change back — and `episode-order`
+ * is the gate that will tell you everything that moves with it.
+ *
+ * **The number:** ep1 gains 105s (reckoning 45 + vote 25 + execution 20 + verdict 15). A 4/5/6
+ * episode night goes 26:25 / 31:50 / 37:15 → **28:10 / 33:35 / 39:00**, and the worst case —
+ * three nominations every episode at `EPISODE_CAP` — goes 34:50 → **37:20**, still inside the
+ * forty minutes `round-loop` R2c guards. Instrument: `harness/round-loop.mjs` R2/R3.
  */
 export const premiere = (ep) => ep === 1;
-export const orderFor = (ep) => (premiere(ep) ? EPISODE_ORDER.slice(0, 4) : EPISODE_ORDER);
+
+/**
+ * The order every episode runs in. Takes no episode any more, and keeps the parameter position
+ * so the existing `orderFor(ep)` call sites read the same. `premiere` survives as the predicate
+ * for premiere COPY (the role card's first-night sheet), not for the running order.
+ */
+export const orderFor = () => EPISODE_ORDER;
 
 /** `RECKONING` gains 15s per nomination, hard cap 90s. */
 export const RECKONING_PER_NOM = 15;

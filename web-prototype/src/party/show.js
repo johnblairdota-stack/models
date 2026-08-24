@@ -108,8 +108,10 @@ export const STUB_SHOW_PLAN = [
 
 /**
  * Recap → Debrief → Reckoning → Vote → Execution → Casting.
- * The live SHOW clock runs this on every episode, including the premiere.
- * `playEpisode` still skips Reckoning+ on episode 1.
+ *
+ * Runs on every episode, premiere included — and since 2026-08-25 `playEpisode` does too.
+ * This chain was the shipped behaviour all along; `phases.js` `orderFor` was the half that
+ * disagreed, and it was changed to match this one rather than the other way round.
  */
 export const AFTER_RUN_BEATS = ['recap', 'debrief', 'reckoning', 'vote', 'execution', 'casting'];
 
