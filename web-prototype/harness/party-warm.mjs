@@ -1538,7 +1538,7 @@ console.log('\nparty-warm — the lobby-warm night');
       && nextShowBeat('recap') === 'debrief' && nextShowBeat('debrief') === 'reckoning'
       && nextShowBeat('execution') === 'casting');
   t('W27a · holds are the shooting-schedule seconds, not a silent second table',
-    RECAP_HOLD_MS === 20000 && DEBRIEF_HOLD_MS === 75000);
+    RECAP_HOLD_MS === 10000 && DEBRIEF_HOLD_MS === 75000);
   const localSrc = await readFile(new URL('../net/party/local.mjs', import.meta.url), 'utf8');
   t('W27b · the server clock walks the chain; gates can call the same function',
     /export function progressShow/.test(localSrc)
@@ -2021,11 +2021,12 @@ console.log('\nparty-warm — the lobby-warm night');
     && SIT_CLIP_ALLOW.includes('Stand_to_Sit_Transition_M')
     && /sitPhase/.test(introSrc)
     && /holdForRun/.test(introSrc));
-  t('W33b · name tags are a no-mip nearest-neighbour atlas, STYLE_CONTRACT colours',
+  t('W33b · name tags are a no-mip nearest-neighbour atlas, STYLE_CONTRACT colours, black glyph outline',
     /generateMipmaps = false/.test(tagSrc)
     && /NearestFilter/.test(tagSrc)
     && /strokeText/.test(tagSrc)
     && /#054E84/.test(tagSrc) && /#EDEFF0/.test(tagSrc) && /#B9BEC2/.test(tagSrc)
+    && /GLYPH_OUTLINE/.test(tagSrc) && /#000000/.test(tagSrc)
     && /TAG_REF_DIST/.test(tagSrc) && /NAME_CAP = 8/.test(tagSrc));
   t('W33c · nominators are pre-cast and cannot recast',
     /function assumedLynchVotes/.test(voteSrc)

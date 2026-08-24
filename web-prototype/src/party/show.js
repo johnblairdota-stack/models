@@ -6,7 +6,7 @@
  * this beat; playEpisode pins expedition; the stub clock then pins recap.
  * "Watch the run" is a host workaround, not the clock.
  *
- * After a finished run the clock keeps walking: recap (20 s) → debrief (75 s)
+ * After a finished run the clock keeps walking: recap (10 s) → debrief (75 s)
  * → reckoning → vote → execution → casting. Those holds are `phases.js`
  * `SECONDS`, not a second table. The Recap *button* is gone; the beat is not.
  */

@@ -10,7 +10,7 @@
  *   somebody's lift arrives. `EPISODE_CAP` plus W5 is the belt and braces; R1 runs hundreds of
  *   matches across every player count and every take pattern and requires every one to stop.
  *
- *   **It fits.** `rrr-social-round.md` §1 budgets 27:05 / 32:40 / 38:15 for 4/5/6 episodes, and
+ *   **It fits.** `rrr-social-round.md` §1 budgets 26:25 / 31:50 / 37:15 for 4/5/6 episodes, and
  *   `EPISODE_CAP = 6` is chosen precisely to keep the worst case under forty minutes. R2 asserts
  *   the arithmetic still says so, because a phase whose length drifts by fifteen seconds is
  *   invisible until it has cost four minutes.
@@ -56,8 +56,8 @@ const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' �
 // ---------------------------------------------------------------- R2 · the session budget
 {
   const mins = (n) => sessionSeconds(n) / 60;
-  t('R2 · 4/5/6 episodes land on the budgeted 27:05 / 32:40 / 38:15',
-    Math.abs(sessionSeconds(4) - 1625) < 1 && Math.abs(sessionSeconds(5) - 1960) < 1 && Math.abs(sessionSeconds(6) - 2295) < 1,
+  t('R2 · 4/5/6 episodes land on the budgeted 26:25 / 31:50 / 37:15',
+    Math.abs(sessionSeconds(4) - 1585) < 1 && Math.abs(sessionSeconds(5) - 1910) < 1 && Math.abs(sessionSeconds(6) - 2235) < 1,
     `${mins(4).toFixed(1)} / ${mins(5).toFixed(1)} / ${mins(6).toFixed(1)} min`);
   const worst = sessionSeconds(EPISODE_CAP, 3) / 60;
   t('R2b · the base case fits the window at the episode cap', mins(EPISODE_CAP) <= 40,

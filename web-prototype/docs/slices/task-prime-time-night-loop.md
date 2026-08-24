@@ -64,7 +64,7 @@ Extend the show clock:
 
 ```
 SHOW_BEATS = lobby, casting, expedition, recap, debrief
-RECAP_HOLD_MS   = SECONDS.RECAP   * 1000   // 20_000
+RECAP_HOLD_MS   = SECONDS.RECAP   * 1000   // 10_000
 DEBRIEF_HOLD_MS = SECONDS.DEBRIEF * 1000   // 75_000
 ```
 

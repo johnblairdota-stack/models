@@ -103,7 +103,7 @@ Three things I had specced as separate systems collapse into one. Design the env
 
 **Phase 2 — the spine.** Event envelope with `vis`. Camera roster and unlock progression. PartyKit room with 9 connections.
 
-**Phase 3 — the loop.** `CASTING 45s → EXPEDITION 90s → RECAP 20s → DEBRIEF 75s → RECKONING 45s → VOTE 25s → EXECUTION 20s → VERDICT 15s` = 5:35 an episode; 27–38 minutes a session. Extends `run.js`'s `PHASE` — **zero edits needed**, the bomb is structurally unreachable because `WINDDOWN` is entered only from `escape()` (`run.js:312-317`) and party mode exits via `finish()` (`run.js:342`).
+**Phase 3 — the loop.** `CASTING 45s → EXPEDITION 90s → RECAP 10s → DEBRIEF 75s → RECKONING 45s → VOTE 25s → EXECUTION 20s → VERDICT 15s` = 5:25 an episode; 26–37 minutes a session. Extends `run.js`'s `PHASE` — **zero edits needed**, the bomb is structurally unreachable because `WINDDOWN` is entered only from `escape()` (`run.js:312-317`) and party mode exits via `finish()` (`run.js:342`).
 
 **Phase 4 — task 1 only** (The Dark Run), then the Director, then the remaining four tasks, then roles, then the Reunion.
 

@@ -68,7 +68,7 @@ Holds from `phases.js` `SECONDS` (not a second table):
 
 | beat | ms |
 |---|---|
-| recap | 20_000 |
+| recap | 10_000 |
 | debrief | 75_000 |
 | reckoning | `reckoningSeconds(noms) * 1000` — 45s base, +15s/nom, cap 90s |
 | vote | 25_000 |

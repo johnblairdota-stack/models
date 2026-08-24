@@ -308,6 +308,13 @@ const SIT_CLIPS = {
   sitIdleF: 'Chair_Sit_Idle_F',
   sitDown: 'Stand_to_Sit_Transition_M',
 };
+/**
+ * Chair_Sit_Idle_M spends ~6 of 10.7 s at Spine02 roll ~59° — a periodic lean
+ * forward that John called odd. t=0 is the sit-back pose. Freeze these bones
+ * at that frame; arms keep looping so the circle is not eight statues.
+ */
+const SIT_UPRIGHT_T = 0;
+const SIT_LEAN_BONES = ['Hips', 'Spine02', 'Spine01', 'Spine'];
 
 /**
  * Where the hammer sits in the hand — locked to John's 2026-08-24 grip-tool readout, not to
@@ -1412,10 +1419,25 @@ export function cloneMeshAvatar(source, opts = {}) {
     return found;
   })();
   const hipsRest = hips ? hips.position.clone() : null;
+  const leanBones = [];
+  rig.traverse((o) => {
+    if (o.isBone && SIT_LEAN_BONES.includes(o.name)) leanBones.push(o);
+  });
+  const leanRest = leanBones.map((bone) => ({ bone, q: new THREE.Quaternion() }));
+  let leanFrozen = false;
 
   let pose = 'loco';
   let sitClipName = null;
   let sitIdle = null;
+
+  function captureLean() {
+    for (const row of leanRest) row.q.copy(row.bone.quaternion);
+    leanFrozen = true;
+  }
+  function applyLean() {
+    if (!leanFrozen) return;
+    for (const row of leanRest) row.bone.quaternion.copy(row.q);
+  }
 
   return {
     root: rig,
@@ -1436,7 +1458,9 @@ export function cloneMeshAvatar(source, opts = {}) {
      * Loop a seated idle. Every seat uses Chair_Sit_Idle_M (F tucks 0.56 m and
      * reads as sunk/through-back). Hips X is pinned to bind after the mixer so
      * the clip's sideways translate cannot walk them off the cushion; Y/Z stay
-     * on the clip. The stand-to-sit transition is not played at the sit attach.
+     * on the clip. Torso lean bones are frozen at SIT_UPRIGHT_T so the 10.7 s
+     * Idle_M loop cannot periodically fold them forward. The stand-to-sit
+     * transition is not played at the sit attach.
      */
     playSit({ seatIndex = 0, skipDown: _skipDown = false, phase = 0 } = {}) {
       sitIdle = sitIdleM || sitIdleF;
@@ -1444,7 +1468,6 @@ export function cloneMeshAvatar(source, opts = {}) {
       pose = 'sit';
       sitClipName = sitIdle.getClip().name;
       const dur = Math.max(0.1, sitIdle.getClip().duration);
-      sitIdle.time = ((phase % dur) + dur) % dur;
       idle.setEffectiveWeight(0);
       walk.setEffectiveWeight(0);
       if (sitIdleM && sitIdleM !== sitIdle) sitIdleM.setEffectiveWeight(0);
@@ -1457,6 +1480,10 @@ export function cloneMeshAvatar(source, opts = {}) {
        */
       if (sitDown) sitDown.setEffectiveWeight(0);
       sitIdle.setEffectiveWeight(1);
+      sitIdle.time = SIT_UPRIGHT_T;
+      mixer.update(0);
+      captureLean();
+      sitIdle.time = ((phase % dur) + dur) % dur;
       return true;
     },
     update(dt, state = {}) {
@@ -1475,6 +1502,7 @@ export function cloneMeshAvatar(source, opts = {}) {
         // Clip writes a ~0.18 m sideways hips.x. Pin X to bind so both twins sit
         // on the cushion centre; leave Y/Z to Idle_M (the sit drop and hip-back).
         if (hips && hipsRest) hips.position.x = hipsRest.x;
+        applyLean();
         return;
       }
       const speed = state.speed ?? 0;
