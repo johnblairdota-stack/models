@@ -486,18 +486,27 @@ t('N13c · a refresh resumes the server show beat, not casting',
     JSON.stringify({ show: night.show, n: night.game.state.nominations.length }));
   phases.push(night.show);
 
+  // Two seated living cannot clear a strict majority without a self-vote. Seat a
+  // third phone during Vote so the live execute path still has a legal majority.
+  const extra = await open(base);
+  await sleep(40);
   back.send({ t: 'lynchVote', choice: nomB });
   b.send({ t: 'lynchVote', choice: nomB });
+  extra.send({ t: 'lynchVote', choice: nomB });
   await sleep(20);
   const toExec = progressShow(night);
   await sleep(40);
-  t('N17g · living-majority vote executes; nominator swings; votes air after tally',
+  const aired = last(host, 'lynch');
+  t('N17g · living-majority vote executes; nominee self-vote is coerced to NO_ONE',
     toExec === 'execution' && night.show === 'execution'
+      && extra.welcome?.playerId
       && night.game.state.voteResult?.executed === nomB
-      && last(host, 'lynch')?.result?.executed === nomB
-      && (last(host, 'lynch')?.votes || []).length === 2
+      && aired?.result?.executed === nomB
+      && (aired?.votes || []).some((v) => v.voter === nomB && v.choice === NO_ONE)
+      && (aired?.votes || []).filter((v) => v.choice === nomB).length >= 2
       && night.game.state.players.find((p) => p.id === nomB)?.alive === false,
-    JSON.stringify(last(host, 'lynch')));
+    JSON.stringify(aired));
+  extra.close();
   phases.push(night.show);
 
   const toCasting = progressShow(night);
