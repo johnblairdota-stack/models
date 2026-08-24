@@ -15,12 +15,12 @@ import { recapFromEvents } from '../party/recap.js';
 import { injectNightSkin, markPartyReady, playerName } from '../party/night-skin.js';
 import { qrSvg } from '../party/qr.js';
 import {
-  DEFAULT_LOOK, SHOW_LINE, cleanLook, codeBugHtml, countdownHtml, nameplateHtml,
-  recBugHtml, robotFaceSvg, showCam, titlePlateHtml, verdictPlateHtml,
+  DEFAULT_LOOK, SHOW_LINE, SHOW_TITLE, cleanLook, codeBugHtml, countdownHtml, nameplateHtml,
+  recBugHtml, robotFaceSvg, rundownRailHtml, titlePlateHtml, verdictPlateHtml,
 } from '../party/look.js';
 import { mergePublicNames } from '../party/cast-ui.js';
 import { cueViolations, warmLabel, warmPct, warmUrl } from '../party/follow.js';
-import { formatRemain, isTalkBeat, remainingMs } from '../party/show.js';
+import { formatRemain, holdMsFor, isTalkBeat, remainingMs, rundownRibbon } from '../party/show.js';
 import { NO_ONE, SHOWRUNNER } from '../party/vote.js';
 
 export default async function partyHost({ params }) {
@@ -454,8 +454,14 @@ export default async function partyHost({ params }) {
   function startClockTick() {
     if (ui.clockTimer) return;
     ui.clockTimer = setInterval(() => {
-      const label = formatRemain(remainingMs(ui.showUntil));
+      const left = remainingMs(ui.showUntil);
+      const label = formatRemain(left);
       for (const el of root.querySelectorAll('[data-show-clock]')) el.textContent = label;
+      const bar = root.querySelector('[data-rail-drain]');
+      if (!bar) return;
+      const hold = Number(bar.getAttribute('data-rail-hold'));
+      if (left == null || !Number.isFinite(hold) || hold <= 0) return;
+      bar.style.width = `${Math.max(0, Math.min(100, (left / hold) * 100))}%`;
     }, 250);
   }
 
@@ -642,15 +648,21 @@ export default async function partyHost({ params }) {
      * `show` (`ui.beat`); that is the only word this chrome may say.
      */
     const onIntro = show === 'casting' && ui.introsSent && !ui.introsDone;
+    const ribbon = onRun || rundownRibbon(show);
+    const hold = holdMsFor(show, client.noms?.length ?? 0);
     root.className = `night${onRun ? ' on-run' : ''}${onIntro ? ' on-intro' : ''}${onStage ? ' on-talk' : ''}`;
     root.innerHTML = `
       <div class="night-top">
         <div class="night-brand-row">
-          ${recBugHtml({ cam: showCam(show) })}
-          <div class="night-brand">Prime Time</div>
+          <div class="night-brand">${esc(SHOW_TITLE)}</div>
+          ${recBugHtml({ cam: 'ON AIR' })}
         </div>
-        <div class="night-phase">${esc(show.toUpperCase())} · episode ${esc(String(episode))}${clock ? ` · <span data-show-clock>${esc(clock)}</span>` : ''}</div>
+        <div class="night-phase">
+          <span class="show-ep">episode ${esc(String(episode))} · ${esc(show)}</span>
+          ${clock ? `<span class="show-mast-clock" data-show-clock>${esc(clock)}</span>` : ''}
+        </div>
       </div>
+      ${rundownRailHtml({ beat: show, until: ui.showUntil, holdMs: hold, ribbon })}
       ${onRun || onStage || show === 'lobby' ? '' : `<div class="night-line">${esc(SHOW_LINE)}</div>`}
       <div class="night-main">${body}</div>`;
 
