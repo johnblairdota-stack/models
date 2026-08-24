@@ -17,6 +17,8 @@ import { qrSvg } from '../party/qr.js';
 import { DEFAULT_LOOK, cleanLook, robotFaceSvg } from '../party/look.js';
 import { mergePublicNames } from '../party/cast-ui.js';
 import { cueViolations, warmLabel, warmPct, warmUrl } from '../party/follow.js';
+import { formatRemain, isTalkBeat, remainingMs } from '../party/show.js';
+import { NO_ONE, SHOWRUNNER } from '../party/vote.js';
 
 const LINE = 'Two of you go in. One walks, one talks. The rest of us watch. Someone in this room is lying.';
 
@@ -61,6 +63,10 @@ export default async function partyHost({ params }) {
     cuedRunner: null,
     /** How many world reports have been relayed. Read by the drive, never by the UI. */
     worldSent: 0,
+    /** Epoch ms from the server `show.until`. Clients tick; the server owns the deadline. */
+    showUntil: null,
+    /** Seated-circle cue after the run, so debrief is not an empty ballroom. */
+    sitCued: false,
   };
 
   /**
@@ -103,7 +109,11 @@ export default async function partyHost({ params }) {
       if (m.t === 'welcome') sessionStorage.setItem(tokenKey(code, 'tv'), m.token);
       // `end` rides with `beat` and is cleared whenever a `show` message omits it (an expedition
       // start never carries one) — the TV must not keep showing SMASHED/TIME from a past run.
-      if (m.t === 'show' && m.beat) { ui.beat = m.beat; ui.runEnd = m.end || null; }
+      if (m.t === 'show' && m.beat) {
+        ui.beat = m.beat;
+        ui.runEnd = m.end || null;
+        ui.showUntil = Number.isFinite(m.until) ? m.until : null;
+      }
       if (m.t === 'full') ui.err = 'The TV seat is taken. Close the other host tab, or pick a new room code.';
       /*
        * 🕹️ THE RUNNER'S THUMBS, ON THEIR WAY TO THE BODY. The server relays these to the TV alone
@@ -421,11 +431,30 @@ export default async function partyHost({ params }) {
      * the follow layer stamped INTROS · WALK over the live run. Intros are a casting
      * beat — once the pair is walking, the run cue owns the camera.
      */
-    if (ui.beat === 'expedition' || ui.beat === 'recap' || ui.beat === 'debrief') return;
+    if (ui.beat === 'expedition' || ui.beat === 'recap' || isTalkBeat(ui.beat)) return;
     const cast = introCast();
     if (!cast.length) return;
     ui.introsSent = true;
     sendCue({ kind: 'intros', cast });
+  }
+
+  function cueSitDown() {
+    if (ui.sitCued) return;
+    const cast = introCast();
+    if (!cast.length) return;
+    if (ui.cuedRunner) {
+      sendCue({ kind: 'idle' });
+      ui.cuedRunner = null;
+    }
+    ui.sitCued = sendCue({ kind: 'intros', cast });
+  }
+
+  function startClockTick() {
+    if (ui.clockTimer) return;
+    ui.clockTimer = setInterval(() => {
+      const label = formatRemain(remainingMs(ui.showUntil));
+      for (const el of root.querySelectorAll('[data-show-clock]')) el.textContent = label;
+    }, 250);
   }
 
   function startNight() {
@@ -438,6 +467,7 @@ export default async function partyHost({ params }) {
 
   function sendThemIn() {
     if (!(client.ballots || []).length) return;
+    ui.sitCued = false;
     ui.locked = true;
     client.send({ t: 'episode', opts: {} });
     // Optimistic — the server fans expedition to every socket including this TV.
@@ -490,8 +520,11 @@ export default async function partyHost({ params }) {
       && (client.ballots || []).length >= 1
       && !pair.runner;
     const hasPair = !!pair.runner;
-    const onTalk = show === 'recap' || show === 'debrief';
+    const onTalk = show === 'recap' || show === 'debrief' || show === 'reckoning'
+      || show === 'vote' || show === 'execution';
+    const onStage = isTalkBeat(show);
     const onRun = show === 'expedition' || (hasPair && !onTalk && show !== 'casting');
+    const clock = formatRemain(remainingMs(ui.showUntil));
 
     let body = '';
     if (ui.err) body += `<div class="err">${esc(ui.err)}</div>`;
@@ -525,13 +558,17 @@ export default async function partyHost({ params }) {
       body += `<div class="actions"><button class="btn ghost" id="to-run">Run</button></div>`;
       body += `<p class="hint" style="margin-top:16px">Phones down. Debrief is next.</p>`;
     } else if (show === 'debrief') {
-      body += recapBoard(recap, names, ui.runEnd);
-      body += seatGrid(client.lobby);
-      if (episode === 1 || phase === 'DEBRIEF' || phase === 'VERDICT') {
-        body += `<p class="hint" style="margin-top:16px">No eviction this episode. Phones down — talk.</p>`;
-      } else {
-        body += `<p class="hint" style="margin-top:16px">Phones down — talk. The next ballot is coming.</p>`;
-      }
+      body += talkStage({ recap, names, runEnd: ui.runEnd, clock, kicker: 'Phones down — talk.' });
+    } else if (show === 'reckoning') {
+      body += talkStage({ recap, names, runEnd: ui.runEnd, clock, kicker: 'Nominate. First tap stands.' });
+      body += nomBoard(client.noms, names);
+    } else if (show === 'vote') {
+      body += talkStage({ recap, names, runEnd: ui.runEnd, clock, kicker: 'One ballot. Living majority.' });
+      body += nomBoard(client.noms, names);
+      if (client.lynchResult) body += lynchBoard(client.lynchVotes, client.lynchResult, names);
+    } else if (show === 'execution') {
+      body += talkStage({ recap, names, runEnd: ui.runEnd, clock, kicker: executionLine(client.lynchResult, names) });
+      if (client.lynchResult) body += lynchBoard(client.lynchVotes, client.lynchResult, names);
     } else if (show === 'casting') {
       const showingIntros = ui.introsSent && !ui.introsDone;
       if (showingIntros) {
@@ -545,7 +582,7 @@ export default async function partyHost({ params }) {
       if (hasPair) body += `<button class="btn ghost" id="to-run">Watch the run</button>`;
       body += `</div>`;
       if (episode === 1 && !showingIntros) {
-        body += `<p class="hint" style="margin-top:16px">Episode 1 airs every ballot. Nobody is evicted tonight.</p>`;
+        body += `<p class="hint" style="margin-top:16px">Episode 1 airs every ballot. After the run the room nominates.</p>`;
       }
     } else {
       body += `
@@ -577,13 +614,13 @@ export default async function partyHost({ params }) {
      * `show` (`ui.beat`); that is the only word this chrome may say.
      */
     const onIntro = show === 'casting' && ui.introsSent && !ui.introsDone;
-    root.className = `night${onRun ? ' on-run' : ''}${onIntro ? ' on-intro' : ''}`;
+    root.className = `night${onRun ? ' on-run' : ''}${onIntro ? ' on-intro' : ''}${onStage ? ' on-talk' : ''}`;
     root.innerHTML = `
       <div class="night-top">
         <div class="night-brand">Prime Time</div>
-        <div class="night-phase">${esc(show.toUpperCase())} · episode ${esc(String(episode))}</div>
+        <div class="night-phase">${esc(show.toUpperCase())} · episode ${esc(String(episode))}${clock ? ` · <span data-show-clock>${esc(clock)}</span>` : ''}</div>
       </div>
-      ${onRun ? '' : `<div class="night-line">${esc(LINE)}</div>`}
+      ${onRun || onStage ? '' : `<div class="night-line">${esc(LINE)}</div>`}
       <div class="night-main">${body}</div>`;
 
     /*
@@ -606,6 +643,8 @@ export default async function partyHost({ params }) {
       followMode: follow.mode,
       cuedRunner: ui.cuedRunner,
       worldSent: ui.worldSent,
+      showUntil: ui.showUntil,
+      sitCued: ui.sitCued,
     };
 
     root.querySelector('#go')?.addEventListener('click', startNight);
@@ -626,13 +665,16 @@ export default async function partyHost({ params }) {
      */
     const runnerId = pair.runner || recap.runner;
     follow.mode = onRun && runnerId ? 'run'
-      : (show === 'casting' && ui.introsSent && !ui.introsDone ? 'intros' : 'warm');
-    if ((show === 'debrief' || show === 'casting') && ui.cuedRunner) {
+      : (onStage || (show === 'casting' && ui.introsSent && !ui.introsDone) ? 'intros' : 'warm');
+    if ((onStage || show === 'casting') && ui.cuedRunner) {
       sendCue({ kind: 'idle' });
       ui.cuedRunner = null;
     }
+    if (onStage) cueSitDown();
+    if (show === 'expedition' || show === 'casting') ui.sitCued = false;
     mountFollow();
     placeFollow();
+    startClockTick();
 
     /*
      * The run cue, sent once per runner. `cuedRunner` is what stops a lobby snapshot — which
@@ -794,6 +836,60 @@ function ballotBoard(votes, names, pair, recap, episode) {
   // playEpisode increments episode after the premiere; recap.episode stays 1.
   const huge = Number(episode) === 1 || recap.episode === 1;
   return `${hero}<div class="ballot${huge ? ' huge' : ''}">${rows || '<p class="hint">No ballots yet — phones pick a runner and a guide.</p>'}</div>`;
+}
+
+function talkStage({ recap, names, runEnd, clock, kicker }) {
+  return `
+    <div class="talk-stage">
+      <div class="intro-frame talk-frame" aria-label="Ballroom debrief"></div>
+      <div class="talk-overlay">
+        ${recapMini(recap, names, runEnd)}
+        ${clock ? `<div class="talk-clock" data-show-clock>${esc(clock)}</div>` : ''}
+        <p class="talk-kicker">${esc(kicker || 'Phones down — talk.')}</p>
+      </div>
+    </div>`;
+}
+
+function recapMini(recap, names, runEnd) {
+  const taken = recap.taken?.length
+    ? recap.taken.map((t) => joinedName(names, t.id, 'The runner')).join(', ')
+    : 'CAME BACK';
+  const outcome = runEnd ? `<span class="mini-v ${runEnd === 'SMASHED' ? 'ok' : 'bad'}">${esc(runEnd)}</span>` : '';
+  const cam = recap.cameraLit ? 'CAM LIT' : 'CAM DARK';
+  return `<div class="recap-mini">${outcome}
+    <span class="mini-v ${recap.cameraLit ? 'ok' : 'bad'}">${esc(cam)}</span>
+    <span class="mini-v">${esc(taken)}</span>
+  </div>`;
+}
+
+function nomBoard(standing, names) {
+  const rows = (standing || []).map((n, i) => `
+    <div class="nom-row">
+      <div class="nom-n">${i + 1}</div>
+      <div class="nom-who">${esc(joinedName(names, n.target, 'Someone'))}</div>
+      <div class="nom-by">named by ${esc(joinedName(names, n.nominator, 'a player'))}</div>
+    </div>`).join('');
+  return `<div class="nom-board">${rows || '<p class="hint">No standing nominations yet.</p>'}</div>`;
+}
+
+function lynchBoard(votes, result, names) {
+  const aired = (votes || []).map((v) => `
+    <div class="nom-row">
+      <div class="nom-who">${esc(joinedName(names, v.voter, 'Someone'))}</div>
+      <div class="nom-by">${v.choice === NO_ONE ? 'NO ONE' : esc(joinedName(names, v.choice, 'Someone'))}</div>
+    </div>`).join('');
+  const line = executionLine(result, names);
+  return `<div class="nom-board lynch-board"><p class="talk-kicker">${esc(line)}</p>${aired}</div>`;
+}
+
+function executionLine(result, names) {
+  if (!result) return 'The vote is in.';
+  if (!result.executed) return 'Nobody cleared. No eviction.';
+  const who = joinedName(names, result.executed, 'A player');
+  const swing = result.executioner === SHOWRUNNER
+    ? 'the Showrunner'
+    : joinedName(names, result.executioner, 'the nominator');
+  return `${who} is out. ${swing} swings.`;
 }
 
 function recapBoard(recap, names, runEnd) {

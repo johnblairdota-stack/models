@@ -1507,8 +1507,10 @@ console.log('\nparty-warm — the lobby-warm night');
 // ---- W27 — NIGHT LOOP: RECAP → DEBRIEF → CASTING, CHAPEL TABLE ON EP2 ----------------------
 {
   t('W27 · debrief is a show beat — Recap is not the end of the night',
-    SHOW_BEATS.includes('debrief') && AFTER_RUN_BEATS.join(',') === 'recap,debrief,casting'
-      && nextShowBeat('recap') === 'debrief' && nextShowBeat('debrief') === 'casting');
+    SHOW_BEATS.includes('debrief') && SHOW_BEATS.includes('reckoning')
+      && AFTER_RUN_BEATS.join(',') === 'recap,debrief,reckoning,vote,execution,casting'
+      && nextShowBeat('recap') === 'debrief' && nextShowBeat('debrief') === 'reckoning'
+      && nextShowBeat('execution') === 'casting');
   t('W27a · holds are the shooting-schedule seconds, not a silent second table',
     RECAP_HOLD_MS === 20000 && DEBRIEF_HOLD_MS === 75000);
   const localSrc = await readFile(new URL('../net/party/local.mjs', import.meta.url), 'utf8');
@@ -1543,6 +1545,39 @@ console.log('\nparty-warm — the lobby-warm night');
   t('W27h · beginCasting clears the last pair so episode 2 can ballot',
     /state\.pair = \{ runner: null, guide: null \}/.test(
       await readFile(new URL('../src/party/room.js', import.meta.url), 'utf8')));
+}
+
+// ---- W28 — LIVE LYNCH CLOCK: DEBRIEF → RECKONING → VOTE → EXECUTION → CASTING -------------
+{
+  const localSrc = await readFile(new URL('../net/party/local.mjs', import.meta.url), 'utf8');
+  const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
+  const phoneSrc = await readFile(new URL('../src/views/party-phone.js', import.meta.url), 'utf8');
+  t('W28 · show fanout publishes until so clients can tick without inventing a clock',
+    FANOUT_KEYS.show.includes('until') && FANOUT_KEYS.show.includes('beat'));
+  t('W28a · noms/lynch are closed public side-channels, not state-frame secrets',
+    FANOUT_KEYS.noms.includes('standing') && FANOUT_KEYS.lynch.includes('result')
+      && FANOUT_KEYS.lynchVote.includes('voter') && FANOUT_KEYS.nomRow.includes('target'));
+  t('W28b · the server clock walks Reckoning and Vote; nominations extend the window',
+    /function enterReckoningLive/.test(localSrc)
+    && /function enterVoteLive/.test(localSrc)
+    && /function enterExecutionLive/.test(localSrc)
+    && /function extendReckoning/.test(localSrc)
+    && /msg\.t === 'nominate'/.test(localSrc)
+    && /msg\.t === 'lynchVote'/.test(localSrc));
+  t('W28c · TV debrief is a mini recap over the ballroom, not the full recap card',
+    /function talkStage/.test(hostSrc)
+    && /function recapMini/.test(hostSrc)
+    && /function cueSitDown/.test(hostSrc)
+    && /data-show-clock/.test(hostSrc)
+    && !/No eviction this episode/.test(hostSrc));
+  t('W28d · phones nominate and vote; debrief stays phones-down with a countdown',
+    /paintNominate/.test(phoneSrc)
+    && /paintLynchVote/.test(phoneSrc)
+    && /data-show-clock/.test(phoneSrc)
+    && /t: 'nominate'/.test(phoneSrc)
+    && /t: 'lynchVote'/.test(phoneSrc));
+  t('W28e · CAUGHT is still reserved — hunter take is still the next slice',
+    !/RUN_END\.CAUGHT/.test(localSrc));
 }
 
 // ---- W26 · DUAL-STICK TV CHASE — no phone embed; look cue + camera-relative move ------------

@@ -166,6 +166,38 @@ export function injectNightSkin() {
       background:var(--night-deep); }
     .intro-hint { text-align:center; color:var(--night-dim); font-size:13px;
       letter-spacing:.16em; text-transform:uppercase; margin-top:8px; }
+    /* Talk beats (debrief / reckoning / vote / execution): the ballroom is the picture,
+       the recap is a strip, the clock is the thing you can read from the sofa.
+       No backticks in this comment — this block lives in a template literal. */
+    .night.on-talk .night-top { padding:8px 22px 4px; }
+    .night.on-talk .night-line { display:none; }
+    .night.on-talk .night-main { padding:0 16px 10px; overflow:hidden;
+      display:flex; flex-direction:column; justify-content:center; }
+    .talk-stage { position:relative; display:flex; flex-direction:column; align-items:center; }
+    .talk-frame { height:min(${INTRO_FRAME_PCT}vh, calc(${INTRO_FRAME_PCT}vw * 9 / 16)); }
+    .talk-overlay { position:absolute; inset:0; pointer-events:none;
+      display:flex; flex-direction:column; justify-content:space-between; padding:14px 16px; }
+    .recap-mini { align-self:flex-start; display:flex; flex-wrap:wrap; gap:10px 16px;
+      padding:8px 12px; border-radius:8px; background:rgba(12,10,8,.72);
+      border:1px solid rgba(var(--night-accent-rgb), .28); font-size:13px;
+      letter-spacing:.14em; text-transform:uppercase; font-weight:700; }
+    .recap-mini .mini-v.ok { color:var(--night-live); }
+    .recap-mini .mini-v.bad { color:var(--night-bad); }
+    .talk-clock { align-self:flex-end; font-size:clamp(48px, 10vw, 96px); font-weight:800;
+      line-height:1; font-variant-numeric:tabular-nums; color:#fff;
+      text-shadow:0 4px 24px rgba(0,0,0,.85); }
+    .phone .talk-clock, .phone-clock { font-size:clamp(36px, 14vw, 64px); align-self:flex-start;
+      text-shadow:none; margin:8px 0 12px; }
+    .talk-kicker { margin:8px 0 0; text-align:center; color:var(--night-dim); font-size:14px;
+      letter-spacing:.12em; text-transform:uppercase; }
+    .nom-board { margin-top:10px; display:flex; flex-direction:column; gap:8px; max-width:720px;
+      margin-left:auto; margin-right:auto; }
+    .nom-row { display:grid; grid-template-columns:auto 1fr auto; gap:14px; align-items:center;
+      padding:12px 16px; border-radius:8px; background:rgba(18,14,10,.82);
+      border:1px solid rgba(var(--night-accent-rgb), .2); }
+    .nom-n { color:var(--night-accent); font-weight:800; letter-spacing:.16em; }
+    .nom-who { font-size:clamp(22px, 4vw, 40px); font-weight:800; line-height:1.05; }
+    .nom-by { color:var(--night-dim); font-size:12px; letter-spacing:.1em; text-transform:uppercase; }
     /* '.night' is opaque by design — it is the show's own black. While the mansion is warming
        behind it, it becomes a scrim instead, and 'party-host.js' sets 'rrr-warming' on <body> only
        once the layer is live so the lobby never fades toward a frame that has not rendered. */

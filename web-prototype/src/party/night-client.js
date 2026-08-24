@@ -8,8 +8,9 @@ import { STUB_SHOW_PLAN } from './show.js';
 
 export { CODE_ABC, normalizeCodeDisplay, normalizeCodeWire, STUB_SHOW_PLAN };
 export {
-  SHOW_BEATS, AFTER_RUN_BEATS, isShowBeat, recapAfterMs, nextShowBeat,
-  holdMsFor, RECAP_HOLD_MS, DEBRIEF_HOLD_MS,
+  SHOW_BEATS, AFTER_RUN_BEATS, TALK_BEATS, isShowBeat, isTalkBeat, recapAfterMs, nextShowBeat,
+  holdMsFor, remainingMs, formatRemain,
+  RECAP_HOLD_MS, DEBRIEF_HOLD_MS, RECKONING_HOLD_MS, VOTE_HOLD_MS, EXECUTION_HOLD_MS,
 } from './show.js';
 
 export function makeCode(rand = Math.random) {
@@ -53,6 +54,13 @@ export class PartyNightClient {
     this.beat = 'lobby';
     /** SMASHED/TIME from the server show message. */
     this.runEnd = null;
+    /** Epoch ms — server deadline for the current show beat. Clients tick locally. */
+    this.showUntil = null;
+    /** Standing nominations, public. */
+    this.noms = [];
+    /** Aired lynch ballots — empty until tallied. */
+    this.lynchVotes = [];
+    this.lynchResult = null;
     this.connected = false;
     this.full = false;
   }
@@ -98,7 +106,16 @@ export class PartyNightClient {
         }
         if (m.t === 'lobby') this.lobby = m;
         if (m.t === 'ballots') this.ballots = m.votes || [];
-        if (m.t === 'show') { this.beat = m.beat; this.runEnd = m.end || null; }
+        if (m.t === 'show') {
+          this.beat = m.beat;
+          this.runEnd = m.end || null;
+          this.showUntil = Number.isFinite(m.until) ? m.until : null;
+        }
+        if (m.t === 'noms') this.noms = m.standing || [];
+        if (m.t === 'lynch') {
+          this.lynchVotes = m.votes || [];
+          this.lynchResult = m.result || null;
+        }
         this.onMessage(m);
         if (m.t === 'welcome' || m.t === 'full') {
           clearTimeout(timer);
