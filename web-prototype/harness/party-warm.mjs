@@ -1727,9 +1727,11 @@ console.log('\nparty-warm — the lobby-warm night');
   t('W29 · show chrome CSS holds no hex of its own', hex.length === 0, hex.join(',') || 'no literals');
 
   const colours = SHOW_CHROME_CSS.match(/rgba?\([^)]*\)/gi) || [];
-  const notBlack = colours.filter((c) => !/^rgba?\(\s*0\s*,\s*0\s*,\s*0\s*[,)]/i.test(c));
-  t('W29a · the only literal colours left are black — plate, matte, shadow',
-    notBlack.length === 0, notBlack.join(',') || `${colours.length} blacks`);
+  const notNamed = colours.filter((c) =>
+    !/^rgba?\(\s*0\s*,\s*0\s*,\s*0\s*[,)]/i.test(c)
+    && !/^rgba?\(\s*var\(--night-[a-z-]+-rgb\)/i.test(c));
+  t('W29a · literal colours are black or a palette rgb token — plate, matte, shadow',
+    notNamed.length === 0, notNamed.join(',') || `${colours.length} fills`);
 
   const used = [...new Set([...SHOW_CHROME_CSS.matchAll(/var\((--[a-z-]+)/g)].map((m) => m[1]))];
   const orphans = used.filter((n) => !isNightToken(n));
@@ -1753,10 +1755,12 @@ console.log('\nparty-warm — the lobby-warm night');
     && /countdownHtml\(/.test(hostSrc)
     && /verdictPlateHtml\(/.test(hostSrc));
   t('W29f · lobby still exposes .night-code and the QR — the join is the picture',
-    /night-code/.test(hostSrc) && /night-qr/.test(hostSrc) && /qrSvg\(/.test(hostSrc));
+    /night-code/.test(codeBugHtml({ code: 'RB42' }))
+    && /night-qr/.test(hostSrc) && /qrSvg\(/.test(hostSrc));
   t('W29g · the join URL is a class, not a one-off style attribute',
-    /night-url/.test(hostSrc)
-    && !/style="margin-top:14px;letter-spacing:\.03em/.test(hostSrc));
+    /night-url/.test(codeBugHtml({ code: 'RB42', url: 'http://x' }))
+    && !/style="margin-top:14px;letter-spacing:\.03em/.test(hostSrc)
+    && !/style="margin-top:16px"/.test(hostSrc));
   t('W29h · expedition chrome still never mounts a guide map on the TV',
     !/guideMapSvg/.test(hostSrc) && !/GUIDE_MAP/.test(hostSrc));
   t('W29i · phones keep Jackbox-scale nominate / lynch lists and still hide self',
