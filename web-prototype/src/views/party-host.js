@@ -14,13 +14,14 @@ import { PartyNightClient, defaultWsUrl, makeCode, tokenKey } from '../party/nig
 import { recapFromEvents } from '../party/recap.js';
 import { injectNightSkin, markPartyReady, playerName } from '../party/night-skin.js';
 import { qrSvg } from '../party/qr.js';
-import { DEFAULT_LOOK, cleanLook, robotFaceSvg } from '../party/look.js';
+import {
+  DEFAULT_LOOK, SHOW_LINE, cleanLook, codeBugHtml, countdownHtml, nameplateHtml,
+  recBugHtml, robotFaceSvg, showCam, titlePlateHtml, verdictPlateHtml,
+} from '../party/look.js';
 import { mergePublicNames } from '../party/cast-ui.js';
 import { cueViolations, warmLabel, warmPct, warmUrl } from '../party/follow.js';
 import { formatRemain, isTalkBeat, remainingMs } from '../party/show.js';
 import { NO_ONE, SHOWRUNNER } from '../party/vote.js';
-
-const LINE = 'Two of you go in. One walks, one talks. The rest of us watch. Someone in this room is lying.';
 
 export default async function partyHost({ params }) {
   injectNightSkin();
@@ -555,21 +556,48 @@ export default async function partyHost({ params }) {
        * refreshed TV can jump back onto the run; recap keeps "Run" for the same recovery.
        */
     } else if (show === 'recap') {
-      body += recapBoard(recap, names, ui.runEnd);
+      body += recapBoard(recap, names, ui.runEnd, clock);
       body += `<div class="actions"><button class="btn ghost" id="to-run">Run</button></div>`;
-      body += `<p class="hint" style="margin-top:16px">Phones down. Debrief is next.</p>`;
+      body += `<p class="hint spaced">Phones down. Debrief is next.</p>`;
     } else if (show === 'debrief') {
-      body += talkStage({ recap, names, runEnd: ui.runEnd, clock, kicker: 'Phones down — talk.' });
+      body += talkStage({
+        recap, names, lobby: client.lobby, runEnd: ui.runEnd, clock,
+        kicker: 'Phones down — talk.', beat: 'debrief',
+        who: joinedName(names, recap.runner, 'The circle'),
+        whoSub: 'live · debrief',
+        whoId: recap.runner,
+      });
     } else if (show === 'reckoning') {
-      body += talkStage({ recap, names, runEnd: ui.runEnd, clock, kicker: 'Nominate. First tap stands.' });
-      body += nomBoard(client.noms, names);
+      body += talkStage({
+        recap, names, lobby: client.lobby, runEnd: ui.runEnd, clock,
+        kicker: 'Nominate. First tap stands.', beat: 'reckoning',
+        who: standingLead(client.noms, names) || 'Reckoning',
+        whoSub: client.noms?.length ? 'live · named' : 'live · waiting',
+        whoId: client.noms?.[0]?.target,
+        standing: client.noms,
+      });
     } else if (show === 'vote') {
-      body += talkStage({ recap, names, runEnd: ui.runEnd, clock, kicker: 'One ballot. Living majority.' });
-      body += nomBoard(client.noms, names);
-      if (client.lynchResult) body += lynchBoard(client.lynchVotes, client.lynchResult, names);
+      body += talkStage({
+        recap, names, lobby: client.lobby, runEnd: ui.runEnd, clock,
+        kicker: 'One ballot. Living majority.', beat: 'vote',
+        who: standingLead(client.noms, names) || 'The ballot',
+        whoSub: 'live · vote',
+        whoId: client.noms?.[0]?.target,
+        standing: client.noms,
+        tally: client.lynchResult ? { votes: client.lynchVotes, result: client.lynchResult } : null,
+      });
     } else if (show === 'execution') {
-      body += talkStage({ recap, names, runEnd: ui.runEnd, clock, kicker: executionLine(client.lynchResult, names) });
-      if (client.lynchResult) body += lynchBoard(client.lynchVotes, client.lynchResult, names);
+      const executed = client.lynchResult?.executed;
+      body += talkStage({
+        recap, names, lobby: client.lobby, runEnd: ui.runEnd, clock,
+        kicker: executionLine(client.lynchResult, names), beat: 'execution',
+        who: executed ? joinedName(names, executed, 'A player') : 'Nobody',
+        whoSub: executed ? 'nameplate down' : 'no eviction',
+        whoId: executed,
+        verdict: executionLine(client.lynchResult, names),
+        executed: !!executed,
+        tally: client.lynchResult ? { votes: client.lynchVotes, result: client.lynchResult } : null,
+      });
     } else if (show === 'casting') {
       const showingIntros = ui.introsSent && !ui.introsDone;
       if (showingIntros) {
@@ -583,24 +611,23 @@ export default async function partyHost({ params }) {
       if (hasPair) body += `<button class="btn ghost" id="to-run">Watch the run</button>`;
       body += `</div>`;
       if (episode === 1 && !showingIntros) {
-        body += `<p class="hint" style="margin-top:16px">Episode 1 airs every ballot. After the run the room nominates.</p>`;
+        body += `<p class="hint spaced">Episode 1 airs every ballot. After the run the room nominates.</p>`;
       }
     } else {
       body += `
-        <div class="night-row">
-          <div>
-            <div class="night-code">${esc(code.toUpperCase())}</div>
-            <div class="night-sub">room code · phones open the join URL</div>
-            <div class="night-sub" style="margin-top:14px;letter-spacing:.03em;text-transform:none;max-width:28rem;word-break:break-all">${esc(joinPath)}</div>
+        <div class="lobby-show">
+          ${titlePlateHtml()}
+          <div class="night-row">
+            ${codeBugHtml({ code: code.toUpperCase(), url: joinPath })}
+            <div class="night-qr" aria-label="QR join">${qrSvg(joinPath, { dim: 200 })}</div>
           </div>
-          <div class="night-qr" aria-label="QR join">${qrSvg(joinPath, { dim: 200 })}</div>
-        </div>
-        ${seatGrid(client.lobby)}
-        ${warmBar()}
-        <div class="actions">
-          <button class="btn" id="go" ${canStart ? '' : 'disabled'}>Start the night</button>
-        </div>
-        <p class="hint" data-live-hint style="margin-top:14px">${nLive} phone${nLive === 1 ? '' : 's'} live · need 2 to start · empty chairs stay empty</p>`;
+          ${seatGrid(client.lobby)}
+          ${warmBar()}
+          <div class="actions">
+            <button class="btn" id="go" ${canStart ? '' : 'disabled'}>Start the night</button>
+          </div>
+          <p class="hint live-hint" data-live-hint>${nLive} phone${nLive === 1 ? '' : 's'} live · need 2 to start · empty chairs stay empty</p>
+        </div>`;
     }
 
     // 📺 `on-run` is what lets the night skin give the picture 90% of the television — see
@@ -618,10 +645,13 @@ export default async function partyHost({ params }) {
     root.className = `night${onRun ? ' on-run' : ''}${onIntro ? ' on-intro' : ''}${onStage ? ' on-talk' : ''}`;
     root.innerHTML = `
       <div class="night-top">
-        <div class="night-brand">Prime Time</div>
+        <div class="night-brand-row">
+          ${recBugHtml({ cam: showCam(show) })}
+          <div class="night-brand">Prime Time</div>
+        </div>
         <div class="night-phase">${esc(show.toUpperCase())} · episode ${esc(String(episode))}${clock ? ` · <span data-show-clock>${esc(clock)}</span>` : ''}</div>
       </div>
-      ${onRun || onStage ? '' : `<div class="night-line">${esc(LINE)}</div>`}
+      ${onRun || onStage || show === 'lobby' ? '' : `<div class="night-line">${esc(SHOW_LINE)}</div>`}
       <div class="night-main">${body}</div>`;
 
     /*
@@ -748,7 +778,7 @@ function runStage({ names, lobby, runnerId, guideId, cameras, alarms, followLive
 function seatGrid(lobby) {
   const seats = (lobby?.seats || []).filter((s) => !s.isTV);
   if (!seats.length) {
-    return `<p class="hint" style="margin-top:22px">Waiting for the room…</p>`;
+    return `<p class="hint waiting">Waiting for the room…</p>`;
   }
   return `<div class="seats">${seats.map((s) => seatCard(s)).join('')}</div>`;
 }
@@ -839,14 +869,44 @@ function ballotBoard(votes, names, pair, recap, episode) {
   return `${hero}<div class="ballot${huge ? ' huge' : ''}">${rows || '<p class="hint">No ballots yet — phones pick a runner and a guide.</p>'}</div>`;
 }
 
-function talkStage({ recap, names, runEnd, clock, kicker }) {
+function standingLead(standing, names) {
+  const first = (standing || [])[0];
+  return first ? joinedName(names, first.target, 'Someone') : '';
+}
+
+function talkStage({
+  recap, names, lobby, runEnd, clock, kicker, beat,
+  who, whoSub, whoId, standing, tally, verdict, executed,
+}) {
+  const look = whoId ? seatLook(lobby, whoId) : null;
+  const face = look ? robotFaceSvg(look.shell, look.accent, { size: 64 }) : '';
+  const plate = who
+    ? nameplateHtml({ name: who, sub: whoSub || `live · ${beat || 'debrief'}`, face })
+    : '';
+  const spectacle = verdict
+    ? verdictPlateHtml({
+      kicker: executed ? 'VERDICT READY' : 'NO EVICTION',
+      line: verdict,
+      sub: tally?.result
+        ? `threshold ${tally.result.threshold ?? '—'} · abstained ${tally.result.abstained ?? 0}`
+        : '',
+    })
+    : '';
   return `
     <div class="talk-stage">
       <div class="intro-frame talk-frame" aria-label="Ballroom debrief"></div>
       <div class="talk-overlay">
-        ${recapMini(recap, names, runEnd)}
-        ${clock ? `<div class="talk-clock" data-show-clock>${esc(clock)}</div>` : ''}
-        <p class="talk-kicker">${esc(kicker || 'Phones down — talk.')}</p>
+        <div class="talk-overlay-top">
+          ${recapMini(recap, names, runEnd)}
+          ${countdownHtml({ clock, label: (beat || 'debrief').toUpperCase() })}
+        </div>
+        ${nomBoard(standing, names, lobby)}
+        ${tally ? lynchBoard(tally.votes, tally.result, names) : ''}
+        <div class="talk-overlay-bot">
+          ${spectacle}
+          ${plate}
+          <p class="talk-kicker">${esc(kicker || 'Phones down — talk.')}</p>
+        </div>
       </div>
     </div>`;
 }
@@ -863,24 +923,40 @@ function recapMini(recap, names, runEnd) {
   </div>`;
 }
 
-function nomBoard(standing, names) {
-  const rows = (standing || []).map((n, i) => `
-    <div class="nom-row">
+function nomBoard(standing, names, lobby) {
+  if (!standing) return '';
+  const rows = standing.map((n, i) => {
+    const look = seatLook(lobby, n.target) || DEFAULT_LOOK;
+    const face = robotFaceSvg(look.shell, look.accent, { size: 48 });
+    return `
+    <div class="nom-row show-nom">
       <div class="nom-n">${i + 1}</div>
-      <div class="nom-who">${esc(joinedName(names, n.target, 'Someone'))}</div>
-      <div class="nom-by">named by ${esc(joinedName(names, n.nominator, 'a player'))}</div>
-    </div>`).join('');
+      ${nameplateHtml({
+        name: joinedName(names, n.target, 'Someone'),
+        sub: `named by ${joinedName(names, n.nominator, 'a player')}`,
+        face,
+      })}
+    </div>`;
+  }).join('');
   return `<div class="nom-board">${rows || '<p class="hint">Waiting on phones — nominate.</p>'}</div>`;
 }
 
 function lynchBoard(votes, result, names) {
+  const counts = result?.counts || {};
+  const tally = Object.entries(counts).map(([id, n]) => `
+    <div class="show-tally-row">
+      <div class="who">${esc(joinedName(names, id, 'Someone'))}</div>
+      <div class="n">${esc(String(n))}</div>
+    </div>`).join('');
   const aired = (votes || []).map((v) => `
     <div class="nom-row">
       <div class="nom-who">${esc(joinedName(names, v.voter, 'Someone'))}</div>
       <div class="nom-by">${v.choice === NO_ONE ? 'NO ONE' : esc(joinedName(names, v.choice, 'Someone'))}</div>
     </div>`).join('');
-  const line = executionLine(result, names);
-  return `<div class="nom-board lynch-board"><p class="talk-kicker">${esc(line)}</p>${aired}</div>`;
+  return `<div class="nom-board lynch-board">
+    ${tally ? `<div class="show-tally">${tally}</div>` : ''}
+    ${aired}
+  </div>`;
 }
 
 function executionLine(result, names) {
@@ -893,7 +969,7 @@ function executionLine(result, names) {
   return `${who} is out. ${swing} swings.`;
 }
 
-function recapBoard(recap, names, runEnd) {
+function recapBoard(recap, names, runEnd, clock) {
   const taken = recap.taken?.length
     ? recap.taken.map((t) => joinedName(names, t.id, 'The runner')).join(', ')
     : 'CAME BACK';
@@ -903,7 +979,7 @@ function recapBoard(recap, names, runEnd) {
   const outcome = runEnd
     ? `<div class="fact"><div class="k">Outcome</div><div class="v ${runEnd === 'SMASHED' ? 'ok' : 'bad'}">${esc(runEnd)}</div></div>`
     : '';
-  return `<div class="recap">
+  return `${countdownHtml({ clock, label: 'RECAP' })}<div class="recap">
     ${outcome}
     <div class="fact"><div class="k">Camera</div><div class="v ${recap.cameraLit ? 'ok' : 'bad'}">${recap.cameraLit ? 'LIT' : 'STAYED DARK'}</div></div>
     <div class="fact"><div class="k">Runner</div><div class="v ${recap.taken?.length ? 'bad' : 'ok'}">${esc(taken)}</div></div>

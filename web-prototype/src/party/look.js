@@ -74,3 +74,151 @@ export function robotFaceSvg(shell = DEFAULT_LOOK.shell, accent = DEFAULT_LOOK.a
     <rect class="bot-eye" x="44" y="33" width="6.5" height="4.2" rx="2.1" fill="#1a120c"/>
   </svg>`;
 }
+
+/**
+ * Broadcast chrome — tokens and HTML the TV and the phone share.
+ *
+ * The chase overlay in party-follow.js is the look the room already trusts (REC, lower-third,
+ * letterbox). Host paint used to restyle each beat with inline leftovers. These builders are
+ * the one language: title plate, join-code bug, nameplate, countdown, verdict plate.
+ *
+ * CSS lives here so a bare-node gate can walk it, same as ROLE_CARD_CSS / FOLLOW_CHROME_CSS.
+ * night-skin.js interpolates the block. No colour literals except photographic black.
+ * No backticks in the comment inside the CSS string.
+ */
+export const SHOW_TITLE = 'PRIME TIME';
+export const SHOW_LINE = 'Two of you go in. One walks, one talks. The rest of us watch. Someone in this room is lying.';
+
+/** Camera bug per show beat. Expedition stays CAM 01 to match follow.js CAM_LABEL. */
+export const SHOW_CAM = {
+  lobby: 'RRR CAM 00',
+  casting: 'RRR CAM 00',
+  expedition: 'RRR CAM 01',
+  recap: 'RRR CAM 02',
+  debrief: 'RRR CAM 02',
+  reckoning: 'RRR CAM 03',
+  vote: 'RRR CAM 03',
+  execution: 'RRR CAM 03',
+};
+
+export function showCam(beat) {
+  return SHOW_CAM[String(beat || '')] || SHOW_CAM.lobby;
+}
+
+function escHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
+export function recBugHtml({ cam = SHOW_CAM.lobby } = {}) {
+  return `<div class="show-rec" aria-hidden="true"><span class="show-dot"></span><span>${escHtml(cam)}</span></div>`;
+}
+
+export function nameplateHtml({ name, sub = '', face = '' } = {}) {
+  return `<div class="show-third">
+    ${face ? `<div class="face">${face}</div>` : ''}
+    <div>
+      <div class="who">${escHtml(name)}</div>
+      ${sub ? `<div class="sub">${escHtml(sub)}</div>` : ''}
+    </div>
+  </div>`;
+}
+
+export function titlePlateHtml({ title = SHOW_TITLE, line = SHOW_LINE } = {}) {
+  return `<div class="show-title">
+    <div class="show-title-name">${escHtml(title)}</div>
+    <div class="show-title-line">${escHtml(line)}</div>
+  </div>`;
+}
+
+export function codeBugHtml({ code, url = '', sub = 'room code · phones scan the qr' } = {}) {
+  return `<div class="show-bug">
+    <div class="show-bug-k">live · join</div>
+    <div class="night-code">${escHtml(code)}</div>
+    <div class="night-sub">${escHtml(sub)}</div>
+    ${url ? `<div class="night-url">${escHtml(url)}</div>` : ''}
+  </div>`;
+}
+
+export function countdownHtml({ clock, label = '' } = {}) {
+  if (!clock) return '';
+  return `<div class="show-clock">
+    ${label ? `<div class="show-clock-k">${escHtml(label)}</div>` : ''}
+    <div class="talk-clock" data-show-clock>${escHtml(clock)}</div>
+  </div>`;
+}
+
+export function verdictPlateHtml({ kicker = 'VERDICT READY', line, sub = '' } = {}) {
+  return `<div class="show-verdict">
+    <div class="show-verdict-k">${escHtml(kicker)}</div>
+    <div class="show-verdict-v">${escHtml(line)}</div>
+    ${sub ? `<div class="show-verdict-s">${escHtml(sub)}</div>` : ''}
+  </div>`;
+}
+
+export const SHOW_CHROME_CSS = `
+    /* Shared show dressing. Photographic black only — matte, plate, shadow. */
+    .show-rec { display:flex; align-items:center; gap:9px; letter-spacing:.24em;
+      text-transform:uppercase; font-size:12px; font-weight:700; color:var(--night-ink); }
+    .show-dot { width:11px; height:11px; border-radius:50%; background:var(--night-bad);
+      box-shadow:0 0 12px var(--night-bad); animation: fl-rec 2s ease-in-out infinite; }
+    .night-brand-row { display:flex; align-items:center; gap:14px; }
+    .show-title { margin:0 0 18px; max-width:46rem; }
+    .show-title-name { font-size:clamp(28px, 5vw, 56px); font-weight:800; letter-spacing:.2em;
+      text-transform:uppercase; color:var(--night-accent); line-height:1; }
+    .show-title-name::before { content:''; display:inline-block; width:12px; height:12px;
+      margin-right:14px; vertical-align:0.12em; background:var(--night-accent); transform:rotate(45deg); }
+    .show-title-line { margin-top:10px; color:var(--night-soft); font-size:16px; letter-spacing:.02em;
+      line-height:1.4; }
+    .show-bug { padding:14px 18px 12px; border:1px solid rgba(var(--night-accent-rgb), .35);
+      background:rgba(0,0,0,.45); border-radius:0 14px 14px 0; min-width:min(100%, 22rem); }
+    .show-bug-k { color:var(--night-accent); font-size:11px; letter-spacing:.26em;
+      text-transform:uppercase; font-weight:700; margin-bottom:8px; }
+    .night-url { margin-top:12px; color:var(--night-dim); font-size:12px; letter-spacing:.03em;
+      text-transform:none; max-width:28rem; word-break:break-all; }
+    .hint.spaced { margin-top:16px; }
+    .hint.live-hint { margin-top:14px; }
+    .hint.waiting { margin-top:22px; }
+    .show-third { display:flex; align-items:flex-end; gap:14px;
+      padding:10px 22px 10px 10px; background:rgba(0,0,0,.62); border-radius:0 12px 12px 0;
+      max-width:min(100%, 36rem); }
+    .show-third .face { width:64px; height:64px; flex:0 0 auto;
+      filter: drop-shadow(0 8px 20px rgba(0,0,0,.8)); }
+    .show-third .face .bot-face { width:64px; height:64px; }
+    .show-third .who { font-size:clamp(28px, 4.4vw, 56px); font-weight:800; line-height:.98;
+      color:var(--night-ink); text-shadow:0 3px 18px rgba(0,0,0,.95); }
+    .show-third .sub { margin-top:6px; font-size:12px; letter-spacing:.26em; text-transform:uppercase;
+      color:var(--night-accent); text-shadow:0 2px 10px rgba(0,0,0,.9); }
+    .show-clock { display:flex; flex-direction:column; align-items:flex-end; text-align:right; }
+    .show-clock-k { color:var(--night-accent); font-size:12px; letter-spacing:.22em;
+      text-transform:uppercase; font-weight:700; margin-bottom:4px; }
+    .show-clock .talk-clock { font-size:clamp(56px, 12vw, 120px); }
+    .talk-overlay-top { display:flex; justify-content:space-between; align-items:flex-start;
+      gap:16px; width:100%; }
+    .talk-overlay-bot { display:flex; flex-direction:column; align-items:flex-start; gap:10px; }
+    .show-verdict { margin:8px 0 4px; padding:16px 20px; border:2px solid rgba(var(--night-accent-rgb), .55);
+      background:rgba(0,0,0,.72); border-radius:4px 18px 4px 4px; max-width:min(100%, 42rem); }
+    .show-verdict-k { color:var(--night-accent); font-size:13px; letter-spacing:.28em;
+      text-transform:uppercase; font-weight:800; }
+    .show-verdict-v { margin-top:8px; font-size:clamp(28px, 5vw, 64px); font-weight:800;
+      line-height:1.05; color:var(--night-ink); text-transform:uppercase; }
+    .show-verdict-s { margin-top:8px; color:var(--night-dim); font-size:12px; letter-spacing:.16em;
+      text-transform:uppercase; }
+    .show-tally { display:flex; flex-wrap:wrap; gap:10px 18px; margin-top:8px; }
+    .show-tally-row { display:flex; align-items:baseline; gap:10px;
+      padding:8px 12px; background:rgba(0,0,0,.55); border-radius:8px;
+      border:1px solid rgba(var(--night-accent-rgb), .22); }
+    .show-tally-row .who { font-size:clamp(18px, 2.4vw, 28px); font-weight:800; }
+    .show-tally-row .n { font-size:clamp(22px, 3vw, 36px); font-weight:800; color:var(--night-accent);
+      font-variant-numeric:tabular-nums; }
+    .nom-board { pointer-events:none; }
+    .nom-row.show-nom { display:flex; align-items:center; gap:12px; padding:8px 10px; }
+    .nom-row.show-nom .show-third { background:transparent; padding:0; }
+    .pick-list.jackbox button { min-height:76px; font-size:clamp(22px, 7vw, 36px);
+      padding:18px 20px; letter-spacing:.04em; }
+    .pick-list.buzz button { animation: night-rise .35s ease; }
+    .night.on-run .show-rec, .night.on-talk .show-rec, .night.on-intro .show-rec { font-size:10px; }
+    .night.on-run .show-dot, .night.on-talk .show-dot { width:8px; height:8px; }
+    @keyframes fl-rec { 0%,100% { opacity:.25; } 50% { opacity:1; } }
+`;

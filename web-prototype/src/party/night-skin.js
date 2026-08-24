@@ -14,6 +14,7 @@ import { NIGHT_TOKENS } from './palette.js';
 import { ROLE_CARD_CSS } from './rolecard.js';
 import { GUIDE_MAP_CSS } from './guidemap.js';
 import { INTRO_FRAME_PCT, TV_FRAME_PCT } from './follow.js';
+import { SHOW_CHROME_CSS } from './look.js';
 
 export function playerName(players, id) {
   const p = (players || []).find((x) => x.id === id);
@@ -184,8 +185,9 @@ export function injectNightSkin() {
     .recap-mini .mini-v.ok { color:var(--night-live); }
     .recap-mini .mini-v.bad { color:var(--night-bad); }
     .talk-clock { align-self:flex-end; font-size:clamp(48px, 10vw, 96px); font-weight:800;
-      line-height:1; font-variant-numeric:tabular-nums; color:#fff;
+      line-height:1; font-variant-numeric:tabular-nums; color:var(--night-ink);
       text-shadow:0 4px 24px rgba(0,0,0,.85); }
+    ${SHOW_CHROME_CSS}
     .phone .talk-clock, .phone-clock { font-size:clamp(36px, 14vw, 64px); align-self:flex-start;
       text-shadow:none; margin:8px 0 12px; }
     .talk-kicker { margin:8px 0 0; text-align:center; color:var(--night-dim); font-size:14px;

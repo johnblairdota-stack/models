@@ -454,6 +454,7 @@ export default async function partyPhone({ params }) {
         body += padFxHtml();
       } else if (beat === 'vote') {
         body += paintLynchVote(nominees, me, c);
+        body += padFxHtml();
       } else if (beat === 'execution') {
         body += paintExecution(nominees, c);
       }
@@ -1187,7 +1188,7 @@ export default async function partyPhone({ params }) {
       return html;
     }
     html += `<p class="hint">First tap stands. No self-nom.</p>
-      <div class="pick-list">${targets.map((p) =>
+      <div class="pick-list jackbox buzz">${targets.map((p) =>
         `<button type="button" data-nom="${esc(p.id)}">${esc(p.name)}</button>`).join('')}</div>`;
     return html;
   }
@@ -1208,8 +1209,8 @@ export default async function partyPhone({ params }) {
       html += `<p class="hint">Ballot in. Non-voters count as NO ONE.</p>`;
       return html;
     }
-    html += `<p class="hint">Pick one standing nominee, or NO ONE.</p>
-      <div class="pick-list">
+    html += `<p class="hint">Pick one standing nominee, or NO ONE. You are not on this ballot.</p>
+      <div class="pick-list jackbox">
         ${standing.map((n) => `<button type="button" data-lynch="${esc(n.target)}">${esc(n.name)}</button>`).join('')}
         <button type="button" data-lynch="${NO_ONE}">NO ONE</button>
       </div>`;
@@ -1233,6 +1234,7 @@ export default async function partyPhone({ params }) {
       b.addEventListener('click', () => {
         if (state.nominated) return;
         state.nominated = true;
+        padFx('Named.', 'smash', [0, 40, 50, 110]);
         c.send({ t: 'nominate', target: b.dataset.nom });
         paint();
       });
@@ -1243,11 +1245,18 @@ export default async function partyPhone({ params }) {
     for (const b of root.querySelectorAll('[data-lynch]')) {
       b.addEventListener('click', () => {
         if (state.voted) return;
+        const choice = b.dataset.lynch;
+        if (choice === meId()) return;
         state.voted = true;
-        c.send({ t: 'lynchVote', choice: b.dataset.lynch });
+        padFx('Locked in.', '', [0, 35]);
+        c.send({ t: 'lynchVote', choice });
         paint();
       });
     }
+  }
+
+  function meId() {
+    return state.client?.welcome?.playerId || '';
   }
 
 }

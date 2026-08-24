@@ -139,7 +139,8 @@ t('N1c4 · after a finished run the clock is Recap → Debrief → Reckoning →
     && holdMsFor('reckoning', 0) === RECKONING_HOLD_MS && holdMsFor('vote') === VOTE_HOLD_MS
     && holdMsFor('execution') === EXECUTION_HOLD_MS
     && formatRemain(0) === '0s' && formatRemain(65000) === '1:05'
-    && remainingMs(1000, 1000) === 0);
+    && remainingMs(1000, 1000) === 0
+    && remainingMs(null) === null && remainingMs('') === null);
 t('N1c5 · episode 1 is the gallery painting; episode 2+ is the chapel table',
   missionFor(1) === MISSION_PAINTING && missionFor(2) === MISSION_TABLE
     && missionFor(3).target === 'table-round' && MISSION_TABLE.catalogId === 'table-round'
