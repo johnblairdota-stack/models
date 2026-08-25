@@ -358,7 +358,13 @@ function drapePanel(B, key, o) {
         c: [o.x + o.lean * v, o.yTop - o.h * v, o.z + o.drift * v],
         a: o.depth * 0.5 * spread,
         b: o.w * 0.5 * spread,
-        amp: 0.16 + 0.30 * v,
+        // ⚠ 0.16-0.46 rather than the first pass's 0.16-0.30. Seen square on, the shallower
+        // ripple read as cloth; seen RAKING down the window wall (`cam=eye.walk`, where these
+        // panels own a third of the frame) it read as satin ribbon — each lobe presenting one
+        // flat lit face with a hard edge. A fold only reads as a fold when its lit face turns
+        // far enough to fall away before the next one starts, and at a grazing angle that
+        // needs a deeper section than it does head-on.
+        amp: 0.16 + 0.46 * v,
         roll: o.roll + v * (o.twist ?? 0.5),
       };
     },
@@ -592,7 +598,7 @@ export function ballroomOrder(bin, o = {}) {
           // 0.55 -> 0.82 wide and 0.24 -> 0.30 deep. The box was sized to be unobtrusive
           // because it had nothing to show; a panel with folds wants enough width to fit five
           // of them across, and the pair now reads as curtains that could actually close.
-          w: 0.82, depth: 0.30, folds: 5,
+          w: 0.82, depth: 0.30, folds: 7,
           // The two panels of a pair lean and drift AWAY from the opening, which is what a
           // curtain held back by a tie does, and it also stops a symmetric pair reading as
           // one mirrored object.

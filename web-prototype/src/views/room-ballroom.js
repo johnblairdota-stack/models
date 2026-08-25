@@ -1878,7 +1878,15 @@ export default async function view(args = {}) {
       // The chequer bakes at roughness ~0.135 under a 0.3 clearcoat; dusty and worn patches
       // run well past it. Reflect where the marble is polished, fall back to the environment
       // where it is not, and let the material's own map decide which is which.
-      lo: 0.06, hi: 0.42,
+      //
+      // ⚠ ROUND 17: 0.06/0.42 -> 0.02/0.26, THE SAME CORRECTION THE PARQUET GATE JUST TOOK AND
+      // for the same reason. 0.06/0.42 puts the clean chequer at smoothstep = 0.106, i.e.
+      // EIGHTY-NINE PER CENT planar, and at that weight the black tiles come back as polished
+      // black glass carrying a legible upside-down room. `critic-eye-sweep` called the floor a
+      // wet mirror and the marble border is the half of it the parquet fix did not touch.
+      // 0.02/0.26 lands the same field at 47%: a polished stone floor that holds a soft image,
+      // which is what the bar's own chequer does, rather than a mirror.
+      lo: 0.02, hi: 0.26,
       wobble: 0.0,
       graze: EO_GRAZE,
     });
