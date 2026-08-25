@@ -480,7 +480,10 @@ export const GRADES = {
     // chain — this number is NOT the fix on its own (two stops of blown key cannot be graded
     // away, and 1.55 -> 0.90 was tried and does not reach it) and it must not be re-tuned
     // without the other two, which is the trap the round-15 note above describes.
-    exposure: 1.28,
+    // ROUND 17 second pass: 1.28 -> 1.45, the third term of the re-solve that puts this room on
+    // the bar's own ladder (median 48.8/49.8, toe 10.6/11.3). See the LIGHTS block in
+    // room-ballroom.js — it does not move without `sun` and `bounce`.
+    exposure: 1.45,
     gain: [1.0, 1.0, 1.0],
     ca: 0.0,                    // see the streak-glitch note above the GRADES table
     bloomStrength: 0.070, bloomThreshold: 15, bloomRadius: 1.05,

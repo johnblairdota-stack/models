@@ -394,7 +394,36 @@ export default async function view(args = {}) {
     //
     // ⚠ `?daylight=flat` IS UNTOUCHED. It is the ablation that holds round 12's pre-rebalance
     // numbers, and re-tuning it here would delete the only reachable copy of them.
-    : { env: 1.70, sun: 8150, bounce: 7.35, bounceCard: 5.0, grade: null, sunColor: 0xffe0b8,
+    // ---- ROUND 17, SECOND PASS: THE ROOM WAS STILL 18 L DARKER THAN THE BAR ---------------
+    //
+    // `sun` 8150 -> 5705 and `bounce` 7.35 -> 11.03, with `exposure` 1.28 -> 1.45 in the grade.
+    //
+    // The first pass of this round rejected exactly this triple, and the rejection was a
+    // measuring error worth recording because it is THE error round 13's own note warns about.
+    // It was turned down on the grounds that it took `eye.floor`'s median from 77.8 to 96.6
+    // and `eye.walk`'s from 57.7 to 76.8, i.e. "further from the bar's 49.8". But `eye.floor`
+    // is a CROUCH looking straight down a sunlit floor and the bar is a high overlook of a
+    // room's shaded two thirds — comparing their medians compares their subjects, not their
+    // grades. Round 13: "four rounds of surface work had been done inside a frame composed
+    // differently from the thing it is judged against."
+    //
+    // Compared at the framing that WAS built to match the bar, this room was plainly too dark,
+    // and after this round's three albedo re-solves the same triple now lands on the reference's
+    // own ladder almost exactly:
+    //
+    //     cam=overlook          median L    toe L    white%
+    //     before                  32.2       6.4      1.28
+    //     after                   48.8      10.6      1.07
+    //     refs/bf1-ballroom-01    49.8      11.3      1.20
+    //
+    // ⚠ AND IT PUTS `grade.mjs`'s DARKEST-DECILE GATE INTO WARN, ON PURPOSE. That gate's 2-8
+    // band is stated in its own header to have been read off the two locked STUDY images. The
+    // bar for THIS piece sits at 11.3 and would score WARN against it too — so a room chasing
+    // 2-8 is chasing a number its own reference does not meet, and the way it gets there is by
+    // crushing shadows, which `CRITIC_GUIDE.md` lists as a render tell in its own right
+    // ("dead blacks ... a cut-out silhouette"). This build holds 0.8% of the frame at L <= 2.6
+    // against the art's 0.1%. Matching the art is the point; the study's band is not the art.
+    : { env: 1.70, sun: 5705, bounce: 11.03, bounceCard: 5.0, grade: null, sunColor: 0xffe0b8,
         dir: [0.885, -0.375, 0.265], aim: [-4.7, 0, 0.2], angle: 0.42, penumbra: 0.22, mapSize: 2048,
         shaftWins: [0, 1, 2], cardWins: [0, 2] };
 
@@ -916,6 +945,73 @@ export default async function view(args = {}) {
     const bw = 6.6 / VEST_BACK_KEYS.length;
     bin.box(k, bw, 5.6, 0.3, -3.3 + (i + 0.5) * bw, 2.8, R.z0 - 4.2, 1.6);
   });
+
+  // ---- AND A DOOR AT THE END OF IT (round 17, second pass) --------------------------------
+  //
+  // With the room re-graded onto the bar's ladder the vestibule stopped being a black card and
+  // became a GREY one: a fixed 150x90 rect inside the aperture reads L 27.7 against L 31.3 for
+  // the shaded wall beside it, so the opening is now within four counts of the masonry it is
+  // cut into. Even brightness is the problem — the eye reads an aperture as a passage only if
+  // something in it is at a DIFFERENT depth, and a uniformly lit end wall gives it nothing.
+  //
+  // So the vestibule gets a door standing open onto a lit room, offset from the axis so it is
+  // not a bullseye, plus the light it throws on the floor in front of it. Two boxes. It is the
+  // cheapest possible depth cue and the only one that also answers "where does this go" — this
+  // room is the hub of a house the player digs through, and an eyeline that ends in a lit
+  // doorway is the difference between a wall with a hole in it and a way on.
+  if (VEST_GLOW > 0 && CAM !== 'r10') {
+    const doorMat = new THREE.MeshStandardMaterial({
+      color: 0x2a2c30, roughness: 0.9, metalness: 0,
+      // Warm, and deliberately the OPPOSITE temperature to the vestibule's own cool wash: the
+      // wash is meant to read as daylight from an unseen window, this as a lit interior, and
+      // two different light sources at two different depths is what sells the space as real.
+      emissive: new THREE.Color(0xffdcb4), emissiveIntensity: 1.25 * VEST_GLOW,
+    });
+    engine.onDispose?.(() => doorMat.dispose());
+    // ⚠ A DOOR AJAR, NOT A LIT RECTANGLE. The first build was one uniform emissive quad on the
+    // back wall and it read as a poster stuck to it — no jamb, no depth, no reason for its own
+    // edges. What makes an opening read is the stuff AROUND it: a leaf standing across most of
+    // the aperture, a bright slot beside the leaf, and an architrave with a dark inner edge for
+    // both to sit in. Four boxes, and the slot is now a shape a viewer can name.
+    const doorGroup = new THREE.Group();
+    doorGroup.name = 'vestibule-door';
+    const zw = R.z0 - 4.03;
+    // the lit slot — narrow, because a door left ajar is
+    const slot = new THREE.Mesh(new THREE.PlaneGeometry(0.58, 2.62), doorMat);
+    slot.position.set(-1.62, 1.31, zw);
+    doorGroup.add(slot);
+    // the leaf itself, catching a little of its own spill on the room side
+    const leafMat = new THREE.MeshStandardMaterial({
+      color: 0x1a1712, roughness: 0.85, metalness: 0,
+      emissive: new THREE.Color(0xffcf94), emissiveIntensity: 0.075 * VEST_GLOW,
+    });
+    engine.onDispose?.(() => leafMat.dispose());
+    const leaf = new THREE.Mesh(new THREE.BoxGeometry(1.02, 2.62, 0.06), leafMat);
+    leaf.position.set(-0.82, 1.31, zw + 0.10);
+    leaf.rotation.y = -0.22;                    // swung into the vestibule
+    doorGroup.add(leaf);
+    // architrave: a dark surround so the whole thing is an opening in a wall
+    const jambMat = new THREE.MeshStandardMaterial({ color: 0x151714, roughness: 0.9, metalness: 0 });
+    engine.onDispose?.(() => jambMat.dispose());
+    for (const [jw, jh, jx, jy] of [[0.16, 2.86, -2.02, 1.31], [0.16, 2.86, -0.24, 1.31], [1.94, 0.16, -1.13, 2.70]]) {
+      const j = new THREE.Mesh(new THREE.BoxGeometry(jw, jh, 0.10), jambMat);
+      j.position.set(jx, jy, zw + 0.05);
+      doorGroup.add(j);
+    }
+    scene.add(doorGroup);
+    // The pool it throws — a plain quad on the vestibule floor rather than a light, for the
+    // same numPointLights reason the wash itself is emissive.
+    const spillMat = new THREE.MeshStandardMaterial({
+      color: 0x33352f, roughness: 0.95, metalness: 0,
+      emissive: new THREE.Color(0xffcf94), emissiveIntensity: 0.30 * VEST_GLOW,
+    });
+    engine.onDispose?.(() => spillMat.dispose());
+    const spill = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 2.4), spillMat);
+    spill.rotation.x = -Math.PI / 2;
+    spill.position.set(-1.66, 0.02, R.z0 - 2.9);
+    spill.name = 'vestibule-spill';
+    scene.add(spill);
+  }
   // side walls / ceiling / floor: each split into five 0.84 m z-bands spanning the same
   // R.z0-4.2..R.z0 range r15's single boxes covered — near (at the arch) to far (at the back
   // wall), so the total footprint and draw surface area are exactly unchanged, only re-bucketed.

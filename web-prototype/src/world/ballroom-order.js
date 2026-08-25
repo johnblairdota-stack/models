@@ -571,8 +571,17 @@ export function ballroomOrder(bin, o = {}) {
       // pilasters flanking every window, running the full double height
       for (const s of [-1, 1]) {
         pilaster(B, {
+          // ⚠ ROUND 17: `proj` 0.16 -> 0.30. `critic-eye-sweep`: the pilasters "read as a bright
+          // hairline, not a member". The cause is the RETURN, not the shaft: at 0.16 m of
+          // projection a pilaster seen down the wall presents a 16 cm side face, which at 17 m
+          // is about seven screen pixels — and since its front face carries the same material
+          // as the wall behind it and takes the same fill, those seven pixels are the ONLY
+          // thing distinguishing a structural member from paint. Doubling the projection
+          // doubles the return and, more importantly, puts the shaft far enough off the wall
+          // that its own cast shadow separates it. A giant order standing 0.16 m proud of a
+          // 9.6 m wall was under-scaled for the room anyway.
           x: x0 + 0.14, y: 0.34, z: wz + s * (win.w / 2 + 0.62), rotY: HALF_PI,
-          h: h - 1.55, w: 0.72, proj: 0.16, flutes: 7,
+          h: h - 1.55, w: 0.72, proj: 0.30, flutes: 7,
           keys: { shaft: 'wall', cap: 'gilt' },
         });
       }
@@ -722,8 +731,10 @@ export function ballroomOrder(bin, o = {}) {
     });
     for (const px of P.nearX) {
       pilaster(B, {
+        // Same correction as the window wall's — see the note there. The near wall is the one
+        // `critic-eye-sweep` measured the seven pixels on.
         x: px, y: 0.34, z: z1 - 0.14, rotY: Math.PI,
-        h: h - 1.55, w: 0.66, proj: 0.15, flutes: 6,
+        h: h - 1.55, w: 0.66, proj: 0.28, flutes: 6,
         keys: { shaft: 'wall', cap: 'gilt' },
       });
     }
