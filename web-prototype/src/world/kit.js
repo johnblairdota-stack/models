@@ -1232,9 +1232,41 @@ export function cofferedCeiling(bin, o = {}) {
       const rim = mitredFrame(rimP, iw, id);
       const m = new THREE.Matrix4().makeRotationX(Math.PI / 2).premultiply(tr(x, y - 0.02, z));
       put(K.beam, rim, m);
-      if (o.boss !== false) {
+      // ---- ROUND 17: `vary` — THE CEILING IS ALLOWED TO HAVE AGED --------------------------
+      //
+      // `critic-eye-sweep`, looking straight up from the middle of the ballroom: "the coffer
+      // field is a perfect untouched grid — every panel identical … no variation, no tarnish,
+      // no dirt, no cobweb, in a house whose floor is covered in dust sheets. Reads as a tiled
+      // texture."
+      //
+      // ⚠ AND THE FIRST INSTINCT — "break up the panel texture" — IS WRONG. A coffered ceiling
+      // IS uniform; that is what the order means, and jittering the pans would read as a
+      // building error rather than as age. What a shut-up house actually has is BOSSES THAT
+      // HAVE COME DOWN. They are the small, heavy, purely decorative part, they are fixed to
+      // plaster with nothing but glue and a peg, and they are the first thing to fall. A grid
+      // with two or three empty sockets in it stops being a texture immediately, because the
+      // eye reads the gaps as history rather than as noise.
+      //
+      // Opt-in and rng-seeded: without `vary` this emits exactly what it always did.
+      const vr = o.vary ? o.vary : null;
+      const rnd = vr ? vr.rng ?? (() => 0.5) : null;
+      const keep = !vr || rnd() > (vr.missing ?? 0.10);
+      if (o.boss !== false && keep) {
+        // Size and spin vary a little even where the boss survived — these were cast in a
+        // mould and fitted by hand, and an identical rotation on 28 of them is its own tell.
+        const sc = vr ? 0.86 + rnd() * 0.30 : 1;
+        const spin = vr ? rnd() * Math.PI * 2 : 0;
+        const bm = new THREE.Matrix4().makeRotationX(Math.PI)
+          .premultiply(new THREE.Matrix4().makeRotationY(spin))
+          .premultiply(new THREE.Matrix4().makeScale(sc, 1, sc))
+          .premultiply(tr(x, y - 0.03, z));
         put(K.boss, lathe([[0, 0], [0.085, 0.0], [0.10, 0.03], [0.075, 0.055], [0.085, 0.075], [0.03, 0.10], [0, 0.10]], 12),
-          new THREE.Matrix4().makeRotationX(Math.PI).premultiply(tr(x, y - 0.03, z)), 0.25);
+          bm, 0.25);
+      } else if (vr) {
+        // The socket the boss came out of: a shallow disc of bare plaster, keyed to the PAN
+        // rather than to the gilt so it reads as a scar in the ceiling and not as a fitting.
+        put(K.pan, new THREE.CylinderGeometry(0.072, 0.078, 0.018, 14),
+          tr(x, y - 0.028, z), 0.25);
       }
     }
   }

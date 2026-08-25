@@ -740,10 +740,21 @@ export function ballroomOrder(bin, o = {}) {
       ? new FramedBin(bin, new THREE.Matrix4().makeTranslation(C.x, 0, C.z), o.remap ?? null)
       : B;
     cove(CB, { w: endLen, d: wallLen, y: C.y, r: C.cove, key: 'ceil' });
+    // ⚠ ITS OWN SEEDED STREAM, NOT THE VIEW'S `engine.rng`. Drawing from the shared generator
+    // here would shift every draw after it, so turning the ceiling's ageing on would silently
+    // move the dust sheets, the crate stacks and the paper scatter — a change reported as one
+    // thing that is actually four. A fixed seed also means the same bosses are missing on
+    // every boot, which is what makes the capture comparable round to round.
+    let cs = o.ceilingSeed ?? 0x9e3779b1;
+    const crng = () => {
+      cs = (cs * 1664525 + 1013904223) >>> 0;
+      return cs / 4294967296;
+    };
     cofferedCeiling(B, {
       w: endLen - C.inset, d: wallLen - C.inset, cellsX: C.cellsX, cellsZ: C.cellsZ,
       y: C.y, beam: C.beam, drop: C.drop, x: C.x, z: C.z,
       keys: { pan: 'ceil', beam: 'gilt', boss: 'gilt' },
+      vary: o.ceilingVary === false ? null : { rng: crng, missing: 0.12 },
     });
     for (const cz of C.roseZ) {
       for (const cx of C.roseX) ceilingRose(B, { r: C.roseR, y: C.y - 0.34, x: cx, z: cz, key: 'gilt' });

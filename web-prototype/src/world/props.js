@@ -901,6 +901,25 @@ export function urnOnPedestal(bin, o = {}) {
  * implied mass: rounded top, folds falling to the floor, hem pooling. Cheap and it says
  * "abandoned grand house" faster than any amount of dirt.
  */
+/**
+ * Deterministic 2D value noise, smooth-interpolated. Used by `dustSheet` for the wrinkle
+ * field — see the note there for why a fold field keyed only to the FALL is not enough.
+ * Deliberately not a THREE or glsl-noise import: this runs once at bake time on a few
+ * thousand vertices, so a dozen lines beats pulling a texture path into a prop builder.
+ */
+function _vnoise2(x, y) {
+  const xi = Math.floor(x), yi = Math.floor(y);
+  const xf = x - xi, yf = y - yi;
+  const h = (a, b) => {
+    const n = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
+    return n - Math.floor(n);
+  };
+  const s = (t) => t * t * (3 - 2 * t);
+  const u = s(xf), v = s(yf);
+  const a = h(xi, yi), b = h(xi + 1, yi), c = h(xi, yi + 1), d = h(xi + 1, yi + 1);
+  return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v - 0.5;
+}
+
 export function dustSheet(o = {}) {
   const w = o.w ?? 1.6, d = o.d ?? 0.9, h = o.h ?? 1.0;
   const nx = o.nx ?? 22, nz = o.nz ?? 16;
@@ -937,11 +956,21 @@ export function dustSheet(o = {}) {
       } else if (shape === 'mound') {
         // a heap of cases under one sheet — three offset lumps, which is what the reference's
         // central pile actually is
+        //
+        // ⚠ ROUND 17: THE EXPONENTS WERE 3.0 / 3.4 / 4.0 AND THAT IS A HEAP OF BOULDERS.
+        // `critic-eye-sweep` got the near mound filling a third of the frame from `eye.floor`
+        // and called it a beanbag, and it was right: at p=3 a superellipse is barely off round,
+        // three of them max'd together give one smooth hill, and `mass: 0.62` then smooths it
+        // again. What makes a sheeted pile read is that the thing under it has CORNERS — the
+        // cloth tents over a case edge in a straight ridge and falls away either side, and that
+        // ridge is the whole silhouette. 7 / 8 / 9 keeps the same three lumps in the same three
+        // places (so the composition the round-12 dressing work placed is untouched) and gives
+        // each one a flat top and a hard shoulder for the cloth to break over.
         const lump = (cx, cz, sx, sz, p) => Math.max(0,
           1 - (Math.pow(Math.abs((ex - cx) * sx), p) + Math.pow(Math.abs((ez - cz) * sz), p)));
-        top = Math.max(lump(-0.25, 0.10, 1.35, 1.60, 3.0) * 1.00,
-          Math.max(lump(0.38, -0.18, 1.55, 1.75, 3.4) * 0.82,
-            lump(0.10, 0.45, 2.10, 2.30, 4.0) * 0.55));
+        top = Math.max(lump(-0.25, 0.10, 1.35, 1.60, 7.0) * 1.00,
+          Math.max(lump(0.38, -0.18, 1.55, 1.75, 8.0) * 0.82,
+            lump(0.10, 0.45, 2.10, 2.30, 9.0) * 0.55));
       } else {
         const rr = Math.pow(Math.abs(ex), 3.2) + Math.pow(Math.abs(ez), 3.2);
         top = Math.max(0, 1 - rr);
@@ -989,11 +1018,30 @@ export function dustSheet(o = {}) {
       const poolAt = 0.82;
       const pool = Math.pow(Math.max(0, fall - poolAt) / (1 - poolAt), 1.3);
       const flare = 1 + pool * (0.16 + 0.06 * Math.sin(theta * np * 1.6 + seedB));
-      const px = (ex * w / 2) * flare + (ex / rr2) * crease;
-      const pz = (ez * d / 2) * flare + (ez / rr2) * crease;
+      // ---- THE WRINKLE, WHICH IS WHAT THE FOLD FIELD ALONE CANNOT DO (ROUND 17) ----------
+      //
+      // Every term above is gated by `fall`, so all of them go to zero ON TOP of the mass —
+      // correct for a GATHER (cloth only gathers where it hangs free) and wrong for a sheet.
+      // The consequence is visible the moment a player stands next to one: `crease` is
+      // `pow(fall, 1.35)`, the mound's top has fall ~ 0, and the biggest sheet in the room
+      // presents a perfectly smooth dome to the camera. `critic-eye-sweep` filed it as
+      // "smooth featureless mounds — traffic cones at distance, beanbags close up".
+      //
+      // A dust sheet is LINEN THAT HAS BEEN FOLDED IN A CUPBOARD FOR A DECADE. It is creased
+      // everywhere, including where it is supported, at a much finer scale than the gathers and
+      // in no particular direction. Three octaves of value noise, displaced along y where the
+      // cloth lies flat and radially where it hangs, is that — and it also breaks the mound's
+      // silhouette, which is what stops it reading as a solid at 10 m.
+      const wrAmp = (o.wrinkle ?? 0.055) * Math.min(w, d);
+      const wrink = (_vnoise2(u * 3.4 + seedA, v * 3.1 + seedB) * 0.60
+        + _vnoise2(u * 8.1 + seedB * 2.0, v * 7.3 + seedA * 1.5) * 0.28
+        + _vnoise2(u * 17.3 + seedA * 3.0, v * 15.9 + seedB * 2.5) * 0.12) * wrAmp;
+      const px = (ex * w / 2) * flare + (ex / rr2) * (crease + wrink * fall * 0.9);
+      const pz = (ez * d / 2) * flare + (ez / rr2) * (crease + wrink * fall * 0.9);
       // a pleat that tucks IN also drops a little, which is what makes a crease read as a
       // crease rather than as a ripple in a shell
-      const py = Math.max(0, y + sag - Math.max(0, -crease) * 0.35 - pool * 0.02 * h);
+      const py = Math.max(0, y + sag - Math.max(0, -crease) * 0.35 - pool * 0.02 * h
+        + wrink * (1 - fall * 0.65));
       pos.push(px, py, pz);
       uv.push(u * 2, v * 2);
     }
