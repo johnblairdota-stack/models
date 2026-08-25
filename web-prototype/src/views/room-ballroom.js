@@ -643,7 +643,19 @@ export default async function view(args = {}) {
   // The pilaster shafts, a shade down and a shade warmer than the wall they stand against —
   // see the note at the pilaster call in ballroom-order.js. Stone against painted joinery.
   const pilasterStone = mats.boiserie.clone();
-  pilasterStone.color = new THREE.Color(0xbdb3a2);
+  // ⚠ 0xbdb3a2 -> 0x8f887c, AND THE ANGLE THAT SETTLED IT IS `eye.mirror`. Looking ALONG the
+  // mirror wall you see the pilasters' returns rather than their faces, and at 0xbdb3a2 they
+  // came back as pale flat bands standing three to four times brighter than the wall they are
+  // cut from — ghostly strips laid over dark joinery, with a hard unchamfered arris down each
+  // one. The tone that separated them nicely when seen face-on (`eye.walk`, where they had been
+  // reading as hairlines) separates them far too much seen edge-on, because a return catches
+  // the cold fill almost square while the wall beside it catches nothing.
+  //
+  // This is the third value this material has had in one round and the reason is worth stating:
+  // a member's tone cannot be solved from one camera, because what it is solved AGAINST — the
+  // wall behind it — changes brightness by a factor of four depending on which way you are
+  // looking at that wall.
+  pilasterStone.color = new THREE.Color(0x8f887c);
   pilasterStone.name = 'ballroom-pilaster-shaft';
   engine.onDispose?.(() => pilasterStone.dispose());
   const M = {
@@ -1504,7 +1516,15 @@ export default async function view(args = {}) {
   // not gold. The room's own warm bounce supplies whatever warmth they should carry, and when
   // the ALBEDO carries it too the two multiply and the sheets end up the most saturated large
   // objects in the frame.
-  sheetMat.color = new THREE.Color(0xa9a79e);
+  // ⚠ AND THE ALBEDO HAS TO BE COOL TO LAND NEUTRAL, which is the step the previous pass
+  // stopped one short of. 0xa9a79e is a warm-neutral linen, and under this room's key — a warm
+  // sun and a warm-leaning fill — it renders at chroma 14.7 in shade and 30.2 in the light
+  // against the bar's own sheets at 1.7 and 4.1. The reference's sheets are essentially GREY;
+  // ours were still linen-coloured. An albedo is not what the viewer sees, the product of the
+  // albedo and the light is, so a surface that must read neutral under a warm light has to be
+  // authored cool by as much as the light is warm. That is the same reasoning the vestibule's
+  // cool emission already uses two hundred lines down, applied to a material instead of a lamp.
+  sheetMat.color = new THREE.Color(0x9fa5aa);
   if (sheetMat.normalScale) sheetMat.normalScale.multiplyScalar(0.30);
   sheetMat.name = 'dust-sheet-linen';
   engine.onDispose?.(() => sheetMat.dispose());
