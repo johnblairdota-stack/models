@@ -181,6 +181,9 @@ export default async function view(args = {}) {
   // `?vestglow=N` — the ablation for round 17's vestibule emission. 0 restores r16 exactly.
   const VEST_GLOW = Number.isFinite(parseFloat(qs.get('vestglow')))
     ? Math.max(0, Math.min(8, parseFloat(qs.get('vestglow')))) : 1.0;
+  // `?grime=N` — the ablation for round 17's skirting dirt. 0 removes it entirely.
+  const GRIME = Number.isFinite(parseFloat(qs.get('grime')))
+    ? Math.max(0, Math.min(4, parseFloat(qs.get('grime')))) : 1.0;
   // `?eograze=N` — the ablation for round 17's grazing-lobe widening. 0 restores the pre-r17
   // mirror on BOTH the floor and the end plates; 1 is the shipping physical coefficient. See
   // the long note above `planarEnvmapChunk`'s LOD block for what it does and why it is not a
@@ -1591,6 +1594,87 @@ export default async function view(args = {}) {
     }
     scene.add(outside);
     engine.outside = outside;
+  }
+
+  // ---- GRIME, AND IT HAS TO OBEY THE GEOMETRY (round 17, third pass) ----------------------
+  //
+  // `CRITIC_GUIDE.md` lists this FIRST among the usual failures — "grime must collect in
+  // corners, along the floor line, in mouldings, under sills" — and after the ladder match the
+  // critic's own top complaint is that this room is too clean for a house being emptied. Every
+  // surface in it is as clean at the skirting as it is at eye height, and the corners are the
+  // same tone as the middle of the wall.
+  //
+  // ⚠ A MULTIPLY BAND, NOT AN ADDITIVE ONE, AND THIS FILE HAS ALREADY PAID TO LEARN WHY. The
+  // light pools a few hundred lines up were additive until round 3, and an additive decal over
+  // a black-and-white chequer lifts the black tiles as hard as the white ones, so the pattern
+  // dissolves inside the decal and its own rectangle becomes the seam. Dirt has exactly the
+  // same job in reverse: it must SCALE what is under it, so a gilt moulding under grime stays
+  // gilt and a pale wall stays pale, both a stop down. Same blend factors as POOL_MUL_FRAG, and
+  // the same rule that the factor is exactly 1.0 at the band's outer edge or the quad shows.
+  //
+  // Three frequencies, because one is a gradient and a gradient is not dirt: the vertical rise
+  // from the floor, a slow horizontal wander so no two metres of skirting are alike, and a
+  // corner term that doubles it in the last metre of each run — which is the specific thing the
+  // guide asks for and the thing a viewer reads as "nobody has swept in here".
+  //
+  // `?grime=0` ablates it.
+  if (GRIME > 0) {
+    const GRIME_FRAG = /* glsl */ `
+      precision highp float;
+      uniform vec3  uTint;
+      uniform float uStrength;
+      uniform float uCorner;
+      varying vec2 vUv;
+      void main(){
+        // up the wall: strong at the skirting, gone by the top of the band
+        float g = pow(max(0.0, 1.0 - vUv.y), 2.4);
+        // along the wall: a slow wander, two octaves, so the band is never even
+        float w = 0.70
+          + 0.20 * sin(vUv.x * 11.0 + 0.7)
+          + 0.10 * sin(vUv.x * 41.0 + 2.3);
+        // and the corners, where a floor never gets swept
+        float c = 1.0 + uCorner * (smoothstep(0.16, 0.0, vUv.x) + smoothstep(0.84, 1.0, vUv.x));
+        float a = clamp(g * w * c * uStrength, 0.0, 1.0);
+        gl_FragColor = vec4(mix(vec3(1.0), uTint, a), 1.0);
+      }`;
+    const grimeBand = (w, h, tint, strength) => new THREE.Mesh(
+      new THREE.PlaneGeometry(w, h),
+      new THREE.ShaderMaterial({
+        vertexShader: 'varying vec2 vUv;\nvoid main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+        fragmentShader: GRIME_FRAG,
+        uniforms: {
+          uTint: { value: new THREE.Color(tint) },
+          uStrength: { value: strength * GRIME },
+          uCorner: { value: 1.15 },
+        },
+        transparent: true,
+        blending: THREE.CustomBlending,
+        blendEquation: THREE.AddEquation, blendSrc: THREE.ZeroFactor, blendDst: THREE.SrcColorFactor,
+        blendEquationAlpha: THREE.AddEquation, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor,
+        depthWrite: false, depthTest: true, side: THREE.DoubleSide, toneMapped: true,
+      }));
+    const grimes = [];
+    // A cool, slightly green-grey soot rather than a brown: this room's own bounce is warm, and
+    // dirt tinted the same way as the light reads as a lighting change instead of as dirt.
+    const SOOT = 0x8e9088;
+    // 1.15, not 1.55: the first pass put the band's top edge across the middle of the raised
+    // panels, and a dirt gradient that ends halfway up a panel reads as a lighting change. Kept
+    // below the dado so its own falloff is hidden by an architectural line.
+    const BAND_H = 1.15;
+    const place = (mesh, x, z, rotY) => {
+      mesh.position.set(x, BAND_H / 2, z);
+      mesh.rotation.y = rotY;
+      mesh.renderOrder = 8;          // under the light pools (9/10), over the opaques
+      mesh.name = 'grime';
+      scene.add(mesh);
+      grimes.push(mesh);
+    };
+    place(grimeBand(R.z1 - R.z0, BAND_H, SOOT, 0.52), R.x0 + 0.05, 0, Math.PI / 2);   // window wall
+    place(grimeBand(R.z1 - R.z0, BAND_H, SOOT, 0.52), R.x1 - 0.05, 0, -Math.PI / 2);  // mirror wall
+    place(grimeBand(R.x1 - R.x0, BAND_H, SOOT, 0.46), 0, R.z0 + 0.05, 0);             // arched end
+    place(grimeBand(R.x1 - R.x0, BAND_H, SOOT, 0.46), 0, R.z1 - 0.05, Math.PI);       // near wall
+    engine.onDispose?.(() => grimes.forEach((m) => { m.geometry.dispose(); m.material.dispose(); }));
+    engine.grime = grimes;
   }
 
   // ---- chandeliers -------------------------------------------------------
