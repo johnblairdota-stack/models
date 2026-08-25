@@ -837,7 +837,16 @@ export function ballroomOrder(bin, o = {}) {
     const bal = balustrade(B, {
       from: [x1 - 2.28, galleryY + 0.11, dz - dl / 2 + (o.balInset ?? 0.1)],
       to: [x1 - 2.28, galleryY + 0.11, dz + dl / 2 - (o.balInset ?? 0.1)],
-      railH: 0.98, pitch: o.balPitch ?? 0.30, segs: 8,
+      // ⚠ ROUND 17: `segs` 8 -> 16. `critic-eye-sweep` called the balusters "flat pale
+      // blue-grey with no stone character", and an OCTAGONAL lathe is most of that: a turned
+      // baluster reads because the light runs continuously round its belly and pinches at each
+      // neck, and eight facets replace that with eight flat panels and eight hard edges. It is
+      // invisible at 20 m from `eye.mirror` and unmissable from `eye.gallery`, where the near
+      // balusters are a metre from the camera and own the bottom of the frame.
+      //
+      // It costs nothing per baluster: they are ONE InstancedMesh sharing one lathe, so this is
+      // about 220 extra triangles for the whole gallery, once.
+      railH: 0.98, pitch: o.balPitch ?? 0.30, segs: o.balSegs ?? 16,
       material: o.material?.baluster ?? null,
       keys: { rail: 'gilt', base: 'stone' },
     });

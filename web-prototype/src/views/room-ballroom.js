@@ -324,7 +324,7 @@ export default async function view(args = {}) {
   // shaft and where the pool decals land. A `flat` that restored the LEVELS but kept the new
   // ANGLE would be a break test of half the change, reported as a break test of all of it.
   const LIGHTS = DAYLIGHT === 'flat'
-    ? { env: 3.2, sun: 300, bounce: 1.0, bounceCard: 2.2, grade: FLAT_GRADE,
+    ? { env: 3.2, sun: 300, bounce: 1.0, bounceCard: 2.2, grade: FLAT_GRADE, sunColor: 0xd6e4ff,
         dir: [0.865, -0.44, 0.24], aim: null, angle: 0.34, penumbra: 0.28, mapSize: 1024,
         shaftWins: [1, 2, 3], cardWins: [1, 3] }
     // ---- ROUND 17: THE KEY/FILL RATIO, RE-SOLVED AT PLAYER EYE HEIGHT --------------------
@@ -394,7 +394,7 @@ export default async function view(args = {}) {
     //
     // ⚠ `?daylight=flat` IS UNTOUCHED. It is the ablation that holds round 12's pre-rebalance
     // numbers, and re-tuning it here would delete the only reachable copy of them.
-    : { env: 1.70, sun: 8150, bounce: 7.35, bounceCard: 5.0, grade: null,
+    : { env: 1.70, sun: 8150, bounce: 7.35, bounceCard: 5.0, grade: null, sunColor: 0xffe3c2,
         dir: [0.885, -0.375, 0.265], aim: [-4.7, 0, 0.2], angle: 0.42, penumbra: 0.22, mapSize: 2048,
         shaftWins: [0, 1, 2], cardWins: [0, 2] };
 
@@ -1165,6 +1165,10 @@ export default async function view(args = {}) {
   }
 
   // ---- balustrade on the musicians' gallery ------------------------------
+  const balusterStone = mats.stone.clone();
+  balusterStone.color = new THREE.Color(0xb8ae9c);
+  balusterStone.name = 'gallery-baluster-stone';
+  engine.onDispose?.(() => balusterStone.dispose());
   // The plinth and handrail go into the shared bin (they merge with the gilt and stone
   // buckets, no extra draw call); the balusters come back as one InstancedMesh.
   const bal = ballroomOrder(bin, {
@@ -1173,7 +1177,13 @@ export default async function view(args = {}) {
       windowWall: false, mirrorWall: false, endWall: false, nearWall: false,
       ceiling: false, mirrors: false, dressing: false,
     },
-    material: { baluster: mats.stone },
+    // ⚠ ITS OWN STONE, A SHADE DOWN FROM THE WALL'S. The balustrade stands in front of the
+    // upper mirror wall and was cut from the same `mats.stone` as it, so at the distance
+    // `eye.mirror` sees it the rail, the balusters and the wall behind them all sat within a
+    // few counts of each other and the whole assembly read as one pale band. A real stone
+    // balustrade is dirtier than the wall it guards — it is handled, and it collects what
+    // falls past it — so this is age rather than a contrast trick.
+    material: { baluster: balusterStone },
   });
 
   const meshes = bin.build(M, { noCast: ['glass', 'ceil', 'wintrim'] });
@@ -1273,7 +1283,25 @@ export default async function view(args = {}) {
   //                       top decile the grade gate measures.
   // Rounded normals (`flatShading` stays off) plus the new radial pleats do the rest.
   const sheetMat = mats.plaster.clone();
-  sheetMat.color = new THREE.Color(0xcfc6b4);
+  // ⚠ ROUND 17: 0xcfc6b4 -> 0xaea48f, THE THIRD ALBEDO THIS ROUND HAS HAD TO RE-SOLVE AFTER
+  // THE KEY/FILL CHANGE, and the note above is the reason it needed one: this colour was
+  // already chosen once so the sheets would "stop being the brightest neutral objects in a
+  // room whose top decile the grade gate measures". A brighter fill put them straight back
+  // there. Measured against the bar's own sheeted mounds (`harness/_eye17_rect.mjs`):
+  //
+  //     sheet patch                    rgb                    L      chroma
+  //     refs/bf1 shaded mound           48.0,  47.8,  46.3    47.8     1.7
+  //     refs/bf1 lit mound              89.8,  81.3,  71.3    82.4    18.5
+  //     this room, shaded (corner)      88.7,  76.4,  66.0    78.3    22.7   ok
+  //     this room, IN SUN (corner)     197.1, 196.4, 197.3   196.6     0.9   a white cut-out
+  //     this room, in sun, AFTER       184.3, 182.5, 181.3   182.8     3.1
+  //     this room, shaded, AFTER        85.0,  73.1,  62.9    74.9    22.1
+  //
+  // The shaded sheets were already right; the lit ones were two and a half times the bar's
+  // brightest and had lost every trace of the warm bias the same cloth carries in shade. That
+  // is unbleached linen rendered as printer paper, and it is why the folds this round put into
+  // them stop reading the moment the sun reaches one.
+  sheetMat.color = new THREE.Color(0xaea48f);
   if (sheetMat.normalScale) sheetMat.normalScale.multiplyScalar(0.30);
   sheetMat.name = 'dust-sheet-linen';
   engine.onDispose?.(() => sheetMat.dispose());
@@ -1571,7 +1599,44 @@ export default async function view(args = {}) {
     ? sunAim.clone().addScaledVector(dir, -30)
     : winMid.clone().addScaledVector(dir, -22);
   const sun = spotKey({
-    color: 0xd6e4ff, intensity: LIGHTS.sun,
+    // ---- ROUND 17: 0xd6e4ff -> 0xffeeda, AND IT IS THE BAR THAT SAYS SO --------------------
+    //
+    // This key has always been north-sky blue, and paired with warm practicals that is a
+    // defensible scheme — it is the one the rig's own "THE COOL SIDE" note argues for. What it
+    // is not is what the piece is judged against. Measured on the sun patches themselves
+    // (`harness/_eye17_rect.mjs`, three rects on the bar's floor, two on ours):
+    //
+    //     sun patch on the floor          rgb                    L      chroma
+    //     refs/bf1                       198.7, 186.1, 162.9   187.1     35.9
+    //     refs/bf1                       181.9, 164.6, 133.1   166.0     48.8
+    //     this room, before              163.4, 160.3, 166.0   161.4      5.7
+    //
+    // The bar's daylight runs R > G > B every time; ours was neutral, and in the half-lit
+    // margins it went B-highest. That is skylight where the reference has SUN, and it is a
+    // colour tell in eight of the nine player angles because the patches are the brightest
+    // thing on the floor in all of them.
+    //
+    // ⚠ THE COLOUR IS IN `LIGHTS` SO `?daylight=flat` KEEPS 0xd6e4ff. That ablation holds
+    // round 12's pre-rebalance state and is the only reachable copy of it; re-tinting its key
+    // would quietly make it an ablation of something else.
+    //
+    // ⚠ AND IT IS 0xffe3c2 RATHER THAN A FULL SUNLIGHT AMBER, because the grade gate is the
+    // constraint. Swept at the overlook, reading the patch and the gate together:
+    //
+    //     key        patch rgb                 patch chroma   top-decile (r-b)/L
+    //     0xd6e4ff   163.4, 160.3, 166.0            5.7            0.073
+    //     0xffeeda   171.2, 162.7, 161.9            9.3            0.106
+    //     0xffe3c2   171.4, 160.9, 157.7           13.7            0.125   shipped
+    //
+    // The patches now run R > G > B like the bar's, at a quarter of its warm bias rather than
+    // none of it. It stops there because 0.14 is the gate's TARGET and 0.125 is already most of
+    // the way to it — and the interesting part is WHY, because it is not the sun. The bar's own
+    // ladder reads 0.089 top-decile while its floor patches carry chroma 36-49; ours reads 0.125
+    // while ours carry 13.7. The difference is what ELSE is in each frame's top decile: this
+    // room's gilding and its eleven practical flames are up there and the bar has neither. So
+    // the remaining gap to the reference's daylight is not buyable from this light — it is the
+    // gilt and the candles spending the budget first, and that is a separate round's problem.
+    color: LIGHTS.sunColor, intensity: LIGHTS.sun,
     position: sunFrom.toArray(),
     target: sunAim.toArray(),
     // 2048, not 1024. The room now has ten stacks of packing cases standing in the light and
@@ -2018,7 +2083,12 @@ export default async function view(args = {}) {
       // wet mirror and the marble border is the half of it the parquet fix did not touch.
       // 0.02/0.26 lands the same field at 47%: a polished stone floor that holds a soft image,
       // which is what the bar's own chequer does, rather than a mirror.
-      lo: 0.02, hi: 0.26,
+      // A second measured step (round 17, after the parquet beside it stopped competing):
+      // 0.02/0.26 left the clean field at 47% planar and from `cam=eye.walk` the black tiles
+      // still carried a legible inverted room. 0.015/0.21 lands it at 33% — enough for the
+      // chequer to hold a soft image of the windows, which polished marble does, without the
+      // floor reading as the second-brightest thing in the frame.
+      lo: 0.015, hi: 0.21,
       wobble: 0.0,
       graze: EO_GRAZE,
     });
