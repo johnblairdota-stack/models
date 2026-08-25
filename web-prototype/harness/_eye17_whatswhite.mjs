@@ -44,7 +44,10 @@ const census = await page.evaluate(() => {
 });
 console.log('transparent layers found:', JSON.stringify(census));
 
-const SAMPLES = [[900, 900], [1100, 830], [700, 980], [760, 700]];
+// `--px x,y` (repeatable) overrides the default sample set — the answer depends entirely on
+// WHICH pixels are asked about, and the defaults were chosen for `eye.floor`.
+const PXA = process.argv.reduce((a, v, i) => (v === '--px' ? [...a, process.argv[i + 1].split(',').map(Number)] : a), []);
+const SAMPLES = PXA.length ? PXA : [[900, 900], [1100, 830], [700, 980], [760, 700]];
 const sample = async () => page.evaluate((pts) => {
   const cv = document.querySelector('canvas');
   const c = document.createElement('canvas'); c.width = cv.width; c.height = cv.height;

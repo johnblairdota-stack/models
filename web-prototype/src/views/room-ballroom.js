@@ -345,18 +345,37 @@ export default async function view(args = {}) {
     // albedo to pure RED and its sunlit half still renders pale pink-white. That is why the
     // wood came back as white line-art with only its joint pattern surviving.
     //
-    // ⚠ AND THE ROOM WAS ALREADY WRONG IN THE OTHER DIRECTION AT THE OTHER CAMERA, which is
-    // what says "distribution" rather than "exposure". Against the bar's own ladder
-    // (`harness/grade.mjs --img refs/bf1/bf1-ballroom-01.png`: median L 49.8, toe 11.3):
+    // ⚠ AND THE ROOM WAS ALREADY WRONG IN THE OTHER DIRECTION AT THE OTHER CAMERA. Against the
+    // bar's own ladder (`harness/grade.mjs --img refs/bf1/bf1-ballroom-01.png`: median L 49.8,
+    // toe 11.3), measured on the shipped build:
     //
     //     camera        median L before   after     the bar
-    //     eye.floor          84.7          74.0       49.8      washed out, gate fails > 80
-    //     eye.walk           59.0          57.9       49.8
-    //     overlook           32.4          44.2       49.8      under, and it always had been
+    //     eye.floor          84.7          77.8       49.8
+    //     eye.walk           59.0          57.7       49.8
+    //     overlook           32.4          31.0       49.8
     //
-    // One grade cannot move both ends of that; only the key/fill ratio can. So the key comes
-    // down 2.25 stops and the fill goes up to meet it, and both cameras walk toward the bar
-    // together instead of trading places.
+    // ⚠ READ THAT HONESTLY: THE SPREAD IS BARELY NARROWED, AND CHASING IT FURTHER WAS TRIED AND
+    // REJECTED. The obvious next step is more fill and less key still, and it does work at one
+    // end — `_eye17_sweep --cam overlook` at exposure 1.45 / sun x0.70 / bounce x1.5 lands the
+    // overlook at median 46.8, toe 10.8, white 0.92%, i.e. on the bar to within noise on all
+    // three. The same triple takes eye.walk 57.7 -> 76.8 and eye.floor 77.8 -> 96.6. The two
+    // framings pull in opposite directions because their SUBJECTS differ and no exposure can
+    // reconcile that: the overlook looks at the room's shaded two thirds, and a standing player
+    // looks along a sunlit floor. Since the shipped values put the WALKING player's frame
+    // nearest the bar (57.7 against 49.8) and still hold the overlook inside grade.mjs's own
+    // 30-60 band, they are what ships. The convergence is not the win here.
+    //
+    // ⚠ THE WIN IS HEADROOM AND COLOUR, and those did move, measured with
+    // `harness/_eye17_clip.mjs` (share of pixels with no detail left in any channel):
+    //
+    //     camera        white% before   after     the bar
+    //     eye.floor          4.56        0.24       1.20
+    //     corner             2.73        1.21       1.20
+    //     eye.walk           1.27        0.96       1.20
+    //
+    // and the local contrast INSIDE the bright region, which is the thing the hate was actually
+    // about: eye.floor 3.73 -> 5.62, eye.walk 2.59 -> 6.45, corner 5.11 -> 6.33, against the
+    // bar's 8.57. Not parity, but no longer a white plateau at any angle.
     //
     // ⚠ THE FILL IS THE THREE DIRECTIONAL bounceFill LIGHTS, NOT `env`, AND THAT IS DELIBERATE.
     // Rounds 11-12 measured that ~95% of the light on this floor was a structureless five-box
@@ -365,14 +384,10 @@ export default async function view(args = {}) {
     // hand round 12 straight back. `env` is untouched at 1.70; the directional fill is this
     // file's own documented answer for putting modelling back without putting flatness back.
     //
-    // What it costs, measured at `cam=eye.walk` (white / clip / bright-region local contrast):
-    //     before  1.27% / 2.07% / 2.59        after  0.93% / 1.40% / 2.84
-    //     the bar 1.20% / 2.87% / 8.57
-    // — i.e. this render now holds MORE highlight headroom than the locked art does, and the
-    // dust sheets, the crates and the marble veining come back inside the sun patches instead
-    // of being white cut-outs. p90/p50 (the macro-contrast guard, so the patches are not
-    // simply being turned off) is 3.66 -> 3.47 at eye.walk and 3.10 -> 2.41 at the overlook:
-    // the patches still separate, they no longer clip.
+    // The dust sheets, the crates and the marble veining come back inside the sun patches
+    // instead of being white cut-outs. p90/p50 — the macro-contrast guard, so that the patches
+    // are not simply being turned off — holds at 3.48 at eye.walk and 3.39 at the overlook
+    // against 3.66 / 3.10 before: the patches still separate, they no longer clip.
     //
     // ⚠ `?daylight=flat` IS UNTOUCHED. It is the ablation that holds round 12's pre-rebalance
     // numbers, and re-tuning it here would delete the only reachable copy of them.
@@ -452,7 +467,13 @@ export default async function view(args = {}) {
     'eye.walk': { pos: [-10.5, 1.65, 6.8], target: [-10.5, 2.2, -8.0], fov: 62 },  // walking the window wall, raking the piers
     'eye.floor': { pos: [-5.0, 1.05, 3.0], target: [-1.5, 0.0, -3.0], fov: 55 },   // crouched on the chequer/parquet seam
     'eye.arch': { pos: [0, 1.65, -6.0], target: [0, 2.2, 8.0], fov: 66 },       // stood in the arches, looking back
-    'eye.gallery': { pos: [11.0, 6.5, 0], target: [-9.0, 1.4, 0], fov: 62 },    // on the gallery, over the rail
+    // ⚠ EYE HEIGHT ON THE GALLERY IS DECK + 1.65, NOT 6.5. The first pass put it at 6.5, which
+    // is within a few centimetres of the balustrade's own handrail — so the capture came back
+    // with a gilt rail lying across the middle of the frame and two balusters in the near
+    // foreground. That is a camera error, not a defect in the room, and it is worth the note:
+    // an eye-height preset on a raised deck has to be derived from the DECK (galleryY 5.2), or
+    // it lands inside whatever is guarding the edge.
+    'eye.gallery': { pos: [11.4, 6.85, 0], target: [-9.0, 1.4, 0], fov: 62 },  // on the gallery, over the rail
   };
   const CAM = CAM_DEFS[qs.get('cam')] ? qs.get('cam') : 'overlook';
   const CAM_DEF = CAM_DEFS[CAM];
@@ -1530,10 +1551,42 @@ export default async function view(args = {}) {
   // by orientation. Measured on the far end wall (a rect that gets no sun and no practical):
   // dropping the shell alone takes it 67.9 -> 40.0 mean and FLAT, and the directional fill is
   // what puts the modelling back without putting the flatness back.
+  // ⚠ THE WARM/COLD SPLIT HAD TO MOVE WITH `bounce`, AND ROUND 17 FOUND OUT THE HARD WAY.
+  // These three weights were 0.30 warm / 0.42 cold / 0.20 up, i.e. the COLD fill was the
+  // strongest of the three, and that was survivable while `bounce` was 2.1 and the sun was
+  // 19400: the blue never got a look in because the key was two stops over everything.
+  // Round 17 cut the key 2.25 stops and took `bounce` to 7.35, which promoted this light from
+  // a tint to the dominant source in every shaded part of the room — and `_eye17_whatswhite`
+  // caught the result at `cam=eye.gallery`, sampling the shaded parquet with the light pools
+  // ablated out: rgb 134,147,181. Blue by 47 counts, on oak.
+  //
+  // A total of 0.92 is preserved exactly, so this is a redistribution and not a fourth change
+  // to the room's level. What moves is which way the bounce leans, and the physical story is
+  // the one the room already tells: most of the light bouncing around this room has come off a
+  // warm parquet floor and gilded joinery, and only what comes back off the window wall is
+  // sky. Cold stays — it is the reason the shaded side has any modelling at all.
+  //
+  // ⚠ AND IT IS 0.32/0.38 RATHER THAN THE 0.46/0.24 THIS STARTED AT, BECAUSE THE GRADE GATE
+  // CAUGHT THE OVERSHOOT. Chasing the blue out by weight alone walks straight into the
+  // opposite failure this project has a whole GRADES note about — monochrome amber. Measured
+  // at `cam=eye.gallery` with `harness/grade.mjs` (top-decile (r-b)/L; target <= 0.14, fail
+  // > 0.2), against the shaded-parquet rect that found the problem:
+  //
+  //     weights                       floor rect chroma    top-decile (r-b)/L
+  //     0.30 / 0.42 (before)                 22.4            0.181  WARN
+  //     0.46 / 0.24                          13.9            0.250  FAIL
+  //     0.36 / 0.34                          15.2            0.202  FAIL
+  //     0.32 / 0.38 (shipped)                16.8            0.186  WARN
+  //
+  // So most of the win comes not from the weights at all but from DESATURATING both colours
+  // (0xffbc86 -> 0xffcb9e, 0x8fa9d6 -> 0x9db2d4): that takes the blue out of the shade without
+  // spending anything in the top decile, which is where a weight shift spends it. The gate at
+  // the shipping `overlook` camera is unaffected and passes all three: median 33.6,
+  // top-decile 0.032, darkest-decile 7.2.
   scene.add(bounceFill({
-    warm: 0.30 * LIGHTS.bounce, warmColor: 0xffbc86, warmDir: [6, 3, 2],
-    cold: 0.42 * LIGHTS.bounce, coldColor: 0x8fa9d6, coldDir: [-8, 5, 2],
-    up: 0.20 * LIGHTS.bounce, upColor: 0xa9a290,
+    warm: 0.32 * LIGHTS.bounce, warmColor: 0xffcb9e, warmDir: [6, 3, 2],
+    cold: 0.38 * LIGHTS.bounce, coldColor: 0x9db2d4, coldDir: [-8, 5, 2],
+    up: 0.22 * LIGHTS.bounce, upColor: 0xa9a290,
   }));
 
   const haze = glowPatch({ size: 22, color: 0x8fa6cc, strength: 0.05, pow: 1.4 });
@@ -1841,7 +1894,23 @@ export default async function view(args = {}) {
     if (floorParquet) {
       applyPlanarReflection(floorParquet.material, floorRT.texture, texMat, flatN, 'mip', [fw, fh], {
         gain: 1 / (scene.environmentIntensity || 1),
-        lo: 0.32, hi: 0.68,
+        // ⚠ ROUND 17: 0.32/0.68 -> 0.20/0.50, AND THE PARQUET'S OWN ALBEDO CHANGE IS WHY.
+        // The old gate put clean waxed field (PARQUET_SURFACE bakes it at ~0.42) at
+        // smoothstep(0.32, 0.68, 0.42) = 0.24, i.e. SEVENTY-SIX PER CENT planar — a mirror,
+        // not the "soft sheen, not a mirror" the note below it claims. That was survivable
+        // while the oak was bright enough to dominate its own reflection. Once round 17 took
+        // the albedo down to match the bar (see the parquet bake above), the reflection term —
+        // which no albedo scales — took over, and from `cam=eye.gallery` the shaded floor came
+        // back at rgb 153,156,175: brighter than the wood and BLUE, because what it is
+        // reflecting is a wall of cool blown-out windows.
+        //
+        // 0.20/0.50 puts the same clean field at 0.845 environment / 0.155 planar. Worn lanes
+        // and joints (0.55+) fall outside the knee entirely. That is a waxed floor rather than
+        // a French-polished one, which is what this room is, and it is also the honest fix for
+        // round 17's #2 hate — the grazing-lobe widening added at the same time makes the
+        // reflection SOFTER at low angles but cannot make it weaker, and this is the term that
+        // does.
+        lo: 0.20, hi: 0.50,
         wobble: 0.0,
         graze: EO_GRAZE,
       });
