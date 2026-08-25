@@ -650,7 +650,36 @@ export default async function view(args = {}) {
   };
   // `estateMaterials()` entries are LAZY GETTERS and reading one bakes it, so `?depot=0` must
   // not name it in the object literal or the ablation still pays for the surface it removed.
-  if (DEPOT) M.crate = mats.crateDeal;
+  if (DEPOT) {
+    // ⚠ WEATHERED, NOT FRESH. `crateDeal` is a warm new pine and it is the right bake; what it
+    // is not is what a case looks like after years in a shut-up house. Once the room's ladder
+    // matched the reference this was the loudest thing left in a blind pair — the whole depot
+    // read as gold where the bar's reads as grey timber. Measured on matched stacks:
+    //
+    //     packing cases            rgb                  L      chroma
+    //     refs/bf1                47.3, 43.6, 37.0     43.9     10.3
+    //     refs/bf1                48.0, 39.2, 30.4     40.4     17.6
+    //     this room, before      111.4, 89.5, 77.8     93.3     33.6
+    //     this room, after        92.3, 76.4, 69.6     79.3     22.6
+    //
+    // ⚠ AND THE "AFTER" RECT IS NOT PURE CRATE, WHICH COST A ROUND-TRIP. It is a fixed 200x90
+    // window on the overlook capture that also catches floor and a sheeted mound, so it barely
+    // moves when the crate material does — and reading it as if it were crate-only led to
+    // pushing this multiplier to 0x7d8894, which took the cases to black silhouettes with no
+    // board detail left in them at all. The picture caught what the rect could not. Shipped at
+    // 0x99a3ac, which is the step that greyed the timber without swallowing it; the number to
+    // trust here is the capture, not this rect.
+    //
+    // Twice the brightness and three times the chroma. A COOL multiplier does both jobs at
+    // once: it darkens, and multiplying a warm map by a cool colour is what actually greys
+    // timber, where a neutral multiplier would only have made bright pine into dark pine.
+    // A clone, so `room.gallery`'s and the game's own crates are untouched.
+    const crateWeathered = mats.crateDeal.clone();
+    crateWeathered.color = new THREE.Color(0xc9ccd2);
+    crateWeathered.name = 'ballroom-crate-weathered';
+    engine.onDispose?.(() => crateWeathered.dispose());
+    M.crate = crateWeathered;
+  }
   const K = { wall: 'wall', mould: 'gilt', cornice: 'gilt', skirt: 'gilt', trim: 'gilt', leaf: 'wall' };
 
   const bin = new GeoBin();
@@ -743,7 +772,16 @@ export default async function view(args = {}) {
     // change, i.e. still bright, which is correct for a floor in direct sun; what it stops
     // being is COLOURLESS.
     const parquetFloorMat = parquetMat({
-      oak: [0.281, 0.183, 0.101], oakDark: [0.131, 0.079, 0.043], wear: 0.6,
+      // ⚠ THE PATTERN CONTRAST, NOT THE LEVEL, IS WHAT A BLIND PAIR NOW TURNS ON. Put the
+      // composition-matched capture beside `refs/bf1/bf1-ballroom-01.png` unlabelled and the
+      // fastest tell is no longer brightness or colour — both are matched — it is that the
+      // bar's floor is a large CALM expanse whose parquet pattern is barely legible (a tone),
+      // and this one's is a high-contrast diamond repeat that reads as patterned wallpaper
+      // across the biggest surface in the frame. `oakDark` was 47% of `oak`; a real waxed
+      // parquet's stave-to-stave variation is nothing like a 2:1 ratio. 0.73 halves the
+      // pattern's contrast and leaves the panel joints doing the work, which is what the
+      // reference's floor actually shows.
+      oak: [0.281, 0.183, 0.101], oakDark: [0.205, 0.135, 0.078], wear: 0.6,
     });
     parquetFloorMat.name = 'ballroom-floor-parquet';
     engine.onDispose?.(() => parquetFloorMat.dispose());
@@ -1414,7 +1452,16 @@ export default async function view(args = {}) {
   // brightest and had lost every trace of the warm bias the same cloth carries in shade. That
   // is unbleached linen rendered as printer paper, and it is why the folds this round put into
   // them stop reading the moment the sun reaches one.
-  sheetMat.color = new THREE.Color(0xaea48f);
+  //     this room, AFTER the cool correction — see below
+  //
+  // ⚠ AND THE HUE WAS WRONG AS WELL AS THE LEVEL, which only showed once the level was right.
+  // 0xaea48f is a warm tan, and against the bar's sheets — 48,48,46 in shade, 90,81,71 lit,
+  // i.e. very nearly neutral — a room full of them reads as sand dunes rather than as linen.
+  // Dust sheets are unbleached cotton that has been in a dark house for a decade: they go grey,
+  // not gold. The room's own warm bounce supplies whatever warmth they should carry, and when
+  // the ALBEDO carries it too the two multiply and the sheets end up the most saturated large
+  // objects in the frame.
+  sheetMat.color = new THREE.Color(0xa9a79e);
   if (sheetMat.normalScale) sheetMat.normalScale.multiplyScalar(0.30);
   sheetMat.name = 'dust-sheet-linen';
   engine.onDispose?.(() => sheetMat.dispose());

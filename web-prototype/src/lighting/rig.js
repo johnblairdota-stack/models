@@ -512,7 +512,24 @@ export const GRADES = {
     // nowhere near the 6% crushed-black failure the line above exists to avoid.
     toeCrush: 0.018,
     haze: 0.026, hazeColor: [0.058, 0.056, 0.052],
-    shadowTint: [1.02, 0.99, 0.95], highlightTint: [0.975, 1.00, 1.030],
+    // ---- ROUND 17, FOURTH PASS: THE SPLIT-TONING WAS INVERTED AGAINST THE BAR --------------
+    //
+    // `shadowTint` was [1.02, 0.99, 0.95] — R up, B down, i.e. a WARM shadow — and once the
+    // room's ladder matched the reference that became the fastest remaining tell in a blind
+    // pair. Measured on matched props: the bar's sheeted mounds read 48.0, 47.8, 46.3 in shade,
+    // chroma 1.7, essentially neutral; this room's shaded props were running chroma 30+. Its
+    // whole depot read as gold where the reference's reads as grey timber and grey linen, and
+    // no prop albedo fixes that because the tint is applied to all of them at once, after
+    // tonemapping.
+    //
+    // Cooling the shadow end is also FREE against this piece's tightest gate: `grade.mjs`
+    // measures (r-b)/L in the TOP decile, and this term is weighted by pow(1-L, 2), so it does
+    // essentially nothing up there. `highlightTint` is deliberately NOT inverted to match — the
+    // bar's sun patches are warm and warming ours further is the obvious move, but the top
+    // decile is already at 0.129 of a 0.14 target with the gilding spending most of it, and
+    // that is the ceiling this round already documented at the daylight's own colour.
+    shadowTint: [0.985, 0.995, 1.025], highlightTint: [0.985, 1.00, 1.015],
+    splitBalance: 0.55,
     aoIntensity: 1.30, aoRadius: 0.85,
     grain: 0.026,
   },
