@@ -423,7 +423,7 @@ export default async function view(args = {}) {
     // crushing shadows, which `CRITIC_GUIDE.md` lists as a render tell in its own right
     // ("dead blacks ... a cut-out silhouette"). This build holds 0.8% of the frame at L <= 2.6
     // against the art's 0.1%. Matching the art is the point; the study's band is not the art.
-    : { env: 1.70, sun: 5705, bounce: 11.03, bounceCard: 5.0, grade: null, sunColor: 0xffe0b8,
+    : { env: 1.70, sun: 5705, bounce: 11.03, bounceCard: 5.0, grade: null, sunColor: 0xffe7c8,
         dir: [0.885, -0.375, 0.265], aim: [-4.7, 0, 0.2], angle: 0.42, penumbra: 0.22, mapSize: 2048,
         shaftWins: [0, 1, 2], cardWins: [0, 2] };
 
@@ -1733,7 +1733,12 @@ export default async function view(args = {}) {
     //     0xffeeda   171.2, 162.7, 161.9            9.3            0.106
     //     0xffe3c2   171.4, 160.9, 157.7           13.7            0.125
     //     0xffdcb0   171.6, 159.7, 154.1           17.5            0.135   at the target
-    //     0xffe0b8    (shipped, with a margin — see below)
+    //     0xffe7c8    (shipped — see the second-pass note below)
+    //
+    // ⚠ RE-TRIMMED IN THE SECOND PASS. The numbers above were solved at exposure 1.28; taking
+    // the room onto the bar's ladder at 1.45 pushed more warm content into the top decile and
+    // 0xffe0b8 arrived at 0.134 against a 0.14 target — passing, but inside the instrument's
+    // own noise. 0xffe7c8 restores the margin and keeps the R > G > B order that was the point.
     //
     // The patches now run R > G > B like the bar's. It stops here because 0.14 is the gate's
     // TARGET — and the interesting part is WHY, because it is not the sun. The bar's own ladder
