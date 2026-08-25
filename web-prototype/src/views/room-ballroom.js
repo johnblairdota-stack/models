@@ -394,7 +394,7 @@ export default async function view(args = {}) {
     //
     // ⚠ `?daylight=flat` IS UNTOUCHED. It is the ablation that holds round 12's pre-rebalance
     // numbers, and re-tuning it here would delete the only reachable copy of them.
-    : { env: 1.70, sun: 8150, bounce: 7.35, bounceCard: 5.0, grade: null, sunColor: 0xffe3c2,
+    : { env: 1.70, sun: 8150, bounce: 7.35, bounceCard: 5.0, grade: null, sunColor: 0xffe0b8,
         dir: [0.885, -0.375, 0.265], aim: [-4.7, 0, 0.2], angle: 0.42, penumbra: 0.22, mapSize: 2048,
         shaftWins: [0, 1, 2], cardWins: [0, 2] };
 
@@ -1538,13 +1538,22 @@ export default async function view(args = {}) {
   // between that spot and anything.
   const noCast = (o) => { o.traverse((n) => { if (n.isMesh) n.castShadow = false; }); return o; };
   for (const wz of winZ) {
-    const sc = sconce({ merge: true, brass: mats.brass, intensity: 3.0, distance: 6.5, phase: wz, glowStrength: 1.5, glowSize: 4.0 });
+    // ⚠ ROUND 17: glowStrength 1.5 -> 0.55 AND glowSize 4.0 -> 2.6. These were 5x and 2.35x
+    // `sconce`'s own defaults (0.30 / 1.7), i.e. nine two-and-a-half-metre orange halos on the
+    // window wall, and they are the reason the room cannot afford a warm daylight. `grade.mjs`
+    // fails a top-decile (r-b)/L over 0.2 and targets 0.14; the sun's own re-tint had already
+    // spent the frame up to 0.125, and the diagnosis that stopped it is in the LIGHTS note —
+    // the reference reads 0.089 top-decile WHILE carrying chroma 36-49 on its floor, so what
+    // eats this room's budget is not its daylight but its own practicals. A halo is also the
+    // cheapest thing in the frame to disbelieve: it is a flat radial sprite, and at 4 m across
+    // it is unmissable as one.
+    const sc = sconce({ merge: true, brass: mats.brass, intensity: 3.0, distance: 6.5, phase: wz, glowStrength: 0.55, glowSize: 2.6, glowColor: 0xffb877 });
     sc.position.set(R.x0 + 0.30, 2.35, wz + WIN.w / 2 + 1.35);
     sc.rotation.y = Math.PI / 2;
     scene.add(noCast(sc));
   }
   for (const pz of [-5.4, -1.2, 3.0, 6.6]) {
-    const sc = sconce({ merge: true, brass: mats.brass, intensity: 2.8, distance: 6.5, phase: pz, glowStrength: 1.5, glowSize: 4.0 });
+    const sc = sconce({ merge: true, brass: mats.brass, intensity: 2.8, distance: 6.5, phase: pz, glowStrength: 0.55, glowSize: 2.6, glowColor: 0xffb877 });
     sc.position.set(R.x1 - 0.30, 2.45, pz);
     sc.rotation.y = -Math.PI / 2;
     scene.add(noCast(sc));
@@ -1626,16 +1635,23 @@ export default async function view(args = {}) {
     //     key        patch rgb                 patch chroma   top-decile (r-b)/L
     //     0xd6e4ff   163.4, 160.3, 166.0            5.7            0.073
     //     0xffeeda   171.2, 162.7, 161.9            9.3            0.106
-    //     0xffe3c2   171.4, 160.9, 157.7           13.7            0.125   shipped
+    //     0xffe3c2   171.4, 160.9, 157.7           13.7            0.125
+    //     0xffdcb0   171.6, 159.7, 154.1           17.5            0.135   at the target
+    //     0xffe0b8    (shipped, with a margin — see below)
     //
-    // The patches now run R > G > B like the bar's, at a quarter of its warm bias rather than
-    // none of it. It stops there because 0.14 is the gate's TARGET and 0.125 is already most of
-    // the way to it — and the interesting part is WHY, because it is not the sun. The bar's own
-    // ladder reads 0.089 top-decile while its floor patches carry chroma 36-49; ours reads 0.125
-    // while ours carry 13.7. The difference is what ELSE is in each frame's top decile: this
-    // room's gilding and its eleven practical flames are up there and the bar has neither. So
-    // the remaining gap to the reference's daylight is not buyable from this light — it is the
-    // gilt and the candles spending the budget first, and that is a separate round's problem.
+    // The patches now run R > G > B like the bar's. It stops here because 0.14 is the gate's
+    // TARGET — and the interesting part is WHY, because it is not the sun. The bar's own ladder
+    // reads 0.089 top-decile while its floor patches carry chroma 36-49; ours reads 0.13 while
+    // ours carry 17.5. The difference is what ELSE is in each frame's top decile: this room's
+    // gilding and its practical flames are up there and the reference has neither.
+    //
+    // ⚠ THE SCONCE HALOS WERE TRIED AS THE CULPRIT AND ARE NOT IT — worth recording so nobody
+    // spends the round again. They were running at 5x `sconce`'s own default strength and 2.35x
+    // its size (nine 4 m orange sprites on the window wall); bringing them to 0.55 / 2.6 with a
+    // cooler tint is a real improvement to the frame in its own right, but it moved the gate
+    // only 0.125 -> 0.119. What is left is the GILDING, which covers the cornice, the frieze,
+    // the coffer ribs and every moulding in the room, and desaturating that would be
+    // desaturating the piece's defining surface. Left as the honest ceiling on this knob.
     color: LIGHTS.sunColor, intensity: LIGHTS.sun,
     position: sunFrom.toArray(),
     target: sunAim.toArray(),
