@@ -175,6 +175,9 @@ export default async function view(args = {}) {
   // `?pierreflect=0` — the ablation for round 17's planar reflection on the four pier glasses.
   // See the block after the floor reflection for what it replaced and why it was missed.
   const PIER_REFLECT = qs.get('pierreflect') !== '0';
+  // `?outside=0` — the ablation for round 17's courtyard. Restores the emissive-lightbox
+  // glazing AND removes the exterior, because the two only make sense together.
+  const OUTSIDE = qs.get('outside') !== '0';
   // `?vestglow=N` — the ablation for round 17's vestibule emission. 0 restores r16 exactly.
   const VEST_GLOW = Number.isFinite(parseFloat(qs.get('vestglow')))
     ? Math.max(0, Math.min(8, parseFloat(qs.get('vestglow')))) : 1.0;
@@ -551,6 +554,24 @@ export default async function view(args = {}) {
   // same tool and it moved the sample by <1 count, i.e. this position is diffuse/indirect-dominated
   // and roughness is not the lever here.
   const drape = new THREE.MeshStandardMaterial({ color: 0xc02030, roughness: 0.86, metalness: 0 });
+  // See the OUTSIDE block below for why this is a clone rather than `mats.clearGlass` itself.
+  // The BAKE is shared through the baker's key cache — only the two scalars differ — so this
+  // costs one material and no extra texture, and `room.gallery`'s and `room.study`'s own
+  // glazing is untouched.
+  const ballroomGlass = mats.clearGlass.clone();
+  if (OUTSIDE) {
+    // 3.4 -> 0.9: enough for the leading and the quarry bands to still bloom, not enough to be
+    // the picture. What is bright in the opening is now the sky behind it.
+    ballroomGlass.emissiveIntensity = 0.9;
+    ballroomGlass.transparent = true;
+    ballroomGlass.opacity = 0.42;
+    // depthWrite stays ON. These panes are the only transparent surface on this side of the
+    // room and everything behind them (the courtyard, the sky) is opaque and drawn first, so
+    // there is nothing for a pane to sort incorrectly against — and leaving it on keeps the
+    // glazing out of the light shafts' own additive sort.
+    ballroomGlass.needsUpdate = true;
+  }
+  engine.onDispose?.(() => ballroomGlass.dispose());
   const ceilPaint = ceilingMat({ tint: [0.480, 0.452, 0.398], stain: 0.7 });
 
   const M = {
@@ -559,7 +580,7 @@ export default async function view(args = {}) {
     frieze: mats.giltFrieze,
     stone: mats.stone,
     ceil: ceilPaint,
-    glass: mats.clearGlass,
+    glass: ballroomGlass,
     dark,
     drape,
     marbleTop: mats.marbleSlab,
@@ -1328,6 +1349,91 @@ export default async function view(args = {}) {
       ],
     }));
     engine.onDispose?.(() => paperMat.dispose());
+  }
+
+  // ---- THERE IS NOTHING OUTSIDE THE WINDOWS, AND THE GLASS IS A LIGHTBOX (ROUND 17) ------
+  //
+  // `critic-eye-sweep`'s top remaining hate: "windows: still flat white planes behind a
+  // diamond lattice. No exterior, no sky gradient, no glass depth." `_eye17_pick` on a window
+  // pixel returns `kit:glass`, and that material is `stainedGlassMat({ emissive: 3.4 })` — an
+  // OPAQUE plane with an emissive map. So the windows are not glazing at all, they are lamps
+  // in the shape of windows, and nothing put behind them could ever have shown through.
+  //
+  // That was the right call while there was nothing out there: an emissive pane is the cheapest
+  // way to say "bright day" and it costs no geometry. What it cannot say is WHERE, and the bar
+  // (`refs/bf1/bf1-ballroom-01.png`) says where in every opening — courtyard facades, a
+  // cornice, sky above them. A blown highlight with a building silhouetted in the bottom two
+  // thirds reads as a window; a uniform white rectangle reads as a hole in the renderer.
+  //
+  // So both halves change together and neither works alone:
+  //   · the glazing becomes GLAZING — the same bake, emissiveIntensity 3.4 -> 0.9 so the leading
+  //     still blooms, plus transparency so the courtyard is behind it rather than instead of it;
+  //   · a courtyard range opposite, its cornice at 6.0 m, on a ground plane, against a sky card.
+  //
+  // ⚠ NOTHING OUT HERE CASTS. The one shadow-casting light in this room stands at about
+  // (-31, 11) and aims through the window wall, so every one of these meshes is between it and
+  // the room — the facade's own top edge crosses the sun ray at y 6.27. A single `castShadow`
+  // left true here would draw the courtyard's shadow across the ballroom floor and delete the
+  // window patches that are the whole point of the lighting rig.
+  //
+  // ⚠ AND THE HEIGHTS ARE SOLVED, NOT PICKED. The eye must see sky in the TOP of the opening or
+  // the courtyard just replaces one flat field with another. A ray from a standing player at
+  // (4, 1.65) through the window head (-13, 5.4) is at y 7.83 by the time it reaches x -24, so a
+  // range topping out at 6.0 leaves the upper third of every window showing sky. At the wall's
+  // first position (x -22, top 9.0) the same ray was still inside masonry and every window went
+  // grey.
+  //
+  // `?outside=0` ablates both halves back to the emissive lightbox.
+  if (OUTSIDE) {
+    const outside = new THREE.Group();
+    outside.name = 'outside';
+    const noShadow = (m) => { m.castShadow = false; m.receiveShadow = false; return m; };
+    // The sky: unlit, so it is a value rather than a surface, and it sits behind the sun.
+    // ⚠ THE SKY IS SET ABOVE 1.0 IN LINEAR, WHICH IS THE POINT. An sRGB white is 1.0 linear, and
+    // 1.0 through this room's exposure and ACES lands around 232 — a pale grey card, dimmer than
+    // the sun patches it is supposed to be casting. Daylight outside a dark interior is several
+    // stops over the interior, so the sky is authored as an HDR value (`setRGB` writes the
+    // working linear space directly) and lets the tonemapper roll it off the way it rolls off
+    // the real sun. That is also what gives the glazing bars something to silhouette against.
+    const skyMat = new THREE.MeshBasicMaterial();
+    skyMat.color.setRGB(2.60, 2.66, 2.80);
+    const sky = noShadow(new THREE.Mesh(new THREE.PlaneGeometry(110, 70), skyMat));
+    sky.rotation.y = Math.PI / 2;                 // the plane's +z turned to face +x, into the room
+    sky.position.set(-34, 14, 0);
+    outside.add(sky);
+    // The range opposite, and the yard between. Both take the room's own limestone, and both
+    // face +x — i.e. AWAY from the sun, which travels +x — so they are lit by the shell alone
+    // and read as a silhouette against the sky. That is the correct way round: a sunlit facade
+    // out there would compete with the window patches on the floor.
+    const outMat = mats.stone;
+    const yard = noShadow(new THREE.Mesh(new THREE.BoxGeometry(15, 0.4, 48), outMat));
+    yard.position.set(-20.5, -0.2, 0);
+    outside.add(yard);
+    // ⚠ TOP AT 5.0 AND SET BACK TO -26, NOT 6.0 AT -24. The first build put the range's cornice
+    // above every sight line a player has through these windows and the openings came back
+    // grey — one flat field swapped for another, which is the failure this whole item is about.
+    // Further back and lower, the same building occupies the bottom half of each opening and
+    // leaves the top half sky, which is the bar's own proportion.
+    const range = noShadow(new THREE.Mesh(new THREE.BoxGeometry(0.9, 5.0, 48), outMat));
+    range.position.set(-26, 2.5, 0);
+    outside.add(range);
+    const cornice = noShadow(new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.55, 48), outMat));
+    cornice.position.set(-25.8, 5.2, 0);
+    outside.add(cornice);
+    // Its own windows, as dark recesses. Two storeys, so the range reads as a building with a
+    // floor height rather than as a wall — which is also the only cue out there that gives the
+    // ballroom's own 9.6 m something to be measured against.
+    const holeMat = new THREE.MeshStandardMaterial({ color: 0x0b0d11, roughness: 0.9, metalness: 0 });
+    engine.onDispose?.(() => holeMat.dispose());
+    for (let i = -6; i <= 6; i++) {
+      for (const hy of [1.6, 3.8]) {
+        const hole = noShadow(new THREE.Mesh(new THREE.BoxGeometry(0.35, 1.7, 1.15), holeMat));
+        hole.position.set(-25.6, hy, i * 3.6);
+        outside.add(hole);
+      }
+    }
+    scene.add(outside);
+    engine.outside = outside;
   }
 
   // ---- chandeliers -------------------------------------------------------
