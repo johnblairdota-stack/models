@@ -1399,11 +1399,18 @@ export default async function view(args = {}) {
   // what it actually is: a hard-edged Voronoi diagram, thin brown lines on a pale field, which
   // reads as cracked paint rather than as tarnished amalgam.
   //
-  // repeat [3, 5] puts three cells across the plate's width instead of a third of one, so the
-  // craze is a crazing again at the distance a player meets it; fox 0.85 -> 0.40 because the
-  // pattern being smaller makes the same amount of it far more legible. The baker caches by
-  // key, so this costs one 1024 compile and `room.gallery`'s own mirrors are untouched.
-  const mirrorMat = foxedMirrorMat({ fox: 0.40, repeat: [3, 5] });
+  // ⚠ AND THE FIRST FIX FOR IT TRADED ONE DISTANCE FOR ANOTHER, which is worth recording
+  // because it is the trap in every texture-scale change. repeat [3, 5] fixed `eye.under`
+  // and broke `eye.mirror`: three cells across a plate is fine crazing at 1 m and a visible
+  // regular GRID at 20 m, where the whole plate is 90 px and each cell is 30. A repeat only
+  // disappears when it is finer than the eye can resolve at the CLOSEST distance it is seen
+  // from, and then it is automatically finer than that at every other distance. [7, 14] is
+  // that: sub-pixel mottle across the room, real crazing at arm's length. fox 0.85 -> 0.40
+  // because a smaller pattern makes the same amount of it far more legible.
+  //
+  // The baker caches by key, so this costs one 1024 compile and `room.gallery`'s own mirrors
+  // are untouched.
+  const mirrorMat = foxedMirrorMat({ fox: 0.40, repeat: [7, 14] });
   engine.onDispose?.(() => mirrorMat.dispose());
   const mirrorPZ = [-5.3, -1.3, 2.7, 6.7];
   const mirrorGeos = mirrorPZ.map((pz) => {
