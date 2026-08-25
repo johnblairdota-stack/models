@@ -546,6 +546,8 @@ export function ballroomOrder(bin, o = {}) {
   //
   // `o.raised === false` opts back out (the game's own ballroom can, if its budget needs it).
   const RAISED = o.raised !== false;
+  // The pilaster shafts' material bucket — see the note at the window-wall pilasters.
+  const PILK = o.pilasterKey ?? K.wall ?? 'wall';
 
   if (parts.windowWall) {
     wallRun(B, {
@@ -582,7 +584,13 @@ export function ballroomOrder(bin, o = {}) {
           // 9.6 m wall was under-scaled for the room anyway.
           x: x0 + 0.14, y: 0.34, z: wz + s * (win.w / 2 + 0.62), rotY: HALF_PI,
           h: h - 1.55, w: 0.72, proj: 0.30, flutes: 7,
-          keys: { shaft: 'wall', cap: 'gilt' },
+          // ⚠ ITS OWN BUCKET, DEFAULTING TO THE WALL'S. Deepening these members made them
+          // BRIGHTER than the wall they stand on — a pilaster between two windows catches the
+          // daylight nearly square-on — so at `cam=eye.walk` they came back as pale planks.
+          // A giant order in a room like this is stone against painted joinery, so giving the
+          // shaft a key of its own lets the caller say so. Falls back to `wall`, which is what
+          // every existing caller gets.
+          keys: { shaft: PILK, cap: 'gilt' },
         });
       }
       // A crimson drape swagged over each window head, and its two side panels. ROUND 17:
@@ -596,14 +604,25 @@ export function ballroomOrder(bin, o = {}) {
       // from `cam=eye.walk` read as tape stuck over the openings. A pelmet is fitted so its
       // LOWEST point clears the head: centre 0.34 above it, sag 0.22, so the deepest lobe stops
       // just short of the glass.
+      // ⚠ THE DRAPERY HANGS IN FRONT OF THE ORDER, AT x0 + 0.62. Two of this round's own changes
+      // collided here and the capture is unambiguous about it: widening the panels (0.55 ->
+      // 0.82) and deepening the pilasters (proj 0.16 -> 0.30) put both into the same 30 cm of
+      // space, so `cam=eye.walk` came back with pale pilaster shafts standing THROUGH the red
+      // curtains. The pilaster's front face is now at x0 + 0.44, so everything soft clears it
+      // by 3 cm. It is also the more correct arrangement — a curtain in a room with a giant
+      // order hangs off a pole in front of the order, not in the reveal behind it.
       drapeSwag(B, 'drape', {
-        x: x0 + 0.26, y: winHead + 0.34, z0: wz - (win.w + 1.05) / 2, z1: wz + (win.w + 1.05) / 2,
+        x: x0 + 0.62, y: winHead + 0.34, z0: wz - (win.w + 0.55) / 2, z1: wz + (win.w + 0.55) / 2,
         depth: 0.26, h: 0.92, sag: 0.22, folds: 7, roll: wz * 1.7,
       });
       for (const s of [-1, 1]) {
         drapePanel(B, 'drape', {
-          x: x0 + 0.30, yTop: winHead + 0.20, h: win.h * 0.96,
-          z: wz + s * (win.w / 2 + 0.34),
+          // ⚠ TO THE FLOOR. `win.h * 0.96` left the hem at 1.42 m — above the sill, with the
+          // pilaster and the dado visible underneath it — and a curtain that stops in mid-air
+          // reads as a banner. The reference's reach the floor, which is also what makes them
+          // a vertical the room's height can be measured against.
+          x: x0 + 0.62, yTop: winHead + 0.20, h: winHead + 0.20,
+          z: wz + s * (win.w / 2 + 0.30),
           // 0.55 -> 0.82 wide and 0.24 -> 0.30 deep. The box was sized to be unobtrusive
           // because it had nothing to show; a panel with folds wants enough width to fit five
           // of them across, and the pair now reads as curtains that could actually close.
@@ -735,7 +754,7 @@ export function ballroomOrder(bin, o = {}) {
         // `critic-eye-sweep` measured the seven pixels on.
         x: px, y: 0.34, z: z1 - 0.14, rotY: Math.PI,
         h: h - 1.55, w: 0.66, proj: 0.28, flutes: 6,
-        keys: { shaft: 'wall', cap: 'gilt' },
+        keys: { shaft: PILK, cap: 'gilt' },
       });
     }
   }

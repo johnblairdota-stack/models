@@ -626,7 +626,14 @@ export default async function view(args = {}) {
   engine.onDispose?.(() => ballroomGlass.dispose());
   const ceilPaint = ceilingMat({ tint: [0.480, 0.452, 0.398], stain: 0.7 });
 
+  // The pilaster shafts, a shade down and a shade warmer than the wall they stand against —
+  // see the note at the pilaster call in ballroom-order.js. Stone against painted joinery.
+  const pilasterStone = mats.boiserie.clone();
+  pilasterStone.color = new THREE.Color(0xbdb3a2);
+  pilasterStone.name = 'ballroom-pilaster-shaft';
+  engine.onDispose?.(() => pilasterStone.dispose());
   const M = {
+    pil: pilasterStone,
     wall: mats.boiserie,
     gilt: mats.gilt,
     frieze: mats.giltFrieze,
@@ -793,7 +800,7 @@ export default async function view(args = {}) {
   });
   const winZ = PLAN.winZ;
   ballroomOrder(bin, {
-    plan: PLAN, keys: K,
+    plan: PLAN, keys: K, pilasterKey: 'pil',
     parts: { nearWall: false, ceiling: false, mirrors: false, dressing: false, balustrade: false },
   });
   // the vestibule beyond the arch, so the opening is not a black hole
@@ -1039,7 +1046,7 @@ export default async function view(args = {}) {
    * with it, because nothing of this view's own goes between them.
    */
   ballroomOrder(bin, {
-    plan: PLAN, keys: K,
+    plan: PLAN, keys: K, pilasterKey: 'pil',
     parts: {
       windowWall: false, mirrorWall: false, endWall: false,
       mirrors: false, dressing: false, balustrade: false,
@@ -1194,7 +1201,7 @@ export default async function view(args = {}) {
     { x: R.x1 - 0.55, z: 0, rotY: -Math.PI / 2, w: 1.8 },
   ];
   ballroomOrder(bin, {
-    plan: PLAN, keys: K,
+    plan: PLAN, keys: K, pilasterKey: 'pil',
     parts: {
       windowWall: false, mirrorWall: false, endWall: false, nearWall: false,
       ceiling: false, balustrade: false,
@@ -1268,7 +1275,7 @@ export default async function view(args = {}) {
   // The plinth and handrail go into the shared bin (they merge with the gilt and stone
   // buckets, no extra draw call); the balusters come back as one InstancedMesh.
   const bal = ballroomOrder(bin, {
-    plan: PLAN,
+    plan: PLAN, pilasterKey: 'pil',
     parts: {
       windowWall: false, mirrorWall: false, endWall: false, nearWall: false,
       ceiling: false, mirrors: false, dressing: false,

@@ -716,7 +716,15 @@ export function pilaster(bin, o = {}) {
       // flute: cosine grooves between two flat margins
       const inMargin = u < 0.09 || u > 0.91;
       const fu = (u - 0.09) / 0.82;
-      const groove = inMargin ? 0 : Math.pow(Math.max(0, Math.sin(fu * Math.PI * flutes)), 0.6) * 0.028;
+      // ⚠ THE FLUTE DEPTH SCALES WITH THE PROJECTION (round 17). It was a hardcoded 0.028, which
+      // is right for the 0.12 default and vanishes on a giant order: the ballroom's pilasters
+      // went to proj 0.30 to stop reading as hairlines (see that call), and 2.8 cm of groove on
+      // a 0.72 x 0.30 m member is a member with no fluting on it — which is how `eye.walk` came
+      // back with flat cream slabs where the hairlines used to be. `proj * 0.22` reproduces the
+      // old number at the old default to within a millimetre, so every existing caller is
+      // unchanged; the cap stops a very deep pilaster from being carved into a comb.
+      const fluteD = o.fluteDepth ?? Math.min(0.055, proj * 0.22);
+      const groove = inMargin ? 0 : Math.pow(Math.max(0, Math.sin(fu * Math.PI * flutes)), 0.6) * fluteD;
       ring.push(new THREE.Vector3(fx, plinthH + t * shaftH, d - groove));
       uvr.push([u * w, plinthH + t * shaftH]);
     }
