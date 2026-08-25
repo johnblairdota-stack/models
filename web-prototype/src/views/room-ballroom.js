@@ -1003,10 +1003,17 @@ export default async function view(args = {}) {
     // architrave: a dark surround so the whole thing is an opening in a wall
     const jambMat = new THREE.MeshStandardMaterial({ color: 0x151714, roughness: 0.9, metalness: 0 });
     engine.onDispose?.(() => jambMat.dispose());
-    for (const [jw, jh, jx, jy] of [[0.16, 2.86, -2.02, 1.31], [0.16, 2.86, -0.24, 1.31], [1.94, 0.16, -1.13, 2.70]]) {
-      const j = new THREE.Mesh(new THREE.BoxGeometry(jw, jh, 0.10), jambMat);
-      j.position.set(jx, jy, zw + 0.05);
-      doorGroup.add(j);
+    {
+      // merged for the same draw-call reason as the courtyard above
+      const js = [];
+      for (const [jw, jh, jx, jy] of [[0.16, 2.86, -2.02, 1.31], [0.16, 2.86, -0.24, 1.31], [1.94, 0.16, -1.13, 2.70]]) {
+        const g = new THREE.BoxGeometry(jw, jh, 0.10);
+        g.applyMatrix4(new THREE.Matrix4().makeTranslation(jx, jy, zw + 0.05));
+        js.push(g);
+      }
+      const merged = mergeGeometries(js, false);
+      for (const g of js) g.dispose();
+      if (merged) doorGroup.add(new THREE.Mesh(merged, jambMat));
     }
     scene.add(doorGroup);
     // The pool it throws — a plain quad on the vestibule floor rather than a light, for the
@@ -1412,11 +1419,17 @@ export default async function view(args = {}) {
   sheetMat.name = 'dust-sheet-linen';
   engine.onDispose?.(() => sheetMat.dispose());
   scene.add(dustSheetRow({
-    count: 5, material: sheetMat, rng, w: 0.98, d: 0.92, h: 1.18, nx: 40, nz: 34,
+    // ⚠ `variants` 2 -> 4 of 5 (round 17, third pass). `dustSheetRow`'s own header says why the
+    // knob exists — "one geometry instanced N times is N copies of the same crease" — and the
+    // default of 2 was chosen when these sheets were smooth enough that nobody could tell. Now
+    // that they carry gathers AND a wrinkle field, two bakes across five sheets in one row is a
+    // visible repeat, and it is the same "every mound the same cloth" the crates just answered.
+    // Cost is one draw call per variant.
+    count: 5, variants: 4, material: sheetMat, rng, w: 0.98, d: 0.92, h: 1.18, nx: 40, nz: 34,
     shape: 'chair', pleats: 7, from: [-7.5, 0, 5.6], to: [6.5, 0, 6.4],
   }));
   scene.add(dustSheetRow({
-    count: 3, material: sheetMat, rng, w: 2.2, d: 1.2, h: 0.86, nx: 40, nz: 28,
+    count: 3, variants: 3, material: sheetMat, rng, w: 2.2, d: 1.2, h: 0.86, nx: 40, nz: 28,
     shape: 'table', pleats: 9, from: [-9.0, 0, -3.2], to: [-9.4, 0, 2.6],
   }));
   // Two sheeted MOUNDS among the packing cases — the reference's central pile is exactly this,
@@ -1565,31 +1578,57 @@ export default async function view(args = {}) {
     // face +x — i.e. AWAY from the sun, which travels +x — so they are lit by the shell alone
     // and read as a silhouette against the sky. That is the correct way round: a sunlit facade
     // out there would compete with the window patches on the floor.
+    // ⚠ THE COURTYARD IS THREE MESHES, NOT THIRTY, AND THE BUDGET IS WHY. The first build
+    // emitted the yard, the range, its cornice and 26 window recesses as separate meshes, and
+    // `shoot.mjs --perf` came back at 314 draw calls against CRITIC_GUIDE's 300 for a
+    // room-scale view — this piece's own numeric gate, blown by set dressing nobody can even
+    // walk up to. Everything sharing a material is merged: the masonry into one, the recesses
+    // into one. Same picture, 27 fewer calls.
     const outMat = mats.stone;
-    const yard = noShadow(new THREE.Mesh(new THREE.BoxGeometry(15, 0.4, 48), outMat));
-    yard.position.set(-20.5, -0.2, 0);
-    outside.add(yard);
+    const stoneParts = [];
+    const addStone = (g, x, y, z) => {
+      g.applyMatrix4(new THREE.Matrix4().makeTranslation(x, y, z));
+      stoneParts.push(g);
+    };
+    addStone(new THREE.BoxGeometry(15, 0.4, 48), -20.5, -0.2, 0);
     // ⚠ TOP AT 5.0 AND SET BACK TO -26, NOT 6.0 AT -24. The first build put the range's cornice
     // above every sight line a player has through these windows and the openings came back
     // grey — one flat field swapped for another, which is the failure this whole item is about.
     // Further back and lower, the same building occupies the bottom half of each opening and
     // leaves the top half sky, which is the bar's own proportion.
-    const range = noShadow(new THREE.Mesh(new THREE.BoxGeometry(0.9, 5.0, 48), outMat));
-    range.position.set(-26, 2.5, 0);
-    outside.add(range);
-    const cornice = noShadow(new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.55, 48), outMat));
-    cornice.position.set(-25.8, 5.2, 0);
-    outside.add(cornice);
+    addStone(new THREE.BoxGeometry(0.9, 5.0, 48), -26, 2.5, 0);
+    addStone(new THREE.BoxGeometry(1.5, 0.55, 48), -25.8, 5.2, 0);
+    {
+      const merged = mergeGeometries(stoneParts, false);
+      for (const g of stoneParts) g.dispose();
+      if (merged) {
+        merged.computeBoundingSphere();
+        const m = noShadow(new THREE.Mesh(merged, outMat));
+        m.name = 'outside-stone';
+        outside.add(m);
+      }
+    }
     // Its own windows, as dark recesses. Two storeys, so the range reads as a building with a
     // floor height rather than as a wall — which is also the only cue out there that gives the
     // ballroom's own 9.6 m something to be measured against.
     const holeMat = new THREE.MeshStandardMaterial({ color: 0x0b0d11, roughness: 0.9, metalness: 0 });
     engine.onDispose?.(() => holeMat.dispose());
-    for (let i = -6; i <= 6; i++) {
-      for (const hy of [1.6, 3.8]) {
-        const hole = noShadow(new THREE.Mesh(new THREE.BoxGeometry(0.35, 1.7, 1.15), holeMat));
-        hole.position.set(-25.6, hy, i * 3.6);
-        outside.add(hole);
+    {
+      const holes = [];
+      for (let i = -6; i <= 6; i++) {
+        for (const hy of [1.6, 3.8]) {
+          const g = new THREE.BoxGeometry(0.35, 1.7, 1.15);
+          g.applyMatrix4(new THREE.Matrix4().makeTranslation(-25.6, hy, i * 3.6));
+          holes.push(g);
+        }
+      }
+      const merged = mergeGeometries(holes, false);
+      for (const g of holes) g.dispose();
+      if (merged) {
+        merged.computeBoundingSphere();
+        const m = noShadow(new THREE.Mesh(merged, holeMat));
+        m.name = 'outside-windows';
+        outside.add(m);
       }
     }
     scene.add(outside);
@@ -1624,10 +1663,14 @@ export default async function view(args = {}) {
       uniform vec3  uTint;
       uniform float uStrength;
       uniform float uCorner;
+      uniform float uFlip;
       varying vec2 vUv;
       void main(){
-        // up the wall: strong at the skirting, gone by the top of the band
-        float g = pow(max(0.0, 1.0 - vUv.y), 2.4);
+        // up the wall from the skirting, or DOWN from a sill — uFlip is which. Under-sill
+        // staining is the same phenomenon upside down (water and dust come off a ledge and run)
+        // and the guide names it in the same breath as the floor line.
+        float y = mix(vUv.y, 1.0 - vUv.y, uFlip);
+        float g = pow(max(0.0, 1.0 - y), 2.4);
         // along the wall: a slow wander, two octaves, so the band is never even
         float w = 0.70
           + 0.20 * sin(vUv.x * 11.0 + 0.7)
@@ -1637,7 +1680,7 @@ export default async function view(args = {}) {
         float a = clamp(g * w * c * uStrength, 0.0, 1.0);
         gl_FragColor = vec4(mix(vec3(1.0), uTint, a), 1.0);
       }`;
-    const grimeBand = (w, h, tint, strength) => new THREE.Mesh(
+    const grimeBand = (w, h, tint, strength, flip = 0, corner = 1.15) => new THREE.Mesh(
       new THREE.PlaneGeometry(w, h),
       new THREE.ShaderMaterial({
         vertexShader: 'varying vec2 vUv;\nvoid main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
@@ -1645,7 +1688,8 @@ export default async function view(args = {}) {
         uniforms: {
           uTint: { value: new THREE.Color(tint) },
           uStrength: { value: strength * GRIME },
-          uCorner: { value: 1.15 },
+          uCorner: { value: corner },
+          uFlip: { value: flip },
         },
         transparent: true,
         blending: THREE.CustomBlending,
@@ -1673,6 +1717,20 @@ export default async function view(args = {}) {
     place(grimeBand(R.z1 - R.z0, BAND_H, SOOT, 0.52), R.x1 - 0.05, 0, -Math.PI / 2);  // mirror wall
     place(grimeBand(R.x1 - R.x0, BAND_H, SOOT, 0.46), 0, R.z0 + 0.05, 0);             // arched end
     place(grimeBand(R.x1 - R.x0, BAND_H, SOOT, 0.46), 0, R.z1 - 0.05, Math.PI);       // near wall
+    // ---- and under the window sills, which is the next place the guide names --------------
+    // The sill is a 26 m long horizontal ledge with five openings' worth of weather coming over
+    // it, and it was the cleanest line in the room. `uFlip` runs the same falloff downward from
+    // the top of the band; `uCorner` is dialled right down because a sill's dirt concentrates
+    // under the openings rather than at the ends of the run.
+    for (const wz of winZ) {
+      const sill = grimeBand(WIN.w + 0.7, 0.62, SOOT, 0.44, 1, 0.15);
+      sill.position.set(R.x0 + 0.07, WIN.sill - 0.31, wz);
+      sill.rotation.y = Math.PI / 2;
+      sill.renderOrder = 8;
+      sill.name = 'grime';
+      scene.add(sill);
+      grimes.push(sill);
+    }
     engine.onDispose?.(() => grimes.forEach((m) => { m.geometry.dispose(); m.material.dispose(); }));
     engine.grime = grimes;
   }

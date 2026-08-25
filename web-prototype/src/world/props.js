@@ -1177,32 +1177,80 @@ export function packingCrate(bin, o = {}) {
   // Cost is about 24 extra boxes a case. Everything here writes into a GeoBin, so a whole
   // depot is still ONE draw call and this is triangles rather than draw calls — which is the
   // budget this room has room in (see the view's own count note).
-  const nb = o.boards ?? 0;
-  if (nb > 0) {
+  const nbBase = o.boards ?? 0;
+  if (nbBase > 0) {
+    // ---- ROUND 17, THIRD PASS: EVERY CASE ITS OWN CASE ----------------------------------
+    //
+    // Boarding the cases fixed "flat boxes with lines painted on them" and left the next
+    // complaint standing: "every packing case is the same case … nothing is broken, split,
+    // stained or missing a batten. The bar's depot has damage and variety in it and this has
+    // repetition." A stack of identical cases is a repeat, and the guide is explicit that a
+    // viewer finds repeats before they find absences.
+    //
+    // ⚠ SEEDED, NOT RANDOM, for the reason the jitter above already gives: this function takes
+    // no rng, and a random one would make every capture of this room a different picture. The
+    // caller passes an integer per case and everything below is a hash of it, so the depot is
+    // varied AND identical from boot to boot.
+    const sd = (o.seed ?? 0) >>> 0;
+    const hsh = (k) => {
+      let x = (sd * 2654435761 + k * 40503) >>> 0;
+      x ^= x >>> 15; x = (x * 2246822519) >>> 0; x ^= x >>> 13;
+      return x >>> 0;
+    };
+    const nb = nbBase + (hsh(1) % 3) - 1;      // 4, 5 or 6 courses
     const bt = t * 0.55;                       // board thickness, inside the battens' own face
     const gap = 0.006;
     const bh = h - t * 0.6, by0 = t * 0.3;     // match the core box this clads
     const ph = (bh - gap * (nb - 1)) / nb;
     const jit = (k) => (((k * 37) % 5) - 2) * 0.0013;
+    // Two kinds of damage, both of them things that actually happen to a case that has been
+    // dropped: a board sprung off one face (leaving the dark interior showing between the
+    // battens) and a board split across its length, the two halves no longer flush.
+    const sprungFace = (hsh(2) % 5 === 0) ? (hsh(3) % 4) : -1;   // 0..3, or none
+    const sprungRow = hsh(4) % Math.max(1, nb);
+    const splitRow = (hsh(5) % 3 === 0) ? (hsh(6) % Math.max(1, nb)) : -1;
+    // UV scale varies the patch of `crateDeal` each case samples, which is what gives the
+    // stack tone-to-tone variation without a second material or a second bake.
+    const cuv = (o.uv ?? 0.9) * (0.78 + (hsh(7) % 100) / 100 * 0.44);
+    let face = 0;
     for (let i = 0; i < nb; i++) {
       const cy = by0 + ph / 2 + i * (ph + gap);
       for (const sz of [-1, 1]) {
-        put(K.body, new THREE.BoxGeometry(w - t * 1.6, ph, bt),
-          tr(0, cy, sz * ((d - t) / 2 + bt / 2 + jit(i + (sz > 0 ? 3 : 0)))), o.uv ?? 0.9);
+        const fi = face++;
+        if (fi === sprungFace && i === sprungRow) continue;
+        const z = sz * ((d - t) / 2 + bt / 2 + jit(i + (sz > 0 ? 3 : 0)));
+        if (i === splitRow) {
+          // split: two halves, one of them kicked out and tilted
+          const half = (w - t * 1.6) / 2 - 0.012;
+          put(K.body, new THREE.BoxGeometry(half, ph, bt), tr(-half / 2 - 0.012, cy, z), cuv);
+          const g2 = new THREE.BoxGeometry(half, ph, bt);
+          const m2 = new THREE.Matrix4().makeRotationX(sz * 0.09)
+            .premultiply(tr(half / 2 + 0.012, cy, z + sz * bt * 0.55));
+          put(K.body, g2, m2, cuv);
+        } else {
+          put(K.body, new THREE.BoxGeometry(w - t * 1.6, ph, bt), tr(0, cy, z), cuv);
+        }
       }
       for (const sx of [-1, 1]) {
+        const fi = face++;
+        if (fi === sprungFace && i === sprungRow) continue;
         put(K.body, new THREE.BoxGeometry(bt, ph, d - t * 1.6),
-          tr(sx * ((w - t) / 2 + bt / 2 + jit(i + (sx > 0 ? 7 : 11))), cy, 0), o.uv ?? 0.9);
+          tr(sx * ((w - t) / 2 + bt / 2 + jit(i + (sx > 0 ? 7 : 11))), cy, 0), cuv);
       }
     }
     // The lid runs the other way, as a lid does, so the top of a stack does not repeat the
     // sides' rhythm — and it is the face you look down on from anywhere above eye height.
     const nl = Math.max(2, Math.round(nb * 0.6));
     const pd = ((d - t) - gap * (nl - 1)) / nl;
+    // One case in five has been opened and its lid not put back square.
+    const lidSkew = (hsh(8) % 5 === 0) ? ((hsh(9) % 100) / 100 - 0.5) * 0.16 : 0;
+    const lidLift = lidSkew !== 0 ? 0.018 : 0;
     for (let i = 0; i < nl; i++) {
       const cz = -(d - t) / 2 + pd / 2 + i * (pd + gap);
-      put(K.body, new THREE.BoxGeometry(w - t * 1.2, bt, pd),
-        tr(0, h - t * 0.3 + bt / 2 + jit(i + 17), cz), o.uv ?? 0.9);
+      const g = new THREE.BoxGeometry(w - t * 1.2, bt, pd);
+      const m = new THREE.Matrix4().makeRotationY(lidSkew)
+        .premultiply(tr(0, h - t * 0.3 + bt / 2 + lidLift + jit(i + 17), cz));
+      put(K.body, g, m, cuv);
     }
   }
   return { w, h, d };
@@ -1237,6 +1285,9 @@ export function crateStack(bin, o = {}) {
       // Threaded, not defaulted: `boards` costs ~24 boxes a case and the game builds its own
       // depots from this same function under a budget the showcase does not have.
       boards: o.boards ?? 0,
+      // The per-case variation seed. Drawn from the caller's rng ONCE, here, so the geometry
+      // builder stays deterministic given its inputs — see the note at `sd` in packingCrate.
+      seed: Math.floor(rng() * 0xffffff),
     });
     y += h;
   }
