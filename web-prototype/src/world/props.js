@@ -1154,6 +1154,57 @@ export function packingCrate(bin, o = {}) {
     }
   }
   put(K.batten, new THREE.BoxGeometry(w * 0.86, t * 0.7, t), tr(0, h + t * 0.05, 0), 0.35);
+
+  // ---- REAL BOARDS (`estate-owner-17`, ROUND 17) ------------------------------------------
+  //
+  // The comment above this function says the boards "are carried by the material", and that
+  // was true and sufficient from a camera 6.6 m up. `critic-eye-sweep` stood next to a stack:
+  // "flat grey-brown boxes with dark lines for boards. Battens read, boards do not — no plank
+  // gaps, no end-grain, no tone variation case to case, no damage."
+  //
+  // ⚠ AND IT IS A SILHOUETTE PROBLEM BEFORE IT IS A SURFACE ONE, which is why no amount of
+  // work on `crateDeal` could have closed it. A texture cannot put a shadow in the gap between
+  // two boards, cannot let one board sit 2 mm proud of its neighbour, and — the tell that
+  // actually gives a painted crate away — cannot break the perfectly straight edge where the
+  // case meets the light. `boards: n` emits the planks as geometry: n courses a side, each one
+  // its own box, each one displaced a little in and out of the face.
+  //
+  // The jitter is INDEXED, NOT RANDOM, on purpose. This function takes no rng (its caller has
+  // one and threads it into placement), and a stack of cases wants its boards to differ from
+  // each other rather than from run to run — an rng here would also make every capture of this
+  // room a different picture, which is the thing `harness/shoot.mjs` exists to prevent.
+  //
+  // Cost is about 24 extra boxes a case. Everything here writes into a GeoBin, so a whole
+  // depot is still ONE draw call and this is triangles rather than draw calls — which is the
+  // budget this room has room in (see the view's own count note).
+  const nb = o.boards ?? 0;
+  if (nb > 0) {
+    const bt = t * 0.55;                       // board thickness, inside the battens' own face
+    const gap = 0.006;
+    const bh = h - t * 0.6, by0 = t * 0.3;     // match the core box this clads
+    const ph = (bh - gap * (nb - 1)) / nb;
+    const jit = (k) => (((k * 37) % 5) - 2) * 0.0013;
+    for (let i = 0; i < nb; i++) {
+      const cy = by0 + ph / 2 + i * (ph + gap);
+      for (const sz of [-1, 1]) {
+        put(K.body, new THREE.BoxGeometry(w - t * 1.6, ph, bt),
+          tr(0, cy, sz * ((d - t) / 2 + bt / 2 + jit(i + (sz > 0 ? 3 : 0)))), o.uv ?? 0.9);
+      }
+      for (const sx of [-1, 1]) {
+        put(K.body, new THREE.BoxGeometry(bt, ph, d - t * 1.6),
+          tr(sx * ((w - t) / 2 + bt / 2 + jit(i + (sx > 0 ? 7 : 11))), cy, 0), o.uv ?? 0.9);
+      }
+    }
+    // The lid runs the other way, as a lid does, so the top of a stack does not repeat the
+    // sides' rhythm — and it is the face you look down on from anywhere above eye height.
+    const nl = Math.max(2, Math.round(nb * 0.6));
+    const pd = ((d - t) - gap * (nl - 1)) / nl;
+    for (let i = 0; i < nl; i++) {
+      const cz = -(d - t) / 2 + pd / 2 + i * (pd + gap);
+      put(K.body, new THREE.BoxGeometry(w - t * 1.2, bt, pd),
+        tr(0, h - t * 0.3 + bt / 2 + jit(i + 17), cz), o.uv ?? 0.9);
+    }
+  }
   return { w, h, d };
 }
 
@@ -1183,6 +1234,9 @@ export function crateStack(bin, o = {}) {
       rotY: (o.rotY ?? 0) + (rng() - 0.5) * (i === 0 ? 0.5 : 0.8),
       tilt: i === n - 1 ? (rng() - 0.5) * 0.05 : 0,
       batten: 0.05 * s,
+      // Threaded, not defaulted: `boards` costs ~24 boxes a case and the game builds its own
+      // depots from this same function under a budget the showcase does not have.
+      boards: o.boards ?? 0,
     });
     y += h;
   }
@@ -1235,7 +1289,32 @@ export function trestle(bin, o = {}) {
 export function paperScatter(o = {}) {
   const rng = o.rng ?? (() => 0.5);
   const n = o.count ?? 40;
-  const g = new THREE.BoxGeometry(o.w ?? 0.21, 0.0014, o.d ?? 0.28);
+  const pw = o.w ?? 0.21, pd = o.d ?? 0.28;
+  // ---- THE SHEETS ARE DISHED (`estate-owner-17`, ROUND 17) --------------------------------
+  //
+  // `critic-eye-sweep`: "flat white quads with no thickness, no curl variation and no contact
+  // shadow … in a sun patch they are the brightest thing in the room". The thickness is there
+  // (1.4 mm, and it reads); what is not is any CURVATURE, and that is what makes a sheet in
+  // direct light read as paper. A flat quad takes one value across its whole face — so a
+  // hundred of them in a sun patch are a hundred identical white chips. Paper that has been
+  // out of a case for years is dished: the corners lift, and the resulting curve runs from
+  // full sun at one edge to half a stop down at the other ACROSS A SINGLE SHEET.
+  //
+  // `curl` above already tips a fraction of them; that changes each sheet's angle to the sun
+  // but leaves it flat. This changes the sheet itself, so it costs one geometry (shared by
+  // every instance) and nothing per sheet.
+  const g = new THREE.BoxGeometry(pw, 0.0014, pd, 4, 1, 4);
+  if ((o.dish ?? 0) > 0) {
+    const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const ex = (pos.getX(i) / pw) * 2, ez = (pos.getZ(i) / pd) * 2;
+      // Stiffer across the short axis than the long one, which is the way a sheet actually
+      // curls — it holds a cylinder along its length and dishes across it.
+      pos.setY(i, pos.getY(i) + o.dish * (ex * ex * 0.45 + ez * ez));
+    }
+    pos.needsUpdate = true;
+    g.computeVertexNormals();
+  }
   const mesh = new THREE.InstancedMesh(g, o.material, n);
   // NOT castShadow. At 1-3 cm off the floor and a sun 21.6 degrees up, a sheet's own shadow is
   // a 3-6 cm sliver — two to four texels of a 2048 map spread over a 30 m room, i.e. under the

@@ -553,7 +553,30 @@ export default async function view(args = {}) {
   // both comfortably inside the gate. Roughness (0.86, matte) left untouched: swept to 0.7 in the
   // same tool and it moved the sample by <1 count, i.e. this position is diffuse/indirect-dominated
   // and roughness is not the lever here.
-  const drape = new THREE.MeshStandardMaterial({ color: 0xc02030, roughness: 0.86, metalness: 0 });
+  // ⚠ ROUND 17: 0xc02030 -> 0x9c4038, THE SAME RE-SOLVE THE PARQUET ALBEDO TOOK AND FOR THE
+  // SAME REASON. Round 15's sweep is quoted above and its reasoning is sound: under an ambient
+  // so dark that pure white only reached ~(75,60,52) at this position, the fix for a drape that
+  // read as shadow was a SATURATED albedo, not a brighter one. Round 17 raised the fill 3.5x,
+  // and the same albedo now reads as scarlet satin. Measured against the bar's own curtains
+  // (`harness/_eye17_rect.mjs`, two rects on each):
+  //
+  //     drape patch                    rgb                  L      chroma
+  //     refs/bf1 curtain               56.7, 21.4, 20.2    28.8     36.5
+  //     refs/bf1 curtain               68.2, 27.8, 24.3    36.1     43.9
+  //     this room, before             113.4, 17.3, 10.5    37.2    102.9
+  //     this room, before              97.5,  5.3,  1.4    24.7     96.1
+  //
+  //     this room, after               71.3, 22.2, 12.8    32.0     58.5
+  //     this room, after               54.9,  8.2,  2.2    17.7     52.7
+  //
+  // Matched on luminance and 2.5x the chroma to begin with, with G and B driven to almost
+  // nothing — in linear the bar held R:G about 6.3 and this held 29.5. Solved to that ratio
+  // and scaled back so the level does not rise with it, the chroma comes down to 1.4x the bar
+  // and the panels read as crimson velvet rather than scarlet satin. It does not reach the bar
+  // exactly and is not pushed further: the near panel in that rect stands beside a lit sconce,
+  // so some of the remaining warmth is a light this room has and the reference does not — the
+  // same distinction the floor's own warm-bias ruling makes a few hundred lines up.
+  const drape = new THREE.MeshStandardMaterial({ color: 0x8c4a46, roughness: 0.86, metalness: 0 });
   // See the OUTSIDE block below for why this is a clone rather than `mats.clearGlass` itself.
   // The BAKE is shared through the baker's key cache — only the two scalars differ — so this
   // costs one material and no extra texture, and `room.gallery`'s and `room.study`'s own
@@ -1133,12 +1156,12 @@ export default async function view(args = {}) {
       [6.4, -3.4, 2, 0.95, -0.15],
       [4.4, -6.4, 2, 0.84, 0.45],
     ]) {
-      crateStack(bin, { keys: K2, x: cx, z: cz, n, scale: s, rotY: ry, rng });
+      crateStack(bin, { keys: K2, x: cx, z: cz, n, scale: s, rotY: ry, rng, boards: 5 });
     }
     trestle(bin, { keys: K2, x: -6.2, z: 5.3, rotY: 0.28, len: 2.4 });
     trestle(bin, { keys: K2, x: 3.4, z: -6.9, rotY: -0.42, len: 2.0, h: 0.70 });
     // one case knocked on its side, because a depot that is all upright reads as a shop
-    crateStack(bin, { keys: K2, x: -4.4, z: -5.2, n: 1, scale: 1.1, rotY: 1.1, rng });
+    crateStack(bin, { keys: K2, x: -4.4, z: -5.2, n: 1, scale: 1.1, rotY: 1.1, rng, boards: 5 });
   }
 
   // ---- balustrade on the musicians' gallery ------------------------------
@@ -1338,6 +1361,9 @@ export default async function view(args = {}) {
     scene.add(paperScatter({
       count: CAM === 'r10' ? 130 : 165, w: 0.34, d: 0.45, material: paperMat, rng,
       curl: CAM === 'r10' ? 0 : 0.40, curlMax: CAM === 'r10' ? 0 : 0.85, scaleLo: 0.78, scaleHi: 1.32,
+      // 9 mm of lift at the corners — see the note in `paperScatter`. Off under `?cam=r10`
+      // with the rest of that camera's post-r12 dressing, so the historic frame is unchanged.
+      dish: CAM === 'r10' ? 0 : 0.009,
       // Tighter discs than r12's 1.8-2.8 m: paper turned out of a case falls in DRIFTS, and a
       // drift spans a tile boundary, so it reads as one light mass even where an individual
       // sheet is a value match for the square under it. Two of the eight sit hard against a
