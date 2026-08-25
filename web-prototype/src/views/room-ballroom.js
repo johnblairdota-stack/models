@@ -175,6 +175,9 @@ export default async function view(args = {}) {
   // `?pierreflect=0` — the ablation for round 17's planar reflection on the four pier glasses.
   // See the block after the floor reflection for what it replaced and why it was missed.
   const PIER_REFLECT = qs.get('pierreflect') !== '0';
+  // `?vestglow=N` — the ablation for round 17's vestibule emission. 0 restores r16 exactly.
+  const VEST_GLOW = Number.isFinite(parseFloat(qs.get('vestglow')))
+    ? Math.max(0, Math.min(8, parseFloat(qs.get('vestglow')))) : 1.0;
   // `?eograze=N` — the ablation for round 17's grazing-lobe widening. 0 restores the pre-r17
   // mirror on BOTH the floor and the end plates; 1 is the shipping physical coefficient. See
   // the long note above `planarEnvmapChunk`'s LOD block for what it does and why it is not a
@@ -681,7 +684,18 @@ export default async function view(args = {}) {
     x0: R.x0, x1: R.x1, z0: R.z0, z1: R.z1, h: R.h, split: STOREY, galleryY: GALLERY_Y,
     win: WIN,
     bays: { window: 8, mirror: 6, end: 8, near: 8 },
-    arches: [{ x: 0, w: 5.2, h: 5.2, spring: 2.6, t: 0.30 }],
+    // ⚠ `spandrelSteps` IS NOT OPTIONAL HERE EITHER, AND THE ORDER'S OWN COMMENT SAYS THE
+    // OPPOSITE. `ballroom-order.js` records "the showcase never needed one, because its opening
+    // is cut to the arch by `wallRun`" — it is not: the openings that block hands `wallRun` are
+    // `{x0, x1, y0: 0, y1: a.h}`, i.e. RECTANGLES, exactly like the game's. So the two corners
+    // above the springing line have always been open into the vestibule, and the aperture has
+    // always been a 5.2 x 5.2 m rectangle with an arch outline drawn inside it.
+    //
+    // Nobody could see it because the vestibule behind was black (see the emission note there),
+    // so an open corner onto black and an arch onto black are the same pixels. Lighting the
+    // vestibule in this round made the rectangle appear, which is the usual way one fix finds
+    // the next. `room.js` already passes 28 for its own copy of this arch.
+    arches: [{ x: 0, w: 5.2, h: 5.2, spring: 2.6, t: 0.30, spandrelSteps: 28 }],
   });
   const winZ = PLAN.winZ;
   ballroomOrder(bin, {
@@ -758,17 +772,85 @@ export default async function view(args = {}) {
   // r15's `0x9a9486` (t=1 below) so it still butts seamlessly against the unchanged back wall.
   const VEST_FAR = new THREE.Color(0x9a9486);   // r15's value, unchanged — proven safe
   const VEST_NEAR = new THREE.Color(0xdfd7c2);  // +~45% over far, only at the arch-adjacent band
+  //
+  // ---- ROUND 17: THE VESTIBULE HAS NOTHING LIGHTING IT, AND ALBEDO CANNOT FIX THAT --------
+  //
+  // Rounds 15 and 16 both went at this surface and both went at its COLOUR — r15 took the
+  // vestibule out of literal (0,0,0), r16 split it into five z-bands tapering toward the arch.
+  // Both were measured at the overlook, which sees the aperture at an angle and mostly sees the
+  // NEAR bands, and both left the thing a player actually looks at alone: stand in the room and
+  // face the arches (`cam=eye.door`) and the opening is a flat black rectangle 5.2 m across
+  // with an arch outline on it. `_eye17_pick` says those pixels are `kit:vest` — the BACK WALL,
+  // 4.2 m beyond the aperture.
+  //
+  // ⚠ AND NO ALBEDO REACHES IT, WHICH IS WHY TWO ROUNDS OF ALBEDO DID NOT. Every light in this
+  // scene is inside the ballroom: one spot outside the window wall aimed at the floor, three
+  // directional fills, and the practicals. The vestibule is a closed box on the far side of a
+  // wall, so the only thing that lands on its back wall is the environment shell's own -z face,
+  // and r15 already established by forcing this mesh to pure WHITE that the ceiling it can
+  // reach is ~(75,60,52) — i.e. the surface is indirect-lit to the point where its colour is
+  // nearly irrelevant. A black hole with a lighter paint in it is still a black hole.
+  //
+  // So it gets a light of its own, as emission rather than as a light: adding a real one would
+  // put `numPointLights` up, and this file's own practicals note says that recompiles every
+  // material in the scene. The story is the one the architecture already implies — the
+  // vestibule leads somewhere, and somewhere has a window — so the emission RISES with depth,
+  // opposite to the albedo taper above (which models the ballroom's own light spilling IN).
+  // The two together give the opening a front-to-back gradient, which is what makes an aperture
+  // read as a passage rather than as a plate.
+  //
+  // `?vestglow=0` ablates it back to r16.
   const vestTiers = [0, 0.25, 0.5, 0.75, 1].map((t) => {
     const m = mats.stone.clone();
     if (CAM !== 'r10') m.color = VEST_FAR.clone().lerp(VEST_NEAR, 1 - t);
+    if (CAM !== 'r10' && VEST_GLOW > 0) {
+      // Cool, because it is meant to read as daylight from a room this one cannot see, against
+      // a ballroom whose own fill is candlelit and warm. That contrast is the whole read.
+      m.emissive = new THREE.Color(0x8f98a6);
+      // Solved by shooting `cam=eye.door` and measuring a fixed 120x80 rect inside the
+      // aperture (`harness/_eye17_rect.mjs`): r16 leaves it at L 13.5, which is the black
+      // card. These numbers put it at L 32.1 — dimmer than the ballroom's own shaded walls,
+      // which is the relationship a room beyond a doorway has to have, and far enough off
+      // the floor of the range to stop reading as a hole.
+      m.emissiveIntensity = (0.080 + 0.256 * t) * VEST_GLOW;
+    }
     m.name = `vestibule-stone-t${t}`;
     return m;
   });
   const VEST_KEYS = ['vestNear', 'vestT25', 'vestT50', 'vestT75', 'vest'];
   VEST_KEYS.forEach((k, i) => { M[k] = vestTiers[i]; });
   engine.onDispose?.(() => vestTiers.forEach((m) => m.dispose()));
-  // back wall: the farthest surface, stays the single darkest tier (unchanged geometry)
-  bin.box('vest', 6.6, 5.6, 0.3, 0, 2.8, R.z0 - 4.2, 1.6);
+  // ---- the back wall, in FIVE VERTICAL STRIPS (round 17) ---------------------------------
+  // One box lit by one emissive is a uniform slab, and a uniform slab 5.2 m across at the end
+  // of a passage is a grey card where there used to be a black one. What says "there is a room
+  // through there" is that the light in it comes from SOMEWHERE — so the back wall carries a
+  // lateral ramp, as if a window were off to the left of whatever space this leads into. Same
+  // trick as the z-bands above and the same reason it is banded rather than mapped: a gradient
+  // texture would mean a new bake, and five strips are five boxes.
+  const VEST_BACK_KEYS = ['vestB0', 'vestB1', 'vestB2', 'vestB3', 'vestB4',
+    'vestB5', 'vestB6', 'vestB7', 'vestB8'];
+  const vestBack = VEST_BACK_KEYS.map((k, i) => {
+    const t = i / (VEST_BACK_KEYS.length - 1);
+    const m = vestTiers[4].clone();
+    m.name = `vestibule-back-b${i}`;
+    if (CAM !== 'r10' && VEST_GLOW > 0) {
+      m.emissive = new THREE.Color(0x8f98a6);
+      // 0.62x to 1.38x about the far tier's own value. The first pass ran 0.42-1.55 over five
+      // strips and the STEPS were visible as five flat panels — a banded gradient is only
+      // invisible while each step is under the eye's own threshold, and 3.7x across five bands
+      // is not. Nine strips over a 2.2x range puts each step at about 9%, which reads as a
+      // gradient. (This is the same failure r16 fixed on the z-bands by going from three bands
+      // to five, and for the same reason.)
+      m.emissiveIntensity = (0.080 + 0.256) * VEST_GLOW * (0.62 + 0.76 * t);
+    }
+    M[k] = m;
+    return m;
+  });
+  engine.onDispose?.(() => vestBack.forEach((m) => m.dispose()));
+  VEST_BACK_KEYS.forEach((k, i) => {
+    const bw = 6.6 / VEST_BACK_KEYS.length;
+    bin.box(k, bw, 5.6, 0.3, -3.3 + (i + 0.5) * bw, 2.8, R.z0 - 4.2, 1.6);
+  });
   // side walls / ceiling / floor: each split into five 0.84 m z-bands spanning the same
   // R.z0-4.2..R.z0 range r15's single boxes covered — near (at the arch) to far (at the back
   // wall), so the total footprint and draw surface area are exactly unchanged, only re-bucketed.
