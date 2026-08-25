@@ -426,7 +426,7 @@ export default async function view(args = {}) {
     // crushing shadows, which `CRITIC_GUIDE.md` lists as a render tell in its own right
     // ("dead blacks ... a cut-out silhouette"). This build holds 0.8% of the frame at L <= 2.6
     // against the art's 0.1%. Matching the art is the point; the study's band is not the art.
-    : { env: 1.70, sun: 5705, bounce: 11.03, bounceCard: 5.0, grade: null, sunColor: 0xffe7c8,
+    : { env: 1.70, sun: 5705, bounce: 11.03, bounceCard: 5.0, grade: null, sunColor: 0xffc87e,
         dir: [0.885, -0.375, 0.265], aim: [-4.7, 0, 0.2], angle: 0.42, penumbra: 0.22, mapSize: 2048,
         shaftWins: [0, 1, 2], cardWins: [0, 2] };
 
@@ -2217,9 +2217,28 @@ export default async function view(args = {}) {
   // spending anything in the top decile, which is where a weight shift spends it. The gate at
   // the shipping `overlook` camera is unaffected and passes all three: median 33.6,
   // top-decile 0.032, darkest-decile 7.2.
+  // ⚠ THE TWO END WALLS HAD NO FILL AT ALL, AND THE DIRECTIONS ARE WHY (round 17, sixth pass).
+  // `harness/_eye17_whylit.mjs` toggles every light in the room one at a time and samples a
+  // pixel, which is the only way this was ever going to be settled — at the centre of
+  // `cam=eye.mirror` the cold fill is doing the heavy lifting (178,169,130 -> 121,99,47 with
+  // it off), and on the arched end wall's upper storey, seen at a grazing angle from the same
+  // camera, turning EVERY light off in turn changes nothing: 17,14,12 either way. That surface
+  // is lit 100% by the environment shell, and it is 26 m x 4.8 m.
+  //
+  // The cause is that both horizontal fills ran almost purely along x — [6,3,2] and [-8,5,2] —
+  // which is right for the window wall and the mirror wall and gives a z-facing wall an N.L of
+  // 0.29 and 0.21. Adding a real z component to each, in OPPOSITE senses, lights both end
+  // walls without adding a light: for the z -8 wall the warm fill goes 0.29 -> 0.58, and for
+  // the z +8 wall the cold fill goes from UNLIT (-0.21) to 0.46. The two long walls give up
+  // about 12% of their own fill for it, which is a trade worth making — they have the sun and
+  // the end walls have nothing.
+  //
+  // ⚠ AND IT IS NOT A FOURTH LIGHT ON PURPOSE. `numDirLights` is in three's program cache key,
+  // so adding one recompiles every material in the scene — the same reason this file's own
+  // practicals note gives for not adding a point light. Re-aiming is free.
   scene.add(bounceFill({
-    warm: 0.32 * LIGHTS.bounce, warmColor: 0xffcb9e, warmDir: [6, 3, 2],
-    cold: 0.38 * LIGHTS.bounce, coldColor: 0x9db2d4, coldDir: [-8, 5, 2],
+    warm: 0.32 * LIGHTS.bounce, warmColor: 0xffcb9e, warmDir: [6, 3, 5],
+    cold: 0.38 * LIGHTS.bounce, coldColor: 0x9db2d4, coldDir: [-8, 5, -5],
     up: 0.22 * LIGHTS.bounce, upColor: 0xa9a290,
   }));
 
