@@ -25,7 +25,11 @@ const out = await page.evaluate(async (pts) => {
   return pts.map(([px, py]) => {
     v.set((px / 1920) * 2 - 1, -((py / 1080) * 2 - 1));
     rc.setFromCamera(v, e.camera);
-    const hits = rc.intersectObject(e.scene, true).filter((h) => h.object.visible);
+    // Points have a raycast THRESHOLD, so the dust motes report a hit at distance 0 for any
+    // ray that passes near one — which is every ray in a room with 900 of them. Additive decals
+    // are not what painted the pixel either. Both are skipped so the answer is the SOLID.
+    const hits = rc.intersectObject(e.scene, true).filter((h) => h.object.visible
+      && !h.object.isPoints && !/^(dust|glow|light-shaft|light-pool)$/.test(h.object.name || ''));
     return { px, py, hits: hits.slice(0, 3).map((h) => `${h.object.name || h.object.type}@${h.distance.toFixed(2)}`) };
   });
 }, PX);

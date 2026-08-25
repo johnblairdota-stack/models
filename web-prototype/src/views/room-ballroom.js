@@ -172,6 +172,9 @@ export default async function view(args = {}) {
   // `?floorreflect=0` — the ablation for the near-floor washout fix. See the block after the
   // end plates for the measurement that motivated it.
   const FLOOR_REFLECT = qs.get('floorreflect') !== '0';
+  // `?pierreflect=0` — the ablation for round 17's planar reflection on the four pier glasses.
+  // See the block after the floor reflection for what it replaced and why it was missed.
+  const PIER_REFLECT = qs.get('pierreflect') !== '0';
   // `?eograze=N` — the ablation for round 17's grazing-lobe widening. 0 restores the pre-r17
   // mirror on BOTH the floor and the end plates; 1 is the shipping physical coefficient. See
   // the long note above `planarEnvmapChunk`'s LOD block for what it does and why it is not a
@@ -598,8 +601,42 @@ export default async function view(args = {}) {
   if (FLOOR === 'mixed') {
     const pw = (R.x1 - R.x0) - FLOOR_BORDER * 2;
     const pd = (R.z1 - R.z0) - FLOOR_BORDER * 2;
+    // ⚠ ROUND 17 TAKES THE 2.0x BACK TO 1.2x, AND IT IS THE SAME MEASUREMENT THAT PUT IT THERE.
+    // The sweep above is round 14's, and its logic is sound: match a shaded patch of this floor
+    // to the same patch of the bar. What invalidated the ANSWER is that round 17 moved the
+    // directional fill up 3.5x (see the LIGHTS block), so the shaded floor this brightening was
+    // compensating for is no longer dark. Re-read with `harness/_eye17_rect.mjs`, same idea,
+    // same bar:
+    //
+    // Two fixed rects on `cam=eye.arch`'s shaded parquet, and the bar's own two floor patches:
+    //
+    //     shaded floor patch          rgb                 L      chroma
+    //     refs/bf1 mid-floor           58.1, 54.2, 44.9   54.3    13.2
+    //     refs/bf1 near-floor          37.7, 33.2, 21.5   33.3    16.1
+    //     this room, before rect0      95.2, 69.1, 55.4   73.7    39.8
+    //     this room, before rect1     115.0, 85.6, 69.9   90.7    45.1
+    //     this room, after  rect0      67.2, 52.4, 45.4   55.0    21.8
+    //     this room, after  rect1      76.8, 60.1, 51.1   63.0    25.7
+    //
+    // So it lands ON the bar's brighter patch instead of at 1.7x it, and the chroma comes back
+    // with it — 40-45 was oak rendered as terracotta. It does not reach the bar's DARKER patch
+    // and cannot: the planar floor reflection contributes a term this albedo does not scale, so
+    // there is a floor under how dark this surface can be made by albedo alone. Chasing it
+    // further would be chasing the reflection, which is a different knob and a different round.
+    //
+    // The room's own warm bias is deliberately NOT chased — this room is candlelit and the bar
+    // is not, which is this file's settled ruling. Only the level moves.
+    //
+    // ⚠ AND THIS IS THE REST OF THE BLOWN-FLOOR HATE. Round 17's key/fill re-solve took the
+    // sunlit parquet from a solid white plateau down to something with contrast in it, but a
+    // patch measured at L 198.8 with chroma 12.2 is still oak rendered as bleached pine: ACES
+    // desaturates as it saturates, so an albedo this bright cannot hold its colour anywhere the
+    // sun actually lands. Exposure could not reach that and neither could the key — the albedo
+    // is the third term and this is it. The sunlit patch reads L 198.8 -> 174.8 across this
+    // change, i.e. still bright, which is correct for a floor in direct sun; what it stops
+    // being is COLOURLESS.
     const parquetFloorMat = parquetMat({
-      oak: [0.600, 0.392, 0.216], oakDark: [0.280, 0.168, 0.092], wear: 0.6,
+      oak: [0.281, 0.183, 0.101], oakDark: [0.131, 0.079, 0.043], wear: 0.6,
     });
     parquetFloorMat.name = 'ballroom-floor-parquet';
     engine.onDispose?.(() => parquetFloorMat.dispose());
@@ -1729,6 +1766,74 @@ export default async function view(args = {}) {
       floorParquet.material.needsUpdate = true;
     }
     engine.onDispose?.(() => floorRT.dispose());
+  }
+
+  // ---- THE PIER GLASSES ARE MIRRORS TOO, AND NOBODY HAD LOOKED AT THEM (ROUND 17) --------
+  //
+  // Rounds 3 through 11 fixed this exact defect twice — once on the pier plates (round 3, a
+  // cube probe) and once on the END plates (round 9, a true planar reflection) — and the
+  // second fix was never brought back to the first. The reason is entirely a framing one:
+  // BOTH of this file's cameras look down the room from the +x end, so the pier glasses are
+  // seen edge-on or not at all, and `_tmp_geoprobe.mjs` is quoted a few hundred lines above
+  // saying `pier-mirrors` "never once appears" in a raster of the whole frame.
+  //
+  // A player standing in the middle of the room and turning to face the mirror wall gets four
+  // 1.55 x 3.3 m plates square-on under the gallery, and `critic-eye-sweep` filed what they
+  // do there: "the mirror plates read as smeared white/grey blurs with brown blobs. They do
+  // NOT read as mirrors." That is round 3's own diagnosis, still true, in the words that
+  // round used: A PERFECT MIRROR OF A STRUCTURELESS FIVE-BOX IBL IS STRUCTURELESS — and a
+  // 256 px cube probe of a room whose brightest object is a wall of blown-out windows returns
+  // an almost uniform pale field.
+  //
+  // ⚠ ONE TARGET FOR ALL FOUR, WHICH IS WHY THIS IS CHEAP AND THE END PLATES WERE NOT. The end
+  // plates are raked and 10.8 m apart, so each needs its own fitted frustum (see that block's
+  // note on parallax). The four pier glasses are COPLANAR, unraked, and on a plane the camera
+  // never crosses — so one mirrored camera with the main projection serves all four exactly,
+  // the same construction the floor uses, at one extra scene render at build time and nothing
+  // per frame.
+  //
+  // `?pierreflect=0` ablates it back to the round-3 cube path.
+  if (PIER_REFLECT) {
+    const prevTarget = renderer.getRenderTarget();
+    const nrm = new THREE.Vector3(-1, 0, 0);           // the plates face into the room, -x
+    const P = new THREE.Vector3(R.x1 - 0.21, 0, 0);
+    const mcam = planeMirrorCamera(camera, P, nrm, PLANAR_CLIP);
+    const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+    const pw = Math.max(64, Math.round(size.x) & ~1);
+    const ph = Math.max(64, Math.round(size.y) & ~1);
+    const pierRT = new THREE.WebGLRenderTarget(pw, ph, {
+      type: THREE.HalfFloatType, colorSpace: THREE.NoColorSpace,
+      minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter,
+      depthBuffer: true, generateMipmaps: true,
+    });
+    pierRT.texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    mirrorMesh.visible = false;              // or the plates photograph their own backs
+    renderer.setRenderTarget(pierRT);
+    renderer.clear();
+    renderer.render(scene, mcam);
+    renderer.setRenderTarget(prevTarget);
+    mirrorMesh.visible = true;
+    const texMat = new THREE.Matrix4()
+      .set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1)
+      .multiply(mcam.projectionMatrix)
+      .multiply(mcam.matrixWorldInverse);
+    const flatN = nrm.clone().transformDirection(camera.matrixWorldInverse).normalize();
+    // ⚠ envMapIntensity 1.0 FIRST, for the reason the end-plate block gives: this material
+    // lights from its OWN cube envMap, so three honours the authored value — and round 3
+    // authored 2.2 to lift a blurred average of the room off the plate. A planar reflection
+    // returns the room's real values, so anything above 1.0 is a mirror brighter than the
+    // thing it reflects.
+    mirrorMat.envMapIntensity = 1.0;
+    applyPlanarReflection(mirrorMat, pierRT.texture, texMat, flatN, MIRROR_FILTER, [pw, ph], {
+      // The same gate as the end plates: clean silvering bakes near 0.055 and is fully planar,
+      // and where the amalgam has bloomed the roughness jumps past 0.34 and the patch falls
+      // back to the cube — a scattering patch must not carry a sharp image.
+      lo: 0.10, hi: 0.34,
+      graze: EO_GRAZE,
+    });
+    mirrorMat.needsUpdate = true;
+    engine.onDispose?.(() => pierRT.dispose());
+    engine.pierReflect = mirrorMesh;
   }
 
   // Introspection for the ablation harness, so an A/B can ASSERT which path it timed rather
