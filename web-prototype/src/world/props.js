@@ -453,8 +453,15 @@ export function chairGeometry(o = {}) {
   const parts = [];
   const push = (g, m) => { const c = g.clone(); if (m) c.applyMatrix4(m); parts.push(c); };
 
+  // ⚠ THE SEAT IS ITS OWN BUCKET WHEN THE CALLER ASKS (round 17). A ballroom chair is a GILT
+  // FRAME WITH AN UPHOLSTERED SEAT, and merging the two means the whole thing renders in one
+  // material — which is why `cam=eye.back` came back with five solid gold objects across the
+  // foreground. `split: true` returns { frame, seat } and lets the caller give the seat a
+  // silk; without it this returns exactly the single merged geometry it always did.
+  const seatParts = [];
+  const pushSeat = (g, m) => { const c = g.clone(); if (m) c.applyMatrix4(m); (o.split ? seatParts : parts).push(c); };
   const seat = new THREE.BoxGeometry(w, 0.055, d);
-  push(seat, tr(0, seatH, 0));
+  pushSeat(seat, tr(0, seatH, 0));
   const rail = new THREE.BoxGeometry(w - 0.02, 0.06, 0.045);
   push(rail, tr(0, seatH - 0.05, d / 2 - 0.03));
   push(rail, tr(0, seatH - 0.05, -d / 2 + 0.03));
@@ -462,28 +469,42 @@ export function chairGeometry(o = {}) {
   push(sideRail, tr(w / 2 - 0.03, seatH - 0.05, 0));
   push(sideRail, tr(-w / 2 + 0.03, seatH - 0.05, 0));
 
+  // 8 -> 14 segments, the same correction the gallery balusters took this round and for the
+  // same reason: a turned leg reads because the light runs round it, and an octagon replaces
+  // that with eight flat panels. These are one InstancedMesh, so the cost is paid once.
+  const segs = o.segs ?? 14;
   const legG = lathe([[0.024, 0], [0.028, 0.02], [0.020, 0.05], [0.026, 0.14],
-    [0.018, 0.30], [0.024, seatH]], 8);
+    [0.018, 0.30], [0.024, seatH]], segs);
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) push(legG, tr(sx * (w / 2 - 0.045), 0, sz * (d / 2 - 0.045)));
 
   // back: two stiles and a shaped splat
-  const stile = lathe([[0.022, 0], [0.026, 0.10], [0.018, 0.55], [0.024, backH - seatH], [0.012, backH - seatH + 0.05]], 8);
+  const stile = lathe([[0.022, 0], [0.026, 0.10], [0.018, 0.55], [0.024, backH - seatH], [0.012, backH - seatH + 0.05]], segs);
   for (const sx of [-1, 1]) push(stile, tr(sx * (w / 2 - 0.045), seatH, -d / 2 + 0.045));
   push(new THREE.BoxGeometry(w - 0.10, 0.06, 0.035), tr(0, backH - 0.03, -d / 2 + 0.045));
-  push(new THREE.BoxGeometry(0.10, backH - seatH - 0.12, 0.026), tr(0, seatH + (backH - seatH) / 2 - 0.03, -d / 2 + 0.045));
+  // the splat is upholstered too on a chair of this kind — it goes with the seat
+  pushSeat(new THREE.BoxGeometry(0.10, backH - seatH - 0.12, 0.026), tr(0, seatH + (backH - seatH) / 2 - 0.03, -d / 2 + 0.045));
   push(new THREE.BoxGeometry(w - 0.16, 0.05, 0.030), tr(0, seatH + 0.16, -d / 2 + 0.045));
 
   legG.dispose(); stile.dispose(); seat.dispose(); rail.dispose(); sideRail.dispose();
   const merged = mergeGeometries(parts.map((p) => { worldUV(p, 0.35); return p; }), false);
   for (const p of parts) p.dispose();
-  return merged;
+  if (!o.split) return merged;
+  const mergedSeat = mergeGeometries(seatParts.map((p) => { worldUV(p, 0.35); return p; }), false);
+  for (const p of seatParts) p.dispose();
+  return { frame: merged, seat: mergedSeat };
 }
 
 /** A run of chairs against a wall as one InstancedMesh. */
 export function chairRow(o = {}) {
-  const geo = chairGeometry(o);
+  // With `seatMaterial` the row is TWO instanced meshes sharing one transform list — a gilt
+  // frame and an upholstered seat — and the function returns a Group. Without it, behaviour and
+  // return type are exactly what they were.
+  const split = !!o.seatMaterial;
+  const geo = chairGeometry({ ...o, split });
   const n = o.count ?? 6;
-  const mesh = new THREE.InstancedMesh(geo, o.material, n);
+  const mesh = new THREE.InstancedMesh(split ? geo.frame : geo, o.material, n);
+  const seatMesh = split ? new THREE.InstancedMesh(geo.seat, o.seatMaterial, n) : null;
+  if (seatMesh) { seatMesh.castShadow = true; seatMesh.receiveShadow = true; seatMesh.name = 'chairs.seat'; }
   mesh.castShadow = true; mesh.receiveShadow = true;
   const m = new THREE.Matrix4();
   const rng = o.rng ?? (() => 0.5);
@@ -493,10 +514,16 @@ export function chairRow(o = {}) {
     m.makeRotationY((o.face ?? 0) + (rng() - 0.5) * 0.22);
     m.setPosition(p.x + (rng() - 0.5) * 0.06, p.y, p.z + (rng() - 0.5) * 0.06);
     mesh.setMatrixAt(i, m);
+    if (seatMesh) seatMesh.setMatrixAt(i, m);
   }
   mesh.instanceMatrix.needsUpdate = true;
   mesh.name = 'chairs';
-  return mesh;
+  if (!seatMesh) return mesh;
+  seatMesh.instanceMatrix.needsUpdate = true;
+  const g = new THREE.Group();
+  g.name = 'chairs';
+  g.add(mesh, seatMesh);
+  return g;
 }
 
 /**

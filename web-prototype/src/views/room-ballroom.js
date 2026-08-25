@@ -509,6 +509,17 @@ export default async function view(args = {}) {
     // an eye-height preset on a raised deck has to be derived from the DECK (galleryY 5.2), or
     // it lands inside whatever is guarding the edge.
     'eye.gallery': { pos: [11.4, 6.85, 0], target: [-9.0, 1.4, 0], fov: 62 },  // on the gallery, over the rail
+
+    // — two positions the first sweep missed, both of them somewhere a player actually stands —
+    // `eye.under` is the covered aisle the musicians' gallery makes over the mirror wall: a
+    // 2.3 m deck at 5.2 m turns that whole side of the room into a low colonnade, and NOTHING
+    // in the sweep had been under it. It is also the only place in the room with a ceiling at
+    // arm's reach, so it is where a soffit gets looked at.
+    // `eye.back` is the reverse of `eye.win` — hard against the mirror wall looking across the
+    // full 26 m at the window order, which is the widest view the room contains and the one a
+    // player gets on walking in from the +x end.
+    'eye.under': { pos: [11.6, 1.65, 5.4], target: [11.2, 2.4, -8.0], fov: 66 },
+    'eye.back': { pos: [12.2, 1.65, 0], target: [-13.0, 3.0, 0], fov: 70 },
   };
   const CAM = CAM_DEFS[qs.get('cam')] ? qs.get('cam') : 'overlook';
   const CAM_DEF = CAM_DEFS[CAM];
@@ -682,6 +693,18 @@ export default async function view(args = {}) {
   }
   const K = { wall: 'wall', mould: 'gilt', cornice: 'gilt', skirt: 'gilt', trim: 'gilt', leaf: 'wall' };
 
+  // ⚠ `uvWall` 2.4 -> 1.15, AND IT IS A CLOSE-RANGE DEFECT THAT ONLY ONE CAMERA COULD SEE.
+  // The boiserie bake carries a craquelure — the cracked paint of old joinery — and at one
+  // world repeat per 2.4 m its cells come out about 20 cm across. At the two down-looking
+  // cameras that is a soft mottle and it is fine. `cam=eye.under` (the covered aisle beneath
+  // the musicians' gallery, added this round because a player walks it) stands 2 m from that
+  // wall, and there the same texture resolves into what it actually is: a hard-edged Voronoi
+  // diagram, thin brown lines on a pale field. It was picked as `kit:wall` rather than guessed
+  // — the first three attempts at this defect all assumed it was the mirror plate beside it.
+  //
+  // 1.15 puts the cells near 9 cm, which still is not real craquelure (that is millimetres)
+  // but is small enough to read as surface rather than as pattern at the distance a player
+  // actually gets to this wall.
   const bin = new GeoBin();
 
   // ---- floor: black-and-white marble chequer ----------------------------
@@ -841,7 +864,7 @@ export default async function view(args = {}) {
   });
   const winZ = PLAN.winZ;
   ballroomOrder(bin, {
-    plan: PLAN, keys: K, pilasterKey: 'pil',
+    plan: PLAN, keys: K, pilasterKey: 'pil', uvWall: 1.15,
     parts: { nearWall: false, ceiling: false, mirrors: false, dressing: false, balustrade: false },
   });
   // the vestibule beyond the arch, so the opening is not a black hole
@@ -1094,7 +1117,7 @@ export default async function view(args = {}) {
    * with it, because nothing of this view's own goes between them.
    */
   ballroomOrder(bin, {
-    plan: PLAN, keys: K, pilasterKey: 'pil',
+    plan: PLAN, keys: K, pilasterKey: 'pil', uvWall: 1.15,
     parts: {
       windowWall: false, mirrorWall: false, endWall: false,
       mirrors: false, dressing: false, balustrade: false,
@@ -1249,7 +1272,7 @@ export default async function view(args = {}) {
     { x: R.x1 - 0.55, z: 0, rotY: -Math.PI / 2, w: 1.8 },
   ];
   ballroomOrder(bin, {
-    plan: PLAN, keys: K, pilasterKey: 'pil',
+    plan: PLAN, keys: K, pilasterKey: 'pil', uvWall: 1.15,
     parts: {
       windowWall: false, mirrorWall: false, endWall: false, nearWall: false,
       ceiling: false, balustrade: false,
@@ -1368,7 +1391,20 @@ export default async function view(args = {}) {
   //     empty. See the note on the material.
   //
   // The four plates are ONE mesh: coplanar, same material, so four draw calls of nothing.
-  const mirrorMat = mats.mirror;
+  // ⚠ A DEDICATED BAKE, AND THE REASON IS THE SCALE OF THE FOXING, NOT ITS AMOUNT.
+  // `mats.mirror` is `foxedMirrorMat()` at its defaults — fox 0.85, repeat [1,1] — and the
+  // whole of this file's mirror history was written against plates that were 71 SCREEN PIXELS
+  // wide, where one pattern repeat stretched over a 1.55 x 3.3 m plate is a soft mottle.
+  // `cam=eye.under` passes within a metre of one, and at 700 px the same texture resolves into
+  // what it actually is: a hard-edged Voronoi diagram, thin brown lines on a pale field, which
+  // reads as cracked paint rather than as tarnished amalgam.
+  //
+  // repeat [3, 5] puts three cells across the plate's width instead of a third of one, so the
+  // craze is a crazing again at the distance a player meets it; fox 0.85 -> 0.40 because the
+  // pattern being smaller makes the same amount of it far more legible. The baker caches by
+  // key, so this costs one 1024 compile and `room.gallery`'s own mirrors are untouched.
+  const mirrorMat = foxedMirrorMat({ fox: 0.40, repeat: [3, 5] });
+  engine.onDispose?.(() => mirrorMat.dispose());
   const mirrorPZ = [-5.3, -1.3, 2.7, 6.7];
   const mirrorGeos = mirrorPZ.map((pz) => {
     const g = new THREE.PlaneGeometry(1.55, 3.3);
@@ -1488,8 +1524,16 @@ export default async function view(args = {}) {
       shape: 'mound', pleats: 6, fold: 0.085, from: [-1.9, 0, -3.4], to: [4.9, 0, -1.6],
     }));
   }
+  // ⚠ GILT FRAME, SILK SEAT. `cam=eye.back` puts five of these across the bottom of the widest
+  // view the room has, and rendered entirely in `mats.gilt` they read as solid gold objects
+  // rather than as furniture — a ballroom chair is a gilded frame with an upholstered seat and
+  // splat, and the material split is most of that read. The silk is a faded rose that has been
+  // in the dark for years: it has to be dark enough not to compete with the drapes, which are
+  // the room's one saturated colour and need to stay so.
+  const chairSilk = new THREE.MeshStandardMaterial({ color: 0x6b4a48, roughness: 0.78, metalness: 0 });
+  engine.onDispose?.(() => chairSilk.dispose());
   scene.add(chairRow({
-    count: 8, material: mats.gilt, rng,
+    count: 8, material: mats.gilt, seatMaterial: chairSilk, rng,
     from: [8.5, 0, -6.6], to: [8.9, 0, 5.4], face: -Math.PI / 2,
   }));
 
@@ -2497,7 +2541,17 @@ export default async function view(args = {}) {
     // authored 2.2 to lift a blurred average of the room off the plate. A planar reflection
     // returns the room's real values, so anything above 1.0 is a mirror brighter than the
     // thing it reflects.
-    mirrorMat.envMapIntensity = 1.0;
+    // ⚠ 0.62 RATHER THAN 1.0, AND IT IS ABSORPTION, NOT TASTE. 1.0 is "a mirror as bright as the
+    // thing it reflects", which is the right number for a clean modern mirror and wrong for a
+    // 19th-century mercury plate: the silvering is a tarnished amalgam behind glass with iron
+    // in it, and a real one returns roughly two thirds of what falls on it, slightly grey-green.
+    // It matters here because what these plates are pointed at is a wall of blown-out windows —
+    // so at 1.0 they came back as WHITE PANELS. `cam=eye.under`, added this round because a
+    // player walking the covered aisle beneath the musicians' gallery passes within a metre of
+    // one, shows it plainly: the plate reads as a sheet of cracked white board, with the foxing
+    // that should say "old glass" reading as crazed paint because there is nothing behind it
+    // dark enough for the craze to sit on.
+    mirrorMat.envMapIntensity = 0.62;
     applyPlanarReflection(mirrorMat, pierRT.texture, texMat, flatN, MIRROR_FILTER, [pw, ph], {
       // The same gate as the end plates: clean silvering bakes near 0.055 and is fully planar,
       // and where the amalgam has bloomed the roughness jumps past 0.34 and the patch falls
