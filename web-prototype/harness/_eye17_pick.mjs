@@ -1,0 +1,33 @@
+// eye-sweep-17: which mesh paints these pixels? A live raycast through the capture camera.
+//   node harness/_eye17_pick.mjs --cam eye.arch --px 368,300 --px 585,300
+// `_tmp_geoprobe.mjs --pick` answers the same question but serves dist/, so it needs a build
+// first; this one goes through the running dev server the rest of this round's tools use.
+import { chromium } from 'playwright';
+import net from 'node:net';
+const PORT = 5178;
+const argv = process.argv.slice(2);
+const opt = (n, d) => { const i = argv.indexOf(`--${n}`); return i >= 0 ? argv[i + 1] : d; };
+const CAM = opt('cam', 'eye.arch');
+const PX = argv.reduce((a, v, i) => (v === '--px' ? [...a, argv[i + 1].split(',').map(Number)] : a), []);
+const portOpen = (p) => new Promise((res) => { const s = net.connect(p, '127.0.0.1'); s.on('connect', () => { s.destroy(); res(true); }); s.on('error', () => res(false)); });
+if (!(await portOpen(PORT))) { console.error('vite not running on 5178'); process.exit(3); }
+const browser = await chromium.launch({ args: ['--use-angle=d3d11', '--ignore-gpu-blocklist', '--force-device-scale-factor=1', '--hide-scrollbars'] });
+const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+await page.routeWebSocket((u) => u.hostname === '127.0.0.1' && u.port === String(PORT), () => {});
+await page.goto(`http://127.0.0.1:${PORT}/?view=room.ballroom&capture=1&cam=${CAM}`, { waitUntil: 'load', timeout: 60000 });
+await page.waitForFunction(() => document.body.dataset.rrrReady === '1' || document.body.dataset.rrrError === '1', null, { timeout: 600000 });
+await page.evaluate((n) => window.__rrr.settle(n), 12);
+const out = await page.evaluate(async (pts) => {
+  const T = await import('/node_modules/three/build/three.module.js');
+  const e = window.__rrr.engine;
+  const rc = new T.Raycaster();
+  const v = new T.Vector2();
+  return pts.map(([px, py]) => {
+    v.set((px / 1920) * 2 - 1, -((py / 1080) * 2 - 1));
+    rc.setFromCamera(v, e.camera);
+    const hits = rc.intersectObject(e.scene, true).filter((h) => h.object.visible);
+    return { px, py, hits: hits.slice(0, 3).map((h) => `${h.object.name || h.object.type}@${h.distance.toFixed(2)}`) };
+  });
+}, PX);
+for (const r of out) console.log(`(${r.px},${r.py})`.padEnd(14), r.hits.join('  |  '));
+await browser.close();

@@ -172,6 +172,13 @@ export default async function view(args = {}) {
   // `?floorreflect=0` — the ablation for the near-floor washout fix. See the block after the
   // end plates for the measurement that motivated it.
   const FLOOR_REFLECT = qs.get('floorreflect') !== '0';
+  // `?eograze=N` — the ablation for round 17's grazing-lobe widening. 0 restores the pre-r17
+  // mirror on BOTH the floor and the end plates; 1 is the shipping physical coefficient. See
+  // the long note above `planarEnvmapChunk`'s LOD block for what it does and why it is not a
+  // strength knob. Parsed permissively and clamped rather than validated, so a sweep can pass
+  // intermediate values without editing source.
+  const EO_GRAZE = Number.isFinite(parseFloat(qs.get('eograze')))
+    ? Math.max(0, Math.min(8, parseFloat(qs.get('eograze')))) : 1.0;
   // ---- `?floor=` — THE PERMANENT ABLATION TOGGLE FOR THE FLOOR MATERIAL -------------------
   //
   // ROUND 14. `critic-estate-11`'s fastest remaining tell: the bar (`refs/bf1/bf1-ballroom-01.png`
@@ -311,7 +318,59 @@ export default async function view(args = {}) {
     ? { env: 3.2, sun: 300, bounce: 1.0, bounceCard: 2.2, grade: FLAT_GRADE,
         dir: [0.865, -0.44, 0.24], aim: null, angle: 0.34, penumbra: 0.28, mapSize: 1024,
         shaftWins: [1, 2, 3], cardWins: [1, 3] }
-    : { env: 1.70, sun: 19400, bounce: 2.1, bounceCard: 5.0, grade: null,
+    // ---- ROUND 17: THE KEY/FILL RATIO, RE-SOLVED AT PLAYER EYE HEIGHT --------------------
+    //
+    // `sun` 19400 -> 8150 and `bounce` 2.1 -> 7.35. This is the fix for round 17's #1 hate
+    // ("every surface in direct sun clips to a textureless white plateau") and it is a
+    // LIGHT-DISTRIBUTION change, not a grade one. What the sweeps established, in order:
+    //
+    //   _eye17_sweep      the daylight spot at 25% takes white-pixel share 4.56% -> 0.21%, so
+    //                     the white IS the key. Exposure alone cannot reach it: 1.55 -> 0.90
+    //                     is 0.78 of a stop and the patch is two stops over.
+    //   _eye17_floorwhy   not the parquet's albedo, and not its specular either.
+    //   _eye17_sheen      clearcoat, clearcoatRoughness and specularIntensity on both floor
+    //                     materials move the frame by less than 0.1%. Not a lobe problem.
+    //   _eye17_whatswhite not the light shafts, the light pools, the motes or the glow patch.
+    //   _eye17_zfight     not a depth fight between the two floor planes.
+    //   ?floorreflect=0   not the planar floor reflection (29.97% vs 30.24% bright).
+    //
+    // What is left, and what the `pqRed` frame shows directly: the sunlit floor is roughly two
+    // stops past the ACES shoulder, and ACES desaturates as it saturates — force the parquet's
+    // albedo to pure RED and its sunlit half still renders pale pink-white. That is why the
+    // wood came back as white line-art with only its joint pattern surviving.
+    //
+    // ⚠ AND THE ROOM WAS ALREADY WRONG IN THE OTHER DIRECTION AT THE OTHER CAMERA, which is
+    // what says "distribution" rather than "exposure". Against the bar's own ladder
+    // (`harness/grade.mjs --img refs/bf1/bf1-ballroom-01.png`: median L 49.8, toe 11.3):
+    //
+    //     camera        median L before   after     the bar
+    //     eye.floor          84.7          74.0       49.8      washed out, gate fails > 80
+    //     eye.walk           59.0          57.9       49.8
+    //     overlook           32.4          44.2       49.8      under, and it always had been
+    //
+    // One grade cannot move both ends of that; only the key/fill ratio can. So the key comes
+    // down 2.25 stops and the fill goes up to meet it, and both cameras walk toward the bar
+    // together instead of trading places.
+    //
+    // ⚠ THE FILL IS THE THREE DIRECTIONAL bounceFill LIGHTS, NOT `env`, AND THAT IS DELIBERATE.
+    // Rounds 11-12 measured that ~95% of the light on this floor was a structureless five-box
+    // IBL shell, that this was the whole of "evenly lit", and that taking the shell 3.2 -> 1.70
+    // is what let the sun patches read at all. Buying the dark half back out of the shell would
+    // hand round 12 straight back. `env` is untouched at 1.70; the directional fill is this
+    // file's own documented answer for putting modelling back without putting flatness back.
+    //
+    // What it costs, measured at `cam=eye.walk` (white / clip / bright-region local contrast):
+    //     before  1.27% / 2.07% / 2.59        after  0.93% / 1.40% / 2.84
+    //     the bar 1.20% / 2.87% / 8.57
+    // — i.e. this render now holds MORE highlight headroom than the locked art does, and the
+    // dust sheets, the crates and the marble veining come back inside the sun patches instead
+    // of being white cut-outs. p90/p50 (the macro-contrast guard, so the patches are not
+    // simply being turned off) is 3.66 -> 3.47 at eye.walk and 3.10 -> 2.41 at the overlook:
+    // the patches still separate, they no longer clip.
+    //
+    // ⚠ `?daylight=flat` IS UNTOUCHED. It is the ablation that holds round 12's pre-rebalance
+    // numbers, and re-tuning it here would delete the only reachable copy of them.
+    : { env: 1.70, sun: 8150, bounce: 7.35, bounceCard: 5.0, grade: null,
         dir: [0.885, -0.375, 0.265], aim: [-4.7, 0, 0.2], angle: 0.42, penumbra: 0.22, mapSize: 2048,
         shaftWins: [0, 1, 2], cardWins: [0, 2] };
 
@@ -351,11 +410,45 @@ export default async function view(args = {}) {
   // move the camera after that and those three surfaces — including the largest and best one in
   // the room — keep the OLD camera's reflection. `_eo13_cam.mjs` says so in its own header and
   // its pictures show it. Choose a framing live; capture it from source.
+  //
+  // ---- THE PLAYER-EYE SWEEP (`estate-owner-17`, ROUND 17) --------------------------------
+  //
+  // Rounds 1-16 judged this room through exactly two cameras, both of them looking the same
+  // way down the room's long diagonal from the +x end. A room is not a diorama: the player
+  // walks it, and every wall of it is a hero surface for however long they are facing it.
+  // The first sweep at eye height found defects that neither `r10` nor `overlook` can see —
+  // the window wall's own face, the ceiling read from below, the arches at the z -8 end.
+  //
+  // These are NOT ablations and NOT alternate framings to ship. They are the standing
+  // validation set: capture all of them before filing any verdict on this piece.
+  //
+  //     node harness/shoot.mjs --view room.ballroom --extra "cam=eye.win" --review 1280
+  //
+  // ⚠️ THEY ARE SOURCE PRESETS RATHER THAN `--cam` OVERRIDES ON PURPOSE. The header above
+  // says why and it is the whole reason this block exists: the floor's planar reflection and
+  // both end plates are rendered ONCE at build time from the camera reflected about their own
+  // plane. A `?campose=` override moves the view matrix AFTER that, so the largest mirror in
+  // the room keeps showing the framing you just left. A sweep done with `--cam` would have
+  // reported the reflection defects of the overlook at every one of these nine angles.
+  //
+  // Eye height is 1.65 m, the player's. `eye.floor` is a crouch and `eye.gallery` stands on
+  // the musicians' gallery, which the player can reach.
   const CAM_DEFS = {
     r10: { pos: [7.4, 1.62, 6.1], target: [-5.2, 4.1, -6.4], fov: 66 },
     overlook: { pos: [9.6, 6.6, 7.0], target: [-4.5, 1.0, -4.0], fov: 56 },
+
+    // — the player-eye sweep —
+    'eye.door': { pos: [0, 1.65, 6.6], target: [0, 2.6, -8.0], fov: 62 },       // in at the south, down the room to the arches
+    'eye.win': { pos: [4.0, 1.65, 0], target: [-13.0, 3.2, 0], fov: 62 },       // mid-room, square on the window order
+    'eye.mirror': { pos: [-4.0, 1.65, 0], target: [13.0, 3.6, 0], fov: 62 },    // mid-room, square on the plates and the gallery
+    'eye.up': { pos: [0, 1.65, 3.0], target: [0, 9.6, -2.0], fov: 70 },         // head back: coffers and the chandelier line
+    'eye.corner': { pos: [-11.4, 1.65, 6.6], target: [11.0, 3.0, -7.0], fov: 66 }, // the long diagonal, from the far corner
+    'eye.walk': { pos: [-10.5, 1.65, 6.8], target: [-10.5, 2.2, -8.0], fov: 62 },  // walking the window wall, raking the piers
+    'eye.floor': { pos: [-5.0, 1.05, 3.0], target: [-1.5, 0.0, -3.0], fov: 55 },   // crouched on the chequer/parquet seam
+    'eye.arch': { pos: [0, 1.65, -6.0], target: [0, 2.2, 8.0], fov: 66 },       // stood in the arches, looking back
+    'eye.gallery': { pos: [11.0, 6.5, 0], target: [-9.0, 1.4, 0], fov: 62 },    // on the gallery, over the rail
   };
-  const CAM = qs.get('cam') === 'r10' ? 'r10' : 'overlook';
+  const CAM = CAM_DEFS[qs.get('cam')] ? qs.get('cam') : 'overlook';
   const CAM_DEF = CAM_DEFS[CAM];
 
   const engine = await estate({
@@ -389,7 +482,10 @@ export default async function view(args = {}) {
   // no filed verdict rests on it — flagged rather than fixed blind, since a change here would
   // touch the `?daylight=flat` break-test's own grade too and that ablation has its own
   // documented reasoning a few lines up that this round did not re-derive.
-  const CAM_GRADE = CAM === 'overlook' ? { lift: [0.030, 0.0292, 0.0282] } : null;
+  // ⚠️ `r10` KEEPS NO LIFT so it stays the byte-for-byte reproduction of the board's own
+  // numbers this file promises; every other camera — the shipping `overlook` and the whole
+  // eye sweep — gets the shipping toe, because the toe is what the PLAYER sees.
+  const CAM_GRADE = CAM === 'r10' ? null : { lift: [0.030, 0.0292, 0.0282] };
   engine.pipeline.setGrade({
     ...GRADES.ballroom,
     ...(LIGHTS.grade ?? {}),
@@ -1531,7 +1627,8 @@ export default async function view(args = {}) {
       // to stop reading as a panel; 1.0 is the honest number and anything above it is a
       // mirror brighter than the thing it reflects.
       mat.envMapIntensity = 1.0;
-      applyPlanarReflection(mat, rt.texture, texMat, flatN, MIRROR_FILTER, [rtW, RT_H]);
+      applyPlanarReflection(mat, rt.texture, texMat, flatN, MIRROR_FILTER, [rtW, RT_H],
+        { graze: EO_GRAZE });
       engine.onDispose?.(() => { rt.dispose(); cubeRT.dispose(); });
     }
   }
@@ -1611,6 +1708,7 @@ export default async function view(args = {}) {
       // where it is not, and let the material's own map decide which is which.
       lo: 0.06, hi: 0.42,
       wobble: 0.0,
+      graze: EO_GRAZE,
     });
     floor.material.needsUpdate = true;
     // ---- THE SAME PATCH, A SECOND TIME, FOR THE PARQUET — see the `?floor=` note up top ----
@@ -1626,6 +1724,7 @@ export default async function view(args = {}) {
         gain: 1 / (scene.environmentIntensity || 1),
         lo: 0.32, hi: 0.68,
         wobble: 0.0,
+        graze: EO_GRAZE,
       });
       floorParquet.material.needsUpdate = true;
     }
@@ -1848,10 +1947,53 @@ function planarEnvmapChunk(filterMode = 'sharp') {
   // is a normal-map term, so its derivative is high-frequency noise; feeding that to the mip
   // selection picks a different level per pixel and reintroduces the exact speckle this is
   // removing — as a blur that changes every pixel, which looks like dirty glass and is not.
+  //
+  // ---- THE GRAZING LOBE, WHICH IS THE WHOLE OF ROUND 17's #2 HATE ------------------------
+  //
+  // A planar reflection is a MIRROR AT EVERY ANGLE, and that is wrong in one specific place:
+  // the floor seen nearly edge-on. `critic-eye-sweep` filed it as "the parquet is a mirror …
+  // like wet lacquer" against a bar (`refs/bf1/bf1-ballroom-01.png`) whose floor is matt, and
+  // `harness/_eye17_clip.mjs` puts the same thing in numbers — at `cam=eye.floor` 30.2% of the
+  // frame is above L 190 (the bar: 7.5%) and the local contrast INSIDE that bright area is
+  // 3.73 against the bar's 8.57. A blown, textureless, mirror-bright floor.
+  //
+  // Rounds 1-16 never saw it because both of their cameras look DOWN. Elevation is the whole
+  // variable: the overlook meets the floor at 17 degrees, the r10 camera at 6, and a standing
+  // player at 3-6 across most of the room. The lower the angle the more of the frame the floor
+  // is, and the more mirror-like this code makes it.
+  //
+  // THE FIX IS NOT A STRENGTH KNOB, IT IS THE MISSING HALF OF THE BRDF. A GGX lobe's angular
+  // width grows as roughness / cos(theta_v): at normal incidence a waxed floor returns a soft
+  // sheen, and at grazing that SAME material smears the room into a long vertical streak. The
+  // planar path models the direction and skips the width, so it hands back a sharp mirror at
+  // exactly the angle where a real floor has none. Widen the lobe by fetching a coarser mip:
+  //
+  //     spread = 1 + uEoGraze * roughness / max( N.V, 0.02 )      lod += log2( spread )
+  //
+  // The numbers this produces are the point. Clean waxed parquet bakes at roughness ~0.42:
+  //
+  //     camera          floor N.V     spread    extra mip levels
+  //     eye.floor (3 deg)   0.10       5.2         2.4      a streak, which is correct
+  //     overlook (17 deg)   0.29       2.4         1.3      a soft sheen
+  //     straight down       1.00       1.4         0.5      almost untouched
+  //
+  // ⚠ IT IS DELIBERATELY THE SAME CODE ON THE END PLATES, and it costs them nothing: they are
+  // looked at nearly square-on (N.V ~ 0.9) and bake at roughness ~0.055, so spread is 1.06 and
+  // the reflected mullion grid — the one piece of structure those plates have, and the subject
+  // of rounds 5 through 11 — keeps every bit of its sharpness. A term that had to be excluded
+  // from half the surfaces it applies to would be a fudge; this one does not.
+  //
+  // `?eograze=0` is the permanent ablation and restores the pre-r17 mirror exactly.
   const LOD = [
     '  vec2 eoPx = eoBase * uEoSize;',
     '  vec2 eoDx = dFdx( eoPx ), eoDy = dFdy( eoPx );',
     '  float eoLod = clamp( 0.5 * log2( max( dot( eoDx, eoDx ), dot( eoDy, eoDy ) ) ), 0.0, uEoMaxLod );',
+    // ⚠ CLAMPED AT 0.02, NOT AT 0. N.V reaches zero on the silhouette of every curved surface
+    // this material touches, and an unclamped divide there returns inf -> a NaN lod -> a black
+    // pixel ring. 0.02 is 88.9 degrees, past any angle the floor is actually seen at.
+    '  float eoNdV = clamp( dot( normal, viewDir ), 0.02, 1.0 );',
+    '  float eoSpread = 1.0 + uEoGraze * roughness / eoNdV;',
+    '  eoLod = clamp( eoLod + log2( eoSpread ), 0.0, uEoMaxLod );',
     '  vec2 eoUv = clamp( eoBase + ( normal - uEoFlatN ).xy * uEoWobble, 0.002, 0.998 );',
     '  vec3 eoPlanar = texture2DLodEXT( uEoMap, eoUv, eoLod ).rgb;',
   ];
@@ -1926,6 +2068,10 @@ function applyPlanarReflection(mat, texture, texMat, flatViewNormal, filterMode 
     // no visible halo at this magnification. 0.85 rather than 1.0 only because a mask this
     // strong on a 71-px plate has nowhere to hide if a later camera enlarges it.
     uEoSharp: { value: 0.85 },
+    // See the grazing-lobe note above planarEnvmapChunk's LOD block. 1.0 is not a taste
+    // setting — it is the coefficient that makes `spread` the GGX lobe's own width ratio
+    // rather than a scaled version of it. `?eograze=0` restores the pre-r17 mirror.
+    uEoGraze: { value: opts.graze ?? 1.0 },
   };
   mat.userData.planarUniforms = uni;
   mat.userData.planarFilter = filterMode;
@@ -1962,6 +2108,7 @@ function applyPlanarReflection(mat, texture, texMat, flatViewNormal, filterMode 
         'uniform float uEoSharp;',
         'uniform float uEoGain;',
         'uniform vec2  uEoRough;',
+        'uniform float uEoGraze;',
         'varying vec3  vEoWorld;',
       ].join('\n'))
       // The chunk is injected EXPANDED, in place of its own include — see the note above for

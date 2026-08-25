@@ -475,7 +475,12 @@ export const GRADES = {
     // albedos) needed a second, joint pass — see that comment for the full reasoning. Solved
     // together on one boot, `harness/_eo15_vest_sweep.mjs`, because exposure and toeCrush both
     // move median AND toe and cannot be tuned one item at a time without re-fighting each other.
-    exposure: 1.55,
+    // ROUND 17: 1.55 -> 1.28, as the third of the three terms in the key/fill re-solve. See
+    // the long note on `sun`/`bounce` in room-ballroom.js's LIGHTS block for the measurement
+    // chain — this number is NOT the fix on its own (two stops of blown key cannot be graded
+    // away, and 1.55 -> 0.90 was tried and does not reach it) and it must not be re-tuned
+    // without the other two, which is the trap the round-15 note above describes.
+    exposure: 1.28,
     gain: [1.0, 1.0, 1.0],
     ca: 0.0,                    // see the streak-glitch note above the GRADES table
     bloomStrength: 0.070, bloomThreshold: 15, bloomRadius: 1.05,

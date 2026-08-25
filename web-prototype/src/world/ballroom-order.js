@@ -262,6 +262,133 @@ export function ballroomPlan(o = {}) {
  * "risers" to "arc segments", and the caller that passes it was raised to suit in the same
  * commit.
  */
+/**
+ * ---- CLOTH, BECAUSE THE DRAPES WERE BOXES (`estate-owner-17`, ROUND 17) -------------------
+ *
+ * What was here until this round, at every one of the five windows:
+ *
+ *     B.box('drape', 0.14, 1.15, win.w + 0.95, ...)      // the swag
+ *     B.box('drape', 0.20, win.h * 0.80, 0.55, ...)      // and one side panel per side
+ *
+ * Three rectangular prisms. `critic-eye-sweep` called them "flat, uniform, fully saturated red
+ * slabs with a hard edge and no shading — red card, not velvet", and that is exactly what a box
+ * is: every pixel of a flat face has the same normal, so it takes the same light, so there is
+ * no gradient anywhere on it and the colour is the only thing left. Round 15 spent a whole
+ * joint sweep (`_eo15_drape_sweep.mjs`, `_eo15_vest_sweep.mjs`) solving the drape's ALBEDO
+ * against the bar's own sampled pixels and against the grade gate, and got the colour honestly
+ * right — but a correct colour on a flat face is still a flat face. The bar's curtains
+ * (`refs/bf1/bf1-ballroom-01.png`) read as velvet because every fold runs bright on its
+ * leading edge and falls to near-black in its recess, half a dozen times across each panel.
+ * That is a GEOMETRY read, and no material can be asked to fake it.
+ *
+ * So: a closed cloth tube, swept along a spine, whose cross-section is an ellipse with a
+ * radial ripple. That is the same shape a fluted pilaster shaft is, and for the same reason —
+ * gathered fabric bunches into rounded vertical lobes — which is why it lights like cloth
+ * without a normal map, a cloth shader or a second material.
+ *
+ * @param at(v)  the spine: { c: [x,y,z] centre, a, b: the ellipse's half-axes, amp: ripple
+ *               depth as a fraction of the radius, roll: ripple phase in radians }
+ *               v runs 0..1 along the sweep.
+ * @param axis   'y' for a hanging panel (the sweep runs down), 'z' for a swag across a head.
+ */
+function clothTube(o) {
+  const rings = o.rings ?? 14;
+  const seg = o.seg ?? 20;
+  const at = o.at;
+  const pos = [];
+  const idx = [];
+  const ringPt = (v, i) => {
+    const t = (i / seg) * Math.PI * 2;
+    const f = at(v);
+    // The ripple is what makes it cloth rather than a pipe: `folds` lobes around the section,
+    // deepest at the ripple's own troughs, and `roll` lets a panel's folds drift as it falls
+    // so the lobes are not a straight extrusion the eye can read as machined.
+    const r = 1 + f.amp * Math.cos(o.folds * t + f.roll);
+    return [f.c[0] + Math.cos(t) * f.a * r, f.c[1], f.c[2] + Math.sin(t) * f.b * r];
+  };
+  for (let j = 0; j <= rings; j++) {
+    const v = j / rings;
+    for (let i = 0; i < seg; i++) {
+      const p = ringPt(v, i);
+      // `axis` only decides which coordinate the spine's own travel is written into; `at`
+      // returns the centre in world terms either way, so the caller keeps full control.
+      pos.push(p[0], p[1], p[2]);
+    }
+  }
+  for (let j = 0; j < rings; j++) {
+    for (let i = 0; i < seg; i++) {
+      const a = j * seg + i, b = j * seg + ((i + 1) % seg);
+      const c = (j + 1) * seg + i, d = (j + 1) * seg + ((i + 1) % seg);
+      idx.push(a, c, b, b, c, d);
+    }
+  }
+  // CAP BOTH ENDS. The material is single-sided, so an open tube shows its own interior
+  // through the hole — which on a curtain hanging in front of a blown-out window is the most
+  // conspicuous possible place for it.
+  const capCentre = (j) => {
+    let cx = 0, cy = 0, cz = 0;
+    for (let i = 0; i < seg; i++) { const k = (j * seg + i) * 3; cx += pos[k]; cy += pos[k + 1]; cz += pos[k + 2]; }
+    pos.push(cx / seg, cy / seg, cz / seg);
+    return pos.length / 3 - 1;
+  };
+  const top = capCentre(0);
+  for (let i = 0; i < seg; i++) idx.push(top, ((i + 1) % seg), i);
+  const bot = capCentre(rings);
+  for (let i = 0; i < seg; i++) idx.push(bot, rings * seg + i, rings * seg + ((i + 1) % seg));
+
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+/**
+ * One hanging curtain panel: a cloth tube swept straight down, gathered at the head and
+ * spreading as it falls, with the folds drifting a little on the way.
+ */
+function drapePanel(B, key, o) {
+  const g = clothTube({
+    rings: 16, seg: 22, folds: o.folds ?? 5,
+    at: (v) => {
+      // v 0 at the head, 1 at the hem. A curtain is narrow and tight where it is gathered and
+      // wide and loose at the floor, and its lobes deepen the same way.
+      const spread = 0.62 + 0.38 * Math.pow(v, 0.75);
+      return {
+        c: [o.x + o.lean * v, o.yTop - o.h * v, o.z + o.drift * v],
+        a: o.depth * 0.5 * spread,
+        b: o.w * 0.5 * spread,
+        amp: 0.16 + 0.30 * v,
+        roll: o.roll + v * (o.twist ?? 0.5),
+      };
+    },
+  });
+  B.add(key, g, null, o.uv ?? 0.8);
+  g.dispose();
+}
+
+/**
+ * The swag over a window head: the same tube run horizontally along z, with its spine sagging
+ * on a sine so the middle hangs lower than the two ends it is tied back to.
+ */
+function drapeSwag(B, key, o) {
+  const g = clothTube({
+    rings: 22, seg: 16, folds: o.folds ?? 7,
+    at: (v) => {
+      const s = Math.sin(v * Math.PI);        // 0 at each tie, 1 in the middle
+      return {
+        c: [o.x, o.y - o.sag * s, o.z0 + (o.z1 - o.z0) * v],
+        a: o.depth * 0.5 * (0.75 + 0.35 * s),
+        b: o.h * 0.5 * (0.55 + 0.55 * s),
+        amp: 0.20 + 0.14 * s,
+        roll: o.roll + v * 3.1,
+      };
+    },
+  });
+  B.add(key, g, null, o.uv ?? 0.8);
+  g.dispose();
+}
+
 function spandrel(B, a, t, z0) {
   const segs = a.spandrelSteps ?? 0;
   if (segs <= 0) return;
@@ -393,16 +520,37 @@ export function ballroomOrder(bin, o = {}) {
    * The lower run carries each opening from its sill to the split; the upper run carries the
    * REST of it plus a panelled attic above. Nothing here scales.
    */
+  // ---- ROUND 17: THE PANELS ARE RAISED AND FIELDED, NOT SUNK ------------------------------
+  //
+  // `critic-eye-sweep`'s #4: "from cam=eye.arch the near wall is ~45 percent of frame and is a
+  // featureless grey slab 26m x 9.6m carrying one frieze band and one dado and nothing else".
+  // It is not that the panels were missing — all four walls have always asked for them. It is
+  // WHICH panel: `wallRun`'s default is a SUNK field, a plate set back behind the wall face
+  // with a bolection round it, and that presents exactly ONE step at its edge. Seen square on
+  // it reads; seen at the 5-15 degrees a player meets a long wall at, one step subtends
+  // nothing and the wall goes flat.
+  //
+  // `wallRun` has carried the alternative since the study work, opt-in and unused here, and
+  // its own comment is the argument for turning it on: a raised and fielded panel "presents
+  // two long inclined planes per side, so under a raking beam every panel carries a bright
+  // bevel and a dark bevel and the wall reads as carved from across the room" — filed there as
+  // "the single largest gap in the blind test for three rounds running". `light.shaft` and
+  // `room.study` already opt in. This room, which has the largest wall area of the three and
+  // the most grazing angles on it, did not.
+  //
+  // `o.raised === false` opts back out (the game's own ballroom can, if its budget needs it).
+  const RAISED = o.raised !== false;
+
   if (parts.windowWall) {
     wallRun(B, {
       x: x0, z: z1, length: wallLen, height: split, bays: bays.window, rotY: HALF_PI,
-      keys: K, uvWall, giltPanel: true, reveal: 0.11,
+      keys: K, uvWall, raised: RAISED, giltPanel: true, reveal: 0.11,
       cornice: false, solid: SOLID, skirt: skirtLo, dado: dadoOn.window,
       openings: ops(winLocal.map((zl) => ({ x0: zl - win.w / 2, x1: zl + win.w / 2, y0: win.sill, y1: split })), 'window'),
     });
     wallRun(B, {
       x: x0, z: z1, length: wallLen, height: h - split, y0: split, bays: bays.window, rotY: HALF_PI,
-      keys: K, uvWall, dado: false, giltPanel: true, reveal: 0.11,
+      keys: K, uvWall, raised: RAISED, dado: false, giltPanel: true, reveal: 0.11,
       corniceH: upper.corniceH, corniceProj: upper.corniceProj,
       fieldLo: upper.fieldLo, fieldHi: upper.fieldHi, solid: SOLID, skirt: skirtHi,
       openings: winLocal.map((zl) => ({ x0: zl - win.w / 2, x1: zl + win.w / 2, y0: 0, y1: winHead - split })),
@@ -422,11 +570,34 @@ export function ballroomOrder(bin, o = {}) {
           keys: { shaft: 'wall', cap: 'gilt' },
         });
       }
-      // a crimson drape swagged over each window head, and its two side panels
-      B.box('drape', 0.14, 1.15, win.w + 0.95, x0 + 0.24, winHead - 0.35, wz, 0.8);
+      // A crimson drape swagged over each window head, and its two side panels. ROUND 17:
+      // three `B.box` prisms -> real gathered cloth. See `clothTube` above for why a box can
+      // never read as velvet no matter how well its albedo is solved. The dimensions are the
+      // boxes' own, so the ORDER is unchanged and only the surface inside it is new.
+      // `wz` seeds the fold phase so the five windows do not share one curtain.
+      // ⚠ THE SWAG SITS ABOVE THE HEAD, NOT ACROSS IT. The first cloth pass kept the box's own
+      // `winHead - 0.35` centre, and once the shape had real depth its lower lobes hung a third
+      // of a metre into the glazing — five red bands lying across five blown-out windows, which
+      // from `cam=eye.walk` read as tape stuck over the openings. A pelmet is fitted so its
+      // LOWEST point clears the head: centre 0.34 above it, sag 0.22, so the deepest lobe stops
+      // just short of the glass.
+      drapeSwag(B, 'drape', {
+        x: x0 + 0.26, y: winHead + 0.34, z0: wz - (win.w + 1.05) / 2, z1: wz + (win.w + 1.05) / 2,
+        depth: 0.26, h: 0.92, sag: 0.22, folds: 7, roll: wz * 1.7,
+      });
       for (const s of [-1, 1]) {
-        B.box('drape', 0.20, win.h * 0.80, 0.55, x0 + 0.28, win.sill + win.h * 0.42,
-          wz + s * (win.w / 2 + 0.24), 0.8);
+        drapePanel(B, 'drape', {
+          x: x0 + 0.30, yTop: winHead + 0.20, h: win.h * 0.96,
+          z: wz + s * (win.w / 2 + 0.34),
+          // 0.55 -> 0.82 wide and 0.24 -> 0.30 deep. The box was sized to be unobtrusive
+          // because it had nothing to show; a panel with folds wants enough width to fit five
+          // of them across, and the pair now reads as curtains that could actually close.
+          w: 0.82, depth: 0.30, folds: 5,
+          // The two panels of a pair lean and drift AWAY from the opening, which is what a
+          // curtain held back by a tie does, and it also stops a symmetric pair reading as
+          // one mirrored object.
+          lean: 0.05, drift: s * 0.10, twist: s * 0.6, roll: wz * 1.3 + (s > 0 ? 1.9 : 0),
+        });
       }
     }
   }
@@ -442,12 +613,12 @@ export function ballroomOrder(bin, o = {}) {
   if (parts.mirrorWall) {
     wallRun(B, {
       x: x1, z: z0, length: wallLen, height: split, bays: bays.mirror, rotY: -HALF_PI,
-      keys: K, uvWall, giltPanel: true, cornice: false, reveal: 0.11,
+      keys: K, uvWall, raised: RAISED, giltPanel: true, cornice: false, reveal: 0.11,
       solid: SOLID, skirt: skirtLo, dado: dadoOn.mirror, openings: ops([], 'mirror'),
     });
     wallRun(B, {
       x: x1, z: z0, length: wallLen, height: h - split, y0: split, bays: bays.mirror, rotY: -HALF_PI,
-      keys: K, uvWall, dado: false, giltPanel: true, reveal: 0.11,
+      keys: K, uvWall, raised: RAISED, dado: false, giltPanel: true, reveal: 0.11,
       corniceH: upper.corniceH, corniceProj: upper.corniceProj,
       fieldLo: upper.fieldLo, fieldHi: upper.fieldHi, solid: SOLID, skirt: skirtHi,
     });
@@ -501,7 +672,7 @@ export function ballroomOrder(bin, o = {}) {
   if (parts.endWall) {
     wallRun(B, {
       x: x0, z: z0, length: endLen, height: split, bays: bays.end,
-      keys: K, uvWall, giltPanel: true, cornice: false, solid: SOLID, skirt: skirtLo,
+      keys: K, uvWall, raised: RAISED, giltPanel: true, cornice: false, solid: SOLID, skirt: skirtLo,
       dado: dadoOn.end,
       openings: ops(P.arches.map((a) => ({
         x0: a.x - x0 - a.w / 2, x1: a.x - x0 + a.w / 2, y0: 0, y1: a.h,
@@ -509,7 +680,7 @@ export function ballroomOrder(bin, o = {}) {
     });
     wallRun(B, {
       x: x0, z: z0, length: endLen, height: h - split, y0: split, bays: bays.end,
-      keys: K, uvWall, dado: false, giltPanel: true, solid: SOLID, skirt: skirtHi,
+      keys: K, uvWall, raised: RAISED, dado: false, giltPanel: true, solid: SOLID, skirt: skirtHi,
       corniceH: upper.corniceH, corniceProj: upper.corniceProj,
       fieldLo: upper.fieldLo, fieldHi: upper.fieldHi,
       openings: P.arches.map((a) => ({
@@ -534,12 +705,12 @@ export function ballroomOrder(bin, o = {}) {
   if (parts.nearWall) {
     wallRun(B, {
       x: x1, z: z1, length: endLen, height: split, bays: bays.near, rotY: Math.PI,
-      keys: K, uvWall, giltPanel: true, cornice: false, solid: SOLID, skirt: skirtLo,
+      keys: K, uvWall, raised: RAISED, giltPanel: true, cornice: false, solid: SOLID, skirt: skirtLo,
       dado: dadoOn.near, openings: ops([], 'near'),
     });
     wallRun(B, {
       x: x1, z: z1, length: endLen, height: h - split, y0: split, bays: bays.near, rotY: Math.PI,
-      keys: K, uvWall, dado: false, giltPanel: true, solid: SOLID, skirt: skirtHi,
+      keys: K, uvWall, raised: RAISED, dado: false, giltPanel: true, solid: SOLID, skirt: skirtHi,
       corniceH: upper.corniceH, corniceProj: upper.corniceProj,
       fieldLo: upper.fieldLo, fieldHi: upper.fieldHi,
     });
