@@ -13,6 +13,7 @@ import { GeoBin, STOREY, STOREY2 } from '../world/kit.js';
  */
 import { ballroomPlan, ballroomOrder } from '../world/ballroom-order.js';
 import { dustSheetRow, chairRow, crateStack, trestle, paperScatter } from '../world/props.js';
+import { grimeBand } from '../world/patina.js';
 import { buildChandelier } from '../world/chandelier.js';
 import { sconce, candelabra, driveFlicker } from '../lighting/practicals.js';
 import { lightShaft, dustMotes, lightPool, glowPatch, driveVolumetrics } from '../lighting/volumetric.js';
@@ -1837,78 +1838,12 @@ export default async function view(args = {}) {
   //
   // `?grime=0` ablates it.
   if (GRIME > 0) {
-    const GRIME_FRAG = /* glsl */ `
-      precision highp float;
-      uniform vec3  uTint;
-      uniform float uStrength;
-      uniform float uCorner;
-      uniform float uFlip;
-      uniform float uMacro;
-      uniform vec2  uMacroScale;
-      varying vec2 vUv;
-      // ---- MACRO PATINA (round 17, fifth pass) ------------------------------------------
-      // The blind pair against refs/bf1/bf1-ballroom-01.png comes down to this and it is the
-      // guide's second named failure, "only one detail frequency". This room now has detail at
-      // the GEOMETRY frequency (panels, mouldings, boards, folds) and at the FINE frequency
-      // (craquelure, grain, plaster tooth) and nothing in between. The reference's walls are
-      // not uniform fields with clean gilt lines on them — every bay carries metre-scale
-      // blotching: damp that came through once and dried, a patch that was washed, a run from
-      // a leak. That is the frequency a viewer reads as "this surface has a history".
-      //
-      // Two octaves of value noise at 1-4 m, multiplied, at very low contrast. It has to be a
-      // MULTIPLY for the same reason the skirting grime and the light pools are — a patina
-      // scales what is under it, so gilt stays gilt and plaster stays plaster, both a little
-      // down where the stain sits.
-      float h21g(vec2 p){
-        vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-        p3 += dot(p3, p3.yzx + 33.33);
-        return fract((p3.x + p3.y) * p3.z);
-      }
-      float vnG(vec2 p){
-        vec2 i = floor(p), f = fract(p);
-        f = f * f * (3.0 - 2.0 * f);
-        return mix(mix(h21g(i), h21g(i + vec2(1.0, 0.0)), f.x),
-                   mix(h21g(i + vec2(0.0, 1.0)), h21g(i + vec2(1.0, 1.0)), f.x), f.y);
-      }
-      void main(){
-        // up the wall from the skirting, or DOWN from a sill — uFlip is which. Under-sill
-        // staining is the same phenomenon upside down (water and dust come off a ledge and run)
-        // and the guide names it in the same breath as the floor line.
-        float y = mix(vUv.y, 1.0 - vUv.y, uFlip);
-        float g = pow(max(0.0, 1.0 - y), 2.4);
-        // along the wall: a slow wander, two octaves, so the band is never even
-        float w = 0.70
-          + 0.20 * sin(vUv.x * 11.0 + 0.7)
-          + 0.10 * sin(vUv.x * 41.0 + 2.3);
-        // and the corners, where a floor never gets swept
-        float c = 1.0 + uCorner * (smoothstep(0.16, 0.0, vUv.x) + smoothstep(0.84, 1.0, vUv.x));
-        float a = clamp(g * w * c * uStrength, 0.0, 1.0);
-        // the patina runs over the WHOLE plane, not just the band's falloff
-        vec2 mp = vUv * uMacroScale;
-        float m = vnG(mp) * 0.62 + vnG(mp * 2.7 + 11.3) * 0.38;
-        // biased so most of the wall is untouched and the stains are the exception
-        a = clamp(a + uMacro * smoothstep(0.42, 0.92, m), 0.0, 1.0);
-        gl_FragColor = vec4(mix(vec3(1.0), uTint, a), 1.0);
-      }`;
-    const grimeBand = (w, h, tint, strength, flip = 0, corner = 1.15, macro = 0) => new THREE.Mesh(
-      new THREE.PlaneGeometry(w, h),
-      new THREE.ShaderMaterial({
-        vertexShader: 'varying vec2 vUv;\nvoid main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-        fragmentShader: GRIME_FRAG,
-        uniforms: {
-          uTint: { value: new THREE.Color(tint) },
-          uStrength: { value: strength * GRIME },
-          uCorner: { value: corner },
-          uFlip: { value: flip },
-          uMacro: { value: macro },
-          uMacroScale: { value: new THREE.Vector2(w / 3.2, h / 3.2) },
-        },
-        transparent: true,
-        blending: THREE.CustomBlending,
-        blendEquation: THREE.AddEquation, blendSrc: THREE.ZeroFactor, blendDst: THREE.SrcColorFactor,
-        blendEquationAlpha: THREE.AddEquation, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor,
-        depthWrite: false, depthTest: true, side: THREE.DoubleSide, toneMapped: true,
-      }));
+    // The shader and the quad live in `world/patina.js` now — the playable ballroom uses the
+    // same dirt, and a copy in each file is two copies to keep in step. Everything about how
+    // it is SHAPED is documented there; what stays here is where this room puts it.
+    const band = (w, h, tint, strength, flip = 0, corner = 1.15, macro = 0) => grimeBand({
+      w, h, tint, strength: strength * GRIME, flip, corner, macro: macro * GRIME,
+    });
     const grimes = [];
     // A cool, slightly green-grey soot rather than a brown: this room's own bounce is warm, and
     // dirt tinted the same way as the light reads as a lighting change instead of as dirt.
@@ -1925,10 +1860,10 @@ export default async function view(args = {}) {
       scene.add(mesh);
       grimes.push(mesh);
     };
-    place(grimeBand(R.z1 - R.z0, BAND_H, SOOT, 0.52), R.x0 + 0.05, 0, Math.PI / 2);   // window wall
-    place(grimeBand(R.z1 - R.z0, BAND_H, SOOT, 0.52), R.x1 - 0.05, 0, -Math.PI / 2);  // mirror wall
-    place(grimeBand(R.x1 - R.x0, BAND_H, SOOT, 0.46), 0, R.z0 + 0.05, 0);             // arched end
-    place(grimeBand(R.x1 - R.x0, BAND_H, SOOT, 0.46), 0, R.z1 - 0.05, Math.PI);       // near wall
+    place(band(R.z1 - R.z0, BAND_H, SOOT, 0.52), R.x0 + 0.05, 0, Math.PI / 2);   // window wall
+    place(band(R.z1 - R.z0, BAND_H, SOOT, 0.52), R.x1 - 0.05, 0, -Math.PI / 2);  // mirror wall
+    place(band(R.x1 - R.x0, BAND_H, SOOT, 0.46), 0, R.z0 + 0.05, 0);             // arched end
+    place(band(R.x1 - R.x0, BAND_H, SOOT, 0.46), 0, R.z1 - 0.05, Math.PI);       // near wall
 
     // ---- and the PATINA, full height, on all four ----------------------------------------
     // Same shader, band falloff switched off (`strength` 0), carrying only the macro term. Four
@@ -1937,7 +1872,7 @@ export default async function view(args = {}) {
     // still turning on.
     const PATINA_H = R.h - 0.2;
     const patina = (w, x, z, rotY) => {
-      const m = grimeBand(w, PATINA_H, SOOT, 0.0, 0, 0.0, 0.24);
+      const m = band(w, PATINA_H, SOOT, 0.0, 0, 0.0, 0.24);
       m.position.set(x, PATINA_H / 2 + 0.1, z);
       m.rotation.y = rotY;
       m.renderOrder = 7;
@@ -1955,7 +1890,7 @@ export default async function view(args = {}) {
     // the top of the band; `uCorner` is dialled right down because a sill's dirt concentrates
     // under the openings rather than at the ends of the run.
     for (const wz of winZ) {
-      const sill = grimeBand(WIN.w + 0.7, 0.62, SOOT, 0.44, 1, 0.15);
+      const sill = band(WIN.w + 0.7, 0.62, SOOT, 0.44, 1, 0.15);
       sill.position.set(R.x0 + 0.07, WIN.sill - 0.31, wz);
       sill.rotation.y = Math.PI / 2;
       sill.renderOrder = 8;

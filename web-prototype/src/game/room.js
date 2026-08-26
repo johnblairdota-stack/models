@@ -250,6 +250,9 @@ export async function buildTestRoom(engine, o = {}) {
    */
   const BALL = !!(PORT && ESTATE?.ballroom);
   const ballMod = BALL ? await tryImport(() => import('../world/ballroom-order.js')) : null;
+  // The dirt layer the ballroom showcase uses, loaded the same guarded way as the order itself
+  // so a missing module degrades to "no grime" rather than to a room that will not build.
+  const ballPatina = BALL ? await tryImport(() => import('../world/patina.js')) : null;
   /**
    * 🆕 **`?ballfix=0` — THE PERMANENT ABLATION FOR `ballroom-fix-1`'S TWO CHANGES**, and it is
    * one flag for both because they were measured as one round.
@@ -3130,6 +3133,49 @@ export async function buildTestRoom(engine, o = {}) {
           built.instanced.receiveShadow = true;
           sp.root.add(built.instanced);
         }
+
+        /**
+         * 🆕 **THE DIRT, THE SAME LAYER THE SHOWCASE USES** (`world/patina.js`).
+         *
+         * `CRITIC_GUIDE.md` lists this first among the usual failures — grime collects in
+         * corners, along the floor line, under sills — and `room.ballroom`'s round 17 added it
+         * there after a critic put it at the top of the board. This room had the same problem
+         * and worse: every surface as clean at the skirting as at eye height, on the largest
+         * wall area in the house. The shader is shared rather than copied, so the two rooms
+         * cannot drift.
+         *
+         * Two passes per wall, and they do different jobs — see the module for both. The band
+         * is the skirting grime; the patina is the metre-scale blotching that gives the wall a
+         * middle detail frequency, which is the guide's SECOND named failure and the thing this
+         * room, all panels and mouldings and nothing in between, was most short of.
+         *
+         * ⚠️ `renderOrder` 7 AND 8, UNDER THE LIGHT POOLS. Everything here is a multiply over
+         * opaque geometry and has to land before anything additive does.
+         */
+        {
+          const SOOT = 0x8e9088;
+          const BAND_H = 1.15;
+          const PAT_H = Math.max(1, plan.h - 0.2);
+          const wallLen = plan.z1 - plan.z0, endLen = plan.x1 - plan.x0;
+          const put = (mesh, x, y, z, rotY, order) => {
+            mesh.position.set(x, y, z);
+            mesh.rotation.y = rotY;
+            mesh.renderOrder = order;
+            sp.root.add(mesh);
+          };
+          const faces = [
+            [wallLen, plan.x0 + 0.06, 0, Math.PI / 2],
+            [wallLen, plan.x1 - 0.06, 0, -Math.PI / 2],
+            [endLen, 0, plan.z0 + 0.06, 0],
+            [endLen, 0, plan.z1 - 0.06, Math.PI],
+          ];
+          for (const [len, x, z, rotY] of (ballPatina?.grimeBand ? faces : [])) {
+            put(ballPatina.grimeBand({ w: len, h: BAND_H, tint: SOOT, strength: 0.5, corner: 1.15 }),
+              x, BAND_H / 2, z, rotY, 8);
+            put(ballPatina.grimeBand({ w: len, h: PAT_H, tint: SOOT, strength: 0, corner: 0, macro: 0.24 }),
+              x, PAT_H / 2 + 0.1, z, rotY, 7);
+          }
+        }
       },
     };
   }
@@ -3879,6 +3925,28 @@ async function loadEstateSurfaces(L) {
          */
         floor: L.parquetMat({
           size: 1024, joint: 0.44, jointDark: 0.62, height: 0.016, normal: 0.50,
+          /**
+           * ⚠️ **AND THE ALBEDO DOES PORT AFTER ALL — SOLVED HERE, NOT COPIED.** The entry
+           * above originally shipped without this and said so: the showcase's oak was matched
+           * under one 1150 W spot through five windows, this room is lit by five practicals,
+           * so its level wanted its own solve rather than a copy. That reasoning stands; what
+           * was missing was the measurement, because until `?spawn=` existed nothing had ever
+           * photographed this room. With a camera in it:
+           *
+           *     floor patch                    rgb                    L      chroma
+           *     game ballroom, before        178.9, 128.6,  77.9    135.6    101.0
+           *     views/room-ballroom.js       100.7,  70.6,  45.1     75.2     55.5
+           *
+           * 1.8x the brightness AND 1.8x the chroma — the house default is a mid oak, and five
+           * warm practicals close over it render it as blond, almost orange, laminate. So the
+           * albedo comes down and is desaturated toward its own luma, in two measured steps —
+           * 0.6x landed at 108.9 / 87.7 and a second step at 85.8 / 73.8 — which is the same recipe the
+           * showcase used against ITS reference and a different answer, because the two rooms
+           * are lit differently. `oakDark` keeps the showcase's ratio
+           * (0.73 of `oak`) rather than the default's 0.47, since halving the stave-to-stave
+           * contrast is the other half of what stopped that floor reading as pattern.
+           */
+          oak: [0.108, 0.088, 0.072], oakDark: [0.079, 0.064, 0.053],
         }),
         // the showcase's own gilding, unchanged — it is already solved through the tone curve
         gilt: mats.gilt,

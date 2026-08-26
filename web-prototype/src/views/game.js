@@ -394,11 +394,41 @@ export default async function view(args = {}) {
 
   // The capture starts somewhere composed; live play starts where the level puts you.
   player.pos.copy(engine.capture ? room.spawn.capture : room.spawn.player[0]);
+  /**
+   * 🆕 `?spawn=<anchor>&facing=<radians>` — START A CAPTURE ANYWHERE THE LEVEL HAS A NAME FOR.
+   *
+   * The capture spawn is one authored constant, and `spaces.js` says what it is for: *"the
+   * capture director only: the gallery's west end, looking east down the room."* That is a good
+   * frame and it is the only frame — so `shoot.mjs --view game.play` has never once photographed
+   * the ballroom, the study, or anywhere else in the house.
+   *
+   * That is not a small gap. Round 17 rebuilt `room.ballroom` against eleven player-eye cameras
+   * on the reasoning that a room is not a diorama, and then the PLAYABLE copy of that same room
+   * could not be looked at at all. Worse, it is a silent gap: a capture of the gallery renders
+   * fine, so a change to the ballroom comes back as a byte-identical image and reads as "no
+   * effect" rather than as "not in shot". That happened once while this was being written —
+   * two captures 0/2073600 pixels apart were compared and a difference described in them.
+   *
+   * `ANCHORS` already names the stations (`ballroom.centre`, `ballroom.north`, ...), so this
+   * costs a lookup and nothing else. Unknown or missing name falls through to the authored
+   * spawn, so nothing that does not pass it changes.
+   */
+  {
+    const _qs = args.params ?? new URLSearchParams(location.search);
+    const _at = _qs.get('spawn') ? room.anchor(_qs.get('spawn')) : null;
+    if (_at) player.pos.set(_at.x, player.pos.y, _at.z);
+    else if (_qs.get('spawn')) console.warn('[game] no anchor named', _qs.get('spawn'));
+  }
   // `facing` is atan2(dx, dz), so 0 points toward +Z and PI toward -Z. The player spawns at
   // the study's south end looking north, up the room and toward its door. Getting this
   // backwards spawns the player staring at a wall.
   player.facing = Math.PI;
   player.aimYaw = Math.PI;
+  {
+    const _qs = args.params ?? new URLSearchParams(location.search);
+    const _f = parseFloat(_qs.get('facing'));
+    if (Number.isFinite(_f)) { player.facing = _f; player.aimYaw = _f; }
+  }
 
   // ⚠️ SPAWN UNARMED — task-sledge-pickup.md, John, 2026-08-08: "yes start unarmed. put the
   // sledge in the first room for the player to find imediatly. the nail gun can spwn somewhere
