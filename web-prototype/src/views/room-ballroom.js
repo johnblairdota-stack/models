@@ -817,6 +817,19 @@ export default async function view(args = {}) {
       // pattern's contrast and leaves the panel joints doing the work, which is what the
       // reference's floor actually shows.
       oak: [0.281, 0.183, 0.101], oakDark: [0.205, 0.135, 0.078], wear: 0.6,
+      // ⚠ AND THE JOINTS, WHICH ARE THE OTHER HALF OF THE SAME COMPLAINT. Halving the
+      // stave-to-stave contrast above stopped the WOOD reading as pattern; the board joints
+      // kept drawing the grid on their own, because they were mixing 85% toward near-black.
+      // 0.44 / 0.62 keeps them legible underfoot and lets them close up at room distance,
+      // which is what a waxed floor's joints actually do.
+      joint: 0.44, jointDark: 0.62,
+      // ⚠ AND THE RELIEF, WHICH WAS THE REAL CULPRIT. Softening the albedo joints barely moved
+      // the read, because the pattern was mostly in the NORMAL map: 35 mm of height on a floor
+      // carves every panel border and every diamond into a visible groove, and 21 x 11 m of
+      // that is a carved grid no matter what colour it is. 8 mm and a third of the normal
+      // strength leaves the joints as something you find underfoot rather than something that
+      // patterns the room.
+      height: 0.008, normal: 0.34,
     });
     parquetFloorMat.name = 'ballroom-floor-parquet';
     engine.onDispose?.(() => parquetFloorMat.dispose());

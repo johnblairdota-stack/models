@@ -653,6 +653,8 @@ uniform vec3  uOak;
 uniform vec3  uOakDark;
 uniform float uPanels;   // panels across the tile
 uniform float uWear;
+uniform float uJoint;      // how strongly the board joints darken — see the note at the mix
+uniform float uJointDark;  // and how far toward black they go
 
 float staveGrain(vec2 sp, float h){
   // stretched fbm along the stave, plus cathedral arcs from the growth rings
@@ -718,15 +720,25 @@ void surface(in vec2 uv, inout Surf s){
 export function parquetMat(opts = {}) {
   const o = {
     oak: [0.300, 0.196, 0.108], oakDark: [0.140, 0.084, 0.046],
-    panels: 4.0, wear: 0.6, size: 1024, repeat: [1, 1], ...opts,
+    panels: 4.0, wear: 0.6, size: 1024, repeat: [1, 1],
+    // 0.85 / 0.35 are the constants this shader carried before they were exposed — every
+    // existing caller stays byte-identical. See the note at the joint mix in PARQUET_SURFACE.
+    joint: 0.85, jointDark: 0.35, height: 0.035, normal: 1.0, ...opts,
   };
   return baker().standard({
     key: `est-parq:${JSON.stringify(o)}`,
-    size: o.size, surface: PARQUET_SURFACE, heightScale: 0.035, normalStrength: 1.0,
+    // ⚠ `height` / `normal` (round 17). These were 0.035 and 1.0 — thirty-five millimetres of
+    // relief on a floor — and that is what was still drawing the ballroom's parquet as a
+    // carved grid after the albedo joints had been softened. The pattern was never only in the
+    // colour: the NORMAL map was cutting each panel border and its diamond as a groove you
+    // could see the shading of. Real parquet is flat; its joints are hairlines. Defaults are
+    // the old constants, so every existing caller is byte-identical.
+    size: o.size, surface: PARQUET_SURFACE, heightScale: o.height, normalStrength: o.normal,
     repeat: o.repeat, anisotropy: 16,
     uniforms: {
       uOak: new THREE.Vector3(...o.oak), uOakDark: new THREE.Vector3(...o.oakDark),
       uPanels: o.panels, uWear: o.wear,
+      uJoint: o.joint, uJointDark: o.jointDark,
     },
   }, {
     clearcoat: 0.35, clearcoatRoughness: 0.28, envMapIntensity: 1.0,
