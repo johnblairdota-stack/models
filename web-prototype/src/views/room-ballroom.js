@@ -794,6 +794,36 @@ export default async function view(args = {}) {
    * still open.
    */
   const OAK_G = qs.has('oakg') ? Math.max(0.5, Math.min(2, Number(qs.get('oakg')) || 1)) : 1.30;
+  /**
+   * `?floorpat=N` — THE FINE PATTERN'S CONTRAST, AND IT RETIRES THIS ROUND'S OWN FRAMING.
+   *
+   * 🚨 **"THE BAR'S FLOOR READS AS A TONE AND THIS ONE READS AS PATTERN" WAS TRUE AND THE
+   * CONCLUSION DRAWN FROM IT TWICE WAS WRONG.** Round 17 acted on it by laying the oak plain,
+   * which never converged over four passes; round 18 filed the residue as needing a floor
+   * surface BUILT to be plain — *"a piece of work, not a parameter"*. Both assumed the bar's
+   * floor carries no pattern. Cropped, it plainly does: large faint squares with a diagonal
+   * inside them, exactly this floor's own design at a fraction of its contrast.
+   *
+   * So it was never pattern-or-tone, it is CONTRAST AND SCALE. Local standard deviation over a
+   * sliding window, normalised by the patch mean, shade-only rects at matched luminance
+   * (`harness/_floorpat18.mjs`, 32.7 against 30.9):
+   *
+   *     window        4px    10px    24px    48px
+   *     bar           3.5     7.3    12.1    19.0
+   *     before        9.5    13.3    15.8    15.6
+   *
+   * The bar CLIMBS 3.5 -> 19.0 across the range, a factor of 5.4 — almost nothing at stave
+   * scale, a great deal at room scale, which is what "reads as a tone" actually means: the
+   * variation you see is where the floor is dirty, not what it is made of. This one was nearly
+   * flat, 9.5 -> 15.6, a factor of 1.6, and 2.7x the bar at the fine end.
+   *
+   * `patCon` scales grain, stave drift, flecking and joints toward the field's own mean, and
+   * the RELIEF with them (see the note at `s.height` — round 17 already learned once that the
+   * normal map draws this grid on its own). It deliberately leaves the wax and the wear lanes,
+   * because those are the large-scale terms and the bar has MORE of them, not fewer.
+   */
+  const FLOOR_PAT = qs.has('floorpat')
+    ? Math.max(0, Math.min(2, Number(qs.get('floorpat')) || 0)) : 0.50;
   const LUMA = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
   const oakHue = (c) => {
     const t = [c[0], c[1] * OAK_G, c[2]];
@@ -1100,7 +1130,7 @@ export default async function view(args = {}) {
       // pattern's contrast and leaves the panel joints doing the work, which is what the
       // reference's floor actually shows.
       oak: oakHue([0.281, 0.183, 0.101]), oakDark: oakHue([0.205, 0.135, 0.078]),
-      wear: 0.6, bakeDust: FLOOR_DUST,
+      wear: 0.6, bakeDust: FLOOR_DUST, patCon: FLOOR_PAT,
       // ⚠ AND THE JOINTS, WHICH ARE THE OTHER HALF OF THE SAME COMPLAINT. Halving the
       // stave-to-stave contrast above stopped the WOOD reading as pattern; the board joints
       // kept drawing the grid on their own, because they were mixing 85% toward near-black.
@@ -2268,7 +2298,21 @@ export default async function view(args = {}) {
     // grazing angle come out as a fine mottle that reads as noise; a floor's staining is a few
     // big areas, not many small ones.
     {
-      const fp = band((R.x1 - R.x0) + 2, (R.z1 - R.z0) + 2, SOOT, 0.0, 0, 0.0, 0.20);
+      /**
+       * ⚠ `?floorstain=N`, AND 0.20 -> 0.58 IS THE OTHER HALF OF THE FLOOR FINDING. Cutting the
+       * fine pattern (`?floorpat`) alone takes this floor's whole contrast ladder DOWN, and the
+       * bar's ladder does not want to come down — it wants to TILT. Measured shade-only at
+       * matched luminance, the bar climbs 3.5 / 7.3 / 12.1 / 19.0 across 4 / 10 / 24 / 48 px
+       * windows, so it has less than half this floor's fine contrast and more than its large.
+       * Two knobs, opposite directions; one of them alone just makes a flatter floor.
+       *
+       * This is the same "one detail frequency" complaint the walls got in round 17 and the
+       * ceiling got earlier in this one, arriving on the floor from the other side: the floor
+       * had the FINE frequency and was missing the coarse one.
+       */
+      const FSTAIN = qs.has('floorstain')
+        ? Math.max(0, Math.min(1, Number(qs.get('floorstain')) || 0)) : 0.20;
+      const fp = band((R.x1 - R.x0) + 2, (R.z1 - R.z0) + 2, SOOT, 0.0, 0, 0.0, FSTAIN);
       fp.material.uniforms.uMacroScale.value.set(((R.x1 - R.x0) + 2) / 6.5, ((R.z1 - R.z0) + 2) / 6.5);
       fp.rotation.x = -Math.PI / 2;
       fp.position.set(0, 0.02, 0);

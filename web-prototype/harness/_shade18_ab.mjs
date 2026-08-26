@@ -163,6 +163,12 @@ for (const spec of SPECS) {
     if (v.sat != null) gp.saturation = v.sat;
     if (v.shadow) gp.shadowTint = v.shadow;
     if (v.split != null) gp.splitBalance = v.split;
+    // `grain` — the grade's film grain, which is PER-PIXEL and therefore sits underneath every
+    // fine-scale measurement in the frame. Round 18 spent two sweeps trying to pull the floor's
+    // 4px local contrast down to the bar's 3.5 and found a floor it could not get under; grain
+    // at 0.026 is a candidate for most of that, and if it is, the floor's own pattern is
+    // already at the bar and the remaining complaint is about the grade instead.
+    if (v.grain != null) gp.grain = v.grain;
     if (Object.keys(gp).length) window.__rrr.setGrade(gp);
   }, q);
   await page.evaluate((n) => window.__rrr.settle(n), 6);

@@ -657,7 +657,8 @@ uniform float uPanels;   // panels across the tile
 uniform float uWear;
 uniform float uJoint;      // how strongly the board joints darken — see the note at the mix
 uniform float uJointDark;  // and how far toward black they go
-uniform float uPlain;      // 0 = Versailles panel, 1 = running block bond
+uniform float uPlain;
+uniform float uPatCon;      // fine-pattern contrast, 1 = as authored — see the block below
 
 float staveGrain(vec2 sp, float h){
   // stretched fbm along the stave, plus cathedral arcs from the growth rings
@@ -742,6 +743,34 @@ void surface(in vec2 uv, inout Surf s){
   joint = max(joint, 1.0 - smoothstep(0.0, 0.006, abs(bd - 0.150)));
   col = mix(col, uOakDark * 0.35, joint * 0.85);
 
+  // ---- ROUND 18: THE PATTERN'S CONTRAST, SEPARATED FROM ITS EXISTENCE -------------------
+  //
+  // Rounds 17 and 18 both read this floor as "pattern where the bar reads as tone" and both
+  // reached for the same answer: lay the oak plain instead. That never converged, and round 18
+  // filed the residue as needing a floor surface BUILT to be plain - a piece of work rather
+  // than a parameter. All of that assumed the bar's floor has no pattern in it. It plainly
+  // does: cropped, it is large faint squares with a diagonal inside them.
+  //
+  // So the question was never pattern-or-tone, it is HOW MUCH CONTRAST AT WHAT SCALE, and that
+  // is measurable. Local standard deviation over a sliding window, normalised by the patch
+  // mean, on shade-only rects at matched luminance (harness/_floorpat18.mjs):
+  //
+  //     window        4px    10px    24px    48px
+  //     bar           3.5     7.3    12.1    19.0
+  //     this floor    9.5    13.3    15.8    15.6
+  //
+  // The bar's contrast CLIMBS with scale, 3.5 to 19.0, a factor of 5.4: almost nothing at stave
+  // scale and a great deal at room scale, which is precisely what "reads as a tone" means - the
+  // variation you see is where the floor is dirty, not what it is made of. This one is nearly
+  // FLAT across the range, 9.5 to 15.6, a factor of 1.6, and is 2.7x the bar at the fine end.
+  //
+  // uPatCon scales the fine pattern - grain, stave drift, flecking and joints - toward the
+  // field's own mean colour, leaving the base colour, the wax and the wear lanes alone because
+  // those are the LARGE-scale terms and the bar has more of them, not fewer. 1.0 is exactly
+  // what this shader did before, so every existing caller is byte-identical.
+  vec3 patFlat = mix(uOak, uOakDark, 0.375);
+  col = mix(patFlat, col, uPatCon);
+
   // wax: uneven polish, worn through in the traffic lanes
   float wax  = fbmT(uv * 3.5 + 8.0, 4.0, 3, 2.0, 0.55);
   float lane = smoothstep(0.42, 0.88, fbmT(uv * vec2(2.0, 2.6) + 15.0, 3.0, 3, 2.0, 0.5)) * uWear;
@@ -752,7 +781,12 @@ void surface(in vec2 uv, inout Surf s){
   s.roughness = clamp(rough, 0.10, 1.0);
   s.metalness = 0.0;
   s.ao        = 1.0 - joint * 0.55;
-  s.height    = 0.68 - joint * 0.30 + g * 0.03 + (frame > 0.5 ? 0.012 : 0.0);
+  // ⚠ THE RELIEF SCALES WITH IT, OR THE NORMAL MAP GOES ON DRAWING THE GRID THE ALBEDO JUST
+  // STOPPED DRAWING. Round 17 already found this half once - "the pattern was never only in
+  // the colour: the NORMAL map was cutting each panel border and its diamond into a groove you
+  // could see the shading of" - and halved the height for it. Fading the albedo without fading
+  // the height would have re-learned that at the cost of another round.
+  s.height    = 0.68 + (-joint * 0.30 + g * 0.03 + (frame > 0.5 ? 0.012 : 0.0)) * uPatCon;
 }
 `;
 
@@ -762,7 +796,8 @@ export function parquetMat(opts = {}) {
     panels: 4.0, wear: 0.6, size: 1024, repeat: [1, 1],
     // 0.85 / 0.35 are the constants this shader carried before they were exposed — every
     // existing caller stays byte-identical. See the note at the joint mix in PARQUET_SURFACE.
-    joint: 0.85, jointDark: 0.35, height: 0.035, normal: 1.0, plain: 0.0, bakeDust: 0, ...opts,
+    joint: 0.85, jointDark: 0.35, height: 0.035, normal: 1.0, plain: 0.0, bakeDust: 0,
+    patCon: 1.0, ...opts,
   };
   return baker().standard({
     key: `est-parq:${JSON.stringify(o)}`,
@@ -777,7 +812,7 @@ export function parquetMat(opts = {}) {
     uniforms: {
       uOak: new THREE.Vector3(...o.oak), uOakDark: new THREE.Vector3(...o.oakDark),
       uPanels: o.panels, uWear: o.wear,
-      uJoint: o.joint, uJointDark: o.jointDark, uPlain: o.plain,
+      uJoint: o.joint, uJointDark: o.jointDark, uPlain: o.plain, uPatCon: o.patCon,
     },
   }, {
     clearcoat: 0.35, clearcoatRoughness: 0.28, envMapIntensity: 1.0,
