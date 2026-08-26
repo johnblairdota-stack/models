@@ -1382,8 +1382,44 @@ export function balustrade(bin, o = {}) {
     bin.add(key, g, m, prof ? null : 0.5); g.dispose?.();
   };
   seg(0.10, 0.05, 0.30, K.base);
-  seg(0.11, railH, 0.145, K.rail, new Prof(-0.075, 0).ovolo(0.02, 0.055, 4).to(-0.055, 0.085)
-    .to(0.055, 0.085).ovolo(0.02, -0.055, 4).to(0.075, 0).points);
+  /**
+   * ⚠ THE HANDRAIL IS A MOULDED CAP AND IT USED TO BE A FLAT-TOPPED SLAB, WHICH READS AS PIPE.
+   *
+   * Round 18's `eye.gallery` is the angle that settles this: standing on the musicians' deck,
+   * the rail crosses the bottom third of the frame at about a metre from the eye and is the
+   * CLOSEST OBJECT IN THE SHOT. The old section was 150 mm wide, 85 mm tall, flat on top with a
+   * 20 mm ovolo at each corner — which at that range is one unbroken gold cylinder with a
+   * single highlight running its whole length and nothing anywhere to break it. `critic-eye-
+   * sweep` filed it as "a plain tube" and it was right.
+   *
+   * A real cap has three things this did not:
+   *   · a CROWNED top rather than a flat one, so the highlight is a moving line and not a band
+   *   · a fillet and a bead down each face, so there are two more highlights under the first
+   *   · an UNDERCUT — the cap oversails the fascia, so it throws a hard shadow line along its
+   *     whole length onto the balusters, which is what actually reads as a rail from below
+   *
+   * ⚠ AND THE UNDERCUT IS THE ONE THAT DOES THE WORK, because this rail is seen from ABOVE by
+   * the player standing at it and from BELOW by the player on the floor, and from below a flat
+   * soffit at a grazing angle catches the same light as the face and merges with it. It is also
+   * the cheapest: it is a swept section, so all of this is one extra polyline and no extra draw
+   * call — the rail merges into the gilt bucket either way.
+   *
+   * Both callers are this same house (`views/room-gallery.js` and `world/ballroom-order.js`),
+   * so this is not defaulted-off behind an option: a flat-topped rail was not right in either.
+   */
+  seg(0.11, railH, 0.145, K.rail, new Prof(-0.075, -0.030)
+    .to(-0.075, 0.010)                       // fascia, and the undercut it oversails
+    .ovolo(0.012, 0.012, 3)                  // lower bead
+    .to(-0.063, 0.030)
+    .cavetto(0.010, 0.014, 3)                // cove up to the fillet
+    .to(-0.053, 0.052)                       // fillet
+    .ovolo(0.020, 0.020, 4)                  // ovolo into the crown
+    .curve(0.066, 0.014, 0.033, 0.030, 6)    // the crown itself, a shallow segmental top
+    .ovolo(0.020, -0.020, 4)
+    .to(0.063, 0.030)
+    .cavetto(0.012, -0.020, 3)
+    .to(0.075, 0.010)
+    .to(0.075, -0.030).points);
 
   // balusters as one InstancedMesh
   const bal = lathe([

@@ -2172,6 +2172,50 @@ export default async function view(args = {}) {
       scene.add(sill);
       grimes.push(sill);
     }
+    // ---- AND THE CEILING, WHICH `eye.up` IS THE ANGLE THAT ASKS FOR (round 18, eighth pass)
+    //
+    // The seventeen-angle sweep is the only reason this is here. `eye.up` — head back, which is
+    // where a player's eye goes in a double-height room — is a frame that is about half coffer
+    // soffit, and that soffit was the last large surface in the house with NO history on it at
+    // all: twenty-eight panels of identical clean plaster under a roof that has been leaking
+    // into a shut-up house for a decade. The walls got their patina in round 17 and the floor
+    // got it seven passes ago in this one; the critic re-filed the same complaint one surface
+    // along each time, and this is the last of the three.
+    //
+    // ⚠ IT SITS JUST UNDER THE SOFFIT FACE AND LETS THE BEAMS OCCLUDE IT, WHICH IS WHY IT IS
+    // ONE QUAD AND NOT TWENTY-EIGHT. `cofferedCeiling` puts a flat soffit box at `y + 0.02`
+    // 0.05 thick and drops the beams 0.34 BELOW it. A quad a couple of centimetres under the
+    // soffit face is therefore above every beam's underside, so looking up from the floor the
+    // depth test hits a beam first wherever there is a beam and the quad only wherever there is
+    // a panel. One draw call, correctly cut into the coffer wells by geometry that is already
+    // there.
+    //
+    // ⚠ `macro` IS HIGHER AND `scale` COARSER THAN ANYWHERE ELSE IN THE ROOM. Ceiling staining
+    // is not the even settled film the walls carry — it is a few large water-borne blooms
+    // spreading from wherever the roof let go, so this wants a small number of big soft areas.
+    // The band falloff terms are off (`strength` 0, `corner` 0): a ceiling has no bottom edge
+    // for dirt to run down to, and leaving the corner term in would have drawn a dark border
+    // round the whole ceiling, which is a decal tell rather than a stain.
+    {
+      const C = PLAN.ceiling ?? { y: 9.6, inset: 2.3 };
+      const cw = (R.x1 - R.x0) - (C.inset ?? 2.3);
+      const cd = (R.z1 - R.z0) - (C.inset ?? 2.3);
+      // ⚠ 0.60 AND 4.5 m CELLS, NOT 0.30 AND 7.5. The first pass took the floor's numbers
+      // straight up here and they do not survive the move: 7.5 m cells across an 18 x 9 m
+      // soffit is two and a half macro cells by one, which is not a few big stains, it is ONE
+      // low-frequency wash — the median moved 101.3 -> 96.5 and the picture was unchanged
+      // because a uniform 5% darkening of a uniform surface is still a uniform surface. The
+      // number that matters on this surface is how many DISTINCT areas it resolves into, and
+      // four by two is the fewest that still reads as damage rather than as exposure.
+      const cp = band(cw, cd, SOOT, 0.0, 0, 0.0, 0.60);
+      cp.material.uniforms.uMacroScale.value.set(cw / 4.5, cd / 4.5);
+      cp.rotation.x = Math.PI / 2;
+      cp.position.set(0, (C.y ?? 9.6) - 0.02, 0);
+      cp.renderOrder = 6;
+      cp.name = 'grime';
+      scene.add(cp);
+      grimes.push(cp);
+    }
     engine.onDispose?.(() => grimes.forEach((m) => { m.geometry.dispose(); m.material.dispose(); }));
     engine.grime = grimes;
   }
