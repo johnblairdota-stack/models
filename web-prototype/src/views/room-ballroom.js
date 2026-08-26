@@ -829,7 +829,15 @@ export default async function view(args = {}) {
       // that is a carved grid no matter what colour it is. 8 mm and a third of the normal
       // strength leaves the joints as something you find underfoot rather than something that
       // patterns the room.
-      height: 0.008, normal: 0.34,
+      // ⚠ 0.016 / 0.50 RATHER THAN 0.008 / 0.34, AND THE METRIC IS WHY THE FIRST TRY WENT TOO
+      // FAR. Flattening it hard took `cam=eye.floor`'s bright-region local contrast from 6.72
+      // to 4.05 — the parquet's relief IS most of what a floor-filling frame has to look at,
+      // and removing all of it trades "reads as pattern" for "reads as lino". Half the relief
+      // keeps the joints as something the light catches at a raking angle without carving the
+      // panel grid across the room. Worth stating that `_eye17_clip.mjs`'s `detail` counts the
+      // pattern as detail, so it is exactly the wrong instrument for this one change and was
+      // read here only as a floor, not as a target.
+      height: 0.016, normal: 0.50,
     });
     parquetFloorMat.name = 'ballroom-floor-parquet';
     engine.onDispose?.(() => parquetFloorMat.dispose());
