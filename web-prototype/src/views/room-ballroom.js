@@ -1145,11 +1145,41 @@ export default async function view(args = {}) {
     beadGilt.name = 'ballroom-panel-bead';
     engine.onDispose?.(() => beadGilt.dispose());
   }
+  // ⚠ DECLARED HERE AND NOT AT THE KEY TABLE, WHICH IS 130 LINES DOWN. `const` is in a
+  // temporal dead zone until its declaration runs, so reading it in the material table below
+  // while declaring it beside `K` threw on the first frame and took the whole view down with
+  // it — a boot failure, not a wrong picture. The knob has to exist before the first thing
+  // that reads it, and the material table is that thing.
+  /**
+   * 🚨 **DEFAULTS TO `gilt`, BECAUSE THE EVIDENCE IS GENUINELY MIXED AND THIS IS AN IDENTITY
+   * CALL.** (The long note on what this knob is and how its member was found is at the key
+   * table below.) Shot at all seventeen angles as `stone`:
+   *
+   *   FOR: it looks closer. The entablature reads as pale stone with a dark frieze line rather
+   *   than a broad gold band, so the room reads as stone architecture WITH gold accents, which
+   *   is what the reference is. The chroma gate improves nearly everywhere — `eye.up`
+   *   0.331 -> 0.308, `eye.door` 0.223 -> 0.215 — and deciles 3-4 close (0.63 / 0.49 ->
+   *   0.57 / 0.41), which is the gap the whole search was for.
+   *
+   *   AGAINST: a big pale band where a dark one was raises the median everywhere, and two
+   *   angles leave the 30-60 band doing it — `eye.door` 59.7 -> 68.4 and `eye.corner.sw`
+   *   59.4 -> 62.5. `overlook`'s own median moves 49.5 -> 52.7, i.e. AWAY from the bar's 49.8.
+   *   Deciles 5-8 drop further below the reference, so total ladder error is marginally WORSE
+   *   (1.73 against 1.68) even though the deciles this was aimed at improve. And it costs two
+   *   draw calls, taking the worst angle 296 -> 298 of 300.
+   *
+   * So it trades two median gates and most of the draw-call headroom for a small chroma gain
+   * and a real but arguable compositional one. That is a decision about what this room IS, and
+   * this file's history says those get made on more than one round's evidence — round 14 chose
+   * wood parquet over marble the same way. One query param, with the numbers attached.
+   */
+  const CORNICE = qs.get('cornice') === 'stone' ? 'stone' : 'gilt';
   const M = {
     pil: pilasterStone,
     wall: wallMat,
     mould: beadGilt,
     ...(CAP < 1 ? { cap: capGilt } : {}),
+    ...(CORNICE === 'stone' ? { cornice: stoneDusty } : {}),
     ...(qs.get('keysplit') === '1'
       ? { cornice: mats.gilt, skirt: mats.gilt, trim: mats.gilt }
       : {}),
@@ -1248,6 +1278,32 @@ export default async function view(args = {}) {
   if (qs.get('keysplit') === '1') {
     K.cornice = 'cornice'; K.skirt = 'skirt'; K.trim = 'trim';
   }
+  /**
+   * `?cornice=stone|gilt` — WHAT THE ENTABLATURE IS MADE OF, AND IT IS THE LAST MEASURED GAP.
+   *
+   * 🚨 Round 18 closed the luminance ladder to the reference decile for decile and matched the
+   * chroma at the toe and through deciles 5-8, leaving deciles 2-3 at about 1.7x. Eight global
+   * terms were swept at that and every one merely ROTATED the ladder, because the defect is a
+   * shape. What finally located it was masking the decile range and then SCANNING for its
+   * warmest non-red cells rather than reading rects off a crop by eye — three consecutive
+   * attempts at the latter landed on a pilaster, a chandelier chain and a stack of crates.
+   *
+   * Every warm cell is at the top of the frame, and a raycast at each returns `kit:gilt` at
+   * y 7.8 to 9.5 on the window wall: the cornice, the entablature and the coffer beams. They
+   * are a bright warm albedo sitting in deep shade, so they land in the LOW deciles while
+   * carrying gilt's chroma — which is exactly "red matches, green and blue are low".
+   *
+   * ⚠ AND THE REFERENCE'S IS NOT GILT. Cropped at 2x, the bar's cornice band is PALE STONE with
+   * thin gold enrichment lines run along it; this room's is solid gilding two metres deep. That
+   * is a difference in what the order is MADE OF, and it is the same finding as `eye.up`'s
+   * coffer grid arriving from another direction: this room wears more gold than the bar not in
+   * area (15.5 percent against 24.2) but in which MEMBERS are gold.
+   *
+   * `stone` puts the cornice band on the room's own limestone and leaves the panel beads, the
+   * skirting and the window trim gilt — so the gold goes where the reference keeps it, on the
+   * enrichment, and comes off the mass.
+   */
+  if (CORNICE === 'stone') K.cornice = 'cornice';
 
   // ⚠ `uvWall` 2.4 -> 1.15, AND IT IS A CLOSE-RANGE DEFECT THAT ONLY ONE CAMERA COULD SEE.
   // The boiserie bake carries a craquelure — the cracked paint of old joinery — and at one
