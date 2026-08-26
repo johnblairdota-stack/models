@@ -686,17 +686,33 @@ void surface(in vec2 uv, inout Surf s){
 
   // diagonal lattice inside the frame
   vec2 d = (pf - 0.5) * 1.42;
-  vec2 dr = mix(rot(0.7853981) * d, d, uPlain);
-  vec2 lat = dr * mix(5.0, 2.6, uPlain) * mix(vec2(1.0), vec2(0.30, 1.15), uPlain);
+  // ⚠ THE PLAIN BOND RUNS ON THE CONTINUOUS COORDINATE, NOT INSIDE THE PANEL CELL, AND THAT
+  // IS THE WHOLE DIFFERENCE BETWEEN A PLANK FLOOR AND A MAZE. pf is per-panel, so a bond
+  // built from it RESTARTS at every 0.72 m cell — the courses cannot run past a boundary, the
+  // boundary stays visible, and the closed block outlines either side of it interlock into a
+  // Greek key. Three passes were spent on block size and joint width before the pattern turned
+  // out to be the panel grid still showing through the thing that was meant to replace it.
+  // pp is uv * uPanels and is continuous across the whole floor, so courses run the length
+  // of the room the way boards do.
+  vec2 latPanel = rot(0.7853981) * d * 5.0;
+  vec2 latPlain = pp * vec2(1.10, 4.25);
+  vec2 lat = mix(latPanel, latPlain, uPlain);
   // running bond: every other course offset by half a block, which is what stops a plain
   // floor reading as a grid the moment the frame that was hiding it is gone
   lat.x += floor(lat.y) * 0.5 * uPlain;
   vec2 lc = floor(lat), lf = fract(lat);
-  // ⚠ THE JOINT BAND IS IN LAT-CELL UNITS, so a long thin block gets a proportionally FATTER
-  // line along its length — which is why the first plain build read as brickwork rather than
-  // as a floor. Narrower under uPlain to compensate.
-  float latJoint = 1.0 - smoothstep(0.0, mix(0.055, 0.024, uPlain),
-                                    min(min(lf.x, lf.y), min(1.0 - lf.x, 1.0 - lf.y)));
+  // ⚠ THE JOINT BAND IS IN LAT-CELL UNITS, NOT METRES, AND ON A LONG THIN BLOCK THAT IS THE
+  // WHOLE BUG. One width applied to both axes of a 0.92 x 0.24 m block draws the end joints at
+  // 2.2 cm and the side joints at 0.6 cm — nearly four times apart — and with the running
+  // bond's half-block offset those fat cross-lines interlock into a Greek-key maze. The plain
+  // floor read as brickwork, then as a maze, for this reason alone and not because of block
+  // size, which was the first two things tried. Scaling the x width by the cell's own aspect
+  // makes both joints the same width ON THE FLOOR, which is what a plank floor has.
+  float jx = min(lf.x, 1.0 - lf.x);
+  float jy = min(lf.y, 1.0 - lf.y);
+  float jw = mix(0.055, 0.024, uPlain);
+  float jwx = mix(jw, jw * 0.26, uPlain);
+  float latJoint = max(1.0 - smoothstep(0.0, jwx, jx), 1.0 - smoothstep(0.0, jw, jy));
 
   // pick the stave cell + its local coords
   vec2  sp; float sh;
@@ -706,7 +722,9 @@ void surface(in vec2 uv, inout Surf s){
     sh = hash12(pc * 4.0 + side * 17.0 + 1.0);
   } else {
     sp = lf * vec2(1.0, 3.0);
-    sh = hash12(lc + pc * 13.0 + 5.0);
+    // under uPlain the stave hash must NOT carry pc, or every board changes tone as it
+    // crosses a panel boundary that is no longer supposed to exist
+    sh = hash12(lc + mix(pc * 13.0, vec2(0.0), uPlain) + 5.0);
   }
 
   float g = staveGrain(sp, sh);

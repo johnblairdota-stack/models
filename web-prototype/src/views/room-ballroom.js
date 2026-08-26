@@ -188,13 +188,11 @@ export default async function view(args = {}) {
   /**
    * `?floorpattern=panel|plain` — WHICH WAY THE OAK IS LAID, AND THE DEFAULT CHANGED.
    *
-   * 🚨 **JOHN: THIS IS THE ONE CHANGE IN ROUND 17 YOU MAY WANT TO PUT BACK, AND IT IS ONE
-   * QUERY PARAM.** `?floorpattern=panel` restores the Versailles panel this room has had since
-   * round 14. It is flagged this loudly because it is the only change in the round that is a
-   * matter of taste rather than a defect, and because it was put to you and the round carried
-   * on before you answered.
+   * 🚨 **THE DEFAULT FLIPPED TO `plain` DURING ROUND 17 AND THEN FLIPPED BACK. IT IS THE PANEL.**
+   * `?floorpattern=plain` is the ablation and it is worth keeping, because the reasoning for
+   * trying it was sound and the next person will have it again.
    *
-   * Why it flipped anyway: with the daylight matched to the bar (sun-patch chroma 35.8 against
+   * Why it was tried: with the daylight matched to the bar (sun-patch chroma 35.8 against
    * its 35.9) the last thing a blind pair turned on was that the reference's floor reads as a
    * TONE and this one read as PATTERN — a 0.7 m panel cell with a 5 x 5 diamond lattice inside
    * every one of them, across the largest surface in every frame. Everything that could be
@@ -208,14 +206,28 @@ export default async function view(args = {}) {
    * two cannot both be had from a panelled floor, which is exactly why the reference does not
    * have one: it gets realistic pieces AND a calm floor by laying the same oak plain.
    *
-   * ⚠ THIS IS NOT A REVERSAL OF ROUND 14. That round chose WOOD PARQUET over an edge-to-edge
-   * marble chequer, against this same bar, and that choice stands untouched — the floor is
-   * still parquet with a chequer border. What was never measured against the bar is the
-   * pattern laid INTO the parquet, because nobody had matched the daylight yet and the floor's
-   * colour was the louder problem. This finishes the job round 14 started rather than undoing
-   * it.
+   * 🚨 **AND WHY IT WENT BACK: THE PLAIN BOND NEVER CONVERGED.** Four passes, each one fixing a
+   * real defect in it and each one revealing the next:
+   *
+   *   1. block size — read as brickwork
+   *   2. joint width — the band is in lat-cell units, so a 0.92 x 0.24 m block got end joints
+   *      four times fatter than its side joints; scaled by the cell aspect
+   *   3. the bond was built from `pf`, which is PER-PANEL, so the courses restarted every
+   *      0.72 m and the panel boundary it was meant to replace was still drawing itself;
+   *      moved to the continuous `pp`
+   *   4. and it still comes back as a field of rounded rectangles rather than as boards
+   *
+   * Each fix was correct and the thing still does not read as a plank floor. A pattern that
+   * needs five corrections and is not converging is a worse bet than a coherent one that is
+   * already solved, and the panel — with its joints softened (85% -> 44% toward black) and its
+   * relief more than halved (35 mm -> 16 mm) — is coherent and solved. Those two fixes were the
+   * real wins of this thread and they are unaffected by which bond is used.
+   *
+   * ⚠ SO THE OPEN COMPLAINT STANDS: this floor reads as more patterned than the reference's,
+   * and closing it properly means a floor surface built to be plain rather than a panel
+   * surface talked out of being one. That is a piece of work, not a parameter.
    */
-  const FLOOR_PLAIN = qs.get('floorpattern') === 'panel' ? 0.0 : 1.0;
+  const FLOOR_PLAIN = qs.get('floorpattern') === 'plain' ? 1.0 : 0.0;
   // `?eograze=N` — the ablation for round 17's grazing-lobe widening. 0 restores the pre-r17
   // mirror on BOTH the floor and the end plates; 1 is the shipping physical coefficient. See
   // the long note above `planarEnvmapChunk`'s LOD block for what it does and why it is not a
@@ -1946,6 +1958,32 @@ export default async function view(args = {}) {
       scene.add(m);
       grimes.push(m);
     };
+    // ---- AND THE FLOOR, WHICH IS THE LARGEST SURFACE IN EVERY FRAME (round 17, seventh pass)
+    //
+    // The wall patina closed the "only one detail frequency" complaint on the WALLS and the
+    // critic immediately re-filed the same failure one surface along: the reference carries
+    // metre-scale history on its FLOOR too — puddled tonal variation, areas that were mopped
+    // and areas that were not — and this floor was perfectly even everywhere the light was.
+    // It is the same shader laid flat, and on 21 x 11 m it is the single biggest thing left
+    // that a blind pair was turning on.
+    //
+    // ⚠ renderOrder 6, BELOW THE WALL PATINA (7) AND THE POOLS (9/10). It multiplies the floor
+    // AND the planar reflection in it, which is correct — a stain on a polished floor dims what
+    // the floor is reflecting, it does not sit on top of the reflection like a decal.
+    //
+    // ⚠ AND `scale` IS LARGER HERE THAN ON THE WALLS. 3.2 m cells across a 21 m floor seen at a
+    // grazing angle come out as a fine mottle that reads as noise; a floor's staining is a few
+    // big areas, not many small ones.
+    {
+      const fp = band((R.x1 - R.x0) + 2, (R.z1 - R.z0) + 2, SOOT, 0.0, 0, 0.0, 0.20);
+      fp.material.uniforms.uMacroScale.value.set(((R.x1 - R.x0) + 2) / 6.5, ((R.z1 - R.z0) + 2) / 6.5);
+      fp.rotation.x = -Math.PI / 2;
+      fp.position.set(0, 0.02, 0);
+      fp.renderOrder = 6;
+      fp.name = 'grime';
+      scene.add(fp);
+      grimes.push(fp);
+    }
     patina(R.z1 - R.z0, R.x0 + 0.06, 0, Math.PI / 2);
     patina(R.z1 - R.z0, R.x1 - 0.06, 0, -Math.PI / 2);
     patina(R.x1 - R.x0, 0, R.z0 + 0.06, 0);
