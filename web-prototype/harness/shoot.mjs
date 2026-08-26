@@ -634,7 +634,14 @@ export const ErrorOverlay = class {};
 
     record.ok = true;
     log(`  ok  ${id.padEnd(18)} -> ${displayPath(outPath, ROOT)}` +
-      (record.sim ? `\n        sim t=${record.sim.elapsed.toFixed(4)}s frame ${record.sim.frame}` : '') +
+      // ⚠ GUARD ON THE FIELD, NOT ON THE OBJECT. A DOM-only view — `party.host`, `party.phone` —
+      // has a `__rrr` and therefore a `simState()`, but no simulation, so this comes back as an
+      // object with no `elapsed` in it. Testing the object passed, the `.toFixed` threw, and the
+      // throw was caught upstream and reported as "FAIL party.host: Cannot read properties of
+      // undefined" — a harness bug wearing the costume of a broken view. That is the same class
+      // of misleading tool this round has spent itself finding: a boot probe confirmed the view
+      // renders perfectly.
+      (record.sim?.elapsed != null ? `\n        sim t=${record.sim.elapsed.toFixed(4)}s frame ${record.sim.frame}` : '') +
       (record.perf ? `\n        ${record.perf.fps} fps (p95 ${record.perf.worstFps})  frame ${record.perf.frameMs}ms` +
         `  cpu ${record.perf.cpuMs}${record.perf.gpuMs != null ? `  gpu ${record.perf.gpuMs}/${BUDGET.gpuMs.toFixed(2)}ms` : ''}` +
         `  ${record.perf.calls} calls  ${(record.perf.tris / 1000) | 0}k tris  scale ${record.perf.renderScale}` +

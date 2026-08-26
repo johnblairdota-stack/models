@@ -22,6 +22,23 @@ export const FOLLOW_BEATS = ['expedition'];
 /** Closed allow-list — what the TV may SEND. A param not on this list is a violation, not a pass. */
 export const FOLLOW_KEYS = [
   'view', 'room', 'runner', 'name', 'shell', 'accent', 'seed', 'throttle', 'tag', 'warm',
+  /**
+   * 🆕 `capture` — THE HARNESS'S OWN FLAG, AND WITHOUT IT THIS VIEW CANNOT BE PHOTOGRAPHED.
+   *
+   * This list is a closed door and the note below says why: a `flyover=1` that slipped through
+   * would be a silent guide-map leak on the one screen everybody is looking at. `capture` is
+   * not that kind of param. `shoot.mjs` sets it on every view it takes, it turns off the rAF
+   * cap and the input handlers and nothing else, and it names no room, no runner and no
+   * coordinate — so admitting it widens the door by exactly nothing a guide could read.
+   *
+   * What refusing it costs is the whole reason round 18 exists. That round found this project's
+   * ballroom had been judged for four rounds from ONE camera, and separately that the PLAYABLE
+   * copy of it had never been photographed at all until `?spawn=` was added — "a capture of the
+   * gallery renders fine, so a change to the ballroom comes back as a byte-identical image and
+   * reads as 'no effect' rather than as 'not in shot'". The TV's warm slot is the same gap
+   * again: it is the screen the whole room watches all night, and it could not be looked at.
+   */
+  'capture',
 ];
 
 /**
@@ -46,7 +63,7 @@ export const FOLLOW_KEYS = [
  * (`FOLLOW_BEATS.length === 1`) red, and it would also mean the lobby slot carried a runner field
  * it has no business having. Separate function, separate key list, same forbidden list.
  */
-export const WARM_KEYS = ['view', 'room', 'seed', 'warm'];
+export const WARM_KEYS = ['view', 'room', 'seed', 'warm', 'capture'];
 
 /**
  * ⚠️ **INSTRUMENTS — what a developer may TYPE, and a separate list on purpose.**
