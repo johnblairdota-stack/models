@@ -98,7 +98,7 @@ export const GRADE_PRESETS = {
     halation: 0.0, halationTint: [1, 0.4, 0.2],
     ca: 0.0, vignette: 0.14, vignetteRound: 0.9, grain: 0.0, grainSize: 1.0,
     lift: [0, 0, 0], gamma: [1, 1, 1], gain: [1, 1, 1],
-    saturation: 1.0, contrast: 1.0,
+    saturation: 1.0, contrast: 1.0, toneChroma: 0,
     shadowTint: [1, 1, 1], highlightTint: [1, 1, 1], splitBalance: 0.0, toeCrush: 0.0,
     haze: 0.0, hazeColor: [0, 0, 0],
     sharpen: 0.35,
@@ -277,6 +277,9 @@ export class Pipeline {
       uGamma: { value: new THREE.Vector3(1, 1, 1) },
       uGain: { value: new THREE.Vector3(1, 1, 1) },
       uSaturation: { value: 1 },
+      // 0 is plain ACES and is what every grade gets unless it says otherwise — see the
+      // tonemap block in shaders.js for what this is and which round needed it.
+      uToneChroma: { value: 0 },
       uContrast: { value: 1 },
       uShadowTint: { value: new THREE.Vector3(1, 1, 1) },
       uHighlightTint: { value: new THREE.Vector3(1, 1, 1) },
@@ -425,6 +428,7 @@ export class Pipeline {
     u.uGamma.value.fromArray(g.gamma);
     u.uGain.value.fromArray(g.gain);
     u.uSaturation.value = g.saturation;
+    u.uToneChroma.value = g.toneChroma ?? 0;
     u.uContrast.value = g.contrast;
     u.uShadowTint.value.fromArray(g.shadowTint);
     u.uHighlightTint.value.fromArray(g.highlightTint);

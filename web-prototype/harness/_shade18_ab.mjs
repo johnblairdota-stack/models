@@ -179,7 +179,7 @@ for (const spec of SPECS) {
       const g = window.__rrr.engine.pipeline.grade;
       window.__gbase = {
         saturation: g.saturation, contrast: g.contrast, toeCrush: g.toeCrush, haze: g.haze,
-        grain: g.grain, splitBalance: g.splitBalance,
+        grain: g.grain, splitBalance: g.splitBalance, toneChroma: g.toneChroma ?? 0,
         shadowTint: [...g.shadowTint], highlightTint: [...g.highlightTint],
         hazeColor: [...g.hazeColor], lift: [...g.lift],
       };
@@ -217,6 +217,9 @@ for (const spec of SPECS) {
     // at 0.026 is a candidate for most of that, and if it is, the floor's own pattern is
     // already at the bar and the remaining complaint is about the grade instead.
     if (v.grain != null) gp.grain = v.grain;
+    // `tc` — the tonemapper's chroma-recovery term, and the only knob tried in this round that
+    // is shaped like a SLOPE rather than an offset. Everything else rotates the ladder.
+    if (v.tc != null) gp.toneChroma = v.tc;
     // `aoR` / `aoI` — the ambient-occlusion radius and strength, which is the one lever this
     // round has repeatedly called "a lighting answer" for the floor's missing room-scale
     // variation and never actually pulled. The bar's floor carries broad soft darkening around

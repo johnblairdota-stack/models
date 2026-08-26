@@ -255,6 +255,7 @@ uniform vec3  uLift;
 uniform vec3  uGamma;
 uniform vec3  uGain;
 uniform float uSaturation;
+uniform float uToneChroma;   // 0 = plain ACES - see the tonemap block below
 uniform float uContrast;
 uniform vec3  uShadowTint;
 uniform vec3  uHighlightTint;
@@ -338,7 +339,39 @@ void main(){
   col *= uExposure;
 
   // ---- tonemap ----
+  /**
+   * ---- TONEMAP, AND A CHROMA-RECOVERY TERM ON TOP OF IT ---------------------------------
+   *
+   * ⚠ **uToneChroma DEFAULTS TO 0 AND AT 0 THIS IS EXACTLY acesFitted(col).** Every piece
+   * in this project shares this pass, so the term is authored to be a literal no-op unless a
+   * grade asks for it.
+   *
+   * WHY IT EXISTS. room.ballroom's round 18 matched the reference's LUMINANCE ladder decile
+   * for decile and could not match the shape of its CHROMA ladder. The bar's chroma is nearly
+   * FLAT from decile 2 to decile 9 (0.40 down to 0.34); this room's RAMPS (0.90 down to 0.10).
+   * Ten global terms were swept at that — the bounce fills, the sun, the environment's candle
+   * boxes and its ambient, the toe, the haze, the split tone, the drape, the cornice — and
+   * every one of them ROTATES the ladder, because a global multiply or tint cannot change a
+   * slope. Deciles 2-3 sit above the bar and 5-8 now sit below it, so pulling either end
+   * further costs the other.
+   *
+   * The slope has a cause, and it is here. ACES is fitted in a colour space where increasing
+   * luminance pulls the result toward the white point, so it desaturates highlights hard — and
+   * nothing downstream puts any of it back. That is a property of the TONEMAPPER, not of any
+   * light or material in the room, which is why nothing in the room could fix it.
+   *
+   * WHAT THIS DOES. Tonemap the LUMINANCE and keep the input's chroma ratio, then blend that
+   * against plain ACES. At 1.0 the hue and saturation of the scene survive tonemapping intact,
+   * which is garish on real highlights; the useful range is small.
+   */
+  vec3 preTone = col;
   col = acesFitted(col);
+  if (uToneChroma > 0.0) {
+    float pl = max(lumaW(preTone), 1e-4);
+    // the scene's own colour, rescaled to the luminance the tonemapper chose for it
+    vec3 keepChroma = clamp(preTone * (lumaW(col) / pl), 0.0, 1.0);
+    col = mix(col, keepChroma, uToneChroma);
+  }
 
   // ---- grade ----
   float L = lumaW(col);

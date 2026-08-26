@@ -543,6 +543,58 @@ export const GRADES = {
     halation: 0.042,
     vignette: 0.17, vignetteRound: 0.94,
     contrast: 1.06, saturation: 1.02,
+    /**
+     * ---- ROUND 18: THE ONLY KNOB IN THE ROUND SHAPED LIKE A SLOPE ------------------------
+     *
+     * This room matched the reference's LUMINANCE ladder decile for decile and could not match
+     * the SHAPE of its chroma ladder. The bar's chroma is nearly flat from decile 2 to 9 (0.40
+     * down to 0.34); this room's ramped (1.03 down to 0.00). Ten global terms were swept at it —
+     * the three bounce fills, the sun colour, the environment's candle boxes and its ambient,
+     * the toe, the haze colour, the split tone, the drape, the cornice — and every one of them
+     * ROTATED the ladder, because a global multiply or tint cannot change a slope. Deciles 2-3
+     * sat above the bar and 5-8 below it, so pulling either end further cost the other.
+     *
+     * The slope's cause is the TONEMAPPER: ACES is fitted in a space where rising luminance
+     * pulls toward the white point, so it desaturates highlights hard and nothing downstream
+     * puts any back. Nothing in the room could ever have fixed it. `uToneChroma` (see the
+     * tonemap block in post/shaders.js) tonemaps the LUMINANCE and keeps the scene's own chroma
+     * ratio, blended against plain ACES; it defaults to 0 everywhere so no other piece moves.
+     *
+     *     toneChroma      d1     d2     d3     d4     d5     d6     d7     d8     d9    d10
+     *     bar            0.79   0.40   0.38   0.40   0.36   0.36   0.34   0.33   0.34   0.09
+     *     0.00           1.03   0.90   0.57   0.40   0.25   0.22   0.24   0.24   0.10   0.00
+     *     0.45           0.90   0.80   0.52   0.36   0.23   0.21   0.24   0.24   0.11   0.05
+     *     0.85           0.78   0.72   0.46   0.33   0.22   0.20   0.24   0.24   0.12   0.10
+     *
+     * ⚠ 0.85 LANDS BOTH ENDS EXACTLY AND IS NOT WHAT SHIPS. It takes the sun patches visibly
+     * yellow and the shaded floor toward teal — the ladder is a summary, and a summary can be
+     * satisfied by a picture that is worse.
+     *
+     * 🚨🚨 **AND 0.45 DOES NOT SHIP EITHER, FOR THE THIRD TIME IN THIS ROUND AND FOR THE SAME
+     * REASON. IT WAS JUDGED AT ONE CAMERA AND IT IS SPENT AT SEVENTEEN.**
+     *
+     *     angle          toneChroma 0 -> 0.45
+     *     overlook          0.005 -> 0.042
+     *     eye.win           0.071 -> 0.232   PASS -> FAIL
+     *     eye.mirror        0.135 -> 0.335   PASS -> FAIL
+     *     eye.door          0.208 -> 0.382
+     *     eye.up            0.309 -> 0.466
+     *
+     * Of course it does: the term puts saturation BACK into highlights, and the chroma gate is
+     * a measurement OF the highlights. At `overlook` the top decile is blown window glare,
+     * which is neutral and has no chroma to restore; everywhere else it is sunlit oak and
+     * gilding, which have plenty. The one framing where this looks free is the one framing
+     * whose top decile is not made of the thing being changed — the SAME blind spot that let
+     * the gate pass this room for four rounds in the first place.
+     *
+     * ⚠ SO THE TERM STAYS IN THE PIPELINE AT 0 AND THE FINDING STANDS: the ramp is the
+     * tonemapper, nothing in the room can flatten it, and flattening it here costs more at
+     * sixteen cameras than it wins at one. Closing this properly means a tonemap whose highlight
+     * desaturation is a function of what is IN the highlight, not a global blend between two
+     * curves. That is a piece of colour science rather than a knob, and it belongs in a round of
+     * its own with every piece in the project re-shot.
+     */
+    toneChroma: 0.0,
     // toeCrush 0 and a small lift, because the rebalance put 6.0% of the frame at L <= 2.6 and
     // the locked art holds 0.1%. Crushed black is a render tell in its own right and it was
     // about to be bought with the macro win.
