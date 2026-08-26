@@ -1151,9 +1151,9 @@ export default async function view(args = {}) {
   // it — a boot failure, not a wrong picture. The knob has to exist before the first thing
   // that reads it, and the material table is that thing.
   /**
-   * 🚨 **DEFAULTS TO `gilt`, BECAUSE THE EVIDENCE IS GENUINELY MIXED AND THIS IS AN IDENTITY
-   * CALL.** (The long note on what this knob is and how its member was found is at the key
-   * table below.) Shot at all seventeen angles as `stone`:
+   * 🚨 **IT SHIPS AS `stone`, AND THE "TRADE" THAT NEARLY KEPT IT OFF WAS AN ARTEFACT OF
+   * TREATING STONE AS A BINARY.** (The long note on what this knob is and how its member was
+   * found is at the key table below.) The first pass shipped it OFF on these numbers:
    *
    *   FOR: it looks closer. The entablature reads as pale stone with a dark frieze line rather
    *   than a broad gold band, so the room reads as stone architecture WITH gold accents, which
@@ -1168,18 +1168,60 @@ export default async function view(args = {}) {
    *   (1.73 against 1.68) even though the deciles this was aimed at improve. And it costs two
    *   draw calls, taking the worst angle 296 -> 298 of 300.
    *
-   * So it trades two median gates and most of the draw-call headroom for a small chroma gain
-   * and a real but arguable compositional one. That is a decision about what this room IS, and
-   * this file's history says those get made on more than one round's evidence — round 14 chose
-   * wood parquet over marble the same way. One query param, with the numbers attached.
+   * ⚠ **AND EVERY ONE OF THOSE COSTS WAS THE VALUE, NOT THE MATERIAL.** `stoneDusty` is simply
+   * BRIGHTER than the gilding it replaced, over a band two metres deep — that is the whole
+   * reason the medians moved. The reference has a pale cornice AND a median of 49.8, so the two
+   * were never in conflict for it and are not here. What was wanted from stone is its
+   * NEUTRALITY. `?cornval` multiplies it down to the luminance the gilt band was already
+   * carrying, and at 0.58 the costs go away and the gains stay:
+   *
+   *     angle             median (gilt -> stone 0.58)   chroma (gilt -> stone)
+   *     overlook              49.5 -> 49.4   (bar 49.8)     0.003 -> 0.002
+   *     eye.door              59.7 -> 58.3                  0.223 -> 0.217
+   *     eye.corner.sw         59.4 -> 59.0                  -0.043 -> -0.045
+   *     eye.up                89.8 -> 89.0                  0.331 -> 0.322
+   *
+   * Deciles 2-4 close from 0.94 / 0.63 / 0.49 to 0.90 / 0.57 / 0.39, with decile 4 landing on
+   * the bar's 0.40 exactly — which is the gap this whole search was for.
+   *
+   * ⚠ WHAT IT STILL COSTS, AND IT IS REAL: two draw calls, taking the worst angle 296 -> 298 of
+   * 300, so the headroom is nearly gone; and deciles 5-8 drop further below the reference,
+   * because taking a large warm surface out of the midtones makes them less chromatic and they
+   * were already under. The first is a budget fact and the second is the ROOM'S OWN SHAPE
+   * problem — its chroma ramps where the bar's is flat — which no single member causes.
+   *
+   * ⚠ AND THE LESSON IS THE ONE THIS ROUND KEEPS RE-LEARNING: a change that looks like a trade
+   * is usually two changes bundled together. "Stone instead of gilt" bundled a HUE change with
+   * a VALUE change, and only the hue was wanted. Separate them before pricing the trade.
    */
-  const CORNICE = qs.get('cornice') === 'stone' ? 'stone' : 'gilt';
+  const CORNICE = qs.get('cornice') === 'gilt' ? 'gilt' : 'stone';
+  /**
+   * `?cornval=N` — AND THE STONE CORNICE'S VALUE, WHICH IS WHAT MAKES THE TRADE GO AWAY.
+   *
+   * The note above priced `stone` as a trade: it wins the chroma and costs two median gates.
+   * That framing was wrong, and treating "stone" as a BINARY is why. The median rose for one
+   * reason only — `stoneDusty` at [0.545, 0.540, 0.520] is simply BRIGHTER than the gilding it
+   * replaced, over a band two metres deep — and the reference has a pale cornice AND a median
+   * of 49.8, so the two are not in conflict for it and need not be here.
+   *
+   * What was wanted from `stone` is its NEUTRALITY, not its brightness. Multiplying it down to
+   * the luminance the gilt band was already carrying keeps the chroma win and gives the median
+   * back. Multiplies in LINEAR, like every other colour multiplier in this file.
+   */
+  const CORNVAL = qs.has('cornval')
+    ? Math.max(0.2, Math.min(1.5, Number(qs.get('cornval')) || 1)) : 0.58;
+  const corniceMat = CORNICE === 'stone' ? stoneDusty.clone() : null;
+  if (corniceMat) {
+    corniceMat.color = new THREE.Color(CORNVAL, CORNVAL, CORNVAL);
+    corniceMat.name = 'ballroom-cornice-stone';
+    engine.onDispose?.(() => corniceMat.dispose());
+  }
   const M = {
     pil: pilasterStone,
     wall: wallMat,
     mould: beadGilt,
     ...(CAP < 1 ? { cap: capGilt } : {}),
-    ...(CORNICE === 'stone' ? { cornice: stoneDusty } : {}),
+    ...(corniceMat ? { cornice: corniceMat } : {}),
     ...(qs.get('keysplit') === '1'
       ? { cornice: mats.gilt, skirt: mats.gilt, trim: mats.gilt }
       : {}),
