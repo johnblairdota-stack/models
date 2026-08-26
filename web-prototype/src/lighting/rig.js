@@ -123,6 +123,8 @@ export function studyEnv(renderer) {
 /** Preset: a double-height ballroom with a whole wall of windows. */
 export function ballroomEnv(renderer, o = {}) {
   const CG = o.candleGlow ?? 1.0;
+  const AS = o.ambientScale ?? 1.0;
+  const AT = o.ambientTint ?? [1, 1, 1];
   return roomEnv(renderer, {
     // ⚠ `key` CARRIES THE OPTIONS OR THE BAKER HANDS BACK THE WRONG SHELL. `roomEnv` caches by
     // key, and `prop.chandelier` shares this preset — so a ballroom-only variant that reused
@@ -142,7 +144,21 @@ export function ballroomEnv(renderer, o = {}) {
     // It also goes decisively WARMER at the same time. The old shell was r/b 0.65 — a blue
     // ambient in a room whose light sources are candles — and prop.chandelier, which shares
     // this preset, spent three rounds with an amber top decile sitting on a blue floor.
-    ambient: [0.148, 0.152, 0.166],
+    /**
+     * ⚠ `ambient` IS THE ONLY TERM IN THIS SHELL THAT REACHES A SURFACE FACING NOWHERE, which
+     * makes it the one that owns the very bottom of the ladder. The five boxes below are all
+     * DIRECTIONAL — a surface has to face one to get any of it — so in the deepest shade, where
+     * a fragment faces none of them, this is nearly all the light there is.
+     *
+     * Round 18's last open gap is deciles 2-3 with the RED MATCHING the bar and green and blue
+     * both low, after the albedos, the fills, the sun, the toe, the haze and the drape have all
+     * been corrected. A term that is slightly blue and lands hardest where nothing else lands
+     * is the shape of that gap.
+     *
+     * `ambientScale` and `ambientTint` let the ballroom move it without touching
+     * `prop.chandelier`, which shares this preset. Both default to no-ops.
+     */
+    ambient: [0.148 * AS * AT[0], 0.152 * AS * AT[1], 0.166 * AS * AT[2]],
     boxes: [
       { size: [0.3, 7.0, 16.0], pos: [-11.5, 3.0, 0.0], color: [2.60, 2.72, 2.95] },   // window wall, daylight
       /**

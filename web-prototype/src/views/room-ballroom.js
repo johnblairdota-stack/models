@@ -692,6 +692,17 @@ export default async function view(args = {}) {
    * in ABSOLUTE r-b is 9.0 against 11.9 — a third more, not nearly double. The gap is real at
    * decile 3 and overstated at decile 1.
    */
+  /**
+   * `?amb=N&ambtint=cool|flat` — THE SHELL'S UNIFORM TERM, WHICH IS THE LAST THING IN THE ROOM
+   * NOBODY HAS MOVED.
+   *
+   * Every other box in `ballroomEnv` is DIRECTIONAL: a surface has to face it to get any of it.
+   * `ambient` is the only term that reaches a fragment facing none of them, so it owns the very
+   * bottom of the ladder — and the bottom of the ladder is round 18's last open gap, deciles
+   * 2-3 running about 1.7x the bar with the RED MATCHING and green and blue both low.
+   */
+  const AMB = qs.has('amb') ? Math.max(0.5, Math.min(3, Number(qs.get('amb')) || 1)) : 1.0;
+  const AMBT = qs.get('ambtint') === 'cool' ? 'cool' : 'flat';
   const CANDLE = qs.has('candle')
     ? Math.max(0, Math.min(2, Number(qs.get('candle')) || 0)) : 1.0;
   scene.environment = ballroomEnv(renderer, {
@@ -701,8 +712,10 @@ export default async function view(args = {}) {
      * function's own header documents for `bounceTint`, and the same one `bakeDust` documents
      * in the baker. `-r18` because the value below changes what this key means.
      */
-    key: `ballroom2-r18-cg${CANDLE}`, bounceTint: [1.075, 1.085, 1.075],
+    key: `ballroom2-r18-cg${CANDLE}-a${AMB}-${AMBT}`, bounceTint: [1.075, 1.085, 1.075],
     candleGlow: CANDLE,
+    ambientScale: AMB,
+    ambientTint: AMBT === 'cool' ? [0.86, 1.00, 1.20] : [1, 1, 1],
   });
   scene.environmentIntensity = LIGHTS.env;
   scene.background = new THREE.Color(0x05070c);
