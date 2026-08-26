@@ -522,6 +522,22 @@ export default async function view(args = {}) {
     // player gets on walking in from the +x end.
     'eye.under': { pos: [11.6, 1.65, 5.4], target: [11.2, 2.4, -8.0], fov: 66 },
     'eye.back': { pos: [12.2, 1.65, 0], target: [-13.0, 3.0, 0], fov: 70 },
+
+    // — and the five that finish the coverage —
+    // `eye.corner` above is ONE of four corners. A room is not symmetric to a player: this one
+    // has windows on one long side and a gallery over the other, so each corner looks at a
+    // different pair of walls and each is a different picture. All three of the others.
+    'eye.corner.ne': { pos: [-11.5, 1.65, -6.8], target: [11.0, 2.8, 7.0], fov: 66 },
+    'eye.corner.se': { pos: [11.5, 1.65, -6.8], target: [-11.0, 2.8, 7.0], fov: 66 },
+    'eye.corner.sw': { pos: [11.5, 1.65, 6.8], target: [-11.0, 2.8, -7.0], fov: 66 },
+    // Standing INSIDE the vestibule looking back in — the arch is a way through, so a player
+    // stands on both sides of it, and the room framed by its own opening is a shot this piece
+    // has never taken.
+    'eye.vest': { pos: [0, 1.65, -10.4], target: [0, 2.6, 8.0], fov: 66 },
+    // And looking down at your own feet, which is where a player's eye goes whenever they are
+    // not going anywhere. Nothing had ever photographed this floor from directly above it at
+    // standing height.
+    'eye.down': { pos: [-2.0, 1.65, 2.0], target: [-2.6, 0, 0.4], fov: 60 },
   };
   const CAM = CAM_DEFS[qs.get('cam')] ? qs.get('cam') : 'overlook';
   const CAM_DEF = CAM_DEFS[CAM];

@@ -3599,7 +3599,7 @@ function binMaterials(m, sp = null) {
   if (BR) {
     return {
       wall: BR.wall,
-      floor: m.floor,
+      floor: BR.floor ?? m.floor,
       ceiling: BR.ceil,
       mould: BR.stone,
       skirt: BR.stone,
@@ -3854,6 +3854,32 @@ async function loadEstateSurfaces(L) {
          * brightness from the rooms either side of it.
          */
         wall: L.boiserieMat({ paint: [0.330, 0.302, 0.262], grime: 0.85, size: 1024 }),
+        /**
+         * 🆕 **ITS OWN PARQUET BAKE, CARRYING THE SHOWCASE'S ROUND-17 PATTERN SOLVE** — and
+         * carrying ONLY the pattern half of it, which is the whole point of this entry.
+         *
+         * `room.ballroom`'s round 17 found two things about this surface that are properties of
+         * the JOINERY and not of the light it is under. The board joints were mixing 85% toward
+         * 35% of `oakDark`, i.e. very nearly black; and `heightScale` was 0.035 with
+         * `normalStrength` 1.0, which is thirty-five millimetres of relief on a floor, so the
+         * normal map carved every panel border and every diamond into a groove you could see
+         * the shading of. On the 21 x 11 m field that draws a legible grid across the largest
+         * surface in the frame, and against the piece's own bar — whose floor is also parquet —
+         * it is the difference between reading as a floor and reading as patterned wallpaper.
+         * Neither of those is a function of how the room is lit, so both port straight over.
+         *
+         * ⚠️ **THE ALBEDO DELIBERATELY DOES NOT PORT.** The showcase also re-solved `oak` and
+         * `oakDark` in the same round, and those numbers were matched against a reference patch
+         * under ITS key — one 1150 W spot through five windows. This room is lit by five
+         * practicals and its whole palette sits a tier darker; `m.floor`'s own values are the
+         * measured landing point for that, exactly as `wall` above is 0.330 rather than the
+         * showcase's 0.560. Taking the showcase's albedo here would repeat the mistake that
+         * note exists to prevent. If this floor's level is ever judged wrong, it wants its own
+         * solve against this room's lights, not a copy of someone else's.
+         */
+        floor: L.parquetMat({
+          size: 1024, joint: 0.44, jointDark: 0.62, height: 0.016, normal: 0.50,
+        }),
         // the showcase's own gilding, unchanged — it is already solved through the tone curve
         gilt: mats.gilt,
         stone: mats.stone,
