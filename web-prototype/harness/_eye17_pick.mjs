@@ -14,7 +14,11 @@ if (!(await portOpen(PORT))) { console.error('vite not running on 5178'); proces
 const browser = await chromium.launch({ args: ['--use-angle=d3d11', '--ignore-gpu-blocklist', '--force-device-scale-factor=1', '--hide-scrollbars'] });
 const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
 await page.routeWebSocket((u) => u.hostname === '127.0.0.1' && u.port === String(PORT), () => {});
-await page.goto(`http://127.0.0.1:${PORT}/?view=room.ballroom&capture=1&cam=${CAM}`, { waitUntil: 'load', timeout: 60000 });
+// `--keysplit` boots the view with every gilt sub-key in its own bin bucket, so the answer to
+// "which gilt is that" is a name rather than the word "gilt" — see the note at `?keysplit=` in
+// the view. Costs three draw calls and is a diagnostic only.
+const KS = argv.includes('--keysplit') ? '&keysplit=1' : '';
+await page.goto(`http://127.0.0.1:${PORT}/?view=room.ballroom&capture=1&cam=${CAM}${KS}`, { waitUntil: 'load', timeout: 60000 });
 await page.waitForFunction(() => document.body.dataset.rrrReady === '1' || document.body.dataset.rrrError === '1', null, { timeout: 600000 });
 await page.evaluate((n) => window.__rrr.settle(n), 12);
 const out = await page.evaluate(async (pts) => {

@@ -976,9 +976,60 @@ export default async function view(args = {}) {
   pilasterStone.color = new THREE.Color(0x8f887c);
   pilasterStone.name = 'ballroom-pilaster-shaft';
   engine.onDispose?.(() => pilasterStone.dispose());
+  /**
+   * `?bead=N` — THE PANEL BEADS' OWN TONE, SPLIT OUT OF THE GILT BUCKET.
+   *
+   * 🚨 **THE UPPER WALL'S DOTTED BRIGHT LINES ARE NOT AN ALIASING BUG, AND THE PROBE THAT
+   * SETTLED THAT IS WORTH KEEPING.** Round 18 diagnosed them as sub-pixel geometric aliasing on
+   * the gilt panel beads and filed the fix as structural — thicker beads or multi-sample AA in
+   * the shared pipeline. MSAA was then actually tried (`samples: 4` on the scene target, which
+   * three r180 resolves alongside its depth texture, so the AO and the soft particles survive
+   * it) and it made the frame WORSE: the beads became CONTINUOUS bright scratches instead of
+   * broken ones. Reverted.
+   *
+   * That is the answer, just not the expected one. Continuity was never the problem; the beads
+   * are simply far brighter against their wall than the reference's are. Cropped side by side
+   * at the same zoom, the bar's panel outlines are continuous MUTED gold at low contrast
+   * against grey plaster, and this room's are near-white streaks. `metalness` 1.0 -> 0.45 moves
+   * it 10% (163 spike pixels -> 147) and `envMapIntensity` 0.62 -> 0.25 moves it not at all, so
+   * it is not specular either — it is the albedo, and gilt is a bright warm albedo.
+   *
+   * ⚠ **AND IT IS NOT THE PANEL BEADS EITHER, WHICH IS WHY THIS DEFAULTS TO 1.0 AND CHANGES
+   * NOTHING.** `wallRun` puts the beads on their own `mould` key and `ballroom-order.js` maps
+   * `mould`/`cornice`/`skirt`/`trim` all into `gilt`; splitting `mould` out and taking it down
+   * a stop and a half moved 163 spike pixels to 158. `?keysplit=1` then put the cornice, the
+   * skirting and the window trim in their own buckets too, and the raycast STILL returns
+   * `kit:gilt` — so the streaks are not `wallRun` geometry at all. They are two thin gilt
+   * surfaces 14 cm apart at 18.2 m, in front of the wall, in the shared bin.
+   *
+   * 🚨 **WHAT IS ESTABLISHED, AND WHAT IS LEFT.** Ruled out by deletion or by a live tweak:
+   * the grime, the crystal, the named chandelier meshes, the dust motes, the light shafts, the
+   * wall itself, the clearcoat, the environment specular, the panel beads, the cornice, the
+   * skirting and the window trim. Ruled out as a CLASS by experiment: aliasing, because MSAA
+   * fixes the brokenness and makes the result worse. What remains is un-named geometry emitted
+   * straight onto the `gilt` key by something other than `wallRun`, and the honest next step is
+   * `?keysplit=1` extended to whatever emits it rather than another round of guessing.
+   *
+   * The knob stays because the bead tone is a real question independently of this, and because
+   * finding where the beads live cost a boot that nobody should have to spend twice.
+   */
+  const BEAD = qs.has('bead') ? Math.max(0.2, Math.min(1, Number(qs.get('bead')) || 1)) : 1.0;
+  const beadGilt = BEAD < 1 ? mats.gilt.clone() : mats.gilt;
+  if (BEAD < 1) {
+    // ⚠ MULTIPLIES IN LINEAR. 0.62 is about two thirds of a stop, not 38% "less bright" — the
+    // same trap that took the packing cases to black silhouettes earlier in this project when
+    // a colour multiplier was read as if it were an sRGB percentage.
+    beadGilt.color = new THREE.Color(BEAD, BEAD, BEAD);
+    beadGilt.name = 'ballroom-panel-bead';
+    engine.onDispose?.(() => beadGilt.dispose());
+  }
   const M = {
     pil: pilasterStone,
     wall: wallMat,
+    mould: beadGilt,
+    ...(qs.get('keysplit') === '1'
+      ? { cornice: mats.gilt, skirt: mats.gilt, trim: mats.gilt }
+      : {}),
     /**
      * 🚨 **OPEN COMPLAINT, DIAGNOSED AND NOT FIXED: THE GILT BEADS ALIAS INTO DOTTED LINES.**
      *
@@ -1052,7 +1103,28 @@ export default async function view(args = {}) {
     engine.onDispose?.(() => crateWeathered.dispose());
     M.crate = crateWeathered;
   }
-  const K = { wall: 'wall', mould: 'gilt', cornice: 'gilt', skirt: 'gilt', trim: 'gilt', leaf: 'wall' };
+  // ⚠ `mould` NO LONGER LANDS IN `gilt` — see the `?bead=` note above the material table. It is
+  // the panel-bead key, and the beads want a shade of gilding rather than the cornice's. The
+  // other three stay, so this is one extra bucket and not four.
+  // ⚠ `mould` ONLY LEAVES THE `gilt` BUCKET WHEN `?bead=` ASKS IT TO. Splitting it costs a draw
+  // call and bought nothing measurable (see the `?bead=` note above the material table), so the
+  // default is the original single bucket and the knob is there for the next person who wants
+  // to try the beads at a different tone without re-deriving where they live.
+  const K = { wall: 'wall', mould: BEAD < 1 ? 'mould' : 'gilt', cornice: 'gilt', skirt: 'gilt', trim: 'gilt', leaf: 'wall' };
+  /**
+   * `?keysplit=1` — A DIAGNOSTIC, NOT A SHIPPING PATH. Puts every gilt sub-key in its own bin
+   * bucket so a raycast can NAME which member it hit, at the cost of three extra draw calls.
+   *
+   * This exists because "which gilt is that" cost this round several boots of guessing. The
+   * upper wall's bright streaks raycast to `kit:gilt`, and `gilt` is the bucket for the
+   * cornice, the skirting, the window trim and (until this round) the panel beads all at once —
+   * so the answer "gilt" is worth about as much as "the room". Splitting the beads out proved
+   * they were NOT the cause (a stop and a half off their tone moved 163 spike pixels to 158);
+   * this makes the same question answerable for the other three without another guess.
+   */
+  if (qs.get('keysplit') === '1') {
+    K.cornice = 'cornice'; K.skirt = 'skirt'; K.trim = 'trim';
+  }
 
   // ⚠ `uvWall` 2.4 -> 1.15, AND IT IS A CLOSE-RANGE DEFECT THAT ONLY ONE CAMERA COULD SEE.
   // The boiserie bake carries a craquelure — the cracked paint of old joinery — and at one
