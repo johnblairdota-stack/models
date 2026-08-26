@@ -121,9 +121,13 @@ export function studyEnv(renderer) {
 }
 
 /** Preset: a double-height ballroom with a whole wall of windows. */
-export function ballroomEnv(renderer) {
+export function ballroomEnv(renderer, o = {}) {
   return roomEnv(renderer, {
-    key: 'ballroom2',
+    // ⚠ `key` CARRIES THE OPTIONS OR THE BAKER HANDS BACK THE WRONG SHELL. `roomEnv` caches by
+    // key, and `prop.chandelier` shares this preset — so a ballroom-only variant that reused
+    // 'ballroom2' would be served whichever of the two booted first. This is the same cache-key
+    // trap `applyPlanarReflection` has a paragraph about.
+    key: o.key ?? 'ballroom2',
     // ROUND 5 — the §6.2 rebalance the study got in round 3 and the other three rooms never
     // did. Effective ambient irradiance is this array times the view's
     // `scene.environmentIntensity`, and measured across the estate it was:
@@ -140,7 +144,20 @@ export function ballroomEnv(renderer) {
     ambient: [0.148, 0.152, 0.166],
     boxes: [
       { size: [0.3, 7.0, 16.0], pos: [-11.5, 3.0, 0.0], color: [2.60, 2.72, 2.95] },   // window wall, daylight
-      { size: [14.0, 0.3, 14.0], pos: [0, -7.0, 0], color: [1.150, 1.120, 1.040] },     // marble bounce — a chequer floor under a wall of windows is the brightest surface in the room and it is what lights the walls
+      /**
+       * ⚠ THE FLOOR BOUNCE, AND ROUND 17 FOUND IT IS WHY THE PROPS ARE WARM. This box is the
+       * dominant term in everything this room's shade sees — the comment below is right that a
+       * floor under a wall of windows is what lights the walls — and at r/b 1.106 it is warm.
+       * That was correct when it was written (the floor was a marble chequer under daylight and
+       * then an oak field), and it is the reason the dust sheets kept coming back at chroma 10.9
+       * in shade against the bar's own sheets at 1.7: three albedo passes fought a bounce colour
+       * rather than the sheets.
+       *
+       * `bounceTint` lets THE BALLROOM cool it without touching `prop.chandelier`, which shares
+       * this preset and whose whole subject is a warm fixture. Default is the value that was
+       * here, so that piece is byte-identical.
+       */
+      { size: [14.0, 0.3, 14.0], pos: [0, -7.0, 0], color: o.bounceTint ?? [1.150, 1.120, 1.040] },     // marble bounce — a chequer floor under a wall of windows is the brightest surface in the room and it is what lights the walls
       { size: [10.0, 0.3, 10.0], pos: [2, 7.4, 0], color: [0.200, 0.186, 0.164] },      // ceiling catch
       { size: [3.0, 3.0, 0.3], pos: [4.0, 1.0, -11.0], color: [0.44, 0.34, 0.21] },     // chandelier cluster, warm
       { size: [3.0, 3.0, 0.3], pos: [-2.0, 1.0, 11.0], color: [0.36, 0.28, 0.175] },

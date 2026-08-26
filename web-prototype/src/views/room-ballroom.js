@@ -615,7 +615,13 @@ export default async function view(args = {}) {
   const { scene, renderer, camera } = engine;
   const rng = engine.rng;
 
-  scene.environment = ballroomEnv(renderer);
+  // See the `bounceTint` note in `lighting/rig.js`. The floor bounce is the dominant term in
+  // everything this room's shade sees, and at r/b 1.106 it was warm enough that three passes of
+  // dust-sheet albedo were fighting it rather than fixing the sheets. Pulled to near-neutral —
+  // the SUN carries this room's warmth, and it now carries the bar's own amount of it.
+  scene.environment = ballroomEnv(renderer, {
+    key: 'ballroom2-r17', bounceTint: [1.075, 1.085, 1.075],
+  });
   scene.environmentIntensity = LIGHTS.env;
   scene.background = new THREE.Color(0x05070c);
 
@@ -1781,7 +1787,7 @@ export default async function view(args = {}) {
     skyMat.color.setRGB(2.60, 2.66, 2.80);
     const sky = noShadow(new THREE.Mesh(new THREE.PlaneGeometry(110, 70), skyMat));
     sky.rotation.y = Math.PI / 2;                 // the plane's +z turned to face +x, into the room
-    sky.position.set(-34, 14, 0);
+    sky.position.set(-44, 16, 0);
     outside.add(sky);
     // The range opposite, and the yard between. Both take the room's own limestone, and both
     // face +x — i.e. AWAY from the sun, which travels +x — so they are lit by the shell alone
@@ -1807,6 +1813,28 @@ export default async function view(args = {}) {
     // leaves the top half sky, which is the bar's own proportion.
     addStone(new THREE.BoxGeometry(0.9, 5.0, 48), -26, 2.5, 0);
     addStone(new THREE.BoxGeometry(1.5, 0.55, 48), -25.8, 5.2, 0);
+    // ---- ROOFLINE AND A SECOND RANGE BEHIND IT (round 17, sixth pass) ----------------------
+    //
+    // `critic-eye-sweep` kept the courtyard on the board after it started working: "one range
+    // and a sky — no roofline variation, no depth behind the first building. It does its job at
+    // eye.win but reads as a flat once you look at it." Both halves of that are one-line facts
+    // about what was built, so both get built.
+    //
+    // A ROOFLINE, because a real range is not one extrusion: three bays step up out of it at
+    // different heights and one carries a stack. And a SECOND RANGE seven metres further back
+    // and two metres taller, so the gap between the two is a piece of sky with a building on
+    // each side of it — which is the only cue out there that says "distance" rather than
+    // "backdrop". The sky card moves from -34 to -44 to stay behind both.
+    //
+    // Everything here is in the same merged bucket as the first range, so the whole courtyard
+    // is still ONE draw call — see the merge note above, which exists because the first version
+    // of this blew the view's own 300-call budget with 26 separate window recesses.
+    for (const [bz, bh, bw] of [[-14.5, 1.5, 6.0], [2.0, 2.3, 7.5], [15.5, 1.1, 5.0]]) {
+      addStone(new THREE.BoxGeometry(1.1, bh, bw), -26, 5.0 + bh / 2, bz);
+    }
+    addStone(new THREE.BoxGeometry(0.8, 2.2, 0.8), -26, 8.4, 3.4);          // a stack
+    addStone(new THREE.BoxGeometry(1.0, 7.0, 44), -33, 3.5, 4.0);           // the second range
+    addStone(new THREE.BoxGeometry(1.6, 0.5, 44), -32.8, 7.2, 4.0);
     {
       const merged = mergeGeometries(stoneParts, false);
       for (const g of stoneParts) g.dispose();
@@ -1828,6 +1856,15 @@ export default async function view(args = {}) {
         for (const hy of [1.6, 3.8]) {
           const g = new THREE.BoxGeometry(0.35, 1.7, 1.15);
           g.applyMatrix4(new THREE.Matrix4().makeTranslation(-25.6, hy, i * 3.6));
+          holes.push(g);
+        }
+      }
+      // the second range's own windows, on a different rhythm and a different storey height so
+      // the two buildings do not read as one wall drawn twice
+      for (let i = -5; i <= 5; i++) {
+        for (const hy of [2.2, 5.0]) {
+          const g = new THREE.BoxGeometry(0.35, 1.5, 1.0);
+          g.applyMatrix4(new THREE.Matrix4().makeTranslation(-32.6, hy, 4.0 + i * 4.3));
           holes.push(g);
         }
       }
