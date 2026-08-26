@@ -817,6 +817,63 @@ function lightRigFor(row, door) {
  * and an EXIT is used only when there is nothing else, because an exit is where you go rather
  * than where the thing you are afraid of comes through.
  */
+/**
+ * 🏛️ **THE AUTHORED BALLROOM RIG, RE-HOMED ONTO A GENERATED BALLROOM'S OWN RECT.**
+ *
+ * 🚨 **WHY THIS EXISTS: THE PARTY MODE WAS LIGHTING THE BALLROOM WITH THE GENERIC ROOM RIG.**
+ * John, after eighteen rounds of work on that room: *"I want it to be exactly that ballroom we
+ * have worked on, so if the light needs to be 34 then do that."* Fingerprinting the BUILT scene
+ * showed the geometry and the materials were already right — same `est-parq` with round 18's
+ * `bakeDust` and `patCon`, same wall and ceiling dust, same ten grime quads — and the LIGHTS
+ * were not: `0xdfe6f4` at 150 from `KEY` above, against the authored `0xffdcb4` at 360. Same
+ * room, lit like a corridor. It read at median L 12.6 where the playable one reads 34.5.
+ *
+ * A generated ballroom is not the authored one's size, so the authored positions cannot be
+ * copied — they are held as FRACTIONS of the authored 27.20 x 15.30 x 9.60 box and replayed
+ * against whatever rect the generator produced. `dist` scales with the room's linear size, and
+ * intensity with that ratio raised to the light's own decay, so a point at the same relative
+ * place delivers the same illuminance in a bigger room.
+ *
+ * ⚠ `cool` SITS OUTSIDE THE ROOM ON PURPOSE and its fraction is past -1. That is the authored
+ * table's own pattern — `followRig` parks the cool rim beyond the room's widest door so it
+ * rakes IN through the opening — and clamping it to the rect would quietly delete the effect.
+ */
+const BALLROOM_AUTHORED = { w: 27.20, d: 15.30, h: 9.60 };
+function ballroomRig(row) {
+  const W = row.x1 - row.x0, D = row.z1 - row.z0, H = row.storey;
+  if (!(W > 0) || !(D > 0) || !(H > 1.0)) return null;
+  const A = BALLROOM_AUTHORED;
+  const cx = (row.x0 + row.x1) / 2, cz = (row.z0 + row.z1) / 2;
+  // the authored room's long axis is X; a generated one may be turned, so map along/across
+  const alongX = W >= D;
+  const halfLong = (alongX ? W : D) / 2, halfShort = (alongX ? D : W) / 2;
+  const P = (u, yf, v) => (alongX
+    ? [cx + u * halfLong, yf * H, cz + v * halfShort]
+    : [cx + v * halfShort, yf * H, cz + u * halfLong]);
+  // linear scale for distances and, through the decay exponent, for intensities
+  const k = ((alongX ? W : D) / A.w + (alongX ? D : W) / A.d) / 2;
+  const gain = (dist, decay) => Math.pow(Math.max(k, 0.2), decay);
+  return {
+    key: {
+      pos: P(-2.00 / (A.w / 2), 8.20 / A.h, 6.05 / (A.d / 2)),
+      at: P(1.00 / (A.w / 2), 0.70 / A.h, -5.35 / (A.d / 2)),
+      color: 0xffdcb4, intensity: Math.round(360 * gain(38, 1.30)),
+      angle: 0.86, penumbra: 0.70, dist: Math.round(38 * k), decay: 1.30,
+    },
+    warm: [
+      { pos: P(-11.80 / (A.w / 2), 2.60 / A.h, -2.25 / (A.d / 2)),
+        color: 0x8fb3de, intensity: Math.round(44 * gain(22, 1.40)),
+        dist: Math.round(22 * k), decay: 1.40 },
+      { pos: P(10.80 / (A.w / 2), 3.20 / A.h, 1.85 / (A.d / 2)),
+        color: 0xffb271, intensity: Math.round(32 * gain(20, 1.34)),
+        dist: Math.round(20 * k), decay: 1.34 },
+    ],
+    cool: { pos: P(0, 1.90 / A.h, -8.75 / (A.d / 2)),
+      color: 0xa8ccf4, intensity: Math.round(46 * gain(11, 2)), dist: Math.round(11 * k) },
+    up: 0x4a5364,
+  };
+}
+
 function attachLights(rows, portals, panels) {
   if (GENLIGHT_OFF) return;                 // `?genlight=0` — the pre-2026-08-15 arm, verbatim
   const best = new Map();                   // row id -> { x, z, w, exit }
@@ -834,7 +891,12 @@ function attachLights(rows, portals, panels) {
     offer(p.b, p.x, p.z, p.w ?? 0, exit);
   }
   for (const row of rows) {
-    const rig = lightRigFor(row, best.get(row.id) ?? null);
+    // ⚠ A BALLROOM TAKES ITS OWN RIG. Every other generated room is lit by the generic table
+    // above, which is right for them and wrong for the one room in the house that has had
+    // eighteen rounds of lighting work done on it. See `ballroomRig`.
+    const rig = (row.order === 'ballroom' || /ballroom/.test(String(row.id)))
+      ? (ballroomRig(row) ?? lightRigFor(row, best.get(row.id) ?? null))
+      : lightRigFor(row, best.get(row.id) ?? null);
     if (rig) row.lights = rig;              // a refused row carries none — see lightRigFor's guard
   }
 }

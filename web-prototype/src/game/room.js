@@ -3139,7 +3139,16 @@ export async function buildTestRoom(engine, o = {}) {
             leaf: 'wall',
           },
           material: {
-            baluster: mats.estate?.stone ?? mats.skirt,
+            /**
+             * ⚠️ **THE BALLROOM'S OWN STONE, NOT THE HOUSE'S.** `mats.estate.stone` is the
+             * shared entry every room reads and it carries no dust; this room's carries
+             * `bakeDust: 0.75`. Handing the balustrade the shared one put a clean, more
+             * chromatic stone on the one member a player leans over — and it showed up as a
+             * SECOND `est-stone` bake in the built scene's material list, with `bakeDust: 0`
+             * next to the room's own at 0.75. Two bakes of the same stone is also a texture set
+             * nobody needed.
+             */
+            baluster: mats.estate?.ball?.stone ?? mats.estate?.stone ?? mats.skirt,
             mirror: mats.estate?.ball?.mirror ?? null,
           },
         });
@@ -3726,6 +3735,16 @@ function binMaterials(m, sp = null) {
       ceiling: BR.ceil,
       mould: BR.stone,
       skirt: BR.stone,
+      /**
+       * 🆕 **AND `cornice`, WITHOUT WHICH THE STONE ENTABLATURE GOES NOWHERE.** The
+       * `ballroomOrder` call above routes the cornice to its own bin key; a key with no entry
+       * in this table is a bucket with no material, so the change landed in the source, passed
+       * every syntax check, and did not appear in the room. Caught by fingerprinting the BUILT
+       * scene rather than by reading the diff: `harness/_ptverify41.mjs` lists the materials
+       * actually present on the ballroom's meshes, and `game-ballroom-cornice` was not among
+       * them.
+       */
+      cornice: BR.cornice ?? BR.gilt,
       gilt: BR.gilt,
       clere: BR.clere,
       drape: BR.drape,

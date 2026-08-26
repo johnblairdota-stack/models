@@ -39,6 +39,23 @@ export const FOLLOW_KEYS = [
    * again: it is the screen the whole room watches all night, and it could not be looked at.
    */
   'capture',
+  /**
+   * 🆕 `at` — AND THIS ONE IS NOT A CONVENIENCE, IT IS THE ONLY WAY THIS VIEW'S LIGHTING CAN BE
+   * MEASURED AT ALL.
+   *
+   * `shoot.mjs --at N` freezes the simulation N seconds in instead of a few frames in. It
+   * matters here because `followRig` LERPS its four lights toward whichever space the camera is
+   * in, at 0.35 a frame, and a capture taken a few frames after ready photographs a rig on its
+   * way somewhere. Round 18 measured this room at median L 12.6 and nearly filed "the party
+   * mode lights the ballroom at a third of the game's level" off that frame — while the plan
+   * the generator handed the view had the authored key at 360 all along.
+   *
+   * A view whose whole subject is a camera MOVING through a house, that can only ever be
+   * photographed standing still at frame zero, is a view whose look nobody can check. Same
+   * argument as `capture` above and the same absence of anything a guide could read: `at` names
+   * a number of seconds.
+   */
+  'at',
 ];
 
 /**
@@ -63,7 +80,7 @@ export const FOLLOW_KEYS = [
  * (`FOLLOW_BEATS.length === 1`) red, and it would also mean the lobby slot carried a runner field
  * it has no business having. Separate function, separate key list, same forbidden list.
  */
-export const WARM_KEYS = ['view', 'room', 'seed', 'warm', 'capture'];
+export const WARM_KEYS = ['view', 'room', 'seed', 'warm', 'capture', 'at'];
 
 /**
  * ⚠️ **INSTRUMENTS — what a developer may TYPE, and a separate list on purpose.**
