@@ -40,7 +40,11 @@ for (const spec of MATS) {
         if (seen.has(m)) continue;
         seen.add(m);
         if ((m.name || '').toLowerCase().includes(sub.toLowerCase())) {
-          m[prop] = Number(val); m.needsUpdate = true; k++;
+          // a `#rrggbb` value sets `color`; anything else is a scalar. Round 18 needed both on
+          // the same tool: `metalness=0.45` and `color=#a02820` are the same kind of question.
+          if (typeof val === 'string' && val.startsWith('#')) m.color.setHex(parseInt(val.slice(1), 16));
+          else m[prop] = Number(val);
+          m.needsUpdate = true; k++;
         }
       }
     });

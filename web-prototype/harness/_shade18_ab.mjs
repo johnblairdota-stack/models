@@ -164,7 +164,27 @@ for (const spec of SPECS) {
     // 0.49). Global saturation multiplies the whole ladder and so cannot flatten a ramp; the
     // split-tone shadow term is weighted by pow(1-L, 2) and therefore acts almost entirely on
     // the low deciles, which is precisely where the gap is.
-    const gp = {};
+    /**
+     * ⚠ **EVERY GRADE FIELD THIS TOOL CAN TOUCH IS RESET ON EVERY VARIANT, AND IT WAS NOT.**
+     * `Pipeline.setGrade` MERGES — `{ ...this.grade, ...patch }` — so a field set by one spec
+     * stays set for every spec after it. Round 18 lost a sweep to this: a `haze: 0` variant
+     * silently disabled haze for the three hazeColor variants that followed, and all four rows
+     * came back identical with a median 17 counts off the baseline. The lights in this same
+     * tool are snapshotted and restored for exactly this reason; the grade was not, which made
+     * the tool trustworthy in one half and not the other.
+     *
+     * Every knob starts from the baseline value unless the spec names it.
+     */
+    if (!window.__gbase) {
+      const g = window.__rrr.engine.pipeline.grade;
+      window.__gbase = {
+        saturation: g.saturation, contrast: g.contrast, toeCrush: g.toeCrush, haze: g.haze,
+        grain: g.grain, splitBalance: g.splitBalance,
+        shadowTint: [...g.shadowTint], highlightTint: [...g.highlightTint],
+        hazeColor: [...g.hazeColor], lift: [...g.lift],
+      };
+    }
+    const gp = { ...window.__gbase };
     if (v.sat != null) gp.saturation = v.sat;
     if (v.shadow) gp.shadowTint = v.shadow;
     // `high` — the highlight half of the split tone, which round 17 deliberately left neutral
@@ -181,6 +201,13 @@ for (const spec of SPECS) {
     // this room's darkest decile is 8.4 against the bar's 11.3, i.e. it crushes MORE than the
     // reference does, and (r-b)/L divides by that smaller L, so part of the ratio gap is the
     // crush rather than the colour. `toeCrush` and `lift` move both at once.
+    // `haze` / `hazeC` — the distance veil, and the last warm term in the frame that round 18
+    // had not tested. `hazeColor` is [0.058, 0.056, 0.052], i.e. r/b 1.115, and haze is applied
+    // BY DISTANCE — so it lays a warm film over the far half of the room, which is also the
+    // dark half, which is exactly deciles 2-4. It is a much better fit for "red matches, green
+    // and blue are low" than anything already ruled out.
+    if (v.haze != null) gp.haze = v.haze;
+    if (v.hazeC) gp.hazeColor = v.hazeC;
     if (v.toe != null) gp.toeCrush = v.toe;
     if (v.lift) gp.lift = v.lift;
     if (v.split != null) gp.splitBalance = v.split;
@@ -198,7 +225,7 @@ for (const spec of SPECS) {
     // says nothing at three to five metres, which is exactly the band that is missing.
     if (v.aoR != null) gp.aoRadius = v.aoR;
     if (v.aoI != null) gp.aoIntensity = v.aoI;
-    if (Object.keys(gp).length) window.__rrr.setGrade(gp);
+    window.__rrr.setGrade(gp);
   }, q);
   await page.evaluate((n) => window.__rrr.settle(n), 6);
   const buf = await page.screenshot({ type: 'png' });

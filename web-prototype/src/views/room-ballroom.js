@@ -960,7 +960,37 @@ export default async function view(args = {}) {
   // exactly and is not pushed further: the near panel in that rect stands beside a lit sconce,
   // so some of the remaining warmth is a light this room has and the reference does not — the
   // same distinction the floor's own warm-bias ruling makes a few hundred lines up.
-  const drape = new THREE.MeshStandardMaterial({ color: 0x8c4a46, roughness: 0.86, metalness: 0 });
+  /**
+   * ⚠ **0x8c4a46 -> 0xa83020, AND THE RECT THAT SETTLED IT WAS THE THIRD ONE TRIED.** Round 15
+   * set this by sweep and its note says it "does not reach the bar exactly and is not pushed
+   * further" because the sample point stood beside a lit sconce. Measured now on a rect that is
+   * nothing but drape, in both pictures:
+   *
+   *     drape in shade            rgb                  L      r-b   (r-b)/L
+   *     refs/bf1                48.5,  9.9,  9.0     18.1     39.5    2.185
+   *     0x8c4a46                35.5, 11.7,  9.0     16.6     26.5    1.602
+   *     0x9a3830                42.2,  9.3,  7.0     16.1     35.2    2.180
+   *     0xa02418                45.0,  7.6,  5.9     15.4     39.1    2.534
+   *
+   * The bar's velvet is a DEEP SATURATED CRIMSON and this room's was a dusty pink-brown at two
+   * thirds of its red. 0x9a3830 lands its ratio exactly and 0xa02418 lands its absolute r-b;
+   * this sits between them, a little brighter than either, because the bar is brighter than
+   * both (L 18.1 against 16.1 and 15.4).
+   *
+   * ⚠ AND IT DOES NOT REOPEN ROUND 15's FAILURE, WHICH WAS THE OTHER DIRECTION. That round
+   * found 0x3a0d10 rendering at raw rgb ~(4,3,3) and being reported as ENTIRELY ABSENT. This is
+   * three times that red and the room is a stop brighter than it was then.
+   *
+   * ⚠ THE FIRST TWO RECTS WERE WRONG AND THE SWEEP RUN AGAINST THEM SAID "NO EFFECT". One
+   * landed on a pilaster in the reference and one on a chandelier chain here — a colour sweep
+   * over them moved 0.58 to 0.66 and looked like a dead end. Crop the rect and LOOK at it: it
+   * is the rule this round wrote down twice and then broke a third time.
+   */
+  const drape = new THREE.MeshStandardMaterial({ color: 0xa83020, roughness: 0.86, metalness: 0 });
+  // Named so `harness/_hide18.mjs` can address it. `GeoBin` merges by material and names the
+  // mesh after it, so an unnamed material is a mesh no diagnostic can find by name — which is
+  // the same wall round 18 hit chasing the gilt bucket, from the other side.
+  drape.name = 'ballroom-drape';
   // See the OUTSIDE block below for why this is a clone rather than `mats.clearGlass` itself.
   // The BAKE is shared through the baker's key cache — only the two scalars differ — so this
   // costs one material and no extra texture, and `room.gallery`'s and `room.study`'s own

@@ -580,7 +580,15 @@ export const GRADES = {
     // The deficit measured above is specifically in GREEN and BLUE, so a flat lift would buy
     // the level back and leave the colour wrong.
     toeCrush: 0.0,
-    haze: 0.026, hazeColor: [0.058, 0.056, 0.052],
+    /**
+     * ⚠ **THE HAZE WAS WARM AND HAZE IS APPLIED BY DISTANCE, SO IT WAS A WARM FILM OVER THE FAR
+     * HALF OF THE ROOM — WHICH IS ALSO THE DARK HALF.** [0.058, 0.056, 0.052] is r/b 1.115.
+     * Round 18's last open gap was deciles 1-4 running warm with the RED MATCHING the bar and
+     * green and blue both low, and this is the only term in the frame shaped like that: it
+     * cannot touch the near, bright half at all. Cooling it to r/b 0.64 takes decile 1 from
+     * 0.97 to 0.80 against the bar's 0.79 at an UNCHANGED median (49.6 -> 49.5).
+     */
+    haze: 0.026, hazeColor: [0.046, 0.056, 0.072],
     // ---- ROUND 17, FOURTH PASS: THE SPLIT-TONING WAS INVERTED AGAINST THE BAR --------------
     //
     // `shadowTint` was [1.02, 0.99, 0.95] — R up, B down, i.e. a WARM shadow — and once the
@@ -597,6 +605,35 @@ export const GRADES = {
     // bar's sun patches are warm and warming ours further is the obvious move, but the top
     // decile is already at 0.129 of a 0.14 target with the gilding spending most of it, and
     // that is the ceiling this round already documented at the daylight's own colour.
+    /**
+     * ⚠ **AND THE HIGHLIGHT TINT IS NO LONGER NEUTRAL, WHICH REVERSES A ROUND-17 DECISION ON
+     * EVIDENCE THAT ROUND DID NOT HAVE.** Its note says highlightTint is "deliberately NOT
+     * inverted to match" because the top decile was at 0.129 of a 0.14 target and could not
+     * afford it. That ceiling is gone: the top decile now reads 0.010 and the BAR reads 0.089,
+     * so this room is the one that is too COOL up there.
+     *
+     * The deeper reason is the ladder's shape. The bar's chroma is nearly FLAT from decile 2 to
+     * decile 9 (0.40 down to 0.34); this room's RAMPS (0.87 down to 0.14), because ACES
+     * desaturates highlights and nothing puts any of it back. Cooling the haze pulls the bottom
+     * of that ramp down; warming this would push the top up, and the two together are the only
+     * pair of knobs shaped like a ramp.
+     *
+     * 🚨 **AND IT STAYS NEUTRAL ANYWAY, BECAUSE IT WAS TRIED AT SEVENTEEN CAMERAS AND IT ONLY
+     * WORKS AT ONE.** [1.14, 1.00, 0.86] at splitBalance 0.75 lands `overlook`'s decile 1 on
+     * 0.79 exactly and its decile 10 on 0.13 against the bar's 0.09 — a near-perfect ladder.
+     * Moderated to [1.075, 1.00, 0.925] at 0.65 and shot at the angles that actually stress it:
+     *
+     *     angle           before   with the warm highlight
+     *     overlook         0.010            0.070   (better)
+     *     eye.door         0.216            0.287   (worse)
+     *     eye.gallery      0.186            0.247   (WARN -> FAIL)
+     *     eye.up           0.320            0.376   (worse)
+     *
+     * One angle bought and three sold, and `eye.gallery` regressed a band. A GRADE TERM IS
+     * SPENT AT EVERY CAMERA. This is the same mistake the whole round exists to correct — the
+     * chroma gate only ever passed because it was measured at `overlook` — and it was very
+     * nearly made again from the other direction, by tuning a global term against one ladder.
+     */
     shadowTint: [0.985, 0.995, 1.025], highlightTint: [0.985, 1.00, 1.015],
     splitBalance: 0.55,
     aoIntensity: 1.30, aoRadius: 0.85,
