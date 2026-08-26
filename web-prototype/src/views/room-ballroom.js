@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { estate } from './_studio.js';
-import { estateMaterials, ceilingMat, foxedMirrorMat, parquetMat } from '../world/materials-local.js';
+import { estateMaterials, ceilingMat, foxedMirrorMat, parquetMat,
+  boiserieMat, stoneMat } from '../world/materials-local.js';
 import { GeoBin, STOREY, STOREY2 } from '../world/kit.js';
 /**
  * 🆕 **THE ARCHITECTURE MOVED OUT** (`estate-3`, 2026-08-09). Every kit builder this view used
@@ -470,7 +471,36 @@ export default async function view(args = {}) {
     // crushing shadows, which `CRITIC_GUIDE.md` lists as a render tell in its own right
     // ("dead blacks ... a cut-out silhouette"). This build holds 0.8% of the frame at L <= 2.6
     // against the art's 0.1%. Matching the art is the point; the study's band is not the art.
-    : { env: 1.70, sun: 5705, bounce: 11.03, bounceCard: 5.0, grade: null, sunColor: 0xffc87e,
+    // ---- ROUND 18: `sunColor` 0xffc87e -> 0xffe4c0, AND THE OLD CLAIM WAS WRONG ------------
+    //
+    // 🚨 **THIS FILE HAS SAID SINCE ROUND 17 THAT THE SUN PATCH IS MATCHED TO THE BAR — "35.8
+    // against its 35.9" — AND CROPPED SIDE BY SIDE IT IS NOT.** On the sunlit floor, rect
+    // measured on both pictures at the same scale:
+    //
+    //     sun patch on the floor        rgb                  L       r-b   (r-b)/L
+    //     refs/bf1/bf1-ballroom-01   231.5, 216.3, 186.2   217.4    45.3    0.208
+    //     here, 0xffc87e             212.6, 182.3, 116.4   184.0    96.2    0.523
+    //
+    // Two and a half times the chroma. The bar's patch is a near-white cream and this one is
+    // gold, and the two are not close. Whatever the earlier number measured, it was not these
+    // two rects — and it is the reason a "matched daylight" was treated as settled while every
+    // eye-level angle failed the chroma gate on the floor it lands on.
+    //
+    // ⚠ THE FIX IS THE COLOUR, NOT THE LEVEL, AND THAT IS NOT A PREFERENCE. Part of why the
+    // bar's patch is so pale is that it is nearly blown (its top decile sits at L 217.7 with
+    // 2.4% of the frame at L >= 250) and ACES desaturates hard up there. Buying the same
+    // desaturation by driving this floor back into clipping would hand round 17 its own #1
+    // hate straight back — "every surface in direct sun clips to a textureless white plateau".
+    // So the level stays and the sun loses its amber: swept live at `eye.door` and read off the
+    // same rect, 0xffdfb4 lands r-b 53.0 and 0xffe9cd lands 37.2, so 0xffe4c0 lands 44.9
+    // against the bar's 45.3. The patch gets BRIGHTER doing it (184.0 -> 196.2, still 20 counts
+    // under the bar) because the green and blue channels stop being thrown away.
+    //
+    // ⚠ AND IT IS ALMOST FREE EVERYWHERE ELSE, which is how you can tell it is the right term:
+    // across the sweep the whole decile ladder is unmoved except the TOP decile (0.38 -> 0.24)
+    // and the median does not move at all (57.2 -> 57.3). A sun colour should only show up
+    // where the sun lands.
+    : { env: 1.70, sun: 5705, bounce: 11.03, bounceCard: 5.0, grade: null, sunColor: 0xffe4c0,
         dir: [0.885, -0.375, 0.265], aim: [-4.7, 0, 0.2], angle: 0.42, penumbra: 0.22, mapSize: 2048,
         shaftWins: [0, 1, 2], cardWins: [0, 2] };
 
@@ -638,6 +668,145 @@ export default async function view(args = {}) {
   scene.background = new THREE.Color(0x05070c);
 
   const mats = await estateMaterials();
+
+  /**
+   * `?dust=N` — HOW MUCH OF THIS ROOM'S OWN COLOUR IS DUST, 0 TO 1, AND ROUND 18'S ONE CHANGE.
+   *
+   * 🚨 **THE SEVENTEEN-ANGLE SWEEP FOUND A DEFECT THE GATE COULD NOT SEE, AND THIS IS IT.**
+   * Every previous round measured this room at `overlook` and `overlook` alone. Shot from all
+   * seventeen player-eye presets, the top-decile chroma gate PASSES at four and FAILS at
+   * eleven — and the reason it ever passed is a framing accident: `overlook` fills its top
+   * decile with blown-white window glare, which is neutral, so the gate reads the glare
+   * instead of the room. An eye-level frame has no near-white source in it at all.
+   *
+   * Underneath that, both framings run (r-b)/L between 0.6 and 1.6 through deciles 1-8 against
+   * the reference's flat 0.33-0.40. Measured on matched surfaces at matched luminance:
+   *
+   *     shaded floor        bar  37.5, 32.4, 20.9   L 32.7   r-b 16.6
+   *                        here  49.8, 27.7, 16.1   L 31.6   r-b 33.7
+   *     shaded upper wall    bar 133.5,119.5,106.0   L 121.5  r-b 27.4
+   *                        here 128.8, 99.8, 73.8   L 104.0  r-b 54.9
+   *
+   * Two to one, on two unrelated surfaces. This room's shade is AMBER where the bar's is a
+   * neutral grey-olive, and the reference is not a cool picture — it is a warm one whose warmth
+   * comes from the LIGHT and from the red drapes, over surfaces that are essentially grey.
+   *
+   * ⚠ IT IS NOT THE LIGHTING, AND THE PROBE THAT SAYS SO HAD TO BE FIXED FIRST. With every
+   * chromatic light term in the scene zeroed and four white directionals in their place
+   * (`harness/_shade18_ab.mjs`, `neutral:`) the room still runs 1.26 / 0.98 / 0.75 through
+   * deciles 1-3 against the bar's 0.79 / 0.40 / 0.38. The first version of that probe zeroed
+   * the sun and the three bounce fills and called it white light, while leaving this room's
+   * cool PointLight bounce cards and its additive light-shaft geometry running — a probe that
+   * silently leaves two chromatic terms on is worse than none, because its number gets built
+   * on. Corrected, and it restores to the baseline ladder exactly, so it can be trusted.
+   *
+   * ⚠ AND IT IS NOT THE GRADE. `saturation` scales the ladder but the defect is a SHAPE: the
+   * bar's is flat and this room's is a ramp, so the cut that fixes the midtones (0.70) leaves
+   * the shade at 1.8x and costs the drapes and the gilding everywhere. `shadowTint` has the
+   * right shape — it is weighted by pow(1-L, 2) — but it is a multiply at `splitBalance`
+   * strength, and [0.86, 0.97, 1.17], already an implausibly blue shadow, moved the darkest
+   * decile 1.42 -> 1.32.
+   *
+   * So it is the albedo, which is where `room.study` put the identical fix in its round 5 —
+   * "an albedo at r/b 2.45 cannot be lit to r/b 1.5 by any light that is not blue" — against
+   * the identical measurement, on the identical gate blind spot: *"the top-decile gate passed
+   * the whole time, because the top decile is the floor and the floor is neutral; the amber was
+   * in the MID-TONES, where the gate does not look."* That correction was never made here.
+   *
+   * `bakeDust` is that correction generalised: one number, applied in the BAKER to every
+   * surface's albedo, desaturating toward its own luminance and weighted to the dark end
+   * (see the DUST block in `materials/baker.js` for why the weighting is the measurement and
+   * not a refinement). Value preserved, so the median-luminance gate does not move with it.
+   *
+   * ⚠ THE BALLROOM BAKES ITS OWN WALL AND STONE RATHER THAN TAKING THE SHARED ONES.
+   * `estateMaterials()` is a process-wide cache shared with the study, the gallery and the
+   * hall; passing dust through it would dust all four rooms on this room's evidence. These are
+   * the same two calls with the same arguments, plus the dust.
+   */
+  const DUST = qs.has('dust') ? Math.max(0, Math.min(1, Number(qs.get('dust')) || 0)) : 0.75;
+  /**
+   * `?floordust=N` — THE FLOOR TAKES A DIFFERENT DOSE FROM EVERYTHING ELSE, AND IT HAS TO.
+   *
+   * The floor is the one surface that gets BOTH corrections at full strength: it is dark, so
+   * the dust curve gives it nearly all of `DUST`, and it is the largest thing the warm bounce
+   * fill lands on, so the fill's neutralisation moves it as well. The two compound, and at
+   * `DUST` the floor overshoots the bar in the other direction — measured on the shaded-floor
+   * rect at `eye.door`:
+   *
+   *     shaded floor            rgb                  L      r-b
+   *     bar                   37.5, 32.4, 20.9      32.7    16.6
+   *     before                49.8, 27.7, 16.1      31.6    33.7
+   *     dust 0.75, old fill   40.8, 29.1, 25.2      31.3    15.6
+   *     dust 0.75, new fill   35.9, 29.4, 27.4      30.6     8.5
+   *
+   * ⚠ AND THE OVERSHOOT IS NOT ONLY IN r-b, IT IS IN THE HUE. The bar's shaded floor is OLIVE
+   * — its green stands 11.5 above its blue — and at 0.75 with the new fill this one's green
+   * stands 2.0 above its blue, i.e. a grey-violet. Two floors can share an r-b and not look
+   * remotely like the same material, which is why this is measured on the channels and not on
+   * the gate's single scalar.
+   *
+   * The wall is unaffected by this split: its albedo is bright, so the dust curve was only ever
+   * giving it 30% of the number, and it lands on the bar from the fill change alone (r-b
+   * 54.9 -> 32.7 against 27.4).
+   */
+  const FLOOR_DUST = qs.has('floordust')
+    ? Math.max(0, Math.min(1, Number(qs.get('floordust')) || 0)) : 0.42;
+  /**
+   * `?oakg=N` — HOW YELLOW THE OAK IS, AND DUST CANNOT REACH THIS ONE.
+   *
+   * Dust moves a colour along the line toward its own grey, so it can take saturation out of
+   * the floor but it cannot change which hue the floor IS. Measured on the same shaded rect,
+   * after the dust and the fill had both landed:
+   *
+   *     shaded floor            r      g      b     r-g    g-b
+   *     bar                   37.5   32.4   20.9    5.1   11.5
+   *     here                  40.5   28.5   21.7   12.0    6.8
+   *
+   * Same r-b to within a couple of counts and NOT THE SAME COLOUR. The bar's floor is a yellow
+   * olive — its green sits nearly as high as its red — and this one's is a red-brown with the
+   * green down near the blue. Two floors can match on the gate's scalar and still read as
+   * different timbers, which is the whole reason this is measured on the channels.
+   *
+   * ⚠ AND THE CORRECTION IS TOWARD THE MATERIAL'S OWN NAME. Red-brown is walnut and mahogany;
+   * OAK is a yellow-brown. `oak` has been [0.281, 0.183, 0.101] since round 14 — r/g 1.54,
+   * which is a walnut ratio — and the bar's floor sits at 1.16. This lifts the green and drops
+   * the red toward that, at CONSTANT LUMINANCE, so the level this round already solved does not
+   * move with the hue.
+   *
+   * N is the multiplier on the green channel before the luminance is renormalised. 1.0 is the
+   * round-14 colour exactly.
+   */
+  /**
+   * ⚠ 1.30, AND IT WAS PICKED ON THE CHANNELS NORMALISED BY LUMINANCE RATHER THAN ON r-b,
+   * because r-b picks the wrong one. Same rect, same boot, four values:
+   *
+   *     oakg        r/L     g/L     b/L      r-b
+   *     bar        1.147   0.991   0.639    16.6
+   *     1.00       1.292   0.941   0.754    16.4   <- matches on r-b, wrong colour
+   *     1.15       1.206   0.967   0.722    14.8
+   *     1.30       1.138   0.990   0.695    13.5   <- matches on r AND g
+   *     1.45       1.075   1.010   0.673    12.4
+   *
+   * 1.00 already sits on the bar's r-b to within two counts and is a visibly different timber;
+   * 1.30 is 3 counts off on r-b and lands red and green both within 1% of it. What is left is
+   * blue, 8% high, which is the dust and the cool fill lifting the darkest channel — a small
+   * residual on one channel of one surface, and not worth another pass against the two gates
+   * still open.
+   */
+  const OAK_G = qs.has('oakg') ? Math.max(0.5, Math.min(2, Number(qs.get('oakg')) || 1)) : 1.30;
+  const LUMA = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  const oakHue = (c) => {
+    const t = [c[0], c[1] * OAK_G, c[2]];
+    const k = LUMA(c) / LUMA(t);
+    return [t[0] * k, t[1] * k, t[2] * k];
+  };
+  const wallMat = DUST > 0 ? boiserieMat({ bakeDust: DUST }) : mats.boiserie;
+  const stoneDusty = DUST > 0
+    ? stoneMat({ stone: [0.545, 0.540, 0.520], course: 0, bakeDust: DUST })
+    : mats.stone;
+  if (DUST > 0) {
+    engine.onDispose?.(() => { wallMat.dispose(); stoneDusty.dispose(); });
+  }
   const dark = new THREE.MeshStandardMaterial({ color: 0x0a0a0c, roughness: 0.95, metalness: 0 });
   // ITEM 3 (estate-owner-15, ROUND 15): the drape GEOMETRY (the swag + two side panels per
   // window, below) has been here since before this round — the bar's red velvet at every window
@@ -704,11 +873,11 @@ export default async function view(args = {}) {
     ballroomGlass.needsUpdate = true;
   }
   engine.onDispose?.(() => ballroomGlass.dispose());
-  const ceilPaint = ceilingMat({ tint: [0.480, 0.452, 0.398], stain: 0.7 });
+  const ceilPaint = ceilingMat({ tint: [0.480, 0.452, 0.398], stain: 0.7, bakeDust: DUST });
 
   // The pilaster shafts, a shade down and a shade warmer than the wall they stand against —
   // see the note at the pilaster call in ballroom-order.js. Stone against painted joinery.
-  const pilasterStone = mats.boiserie.clone();
+  const pilasterStone = wallMat.clone();
   // ⚠ 0xbdb3a2 -> 0x8f887c, AND THE ANGLE THAT SETTLED IT IS `eye.mirror`. Looking ALONG the
   // mirror wall you see the pilasters' returns rather than their faces, and at 0xbdb3a2 they
   // came back as pale flat bands standing three to four times brighter than the wall they are
@@ -726,16 +895,16 @@ export default async function view(args = {}) {
   engine.onDispose?.(() => pilasterStone.dispose());
   const M = {
     pil: pilasterStone,
-    wall: mats.boiserie,
+    wall: wallMat,
     gilt: mats.gilt,
     frieze: mats.giltFrieze,
-    stone: mats.stone,
+    stone: stoneDusty,
     ceil: ceilPaint,
     glass: ballroomGlass,
     dark,
     drape,
     marbleTop: mats.marbleSlab,
-    wintrim: mats.stone,
+    wintrim: stoneDusty,
   };
   // `estateMaterials()` entries are LAZY GETTERS and reading one bakes it, so `?depot=0` must
   // not name it in the object literal or the ablation still pays for the surface it removed.
@@ -882,7 +1051,8 @@ export default async function view(args = {}) {
       // parquet's stave-to-stave variation is nothing like a 2:1 ratio. 0.73 halves the
       // pattern's contrast and leaves the panel joints doing the work, which is what the
       // reference's floor actually shows.
-      oak: [0.281, 0.183, 0.101], oakDark: [0.205, 0.135, 0.078], wear: 0.6,
+      oak: oakHue([0.281, 0.183, 0.101]), oakDark: oakHue([0.205, 0.135, 0.078]),
+      wear: 0.6, bakeDust: FLOOR_DUST,
       // ⚠ AND THE JOINTS, WHICH ARE THE OTHER HALF OF THE SAME COMPLAINT. Halving the
       // stave-to-stave contrast above stopped the WOOD reading as pattern; the board joints
       // kept drawing the grid on their own, because they were mixing 85% toward near-black.
@@ -1087,7 +1257,7 @@ export default async function view(args = {}) {
   //
   // `?vestglow=0` ablates it back to r16.
   const vestTiers = [0, 0.25, 0.5, 0.75, 1].map((t) => {
-    const m = mats.stone.clone();
+    const m = stoneDusty.clone();
     if (CAM !== 'r10') m.color = VEST_FAR.clone().lerp(VEST_NEAR, 1 - t);
     if (CAM !== 'r10' && VEST_GLOW > 0) {
       // Cool, because it is meant to read as daylight from a room this one cannot see, against
@@ -1460,7 +1630,7 @@ export default async function view(args = {}) {
   }
 
   // ---- balustrade on the musicians' gallery ------------------------------
-  const balusterStone = mats.stone.clone();
+  const balusterStone = stoneDusty.clone();
   balusterStone.color = new THREE.Color(0xb8ae9c);
   balusterStone.name = 'gallery-baluster-stone';
   engine.onDispose?.(() => balusterStone.dispose());
@@ -1811,7 +1981,7 @@ export default async function view(args = {}) {
     // room-scale view — this piece's own numeric gate, blown by set dressing nobody can even
     // walk up to. Everything sharing a material is merged: the masonry into one, the recesses
     // into one. Same picture, 27 fewer calls.
-    const outMat = mats.stone;
+    const outMat = stoneDusty;
     const stoneParts = [];
     const addStone = (g, x, y, z) => {
       g.applyMatrix4(new THREE.Matrix4().makeTranslation(x, y, z));
@@ -2053,6 +2223,34 @@ export default async function view(args = {}) {
   // shadows from a light that is outside the building and aimed at the floor. None of them is
   // between that spot and anything.
   const noCast = (o) => { o.traverse((n) => { if (n.isMesh) n.castShadow = false; }); return o; };
+  /**
+   * ---- ROUND 18: THE ORNAMENT MERGES ACROSS ALL NINE SCONCES, NOT JUST WITHIN EACH ---------
+   *
+   * 🚨 **THE 300-CALL BUDGET WAS ONLY EVER CHECKED AT `overlook`, AND FOUR PLAYER ANGLES BREACH
+   * IT.** `eye.corner.sw` 309, `eye.corner.se` and `eye.back` 308, `eye.gallery` 307, against
+   * `overlook`'s 298 — a gate measured at the one camera that passes it is not a gate. A corner
+   * cam sees down BOTH long walls at once, so it holds every sconce on both of them in frame
+   * where `overlook` culls some of each.
+   *
+   * `sconce({ merge: true })` already merges each fitting's own ornament down to one brass mesh
+   * and one wax mesh — that note is below and it stands. What it cannot do is merge ACROSS
+   * fittings, because it is handed one position at a time. Nine of them is eighteen draw calls
+   * of ornament that never moves, so this takes them to two.
+   *
+   * ⚠ AND THE WAX MATERIAL HAD TO BE HOISTED FOR IT. `practicals.js` falls back to
+   * `new THREE.MeshStandardMaterial(...)` per call when `waxMat` is absent, so the nine sconces
+   * carried nine identical-but-distinct wax materials — which merge cannot combine, and which
+   * were nine separate program lookups in their own right. One shared material, passed in.
+   *
+   * ⚠ THE FLAMES AND THE POINT LIGHTS STAY PER-SCONCE and are not touched here: the flames are
+   * rescaled every frame by `driveFlicker` and a merged flame would flicker as one object,
+   * which is the tell this room's practicals exist to avoid.
+   */
+  const sconceWax = new THREE.MeshStandardMaterial({
+    color: 0xe8dcc0, roughness: 0.62, metalness: 0, name: 'ballroom-sconce-wax',
+  });
+  engine.onDispose?.(() => sconceWax.dispose());
+  const sconceGroups = [];
   for (const wz of winZ) {
     // ⚠ ROUND 17: glowStrength 1.5 -> 0.55 AND glowSize 4.0 -> 2.6. These were 5x and 2.35x
     // `sconce`'s own defaults (0.30 / 1.7), i.e. nine two-and-a-half-metre orange halos on the
@@ -2063,17 +2261,64 @@ export default async function view(args = {}) {
     // eats this room's budget is not its daylight but its own practicals. A halo is also the
     // cheapest thing in the frame to disbelieve: it is a flat radial sprite, and at 4 m across
     // it is unmissable as one.
-    const sc = sconce({ merge: true, brass: mats.brass, intensity: 3.0, distance: 6.5, phase: wz, glowStrength: 0.55, glowSize: 2.6, glowColor: 0xffb877 });
+    const sc = sconce({ merge: true, brass: mats.brass, waxMat: sconceWax, intensity: 3.0, distance: 6.5, phase: wz, glowStrength: 0.55, glowSize: 2.6, glowColor: 0xffb877 });
     sc.position.set(R.x0 + 0.30, 2.35, wz + WIN.w / 2 + 1.35);
     sc.rotation.y = Math.PI / 2;
     scene.add(noCast(sc));
+    sconceGroups.push(sc);
   }
   for (const pz of [-5.4, -1.2, 3.0, 6.6]) {
-    const sc = sconce({ merge: true, brass: mats.brass, intensity: 2.8, distance: 6.5, phase: pz, glowStrength: 0.55, glowSize: 2.6, glowColor: 0xffb877 });
+    const sc = sconce({ merge: true, brass: mats.brass, waxMat: sconceWax, intensity: 2.8, distance: 6.5, phase: pz, glowStrength: 0.55, glowSize: 2.6, glowColor: 0xffb877 });
     sc.position.set(R.x1 - 0.30, 2.45, pz);
     sc.rotation.y = -Math.PI / 2;
     scene.add(noCast(sc));
+    sconceGroups.push(sc);
   }
+  // ⚠ AFTER BOTH LOOPS AND AFTER `scene.add`, because the merge bakes each part's WORLD matrix
+  // and a group that has not been added and updated does not have one yet.
+  scene.updateMatrixWorld(true);
+  //
+  // ⚠ THE GLOW DECALS MERGE TOO, AND THEY ARE WHY THIS CLEARS THE BUDGET RATHER THAN SITTING
+  // ONE OVER IT. Merging the ornament alone took `eye.corner.sw` 309 -> 301: sixteen meshes
+  // saved but only eight calls, because half of them were never in the shadow pass and the two
+  // merged meshes are new calls of their own. The nine wall glows are the rest — and unlike the
+  // ornament they are trivially mergeable, because every one of the nine is created with the
+  // SAME four arguments (0xffb877, strength 0.55, size 2.6, pow 2.6), so the first one's
+  // material is correct for all of them. `glowPatch` builds a ShaderMaterial per call, so this
+  // also drops eight identical materials.
+  //
+  // ⚠ `renderOrder` AND THE ADDITIVE BLEND COME FROM THE MATERIAL AND THE MESH SEPARATELY, so
+  // the merged mesh has to be told the renderOrder again — a merged additive decal at the
+  // default 0 sorts before the room and adds its glow to whatever the depth buffer had at the
+  // time, which is nothing.
+  const mergeAcross = (partName, forcedMat) => {
+    const geos = [];
+    let mat = forcedMat, order = 0;
+    for (const g of sconceGroups) {
+      const m = g.getObjectByName(partName);
+      if (!m) continue;
+      if (!mat) { mat = m.material; order = m.renderOrder; }
+      else if (m.material !== mat) m.material.dispose?.();
+      geos.push(m.geometry.clone().applyMatrix4(m.matrixWorld));
+      m.removeFromParent();
+      m.geometry.dispose();
+    }
+    if (!geos.length) return;
+    const merged = mergeGeometries(geos, false);
+    for (const g of geos) g.dispose();
+    if (!merged) return;
+    merged.computeBoundingSphere();
+    const one = new THREE.Mesh(merged, mat);
+    one.name = `${partName}.merged`;
+    one.castShadow = false;
+    one.receiveShadow = forcedMat != null;
+    one.renderOrder = order;
+    scene.add(one);
+    engine.onDispose?.(() => merged.dispose());
+  };
+  mergeAcross('sconce-brass', mats.brass);
+  mergeAcross('sconce-wax', sconceWax);
+  mergeAcross('glow', null);
   for (const [cx, cz] of [[-3.4, -6.2], [3.4, -6.2]]) {
     const cd = candelabra({ merge: true, brass: mats.brass, h: 1.55, arms: 6, intensity: 0.55, distance: 5.0, lights: 1, phase: cx });
     cd.position.set(cx, 1.35, cz);
@@ -2352,8 +2597,31 @@ export default async function view(args = {}) {
   // ⚠ AND IT IS NOT A FOURTH LIGHT ON PURPOSE. `numDirLights` is in three's program cache key,
   // so adding one recompiles every material in the scene — the same reason this file's own
   // practicals note gives for not adding a point light. Re-aiming is free.
+  // ---- ROUND 18: THE WARM FILL WAS THE OTHER HALF OF THE AMBER --------------------------
+  //
+  // `warmColor` 0xffcb9e -> 0xffecd6 and `warm` 0.32 -> 0.236 of the bounce. The paragraph
+  // above is right that desaturating these two colours is where the win lives, and this is the
+  // same move again, one step further, on a measurement that round could not make: with the
+  // room dusted (see `?dust` at the top of this file), an ablation of every chromatic term at
+  // `eye.door` says the remaining warmth splits about evenly between the ALBEDOS and THIS
+  // LIGHT. Dust alone took the ladder's third decile 1.04 -> 0.69 against the bar's 0.38;
+  // neutralising this fill on top takes it to 0.50, and deciles 6 to 10 land on the bar
+  // outright (0.43 / 0.31 / 0.28 / 0.30 / 0.36 against 0.36 / 0.34 / 0.33 / 0.34 / 0.09).
+  //
+  // ⚠ THE INTENSITY COMES DOWN WITH THE COLOUR AND THAT IS NOT A SEPARATE DECISION. A whiter
+  // fill of the same intensity puts more into the green and blue channels of every surface it
+  // touches, so the room gets BRIGHTER as it gets cooler: at 3.12 the median went 58.6 -> 63.1
+  // and out of the 30-60 band. 2.60 (0.236 x bounce) puts it back at 57.2 with the whole
+  // chroma win intact — swept, because the fill's own luminance compensation does not predict
+  // it (that would be 3.12, which is where the median moved).
+  //
+  // ⚠ AND IT IS NOT NEUTRAL, DELIBERATELY. Pure white (0xffffff) reads better on the ladder
+  // still — deciles 3 to 5 land exactly on the bar — but it takes deciles 6 to 9 BELOW it
+  // (0.24 / 0.20 / 0.14 / 0.19 against 0.36 / 0.34 / 0.33 / 0.34), i.e. it fixes the shade by
+  // making the lit half colder than the reference. 0xffecd6 is the point where both halves are
+  // as close as one colour gets them.
   scene.add(bounceFill({
-    warm: 0.32 * LIGHTS.bounce, warmColor: 0xffcb9e, warmDir: [6, 3, 5],
+    warm: 0.236 * LIGHTS.bounce, warmColor: 0xffecd6, warmDir: [6, 3, 5],
     cold: 0.38 * LIGHTS.bounce, coldColor: 0x9db2d4, coldDir: [-8, 5, -5],
     up: 0.22 * LIGHTS.bounce, upColor: 0xa9a290,
   }));

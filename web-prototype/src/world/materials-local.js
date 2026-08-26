@@ -175,11 +175,12 @@ void surface(in vec2 uv, inout Surf s){
 `;
 
 export function stoneMat(opts = {}) {
-  const o = { stone: [0.560, 0.552, 0.528], soot: 0.0, course: 0, seed: 5.0, size: 1024, repeat: [1, 1], ...opts };
+  const o = { stone: [0.560, 0.552, 0.528], soot: 0.0, course: 0, seed: 5.0, size: 1024,
+    repeat: [1, 1], bakeDust: 0, ...opts };
   return baker().standard({
     key: `est-stone:${JSON.stringify(o)}`,
     size: o.size, surface: STONE_SURFACE, heightScale: 0.05, normalStrength: 1.0,
-    repeat: o.repeat, anisotropy: 8,
+    repeat: o.repeat, anisotropy: 8, bakeDust: o.bakeDust,
     uniforms: { uStone: new THREE.Vector3(...o.stone), uSoot: o.soot, uCourse: o.course, uSeed: o.seed },
   }, { envMapIntensity: 1.0, normalScale: new THREE.Vector2(1, 1) });
 }
@@ -458,11 +459,12 @@ void surface(in vec2 uv, inout Surf s){
 `;
 
 export function ceilingMat(opts = {}) {
-  const o = { tint: [0.700, 0.678, 0.630], stain: 0.55, size: 1024, repeat: [1, 1], ...opts };
+  const o = { tint: [0.700, 0.678, 0.630], stain: 0.55, size: 1024, repeat: [1, 1],
+    bakeDust: 0, ...opts };
   return baker().standard({
     key: `est-ceil:${JSON.stringify(o)}`,
     size: o.size, surface: CEILING_SURFACE, heightScale: 0.03, normalStrength: 0.8,
-    repeat: o.repeat, anisotropy: 4,
+    repeat: o.repeat, anisotropy: 4, bakeDust: o.bakeDust,
     uniforms: { uTint: new THREE.Vector3(...o.tint), uStain: o.stain },
   }, { envMapIntensity: 1.0, normalScale: new THREE.Vector2(0.7, 0.7) });
 }
@@ -760,7 +762,7 @@ export function parquetMat(opts = {}) {
     panels: 4.0, wear: 0.6, size: 1024, repeat: [1, 1],
     // 0.85 / 0.35 are the constants this shader carried before they were exposed — every
     // existing caller stays byte-identical. See the note at the joint mix in PARQUET_SURFACE.
-    joint: 0.85, jointDark: 0.35, height: 0.035, normal: 1.0, plain: 0.0, ...opts,
+    joint: 0.85, jointDark: 0.35, height: 0.035, normal: 1.0, plain: 0.0, bakeDust: 0, ...opts,
   };
   return baker().standard({
     key: `est-parq:${JSON.stringify(o)}`,
@@ -771,7 +773,7 @@ export function parquetMat(opts = {}) {
     // could see the shading of. Real parquet is flat; its joints are hairlines. Defaults are
     // the old constants, so every existing caller is byte-identical.
     size: o.size, surface: PARQUET_SURFACE, heightScale: o.height, normalStrength: o.normal,
-    repeat: o.repeat, anisotropy: 16,
+    repeat: o.repeat, anisotropy: 16, bakeDust: o.bakeDust,
     uniforms: {
       uOak: new THREE.Vector3(...o.oak), uOakDark: new THREE.Vector3(...o.oakDark),
       uPanels: o.panels, uWear: o.wear,
@@ -1409,11 +1411,12 @@ void surface(in vec2 uv, inout Surf s){
 `;
 
 export function boiserieMat(opts = {}) {
-  const o = { paint: [0.560, 0.535, 0.478], grime: 0.75, size: 1024, repeat: [1, 1], ...opts };
+  const o = { paint: [0.560, 0.535, 0.478], grime: 0.75, size: 1024, repeat: [1, 1],
+    bakeDust: 0, ...opts };
   return baker().standard({
     key: `est-bois:${JSON.stringify(o)}`,
     size: o.size, surface: BOISERIE_SURFACE, heightScale: 0.025, normalStrength: 0.9,
-    repeat: o.repeat, anisotropy: 8,
+    repeat: o.repeat, anisotropy: 8, bakeDust: o.bakeDust,
     uniforms: { uPaint: new THREE.Vector3(...o.paint), uGrime: o.grime },
   }, { clearcoat: 0.25, clearcoatRoughness: 0.35, envMapIntensity: 1.0 }, THREE.MeshPhysicalMaterial);
 }

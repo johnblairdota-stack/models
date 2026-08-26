@@ -47,6 +47,7 @@ layout(location = 2) out vec4 oNormalHeight;
 uniform vec2  uTexel;        // 1 / size
 uniform float uNormalStrength;
 uniform float uHeightScale;  // world-ish scale of height relative to one uv tile
+uniform float uBakeDust;     // albedo desaturation toward its own luminance - see oAlbedo below
 
 ${defines}
 ${NOISE_GLSL}
@@ -104,7 +105,63 @@ void main(){
                           -dy * uHeightScale * uNormalStrength,
                           1.0));
 
-  oAlbedo       = vec4(sat3(s.albedo), 1.0);
+  // ---- DUST -----------------------------------------------------------------------
+  // A shut-up room's surfaces are not the colour of the material, they are the colour of the
+  // material under a decade of dust, and that is a DESATURATION rather than a darkening.
+  //
+  // Round 18 measured this against the bar at seventeen player-eye angles and it is the
+  // round's finding. At MATCHED LUMINANCE the reference's shaded floor carries r-b 16.6 and
+  // this room's 33.7; its shaded upper wall 27.4 against this room's 54.9. Exactly two to one,
+  // on two unrelated surfaces. And it is not the lighting: with every chromatic light term
+  // replaced by white directionals the room still ran (r-b)/L 1.05 through its second decile
+  // against the bar's 0.40, so no fill colour, sun colour or environment tint can reach it.
+  //
+  // ⚠ IT ALSO IS NOT THE GRADE, AND BOTH GRADE KNOBS WERE TRIED. saturation scales the whole
+  // ladder and the defect is a SHAPE — the bar's ladder is flat at 0.33-0.40 across deciles
+  // 2-9 and this room's is a ramp from 1.14 down to 0.49 — so the cut that fixes the midtones
+  // (0.70) still leaves the shade at 1.8x and costs the drapes and the gilding everywhere.
+  // shadowTint, which is weighted by pow(1-L, 2) and so has the right shape, is a MULTIPLY
+  // at splitBalance strength: [0.86, 0.97, 1.17], already an implausibly blue shadow, moved
+  // the darkest decile 1.42 -> 1.32. The instrument has to be the albedo.
+  //
+  // ⚠ AND IT GOES HERE, IN THE BAKER, RATHER THAN INTO EACH SURFACE'S OWN COLOUR CONSTANTS.
+  // Dust does not know which shader it landed on. Applied per material it would be a dozen
+  // edits each with its own hand-fitted number and no way to move the room as a whole; applied
+  // to s.albedo it desaturates the flecks, the joints, the stave drift and the patina
+  // together, which is what a layer of dust actually does to a surface.
+  //
+  // ⚠ THE NAME IS uBakeDust AND NOT uDust FOR A REASON THAT COST A BOOT. This uniform is
+  // injected into EVERY surface shader, so its name shares a namespace with every uniform any
+  // of them declares — and marble.js already had a uDust of its own. The collision is a GLSL
+  // 'redefinition' error, which does not throw: the draw is dropped, the bake hands back a
+  // cleared texture, and the room comes up black. The validation twenty lines down is what
+  // turned that into a loud failure instead of a silent one, which is exactly what it is for.
+  // Anything added here in future wants the same uBake prefix.
+  //
+  // ⚠ uBakeDust MUST APPEAR IN THE CALLER'S CACHE KEY. bake() caches on o.key alone, so a
+  // material baked dusty and then requested clean is served the dusty one — the same trap
+  // documented on ballroomEnv's key and on applyPlanarReflection. Default 0.0, so every
+  // caller that does not ask for dust is byte-identical.
+  //
+  // Toward the albedo's OWN luminance, so a dusty floor is the same brightness as a clean one
+  // and the median-luminance gate does not move when this does.
+  //
+  // ⚠ AND IT IS WEIGHTED TO THE DARK END, WHICH IS NOT A REFINEMENT — IT IS THE MEASUREMENT.
+  // Under the white-light probe this room runs (r-b)/L 1.26 / 0.98 / 0.75 through deciles 1-3
+  // against the bar's 0.79 / 0.40 / 0.38, and 0.27 / 0.19 / 0.22 through 7-9 against its
+  // 0.34 / 0.33 / 0.34 — too warm by two and a half at the bottom and ALREADY COOLER THAN THE
+  // BAR at the top. A flat desaturation would fix the shade by making the highlights wrong.
+  //
+  // The dark end is where the warmth is because that is where these shaders put it: every one
+  // of them derives its dark values by tinting the base colour warmer, not just darker
+  // (PARQUET's joints are uOakDark * 0.35 at r/b 2.63; BOISERIE's dirt is uPaint * 0.58/0.54/
+  // 0.46). Which is also the physical story, so the curve costs nothing to justify: dust is not
+  // wiped out of the recesses, the pores and the joints, and the exposed high points are the
+  // parts that get handled and polished. 30% strength by mid-grey, full strength in the dark.
+  float aL = dot(s.albedo, vec3(0.2126, 0.7152, 0.0722));
+  vec3 dusted = mix(s.albedo, vec3(aL),
+                    uBakeDust * mix(1.0, 0.30, smoothstep(0.05, 0.45, aL)));
+  oAlbedo       = vec4(sat3(dusted), 1.0);
   oORM          = vec4(sat(s.ao), sat(s.roughness), sat(s.metalness), sat(s.breakOrder));
   oNormalHeight = vec4(n * 0.5 + 0.5, sat(s.height));
 }
@@ -135,6 +192,9 @@ export class MaterialBaker {
    * @param {string} [o.defines]      raw GLSL prepended (consts, helper fns)
    * @param {number} [o.normalStrength=1]
    * @param {number} [o.heightScale=0.04]  height range / uv-tile size, i.e. relief steepness
+   * @param {number} [o.bakeDust=0]   desaturate the albedo toward its own luminance, 0..1. A
+   *                                  shut-up room is grey because it is dusty, not because its
+   *                                  materials are grey. MUST be reflected in `o.key`.
    * @param {number[]} [o.repeat=[1,1]]
    * @param {number} [o.anisotropy=4]
    * @returns {{map:THREE.Texture, orm:THREE.Texture, normalMap:THREE.Texture, size:number}}
@@ -164,6 +224,10 @@ export class MaterialBaker {
       uTexel: { value: new THREE.Vector2(1 / size, 1 / size) },
       uNormalStrength: { value: o.normalStrength ?? 1.0 },
       uHeightScale: { value: o.heightScale ?? 0.04 },
+      // ⚠ ANY CALLER PASSING THIS MUST ALSO PUT IT IN `o.key` — see the DUST block in the
+      // fragment above. `bake()` caches on the key alone and will happily serve a dusty bake
+      // to a caller that asked for a clean one.
+      uBakeDust: { value: o.bakeDust ?? 0.0 },
     };
     for (const [k, v] of Object.entries(o.uniforms ?? {})) uniforms[k] = { value: v };
 
