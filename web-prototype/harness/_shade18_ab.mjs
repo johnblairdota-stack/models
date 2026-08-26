@@ -175,6 +175,14 @@ for (const spec of SPECS) {
     // are warm cream and this room's are neutral). A split tone is the only instrument shaped
     // like that error — it is weighted by pow(L, 1.5) at one end and pow(1-L, 2) at the other.
     if (v.high) gp.highlightTint = v.high;
+    // `toe` / `lift` — the bottom of the curve. Round 18's last open gap is deciles 3-4, and
+    // the characterisation that came out of it is that this room's RED matches the bar there
+    // and its green and blue are both low. Two things follow that are worth testing together:
+    // this room's darkest decile is 8.4 against the bar's 11.3, i.e. it crushes MORE than the
+    // reference does, and (r-b)/L divides by that smaller L, so part of the ratio gap is the
+    // crush rather than the colour. `toeCrush` and `lift` move both at once.
+    if (v.toe != null) gp.toeCrush = v.toe;
+    if (v.lift) gp.lift = v.lift;
     if (v.split != null) gp.splitBalance = v.split;
     // `grain` — the grade's film grain, which is PER-PIXEL and therefore sits underneath every
     // fine-scale measurement in the frame. Round 18 spent two sweeps trying to pull the floor's

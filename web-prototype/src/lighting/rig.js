@@ -530,7 +530,7 @@ export const GRADES = {
     // toeCrush 0 and a small lift, because the rebalance put 6.0% of the frame at L <= 2.6 and
     // the locked art holds 0.1%. Crushed black is a render tell in its own right and it was
     // about to be bought with the macro win.
-    lift: [0.013, 0.0125, 0.012],
+    lift: [0.014, 0.020, 0.028],
     // ROUND 15: 0.0 -> 0.018 (via an intermediate 0.010), paired with `exposure` above. Not a
     // re-litigation of the line above — this compensates the OTHER direction. Brightening the
     // drape material alone (room-ballroom.js, ITEM 3) to where it actually reads as red velvet
@@ -547,7 +547,39 @@ export const GRADES = {
     // toe win (7.5, inside 2-8) or re-blowing the ITEM 1 hotspot (top-decile chroma 0.088,
     // unchanged from the bloom fix's own 0.086-0.087). black% (pixels at L<=2.6) rises to ~0.5%,
     // nowhere near the 6% crushed-black failure the line above exists to avoid.
-    toeCrush: 0.018,
+    // ---- ROUND 18, LAST PASS: 0.018 -> 0.0, AND THE LIFT GOES COOL WITH IT ----------------
+    //
+    // 🚨 **THIS ROOM WAS CRUSHING HARDER THAN THE REFERENCE AND THE CHROMA METRIC WAS BEING
+    // PAID FOR IT TWICE.** Round 18 matched the ladder through deciles 5-8 and could not close
+    // deciles 1-4. The characterisation that finally moved it: at decile 3 this room reads
+    // 30.4 / 21.0 / 12.7 against the bar's 31.0 / 27.1 / 20.6 — the RED MATCHES, and green and
+    // blue are both low. That is not "too much warm light", which is what four sweeps had been
+    // chasing; it is a shade that has had its bottom pulled out.
+    //
+    // And (r-b)/L divides by L, so a harder crush inflates the ratio on top of the real
+    // difference. Against the bar: darkest decile 8.4 against its 11.3, black% 0.2 against 0.1.
+    // Both say the same thing.
+    //
+    //     ladder             d1     d2     d3     d4     d5     d6     d7     d8   median
+    //     bar               0.79   0.40   0.38   0.40   0.36   0.36   0.34   0.33   49.8
+    //     toeCrush 0.018    1.40   1.08   0.79   0.62   0.42   0.33   0.33   0.32   46.2
+    //     0.0 + cool lift   0.84   0.78   0.59   0.48   0.33   0.26   0.28   0.27   47.6
+    //
+    // Decile 1 lands on the bar (0.84 against 0.79), the toe goes 8.4 -> 10.0 against its 11.3,
+    // and black% lands on it exactly (0.1%). Total absolute ladder error nearly halves.
+    //
+    // ⚠ THIS DOES NOT UNDO ROUND 15, WHICH RAISED IT. That round set 0.018 against a build with
+    // **6.0%** of the frame at L <= 2.6 — crushed black is a render tell and it was right to
+    // fix. This build sits at 0.2% before the change and 0.1% after, so the condition that
+    // justified the crush no longer exists, and the crush is now costing the shade instead.
+    // Checked in the picture as well as the number: the coffers, the corners and the arched
+    // opening all stay deep; what opens up is the floor's dark half, which in the reference is
+    // a mid olive-grey with detail in it rather than near-black.
+    //
+    // ⚠ AND THE LIFT IS DELIBERATELY BLUE-SHIFTED. It was [0.013, 0.0125, 0.012], i.e. flat.
+    // The deficit measured above is specifically in GREEN and BLUE, so a flat lift would buy
+    // the level back and leave the colour wrong.
+    toeCrush: 0.0,
     haze: 0.026, hazeColor: [0.058, 0.056, 0.052],
     // ---- ROUND 17, FOURTH PASS: THE SPLIT-TONING WAS INVERTED AGAINST THE BAR --------------
     //
