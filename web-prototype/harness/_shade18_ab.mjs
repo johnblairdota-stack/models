@@ -167,6 +167,14 @@ for (const spec of SPECS) {
     const gp = {};
     if (v.sat != null) gp.saturation = v.sat;
     if (v.shadow) gp.shadowTint = v.shadow;
+    // `high` — the highlight half of the split tone, which round 17 deliberately left neutral
+    // and round 18's finished ladder says should not be. Against the bar this room now matches
+    // through deciles 6-8 and misses at BOTH ends in OPPOSITE directions: deciles 3-4 run
+    // 0.789 / 0.626 against 0.381 / 0.397 (too warm in the deep shade) and deciles 9-10 run
+    // 0.145 / 0.010 against 0.336 / 0.089 (too COOL at the top, because the bar's blown windows
+    // are warm cream and this room's are neutral). A split tone is the only instrument shaped
+    // like that error — it is weighted by pow(L, 1.5) at one end and pow(1-L, 2) at the other.
+    if (v.high) gp.highlightTint = v.high;
     if (v.split != null) gp.splitBalance = v.split;
     // `grain` — the grade's film grain, which is PER-PIXEL and therefore sits underneath every
     // fine-scale measurement in the frame. Round 18 spent two sweeps trying to pull the floor's

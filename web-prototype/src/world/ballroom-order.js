@@ -548,6 +548,23 @@ export function ballroomOrder(bin, o = {}) {
   const RAISED = o.raised !== false;
   // The pilaster shafts' material bucket — see the note at the window-wall pilasters.
   const PILK = o.pilasterKey ?? K.wall ?? 'wall';
+  /**
+   * ⚠ **THE CAPITALS GET THEIR OWN KEY FOR THE SAME REASON THE SHAFTS DID, AND ROUND 18 FOUND
+   * IT THE HARD WAY.** That round chased bright broken marks on this room's upper wall through
+   * eight probes. A raycast returned `kit:gilt`, which names a BUCKET and not a member — the
+   * cornice, the skirting, the window trim, the panel beads and these capitals were all in it.
+   * Splitting the beads out proved they were innocent; `?keysplit=1` cleared the other three.
+   * What finally identified them was the WORLD COORDINATE of the hit: x -12.7 (30 cm proud of
+   * a wall at -13.0), y 7.5-7.8, z at the pier spacing — which is exactly `pilaster`'s cap at
+   * `proj: 0.30` on the window wall, and nothing else in the room is there.
+   *
+   * A capital is fine mouldings on a member 18 m away, in the brightest material in the room,
+   * against grey plaster. That is a legitimate thing to want to tune separately from a cornice
+   * two metres wide, and there was no way to say so.
+   *
+   * Defaults to `gilt`, so every existing caller is byte-identical.
+   */
+  const CAPK = o.capKey ?? 'gilt';
 
   if (parts.windowWall) {
     wallRun(B, {
@@ -590,7 +607,7 @@ export function ballroomOrder(bin, o = {}) {
           // A giant order in a room like this is stone against painted joinery, so giving the
           // shaft a key of its own lets the caller say so. Falls back to `wall`, which is what
           // every existing caller gets.
-          keys: { shaft: PILK, cap: 'gilt' },
+          keys: { shaft: PILK, cap: CAPK },
         });
       }
       // A crimson drape swagged over each window head, and its two side panels. ROUND 17:
@@ -754,7 +771,7 @@ export function ballroomOrder(bin, o = {}) {
         // `critic-eye-sweep` measured the seven pixels on.
         x: px, y: 0.34, z: z1 - 0.14, rotY: Math.PI,
         h: h - 1.55, w: 0.66, proj: 0.28, flutes: 6,
-        keys: { shaft: PILK, cap: 'gilt' },
+        keys: { shaft: PILK, cap: CAPK },
       });
     }
   }

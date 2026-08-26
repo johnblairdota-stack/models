@@ -45,8 +45,32 @@ const out = await page.evaluate(async (pts) => {
     // are not what painted the pixel either. Both are skipped so the answer is the SOLID.
     const hits = rc.intersectObject(e.scene, true).filter((h) => h.object.visible
       && !h.object.isPoints && !/^(dust|glow|light-shaft|light-pool)$/.test(h.object.name || ''));
-    return { px, py, hits: hits.slice(0, 3).map((h) => `${h.object.name || h.object.type}@${h.distance.toFixed(2)}`) };
+    // ⚠ THE WORLD POINT AND THE FACE, NOT JUST THE BUCKET NAME. Round 18 spent five probes
+    // asking "which gilt is that" and getting the answer "gilt", because `GeoBin` merges by
+    // MATERIAL and the name of the mesh is therefore the name of the material — it cannot
+    // distinguish a cornice from a window architrave from a drapery pole. A world coordinate
+    // can: it is looked up against the source, and there is exactly one thing at any given
+    // (x, y, z). The face normal says which way the surface points, which separates a
+    // horizontal member from a vertical one at the same height.
+    const f = (v) => [v.x, v.y, v.z].map((n) => +n.toFixed(2));
+    return {
+      px, py,
+      hits: hits.slice(0, 3).map((h) => ({
+        name: h.object.name || h.object.type,
+        d: +h.distance.toFixed(2),
+        at: f(h.point),
+        n: h.face ? f(h.face.normal.clone().transformDirection(h.object.matrixWorld)) : null,
+        tris: h.object.geometry?.index
+          ? h.object.geometry.index.count / 3
+          : (h.object.geometry?.attributes?.position?.count ?? 0) / 3,
+      })),
+    };
   });
 }, PX);
-for (const r of out) console.log(`(${r.px},${r.py})`.padEnd(14), r.hits.join('  |  '));
+for (const r of out) {
+  console.log(`(${r.px},${r.py})`);
+  for (const h of r.hits) {
+    console.log(`    ${h.name.padEnd(12)} d ${String(h.d).padStart(6)}  at ${JSON.stringify(h.at).padEnd(24)} normal ${JSON.stringify(h.n)}  (${h.tris} tris in bucket)`);
+  }
+}
 await browser.close();

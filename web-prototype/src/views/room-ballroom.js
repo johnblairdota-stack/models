@@ -661,8 +661,48 @@ export default async function view(args = {}) {
   // everything this room's shade sees, and at r/b 1.106 it was warm enough that three passes of
   // dust-sheet albedo were fighting it rather than fixing the sheets. Pulled to near-neutral —
   // the SUN carries this room's warmth, and it now carries the bar's own amount of it.
+  /**
+   * `?candle=N` — HOW MUCH CANDLE GLOW IS IN THE ENVIRONMENT SHELL OF A ROOM WHOSE CANDLES ARE
+   * NOT LIT.
+   *
+   * `ballroomEnv`'s two warmest boxes model glow off a lit chandelier cluster at r/b 2.1, and
+   * they sit at eye height at both ends of the room. That is right for `prop.chandelier`, which
+   * shares this preset and whose subject is a lit fixture; it is not obviously right here, where
+   * the chandeliers hang unlit in a shut-up house and the light is daylight.
+   *
+   * Round 18 matched this room's decile ladder to the bar through deciles 5-8 — 0.327 / 0.334 /
+   * 0.318 against 0.362 / 0.342 / 0.334 — and could not close deciles 3-4, which sit at
+   * 0.79 / 0.62 against 0.38 / 0.40 after the albedos, the bounce fills and the sun colour have
+   * all been corrected. These boxes are what remains that is both warm and low.
+   *
+   * 🚨 **AND THEY ARE NOT IT. THIS KNOB DOES NOTHING AND IS KEPT TO SAY SO.** Swept 1.0 / 0.5 /
+   * 0.15 / 0: decile 3 moves 0.79 -> 0.77 and decile 2 moves 0.79 -> 0.77 the WRONG way
+   * (1.08 -> 1.11). They are simply too dim next to the window-wall box at [2.60, 2.72, 2.95]
+   * and the floor bounce at 1.075 to matter, however chromatic they are on their own.
+   *
+   * ⚠ WHAT THE DEEP SHADE ACTUALLY IS, STILL OPEN. At decile 3 this room reads 30.4 / 21.0 /
+   * 12.7 against the bar's 31.0 / 27.1 / 20.6 — the RED MATCHES and the green and blue are
+   * both far low. So it is not "too much warm light", it is missing green and blue in the
+   * shade, which is a different search. Ruled out so far: the albedos (dusted), the three
+   * bounce fills (recoloured), the sun (recoloured), these boxes, and the grade's split tone
+   * (helps at both ends but bleeds into deciles 6-8, which already match the bar exactly).
+   *
+   * ⚠ AND PART OF THE RATIO IS AN ARTEFACT OF THE TOE BEING DARKER. (r-b)/L divides by a small
+   * number down here: at decile 1 the bar is 0.79 at L 11.3 and this room 1.40 at L 8.4, which
+   * in ABSOLUTE r-b is 9.0 against 11.9 — a third more, not nearly double. The gap is real at
+   * decile 3 and overstated at decile 1.
+   */
+  const CANDLE = qs.has('candle')
+    ? Math.max(0, Math.min(2, Number(qs.get('candle')) || 0)) : 1.0;
   scene.environment = ballroomEnv(renderer, {
-    key: 'ballroom2-r17', bounceTint: [1.075, 1.085, 1.075],
+    /**
+     * ⚠ `key` CARRIES `candleGlow` NOW TOO. `roomEnv` caches on the key alone, so a shell baked
+     * at one glow value and requested at another is served the first — the same trap this
+     * function's own header documents for `bounceTint`, and the same one `bakeDust` documents
+     * in the baker. `-r18` because the value below changes what this key means.
+     */
+    key: `ballroom2-r18-cg${CANDLE}`, bounceTint: [1.075, 1.085, 1.075],
+    candleGlow: CANDLE,
   });
   scene.environmentIntensity = LIGHTS.env;
   scene.background = new THREE.Color(0x05070c);
@@ -1002,7 +1042,35 @@ export default async function view(args = {}) {
    * `kit:gilt` — so the streaks are not `wallRun` geometry at all. They are two thin gilt
    * surfaces 14 cm apart at 18.2 m, in front of the wall, in the shared bin.
    *
-   * 🚨 **WHAT IS ESTABLISHED, AND WHAT IS LEFT.** Ruled out by deletion or by a live tweak:
+   * 🚨🚨 **AND THEN THE COMPLAINT ITSELF DID NOT SURVIVE ITS OWN METRIC. THE REFERENCE IS
+   * SPIKIER THAN THIS ROOM IS.** `harness/_spike18.mjs` counts pixels standing clear of both
+   * horizontal neighbours, and it was written in this round to quantify "broken bright marks".
+   * Run on the bar's own upper wall, same rect size, same thresholds:
+   *
+   *     400 x 180 patch of upper wall      thr 40    thr 25
+   *     refs/bf1/bf1-ballroom-01             324       908
+   *     here                                 253       407
+   *
+   * The metric does not measure a defect. It measures small bright features, and a reference
+   * full of gilded enrichment, marble veining and window mullions has more of them than this
+   * room does. Eight probes went into something that reads as a defect at 2x zoom on a crop and
+   * is not one — the third complaint in this round withdrawn by measuring it rather than
+   * restating it, after "the floor needs rebuilding" and "the room is more gilded than the bar".
+   *
+   * ⚠ **RULE, AND IT IS THE ONE WORTH KEEPING OUT OF ALL OF THIS: A METRIC INVENTED TO DESCRIBE
+   * A DEFECT MUST BE RUN ON THE REFERENCE BEFORE IT IS TRUSTED.** If the bar scores worse on it,
+   * there is no defect — there is a metric that measures something both pictures have.
+   *
+   * ⚠ The probes below are kept anyway, because locating a member inside a merged bucket cost
+   * eight boots and nobody should pay that twice. `?bead=` and `?cap=` both default to 1.0 and
+   * change nothing. What finally identified the member was not any name but the raycast's WORLD
+   * COORDINATE — x -12.7 against a wall at -13.0, y 7.5-7.8, z on the pier spacing, which is
+   * `pilaster`'s cap at `proj: 0.30` and nothing else in the room is there. `GeoBin` merges by
+   * MATERIAL, so a mesh name is a material name and a raycast can only ever answer with a
+   * bucket; when the bucket holds six members that answer is worth nothing. Ask for the point.
+   *
+   * ---- what the probes DID establish, all still true ----
+   * Ruled out by deletion or by a live tweak:
    * the grime, the crystal, the named chandelier meshes, the dust motes, the light shafts, the
    * wall itself, the clearcoat, the environment specular, the panel beads, the cornice, the
    * skirting and the window trim. Ruled out as a CLASS by experiment: aliasing, because MSAA
@@ -1014,6 +1082,17 @@ export default async function view(args = {}) {
    * finding where the beads live cost a boot that nobody should have to spend twice.
    */
   const BEAD = qs.has('bead') ? Math.max(0.2, Math.min(1, Number(qs.get('bead')) || 1)) : 1.0;
+  // `?cap=N` — the giant order's capitals, which is where the marks above actually live. Same
+  // shape of knob as `?bead=` and the same default: 1.0, no split, no extra draw call. Taking
+  // them down a stop and a half moved the spike count 253 -> 216, which is real and is also
+  // not worth spending a draw call on given the metric itself did not survive the bar control.
+  const CAP = qs.has('cap') ? Math.max(0.2, Math.min(1, Number(qs.get('cap')) || 1)) : 1.0;
+  const capGilt = CAP < 1 ? mats.gilt.clone() : mats.gilt;
+  if (CAP < 1) {
+    capGilt.color = new THREE.Color(CAP, CAP, CAP);
+    capGilt.name = 'ballroom-pilaster-cap';
+    engine.onDispose?.(() => capGilt.dispose());
+  }
   const beadGilt = BEAD < 1 ? mats.gilt.clone() : mats.gilt;
   if (BEAD < 1) {
     // ⚠ MULTIPLIES IN LINEAR. 0.62 is about two thirds of a stop, not 38% "less bright" — the
@@ -1027,6 +1106,7 @@ export default async function view(args = {}) {
     pil: pilasterStone,
     wall: wallMat,
     mould: beadGilt,
+    ...(CAP < 1 ? { cap: capGilt } : {}),
     ...(qs.get('keysplit') === '1'
       ? { cornice: mats.gilt, skirt: mats.gilt, trim: mats.gilt }
       : {}),
@@ -1342,6 +1422,7 @@ export default async function view(args = {}) {
   const winZ = PLAN.winZ;
   ballroomOrder(bin, {
     plan: PLAN, keys: K, pilasterKey: 'pil', uvWall: 1.15,
+    ...(CAP < 1 ? { capKey: 'cap' } : {}),
     parts: { nearWall: false, ceiling: false, mirrors: false, dressing: false, balustrade: false },
   });
   // the vestibule beyond the arch, so the opening is not a black hole
@@ -1595,6 +1676,7 @@ export default async function view(args = {}) {
    */
   ballroomOrder(bin, {
     plan: PLAN, keys: K, pilasterKey: 'pil', uvWall: 1.15,
+    ...(CAP < 1 ? { capKey: 'cap' } : {}),
     parts: {
       windowWall: false, mirrorWall: false, endWall: false,
       mirrors: false, dressing: false, balustrade: false,
@@ -1750,6 +1832,7 @@ export default async function view(args = {}) {
   ];
   ballroomOrder(bin, {
     plan: PLAN, keys: K, pilasterKey: 'pil', uvWall: 1.15,
+    ...(CAP < 1 ? { capKey: 'cap' } : {}),
     parts: {
       windowWall: false, mirrorWall: false, endWall: false, nearWall: false,
       ceiling: false, balustrade: false,

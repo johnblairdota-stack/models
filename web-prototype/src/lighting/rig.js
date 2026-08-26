@@ -122,6 +122,7 @@ export function studyEnv(renderer) {
 
 /** Preset: a double-height ballroom with a whole wall of windows. */
 export function ballroomEnv(renderer, o = {}) {
+  const CG = o.candleGlow ?? 1.0;
   return roomEnv(renderer, {
     // ⚠ `key` CARRIES THE OPTIONS OR THE BAKER HANDS BACK THE WRONG SHELL. `roomEnv` caches by
     // key, and `prop.chandelier` shares this preset — so a ballroom-only variant that reused
@@ -159,8 +160,27 @@ export function ballroomEnv(renderer, o = {}) {
        */
       { size: [14.0, 0.3, 14.0], pos: [0, -7.0, 0], color: o.bounceTint ?? [1.150, 1.120, 1.040] },     // marble bounce — a chequer floor under a wall of windows is the brightest surface in the room and it is what lights the walls
       { size: [10.0, 0.3, 10.0], pos: [2, 7.4, 0], color: [0.200, 0.186, 0.164] },      // ceiling catch
-      { size: [3.0, 3.0, 0.3], pos: [4.0, 1.0, -11.0], color: [0.44, 0.34, 0.21] },     // chandelier cluster, warm
-      { size: [3.0, 3.0, 0.3], pos: [-2.0, 1.0, 11.0], color: [0.36, 0.28, 0.175] },
+      /**
+       * ⚠ THE TWO WARMEST BOXES IN THE SHELL, AND THE BALLROOM CAN TURN THEM DOWN.
+       *
+       * These model candle glow off a lit chandelier cluster, at r/b 2.1 and 2.06 — by some way
+       * the most chromatic thing in this environment — and they sit at EYE HEIGHT at both ends
+       * of the room, which is exactly where the deep shade this shell describes lands. That is
+       * correct for `prop.chandelier`, whose whole subject is a lit fixture. It is not correct
+       * for a daylit ballroom whose chandeliers are hanging unlit under dust sheets.
+       *
+       * Round 18 matched this room's ladder to the bar through deciles 5-8 and could not close
+       * deciles 3-4: 0.79 / 0.62 against 0.38 / 0.40, i.e. the deep shade still around 1.8x too
+       * warm after the albedos, the fills and the sun had all been corrected. These are what is
+       * left that is both warm and low.
+       *
+       * `candleGlow` scales them for callers that want to say so; default 1.0 keeps
+       * `prop.chandelier` byte-identical.
+       */
+      { size: [3.0, 3.0, 0.3], pos: [4.0, 1.0, -11.0],
+        color: [0.44 * CG, 0.34 * CG, 0.21 * CG] },
+      { size: [3.0, 3.0, 0.3], pos: [-2.0, 1.0, 11.0],
+        color: [0.36 * CG, 0.28 * CG, 0.175 * CG] },
     ],
   });
 }
