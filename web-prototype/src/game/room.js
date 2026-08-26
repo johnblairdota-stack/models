@@ -3899,7 +3899,30 @@ async function loadEstateSurfaces(L) {
          * one and its walls are the reference's palest — without being a different tier of
          * brightness from the rooms either side of it.
          */
-        wall: L.boiserieMat({ paint: [0.330, 0.302, 0.262], grime: 0.85, size: 1024 }),
+        /**
+         * 🆕 **AND `bakeDust: 0.75`, WHICH IS A PROPERTY OF THE HOUSE AND NOT OF THE LIGHT IN IT**
+         * (round 18). `views/room-ballroom.js` validated that room from all seventeen player-eye
+         * presets and found the defect its one-camera gate could not see: the surfaces were
+         * carrying warmth that belongs to the light. Measured there at matched luminance, the
+         * shaded upper wall ran r-b 54.9 against the bar's 27.4 and the shaded floor 33.7
+         * against 16.6 — and a white-light probe settled that it was the ALBEDOS, because with
+         * every chromatic light term in the scene zeroed the room still ran 1.26 / 0.98 / 0.75
+         * through deciles 1-3 against the bar's 0.79 / 0.40 / 0.38.
+         *
+         * This room has the same ladder shape — deciles 5 to 8 at 1.10 / 1.13 / 0.81 / 0.68,
+         * measured through `?spawn=ballroom.south` — so the same finding applies.
+         *
+         * ⚠️ **WHICH IS WHY THIS STRENGTH PORTS WHERE THE SHOWCASE'S OTHER THREE CHANGES DO NOT.**
+         * That round also recoloured the warm bounce fill and the sun. Both are daylight terms
+         * and this room has neither: it is lit at night by five practicals, and a candle-lit
+         * room is CORRECTLY orange. Dust is not a lighting term — it is how long the shutters
+         * have been closed, and these are the same closed shutters, so it is the same number
+         * rather than a re-solve. That is the same distinction the note above draws for `paint`
+         * in the other direction: a LEVEL is a function of the light and wants its own solve; a
+         * material's own dustiness is not.
+         */
+        wall: L.boiserieMat({ paint: [0.330, 0.302, 0.262], grime: 0.85, size: 1024,
+          bakeDust: 0.75 }),
         /**
          * 🆕 **ITS OWN PARQUET BAKE, CARRYING THE SHOWCASE'S ROUND-17 PATTERN SOLVE** — and
          * carrying ONLY the pattern half of it, which is the whole point of this entry.
@@ -3925,6 +3948,15 @@ async function loadEstateSurfaces(L) {
          */
         floor: L.parquetMat({
           size: 1024, joint: 0.44, jointDark: 0.62, height: 0.016, normal: 0.50,
+          /**
+           * ⚠️ **0.42 AND NOT THE 0.75 THE WALL TAKES, FOR THE REASON THE SHOWCASE FOUND.** The
+           * floor is the one surface that gets the dust curve at nearly full weight — it is
+           * dark, and that curve is weighted to the dark end — so at the shared number it
+           * overshoots: the bar's shaded floor is OLIVE, its green standing 11.5 counts above
+           * its blue, and at 0.75 the showcase's went to 2.0, a grey-violet. Two floors can
+           * match on r-b and not be the same timber.
+           */
+          bakeDust: 0.42,
           /**
            * ⚠️ **AND THE ALBEDO DOES PORT AFTER ALL — SOLVED HERE, NOT COPIED.** The entry
            * above originally shipped without this and said so: the showcase's oak was matched
@@ -3963,14 +3995,23 @@ async function loadEstateSurfaces(L) {
         }),
         // the showcase's own gilding, unchanged — it is already solved through the tone curve
         gilt: mats.gilt,
-        stone: mats.stone,
+        /**
+         * 🆕 **ITS OWN STONE BAKE RATHER THAN THE SHARED ONE, PURELY SO IT CAN CARRY THE DUST.**
+         * `estateMaterials()` is a process-wide cache — the study, the gallery and the hall all
+         * read `mats.stone` — so passing `bakeDust` through it would dust every room in the
+         * house on this room's evidence. Same colour and same seed as the shared entry
+         * (`materials-local.js`, `stone: () => stoneMat({ stone: [0.545, 0.540, 0.520],
+         * course: 0 })`), plus the dust; `views/room-ballroom.js` does exactly this and for
+         * exactly this reason.
+         */
+        stone: L.stoneMat({ stone: [0.545, 0.540, 0.520], course: 0, bakeDust: 0.75 }),
         /**
          * ⚠️ 0.400 against the showcase's 0.480. `ceiling-1` measured every ceiling in the slice
          * as the darkest and flattest band in the frame, so this does NOT take the study's 0.260
          * treatment — but this soffit is 9.6 m up with no practical within 4 m of it, and the
          * `up` term in `spaces.js` is doing the other half of the work. Both are `?ceil=`-able.
          */
-        ceil: L.ceilingMat({ tint: [0.400, 0.378, 0.336], stain: 0.75 }),
+        ceil: L.ceilingMat({ tint: [0.400, 0.378, 0.336], stain: 0.75, bakeDust: 0.75 }),
         /**
          * ⚠️ **`mats.clearGlass`, NOT A NEW BAKE.** `materials-local.js` authored that entry for
          * this exact room — *"clear leaded daylight glazing for the ballroom and the gallery...
