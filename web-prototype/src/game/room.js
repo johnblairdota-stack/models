@@ -3947,6 +3947,19 @@ async function loadEstateSurfaces(L) {
            * contrast is the other half of what stopped that floor reading as pattern.
            */
           oak: [0.108, 0.088, 0.072], oakDark: [0.079, 0.064, 0.053],
+          /**
+           * ⚠️ **PLAIN, BECAUSE THE SHOWCASE IS NOW PLAIN.** `views/room-ballroom.js` ended
+           * round 17 by laying this oak in a running block bond instead of Versailles panels —
+           * with the daylight matched to the bar, a 0.7 m panel cell with a diamond lattice in
+           * every one of them was the last thing a blind pair turned on, because the reference's
+           * floor reads as a TONE and a panelled one reads as pattern. Softening the joints and
+           * halving the relief (both above) helped and neither was enough.
+           *
+           * The two rooms are the same room. If that default is ever put back there — it is one
+           * query param, `?floorpattern=panel`, and the note in that file explains why it might
+           * be — this line goes with it.
+           */
+          plain: 1.0,
         }),
         // the showcase's own gilding, unchanged — it is already solved through the tone curve
         gilt: mats.gilt,

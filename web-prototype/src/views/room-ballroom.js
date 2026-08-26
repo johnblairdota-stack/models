@@ -185,8 +185,37 @@ export default async function view(args = {}) {
   // `?grime=N` — the ablation for round 17's skirting dirt. 0 removes it entirely.
   const GRIME = Number.isFinite(parseFloat(qs.get('grime')))
     ? Math.max(0, Math.min(4, parseFloat(qs.get('grime')))) : 1.0;
-  // `?floorpattern=plain` — the Versailles panel vs a running block bond. See the parquet bake.
-  const FLOOR_PLAIN = qs.get('floorpattern') === 'plain' ? 1.0 : 0.0;
+  /**
+   * `?floorpattern=panel|plain` — WHICH WAY THE OAK IS LAID, AND THE DEFAULT CHANGED.
+   *
+   * 🚨 **JOHN: THIS IS THE ONE CHANGE IN ROUND 17 YOU MAY WANT TO PUT BACK, AND IT IS ONE
+   * QUERY PARAM.** `?floorpattern=panel` restores the Versailles panel this room has had since
+   * round 14. It is flagged this loudly because it is the only change in the round that is a
+   * matter of taste rather than a defect, and because it was put to you and the round carried
+   * on before you answered.
+   *
+   * Why it flipped anyway: with the daylight matched to the bar (sun-patch chroma 35.8 against
+   * its 35.9) the last thing a blind pair turned on was that the reference's floor reads as a
+   * TONE and this one read as PATTERN — a 0.7 m panel cell with a 5 x 5 diamond lattice inside
+   * every one of them, across the largest surface in every frame. Everything that could be
+   * done without changing the pattern was done first and is still in the bake above: the joint
+   * darkness came down (85% -> 44% toward black) and the relief was more than halved (35 mm ->
+   * 16 mm at half normal strength). Both helped and neither was enough.
+   *
+   * ⚠ AND A SCALE CORRECTION WAS TRIED BEFORE THIS AND MADE IT WORSE — see the note at the UV
+   * repeat below. Bigger cells put the pieces at a realistic 21 cm and made each panel FRAME a
+   * bolder square; finer would hide the pattern and would be joinery nobody has ever made. The
+   * two cannot both be had from a panelled floor, which is exactly why the reference does not
+   * have one: it gets realistic pieces AND a calm floor by laying the same oak plain.
+   *
+   * ⚠ THIS IS NOT A REVERSAL OF ROUND 14. That round chose WOOD PARQUET over an edge-to-edge
+   * marble chequer, against this same bar, and that choice stands untouched — the floor is
+   * still parquet with a chequer border. What was never measured against the bar is the
+   * pattern laid INTO the parquet, because nobody had matched the daylight yet and the floor's
+   * colour was the louder problem. This finishes the job round 14 started rather than undoing
+   * it.
+   */
+  const FLOOR_PLAIN = qs.get('floorpattern') === 'panel' ? 0.0 : 1.0;
   // `?eograze=N` — the ablation for round 17's grazing-lobe widening. 0 restores the pre-r17
   // mirror on BOTH the floor and the end plates; 1 is the shipping physical coefficient. See
   // the long note above `planarEnvmapChunk`'s LOD block for what it does and why it is not a
