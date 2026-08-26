@@ -655,6 +655,7 @@ uniform float uPanels;   // panels across the tile
 uniform float uWear;
 uniform float uJoint;      // how strongly the board joints darken — see the note at the mix
 uniform float uJointDark;  // and how far toward black they go
+uniform float uPlain;      // 0 = Versailles panel, 1 = running block bond
 
 float staveGrain(vec2 sp, float h){
   // stretched fbm along the stave, plus cathedral arcs from the growth rings
@@ -670,14 +671,32 @@ void surface(in vec2 uv, inout Surf s){
 
   // frame vs field
   float bd = min(min(pf.x, 1.0 - pf.x), min(pf.y, 1.0 - pf.y));
-  float frame = 1.0 - smoothstep(0.145, 0.155, bd);
+  // ⚠ uPlain — THE SAME OAK LAID PLAIN INSTEAD OF IN PANELS (round 17).
+  // At 0 this is the Versailles panel it has always been: a bordered frame with a diagonal
+  // lattice inside. At 1 the frame is gone and the lattice is un-rotated and stretched into a
+  // running block bond — the ordinary parquet de chantier a service floor is laid in. Every
+  // other property of the surface (grain, medullary fleck, wax, traffic lanes, joints) is
+  // untouched, so this is the same FLOOR laid a different way, not a different material.
+  //
+  // It exists because the last thing separating this room from
+  // refs/bf1/bf1-ballroom-01.png in a blind pair is that its floor reads as a tone and this
+  // one reads as pattern, and the reference's floor is parquet too — laid plain. Which one
+  // this room should have is a design decision, and a decision wants both pictures.
+  float frame = mix(1.0 - smoothstep(0.145, 0.155, bd), 0.0, uPlain);
 
   // diagonal lattice inside the frame
   vec2 d = (pf - 0.5) * 1.42;
-  vec2 dr = rot(0.7853981) * d;
-  vec2 lat = dr * 5.0;
+  vec2 dr = mix(rot(0.7853981) * d, d, uPlain);
+  vec2 lat = dr * mix(5.0, 2.6, uPlain) * mix(vec2(1.0), vec2(0.30, 1.15), uPlain);
+  // running bond: every other course offset by half a block, which is what stops a plain
+  // floor reading as a grid the moment the frame that was hiding it is gone
+  lat.x += floor(lat.y) * 0.5 * uPlain;
   vec2 lc = floor(lat), lf = fract(lat);
-  float latJoint = 1.0 - smoothstep(0.0, 0.055, min(min(lf.x, lf.y), min(1.0 - lf.x, 1.0 - lf.y)));
+  // ⚠ THE JOINT BAND IS IN LAT-CELL UNITS, so a long thin block gets a proportionally FATTER
+  // line along its length — which is why the first plain build read as brickwork rather than
+  // as a floor. Narrower under uPlain to compensate.
+  float latJoint = 1.0 - smoothstep(0.0, mix(0.055, 0.024, uPlain),
+                                    min(min(lf.x, lf.y), min(1.0 - lf.x, 1.0 - lf.y)));
 
   // pick the stave cell + its local coords
   vec2  sp; float sh;
@@ -723,7 +742,7 @@ export function parquetMat(opts = {}) {
     panels: 4.0, wear: 0.6, size: 1024, repeat: [1, 1],
     // 0.85 / 0.35 are the constants this shader carried before they were exposed — every
     // existing caller stays byte-identical. See the note at the joint mix in PARQUET_SURFACE.
-    joint: 0.85, jointDark: 0.35, height: 0.035, normal: 1.0, ...opts,
+    joint: 0.85, jointDark: 0.35, height: 0.035, normal: 1.0, plain: 0.0, ...opts,
   };
   return baker().standard({
     key: `est-parq:${JSON.stringify(o)}`,
@@ -738,7 +757,7 @@ export function parquetMat(opts = {}) {
     uniforms: {
       uOak: new THREE.Vector3(...o.oak), uOakDark: new THREE.Vector3(...o.oakDark),
       uPanels: o.panels, uWear: o.wear,
-      uJoint: o.joint, uJointDark: o.jointDark,
+      uJoint: o.joint, uJointDark: o.jointDark, uPlain: o.plain,
     },
   }, {
     clearcoat: 0.35, clearcoatRoughness: 0.28, envMapIntensity: 1.0,

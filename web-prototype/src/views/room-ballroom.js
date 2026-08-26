@@ -184,6 +184,8 @@ export default async function view(args = {}) {
   // `?grime=N` — the ablation for round 17's skirting dirt. 0 removes it entirely.
   const GRIME = Number.isFinite(parseFloat(qs.get('grime')))
     ? Math.max(0, Math.min(4, parseFloat(qs.get('grime')))) : 1.0;
+  // `?floorpattern=plain` — the Versailles panel vs a running block bond. See the parquet bake.
+  const FLOOR_PLAIN = qs.get('floorpattern') === 'plain' ? 1.0 : 0.0;
   // `?eograze=N` — the ablation for round 17's grazing-lobe widening. 0 restores the pre-r17
   // mirror on BOTH the floor and the end plates; 1 is the shipping physical coefficient. See
   // the long note above `planarEnvmapChunk`'s LOD block for what it does and why it is not a
@@ -838,6 +840,11 @@ export default async function view(args = {}) {
       // pattern as detail, so it is exactly the wrong instrument for this one change and was
       // read here only as a floor, not as a target.
       height: 0.016, normal: 0.50,
+      // `?floorpattern=plain` lays the same oak in a running block bond instead of Versailles
+      // panels — see the note at `uPlain` in materials-local.js. Default is the panel this
+      // room has always had; the toggle exists so the design decision can be made from two
+      // pictures rather than from an argument.
+      plain: FLOOR_PLAIN,
     });
     parquetFloorMat.name = 'ballroom-floor-parquet';
     engine.onDispose?.(() => parquetFloorMat.dispose());
