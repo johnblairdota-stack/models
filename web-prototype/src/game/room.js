@@ -3175,6 +3175,61 @@ export async function buildTestRoom(engine, o = {}) {
             put(ballPatina.grimeBand({ w: len, h: PAT_H, tint: SOOT, strength: 0, corner: 0, macro: 0.24 }),
               x, PAT_H / 2 + 0.1, z, rotY, 7);
           }
+          /**
+           * 🆕 **AND THE FLOOR AND THE CEILING** (round 18). The block above gave this room's
+           * WALLS a middle detail frequency and the showcase's critic then re-filed the exact
+           * same complaint one surface along, twice: the reference carries metre-scale history
+           * on its floor too, and the coffer soffit was the last large surface in the house
+           * with none at all — twenty-eight panels of identical clean plaster under a roof that
+           * has been leaking into a shut-up house for a decade. Same shader, laid flat.
+           *
+           * ⚠️ **THE FLOOR QUAD IS renderOrder 6, BELOW THE WALLS' 7 AND 8.** It multiplies the
+           * floor and anything reflected in it, which is correct — a stain on a polished floor
+           * dims what the floor is reflecting; it does not sit on top of the reflection like a
+           * decal.
+           *
+           * ⚠️ **AND THE CEILING QUAD LETS THE BEAMS OCCLUDE IT, WHICH IS WHY IT IS ONE QUAD AND
+           * NOT TWENTY-EIGHT.** `cofferedCeiling` drops its beams 0.34 below the soffit face, so
+           * a quad two centimetres under the panel plane is above every beam's underside: from
+           * below, the depth test hits a beam wherever there is one and the quad only where
+           * there is a panel. One draw call, cut into the coffer wells by geometry already
+           * there.
+           *
+           * ⚠️ **THE SCALES ARE NOT THE WALLS' AND THAT IS MEASURED, NOT PREFERRED.** 3.2 m
+           * cells across a 21 m floor at a grazing angle read as noise; a floor's staining is a
+           * few big areas. And the showcase's first ceiling pass took the FLOOR's numbers
+           * straight up there — 7.5 m cells across an 18 x 9 m soffit is two and a half macro
+           * cells by one, i.e. one low-frequency wash, and a uniform 5% darkening of a uniform
+           * surface is still a uniform surface. Four distinct areas by two is the fewest that
+           * reads as damage rather than as exposure.
+           */
+          if (ballPatina?.grimeBand) {
+            // ⚠️ THE CENTRE IS DERIVED FROM THE SAME PLAN BOUNDS THE WALL FACES ABOVE USE, not
+            // from a `cx`/`cz` field. This room is NOT centred on the origin — `spaces.js` puts
+            // it at cz -0.65 — and `ballroomPlan` does not return a centre, so `plan.cx` reads
+            // undefined and a `?? 0` fallback would have laid both quads 0.65 m out of place
+            // along z. Half a metre of offset on a 21 m quad is invisible in a capture and
+            // wrong in the room.
+            const mx = (plan.x0 + plan.x1) / 2, mz = (plan.z0 + plan.z1) / 2;
+            const fw = endLen + 2, fd = wallLen + 2;
+            const fp = ballPatina.grimeBand({ w: fw, h: fd, tint: SOOT, strength: 0, corner: 0, macro: 0.20 });
+            fp.material.uniforms.uMacroScale.value.set(fw / 6.5, fd / 6.5);
+            fp.rotation.x = -Math.PI / 2;
+            fp.position.set(mx, 0.02, mz);
+            fp.renderOrder = 6;
+            sp.root.add(fp);
+
+            const C = plan.ceiling ?? {};
+            const cw = endLen - 2.3, cd = wallLen - 2.3;
+            if (cw > 1 && cd > 1) {
+              const cp = ballPatina.grimeBand({ w: cw, h: cd, tint: SOOT, strength: 0, corner: 0, macro: 0.60 });
+              cp.material.uniforms.uMacroScale.value.set(cw / 4.5, cd / 4.5);
+              cp.rotation.x = Math.PI / 2;
+              cp.position.set(C.x ?? mx, (C.y ?? plan.h) - 0.02, C.z ?? mz);
+              cp.renderOrder = 6;
+              sp.root.add(cp);
+            }
+          }
         }
       },
     };
@@ -3949,6 +4004,27 @@ async function loadEstateSurfaces(L) {
         floor: L.parquetMat({
           size: 1024, joint: 0.44, jointDark: 0.62, height: 0.016, normal: 0.50,
           /**
+           * 🆕 **`patCon` 0.50, PORTED, BECAUSE IT IS A PROPERTY OF THE JOINERY AND NOT OF THE
+           * LIGHT** (round 18). The showcase spent two rounds concluding "the bar's floor reads
+           * as a TONE and this one reads as PATTERN" and twice drew the wrong conclusion from
+           * it — that the oak had to be laid plain. Measured instead of argued, on shade-only
+           * rects at matched luminance, the difference is contrast AT SCALE:
+           *
+           *     window        4px    10px    24px    48px
+           *     bar           3.5     7.3    12.1    19.0
+           *     showcase      9.5    13.3    15.8    15.6
+           *
+           * The bar climbs by a factor of 5.4 across the range; that floor was flat at 1.6 and
+           * 2.7x the bar at the fine end. `patCon` scales grain, stave drift, flecking, joints
+           * and the RELIEF toward the field's mean, leaving the wax and wear lanes, which are
+           * the large-scale terms the bar has MORE of.
+           *
+           * ⚠️ This ports where the albedo above does not, and the distinction is the same one
+           * that note draws: how loud a floor's joinery pattern is is a property of the floor.
+           * How BRIGHT it is is a property of the room's lights.
+           */
+          patCon: 0.50,
+          /**
            * ⚠️ **0.42 AND NOT THE 0.75 THE WALL TAKES, FOR THE REASON THE SHOWCASE FOUND.** The
            * floor is the one surface that gets the dust curve at nearly full weight — it is
            * dark, and that curve is weighted to the dark end — so at the shared number it
@@ -3977,6 +4053,15 @@ async function loadEstateSurfaces(L) {
            * are lit differently. `oakDark` keeps the showcase's ratio
            * (0.73 of `oak`) rather than the default's 0.47, since halving the stave-to-stave
            * contrast is the other half of what stopped that floor reading as pattern.
+           */
+          /**
+           * ⚠️ **AND ROUND 18'S OAK HUE CORRECTION DOES NOT PORT, BECAUSE THIS FLOOR IS ALREADY
+           * THERE.** That round found the showcase's oak was a walnut ratio — r/g 1.535 against
+           * the bar's floor at 1.16 — and lifted its green at constant luminance to land at
+           * 1.181. These values, arrived at independently by desaturating toward luma in two
+           * measured steps for this room's own light, sit at r/g 1.227. Applying the showcase's
+           * multiplier on top would take them to 0.944, i.e. green ABOVE red, which is not oak
+           * and not anything. Checked rather than copied, which is what the note above asks for.
            */
           oak: [0.108, 0.088, 0.072], oakDark: [0.079, 0.064, 0.053],
           /**
