@@ -823,7 +823,43 @@ export default async function view(args = {}) {
    * because those are the large-scale terms and the bar has MORE of them, not fewer.
    */
   const FLOOR_PAT = qs.has('floorpat')
-    ? Math.max(0, Math.min(2, Number(qs.get('floorpat')) || 0)) : 0.50;
+    ? Math.max(0, Math.min(2, Number(qs.get('floorpat')) || 0)) : 0.30;
+  /**
+   * `?floorwax=N` — HOW MUCH THE POLISH VARIES ACROSS THE ROOM. **DEFAULT 1.0, WHICH IS
+   * BYTE-IDENTICAL, AND THE WHOLE REASON IT EXISTS IS A MEASUREMENT THAT TURNED OUT TO BE OF
+   * THE WRONG THING.**
+   *
+   * 🚨 **THE RECT HAD PAPER IN IT.** This knob was built to close a gap at the 48 px window —
+   * 11.5 here against the bar's 19.0, the one scale where this floor looked UNDER the bar
+   * rather than over it — and that 19.0 is not the bar's floor. The rect used for it
+   * (600,760,300,120) contains five or six sheets of scattered white paper on a dark floor,
+   * and the local-contrast measure was reading those. Cropped and looked at, which is what
+   * should have happened before four sweeps were run against it.
+   *
+   * On a genuinely paper-free patch of the same floor at the same luminance (600,830,220,70,
+   * mean 33.0) the bar reads **2.5 / 3.8 / 4.7 / 5.1** across 4/10/24/48 px — nearly FLAT, and
+   * flatter than this floor at every single scale rather than louder at one. So the conclusion
+   * inverts: there was never a large-scale deficit to fill, and turning this knob up moves AWAY
+   * from the bar. It is left at 1.0 and kept only as an ablation.
+   *
+   * Two other instruments were tried against the phantom before the rect was checked, and both
+   * are worth recording because both are the obvious guess and both are wrong for real reasons:
+   *
+   *   · raising the grime macro buys contrast at EVERY scale and costs 11 counts of mean
+   *     luminance doing it (31.9 -> 20.9), because fbm has energy everywhere and a multiply
+   *     can only darken. `?floorstain=` is the ablation.
+   *   · raising the AO radius 0.85 -> 3.6, with intensity, does NOTHING: 11.5 -> 11.6. AO is a
+   *     contact term and only acts near occluders, so on the open floor where this is measured
+   *     it has nothing to say. That was the "it wants a lighting answer" hand-wave from earlier
+   *     in this round, actually pulled, and it was wrong.
+   *
+   * ⚠ RULE, WRITTEN HERE BECAUSE IT COST THIS ROUND FOUR SWEEPS: a local-contrast number over a
+   * rect is only a measurement of the SURFACE if the rect contains nothing but the surface.
+   * Crop it and look at it first. Paper, a shadow edge, a prop or a reflection inside the rect
+   * are all read as texture by this measure, and it reports them confidently.
+   */
+  const FLOOR_WAX = qs.has('floorwax')
+    ? Math.max(0, Math.min(6, Number(qs.get('floorwax')) || 0)) : 1.0;
   const LUMA = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
   const oakHue = (c) => {
     const t = [c[0], c[1] * OAK_G, c[2]];
@@ -1130,7 +1166,7 @@ export default async function view(args = {}) {
       // pattern's contrast and leaves the panel joints doing the work, which is what the
       // reference's floor actually shows.
       oak: oakHue([0.281, 0.183, 0.101]), oakDark: oakHue([0.205, 0.135, 0.078]),
-      wear: 0.6, bakeDust: FLOOR_DUST, patCon: FLOOR_PAT,
+      wear: 0.6, bakeDust: FLOOR_DUST, patCon: FLOOR_PAT, waxVar: FLOOR_WAX,
       // ⚠ AND THE JOINTS, WHICH ARE THE OTHER HALF OF THE SAME COMPLAINT. Halving the
       // stave-to-stave contrast above stopped the WOOD reading as pattern; the board joints
       // kept drawing the grid on their own, because they were mixing 85% toward near-black.

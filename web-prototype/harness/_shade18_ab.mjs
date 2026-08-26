@@ -41,8 +41,13 @@ const browser = await chromium.launch({
 const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
 await page.routeWebSocket((u) => u.hostname === '127.0.0.1' && u.port === String(PORT), () => {});
 const DUST = opt('dust');
+// `--extra "a=1&b=2"` — BAKE-TIME params, which cannot be swept live because they are baked
+// into textures or into scene construction. Combined with the live specs below, this lets one
+// boot answer "with the pattern already flattened and the grime already off, how much of what
+// is left is the grade's grain?" — a question that otherwise costs three boots to bracket.
+const EXTRA = opt('extra');
 await page.goto(`http://127.0.0.1:${PORT}/?view=room.ballroom&capture=1&cam=${encodeURIComponent(CAM)}`
-  + (DUST != null ? `&dust=${DUST}` : ''),
+  + (DUST != null ? `&dust=${DUST}` : '') + (EXTRA ? `&${EXTRA}` : ''),
   { waitUntil: 'load', timeout: 60000 });
 await page.waitForFunction(() => document.body.dataset.rrrReady === '1' || document.body.dataset.rrrError === '1',
   null, { timeout: 600000 });
@@ -169,6 +174,14 @@ for (const spec of SPECS) {
     // at 0.026 is a candidate for most of that, and if it is, the floor's own pattern is
     // already at the bar and the remaining complaint is about the grade instead.
     if (v.grain != null) gp.grain = v.grain;
+    // `aoR` / `aoI` — the ambient-occlusion radius and strength, which is the one lever this
+    // round has repeatedly called "a lighting answer" for the floor's missing room-scale
+    // variation and never actually pulled. The bar's floor carries broad soft darkening around
+    // and under its crates and mounds: 48px local contrast 19.0 against this room's 11.5. At
+    // aoRadius 0.85 this AO is a CONTACT term — it darkens where things touch the floor and
+    // says nothing at three to five metres, which is exactly the band that is missing.
+    if (v.aoR != null) gp.aoRadius = v.aoR;
+    if (v.aoI != null) gp.aoIntensity = v.aoI;
     if (Object.keys(gp).length) window.__rrr.setGrade(gp);
   }, q);
   await page.evaluate((n) => window.__rrr.settle(n), 6);

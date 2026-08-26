@@ -4010,20 +4010,29 @@ async function loadEstateSurfaces(L) {
            * it — that the oak had to be laid plain. Measured instead of argued, on shade-only
            * rects at matched luminance, the difference is contrast AT SCALE:
            *
-           *     window        4px    10px    24px    48px
-           *     bar           3.5     7.3    12.1    19.0
-           *     showcase      9.5    13.3    15.8    15.6
+           *     window                      4px    10px    24px    48px
+           *     bar, paper-free patch       2.5     3.8     4.7     5.1
+           *     showcase, before            9.5    13.3    15.8    15.6
            *
-           * The bar climbs by a factor of 5.4 across the range; that floor was flat at 1.6 and
-           * 2.7x the bar at the fine end. `patCon` scales grain, stave drift, flecking, joints
-           * and the RELIEF toward the field's mean, leaving the wax and wear lanes, which are
-           * the large-scale terms the bar has MORE of.
+           * ⚠️ **AND BOTH ROWS ARE THE SECOND SET OF NUMBERS, BECAUSE THE FIRST RECT HAD PAPER
+           * IN IT.** The bar rect used at first contained five sheets of scattered white paper
+           * on a dark floor, which this measure reads as texture and reports confidently — it
+           * gave the bar 3.5 / 7.3 / 12.1 / 19.0 and made its floor look like it CLIMBED with
+           * scale. On a genuinely clean patch it is nearly flat, and flatter than this floor at
+           * every scale. Crop the rect and look at it before trusting a number from it.
+           *
+           * `patCon` scales grain, stave drift, flecking, joints and the RELIEF toward the
+           * field's mean. Compared through the reference's own lossy codec — which lowers fine
+           * contrast on its own, and is worth controlling for — 0.50 lands 4.5 / 7.5 / 9.5 / 9.4
+           * against the bar's 2.5 / 3.8 / 4.7 / 5.1, and 0.30 lands 3.8 / 6.3 / 7.9 / 8.0.
+           * Below about 0.15 the joinery starts to go at close range, and `eye.down` is a real
+           * player camera.
            *
            * ⚠️ This ports where the albedo above does not, and the distinction is the same one
            * that note draws: how loud a floor's joinery pattern is is a property of the floor.
            * How BRIGHT it is is a property of the room's lights.
            */
-          patCon: 0.50,
+          patCon: 0.30,
           /**
            * ⚠️ **0.42 AND NOT THE 0.75 THE WALL TAKES, FOR THE REASON THE SHOWCASE FOUND.** The
            * floor is the one surface that gets the dust curve at nearly full weight — it is

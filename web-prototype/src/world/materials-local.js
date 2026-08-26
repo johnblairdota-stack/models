@@ -659,6 +659,7 @@ uniform float uJoint;      // how strongly the board joints darken — see the n
 uniform float uJointDark;  // and how far toward black they go
 uniform float uPlain;
 uniform float uPatCon;      // fine-pattern contrast, 1 = as authored — see the block below
+uniform float uWaxVar;      // polish variation at room scale, 1 = as authored
 
 float staveGrain(vec2 sp, float h){
   // stretched fbm along the stave, plus cathedral arcs from the growth rings
@@ -774,7 +775,30 @@ void surface(in vec2 uv, inout Surf s){
   // wax: uneven polish, worn through in the traffic lanes
   float wax  = fbmT(uv * 3.5 + 8.0, 4.0, 3, 2.0, 0.55);
   float lane = smoothstep(0.42, 0.88, fbmT(uv * vec2(2.0, 2.6) + 15.0, 3.0, 3, 2.0, 0.5)) * uWear;
-  float rough = 0.30 + wax * 0.20 + lane * 0.30 + g * 0.05 + joint * 0.3;
+  // ---- ROUND 18: HOW MUCH THE POLISH VARIES, WHICH IS THE FLOOR'S ROOM-SCALE TERM --------
+  //
+  // ⚠ THE MEASUREMENT THIS WAS BUILT FOR WAS OF THE WRONG THING, AND THE DEFAULT IS THEREFORE
+  // 1.0 (byte-identical). It was built to close a 48px local-contrast gap - 11.5 here against
+  // the bar's 19.0 - and that 19.0 came from a rect with five sheets of scattered white paper
+  // in it. On a paper-free patch at the same luminance the bar reads 2.5 / 3.8 / 4.7 / 5.1
+  // across 4/10/24/48px: FLATTER than this floor at every scale, not louder at one. So there
+  // was no large-scale deficit and turning this up moves away from the bar.
+  //
+  // Kept because the mechanism is sound and the next person may want it, and because the two
+  // other instruments tried against the same phantom are worth not re-trying: raising the grime
+  // macro buys contrast at EVERY scale and costs 11 counts of mean luminance (fbm has energy
+  // everywhere, and a multiply only darkens), and raising the AO radius 0.85 -> 3.6 does
+  // nothing at all on an open floor patch, because AO is a contact term.
+  //
+  // The term that varies a floor broadly WITHOUT darkening it is how polished it is. A shut-up
+  // ballroom is waxed in patches and dull in others, and under a wall of windows that reads as
+  // broad soft sheen variation rather than as dirt. It is already here, driving roughness off
+  // an fbm at uv * 3.5, i.e. metre scale; it just had a fixed and fairly small amplitude.
+  //
+  // uWaxVar scales that amplitude around its own mean, so the average roughness does not move
+  // with it and neither does the median luminance. 1.0 is exactly what this shader did before.
+  float rough = 0.30 + (0.10 + (wax - 0.5) * 0.40 * uWaxVar)
+              + lane * 0.30 + g * 0.05 + joint * 0.3;
   col *= 1.0 - lane * 0.06;
 
   s.albedo    = sat3(col);
@@ -797,7 +821,7 @@ export function parquetMat(opts = {}) {
     // 0.85 / 0.35 are the constants this shader carried before they were exposed — every
     // existing caller stays byte-identical. See the note at the joint mix in PARQUET_SURFACE.
     joint: 0.85, jointDark: 0.35, height: 0.035, normal: 1.0, plain: 0.0, bakeDust: 0,
-    patCon: 1.0, ...opts,
+    patCon: 1.0, waxVar: 1.0, ...opts,
   };
   return baker().standard({
     key: `est-parq:${JSON.stringify(o)}`,
@@ -812,7 +836,7 @@ export function parquetMat(opts = {}) {
     uniforms: {
       uOak: new THREE.Vector3(...o.oak), uOakDark: new THREE.Vector3(...o.oakDark),
       uPanels: o.panels, uWear: o.wear,
-      uJoint: o.joint, uJointDark: o.jointDark, uPlain: o.plain, uPatCon: o.patCon,
+      uJoint: o.joint, uJointDark: o.jointDark, uPlain: o.plain, uPatCon: o.patCon, uWaxVar: o.waxVar,
     },
   }, {
     clearcoat: 0.35, clearcoatRoughness: 0.28, envMapIntensity: 1.0,
