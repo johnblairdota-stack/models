@@ -3116,6 +3116,28 @@ export async function buildTestRoom(engine, o = {}) {
           },
           mirrors: { pier: mirrorPlates },
           mirrorPlates: true,
+          /**
+           * 🆕 **THE ENTABLATURE IS STONE, NOT GILT** (round 18). `ballroom-order.js` folds
+           * `mould`/`cornice`/`skirt`/`trim` into `gilt` by default, so this room's cornice was
+           * two metres of solid gilding — and the showcase found by scanning for the warmest
+           * pixels of its darkest deciles that this is where they live: a bright warm albedo
+           * sitting in deep shade lands in the LOW deciles carrying gilt's chroma. The
+           * reference's cornice is pale stone with thin gold enrichment run along it.
+           *
+           * ⚠️ **THE HUE PORTS AND THE VALUE DOES NOT, WHICH IS THE WHOLE POINT OF THAT ROUND'S
+           * FINDING.** "Stone instead of gilt" bundles a hue change with a VALUE change; the
+           * showcase shipped it off once because the value cost it two median gates, then found
+           * that separating them removed the cost entirely. Its own multiplier (0.58) was fitted
+           * against ONE 1150 W spot through five windows. This room is lit by five practicals,
+           * so it takes its own — the same distinction `wall` and `floor` above draw.
+           *
+           * Only `cornice` moves. The skirting, the window trim and the panel beads stay gilt,
+           * so the gold goes where the reference keeps it — on the enrichment, off the mass.
+           */
+          keys: {
+            wall: 'wall', mould: 'gilt', cornice: 'cornice', skirt: 'gilt', trim: 'gilt',
+            leaf: 'wall',
+          },
           material: {
             baluster: mats.estate?.stone ?? mats.skirt,
             mirror: mats.estate?.ball?.mirror ?? null,
@@ -4099,6 +4121,31 @@ async function loadEstateSurfaces(L) {
          * exactly this reason.
          */
         stone: L.stoneMat({ stone: [0.545, 0.540, 0.520], course: 0, bakeDust: 0.75 }),
+        /**
+         * 🆕 The entablature's own stone — see the `keys` note at the `ballroomOrder` call.
+         *
+         * ⚠️ A CLONE OF THE ENTRY ABOVE WITH A VALUE MULTIPLIER, NOT A SECOND BAKE. The baker
+         * caches on its key, so re-baking the same stone at a different colour would cost a
+         * second 1024 texture set for a material that differs by one scalar. `color` multiplies
+         * the map in LINEAR — the same trap that took this project's packing cases to black
+         * silhouettes when a multiplier was read as an sRGB percentage.
+         *
+         * ⚠️ 0.58 IS THE SHOWCASE'S NUMBER AND IT IS USED HERE AS A STARTING POINT, NOT AS A
+         * SOLVE. It was fitted so a stone cornice carried the same luminance as the gilt band it
+         * replaced under ONE 1150 W spot; this room is lit by five practicals. Measured after
+         * the swap through `?spawn=ballroom.south`: this room's median moves 33.8 -> 34.5 and
+         * its top-decile chroma 0.355 -> 0.354, both well inside the band and neither moved
+         * much — because at that spawn the cornice is a thin band near the top of the frame
+         * rather than the broad surface it is at the showcase's `overlook`. So the borrowed
+         * value is SAFE here rather than verified here, and if this room's lighting is ever
+         * re-solved it wants its own sweep from a camera that actually faces the entablature.
+         */
+        cornice: (() => {
+          const c = L.stoneMat({ stone: [0.545, 0.540, 0.520], course: 0, bakeDust: 0.75 }).clone();
+          c.color = new THREE.Color(0.58, 0.58, 0.58);
+          c.name = 'game-ballroom-cornice';
+          return c;
+        })(),
         /**
          * ⚠️ 0.400 against the showcase's 0.480. `ceiling-1` measured every ceiling in the slice
          * as the darkest and flattest band in the frame, so this does NOT take the study's 0.260
