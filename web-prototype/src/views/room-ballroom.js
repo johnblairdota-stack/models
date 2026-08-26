@@ -853,6 +853,23 @@ export default async function view(args = {}) {
       // panel colour off per-cell hashes, not off world-space UV parity, so there is no seam to
       // protect and the repeat count can scale continuously with the border.
       const uv = floorParquet.geometry.attributes.uv;
+      // ⚠ 2.9 STANDS, AND A SCALE CORRECTION WAS TRIED HERE AND MADE IT WORSE. At 2.9 the panel
+      // cell is 0.72 m and `PARQUET_SURFACE` fits a 5 x 5 diagonal lattice inside it, so the
+      // pieces come out at 14 cm where a real Versailles panel's are 20-25 cm. That looked like
+      // the explanation for the last thing a blind pair against `refs/bf1/bf1-ballroom-01.png`
+      // was turning on — this floor reads as PATTERNED and the reference's, which is also
+      // parquet, reads as a tone. So the cell went to 1.09 m (divisor 4.4) to put the pieces at
+      // 21 cm.
+      //
+      // It came back MORE patterned, not less, and the reason is worth keeping: at room
+      // distance what draws the eye is not the piece size but the PANEL FRAME, and making the
+      // cells bigger makes each frame a bolder square. Finer would hide the pattern and would
+      // also be joinery no one has ever made. The two cannot both be had from this surface —
+      // the reference gets realistic pieces AND a calm floor by having no lattice at all.
+      //
+      // So the remaining gap is the PATTERN ITSELF, it is a design decision about this room
+      // rather than a defect, and it is John's. Everything that could be done without making
+      // it is done: joint darkness and relief are both softened (see the bake above).
       const ru = pw / 2.9, rv = pd / 2.9;
       for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * ru, uv.getY(i) * rv);
     }
