@@ -28,7 +28,19 @@ const out = await page.evaluate(() => {
     const g = o.geometry;
     if (g?.index) tris += g.index.count / 3; else if (g?.attributes?.position) tris += g.attributes.position.count / 3;
   });
-  const kit = Object.keys(names).filter((n) => n.startsWith('kit:')).sort();
+  // per-bucket triangles: the question "are the raised panels reaching this room" is a
+  // triangle-count question, not a squint-at-the-wall question. A wall with fielded panels
+  // carries an order of magnitude more geometry than a wall without.
+  const per = {};
+  e.scene.traverse((o) => {
+    if (!o.isMesh && !o.isInstancedMesh) return;
+    const n = o.name || '(unnamed)';
+    const g = o.geometry;
+    const t = g?.index ? g.index.count / 3 : (g?.attributes?.position ? g.attributes.position.count / 3 : 0);
+    per[n] = (per[n] || 0) + t;
+  });
+  const kit = Object.keys(names).filter((n) => n.startsWith('kit:')).sort()
+    .map((n) => `${n}=${Math.round(per[n])}t`);
   return { grime, kit, tris: Math.round(tris), total: Object.values(names).reduce((a, b) => a + b, 0) };
 });
 console.log('grime/patina quads :', out.grime, '(expected 8: four walls x band+patina)');
