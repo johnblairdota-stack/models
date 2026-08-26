@@ -21,6 +21,17 @@ const out = await page.evaluate(async (pts) => {
   const T = await import('/node_modules/three/build/three.module.js');
   const e = window.__rrr.engine;
   const rc = new T.Raycaster();
+  // ⚠ THRESHOLDS, OR THIN PRIMITIVES ARE INVISIBLE TO THIS TOOL AND IT LIES CONFIDENTLY.
+  // A Raycaster tests Points and Line geometry against a DISTANCE THRESHOLD that defaults to 1
+  // for Points and 1 for Lines in world units — which sounds generous but is applied in the
+  // ray's own space, and a hair-thin crystal string or a chain link routinely falls outside it.
+  // The tool then reports the WALL BEHIND, which is exactly how round 18 spent four probes
+  // hiding the grime, the crystal, the chandeliers, the dust and the shafts looking for
+  // something the raycast had already told it was "the wall".
+  rc.params.Points.threshold = 0.05;
+  rc.params.Line.threshold = 0.05;
+  rc.params.Line2 = { threshold: 0.05 };
+  rc.params.Sprite = {};
   const v = new T.Vector2();
   return pts.map(([px, py]) => {
     v.set((px / 1920) * 2 - 1, -((py / 1080) * 2 - 1));

@@ -865,7 +865,24 @@ export default async function view(args = {}) {
     // the picture. What is bright in the opening is now the sky behind it.
     ballroomGlass.emissiveIntensity = 0.9;
     ballroomGlass.transparent = true;
-    ballroomGlass.opacity = 0.42;
+    /**
+     * ⚠ **0.42 -> `?glassop=`, DEFAULT 0.16, AND THE OLD VALUE IS WHY THE QUARRY PATTERN IS
+     * VISIBLE AT ALL** (round 18). At 0.42 nearly half of every pane is the glass's own baked
+     * surface, and that bake carries a diamond quarry across the whole pane. Zoomed in against
+     * the bar the difference is not subtle: the bar's windows are near-white with THIN DARK
+     * GLAZING BARS and no quarry whatever, and this room's read as frosted decorative glass.
+     *
+     * ⚠ AND THAT IS SAFE TO DO HERE PRECISELY BECAUSE THE GRID IS GEOMETRY. `wallRun` emits
+     * real glazing bars on the `wintrim` bucket; the quarry is the only part of the grid that
+     * lives in the texture. So thinning the pane deletes the pattern the bar does not have and
+     * keeps the bars it does — which is not a trade, it is the two being separable.
+     *
+     * Clear glass at normal incidence reflects about 4%. 0.42 was never a physical number; it
+     * was the number that let the leading bloom back when the pane was the picture, and the
+     * courtyard behind it is the picture now.
+     */
+    ballroomGlass.opacity = qs.has('glassop')
+      ? Math.max(0, Math.min(1, Number(qs.get('glassop')) || 0)) : 0.16;
     // depthWrite stays ON. These panes are the only transparent surface on this side of the
     // room and everything behind them (the courtyard, the sky) is opaque and drawn first, so
     // there is nothing for a pane to sort incorrectly against — and leaving it on keeps the
@@ -896,6 +913,37 @@ export default async function view(args = {}) {
   const M = {
     pil: pilasterStone,
     wall: wallMat,
+    /**
+     * 🚨 **OPEN COMPLAINT, DIAGNOSED AND NOT FIXED: THE GILT BEADS ALIAS INTO DOTTED LINES.**
+     *
+     * On the upper wall at `eye.win` the panel bead outlines break into broken bright vertical
+     * dashes — `harness/_spike18.mjs` finds 163 pixels in one 400 x 120 patch standing more
+     * than 40 counts clear of both horizontal neighbours. At a glance they read as scratches or
+     * as a decal seam, which is a render tell on an otherwise clean wall.
+     *
+     * What it is NOT, each ruled out by deletion or by a live material tweak rather than by
+     * argument — this took six probes and the ruling-out is the reusable part:
+     *   · not the grime or the patina    (`?grime=0`, unchanged)
+     *   · not the chandelier crystal      (hid 12 objects, unchanged)
+     *   · not the chandeliers             (hid 6, unchanged)
+     *   · not the dust motes or shafts    (hid 3 + 3, unchanged)
+     *   · not the wall itself             (hid it; the dashes remained, over the sky)
+     *   · not the clearcoat               (`clearcoat=0` live, unchanged)
+     *   · not the environment specular    (`envMapIntensity=0.25` live, 163 -> 162 spikes)
+     *
+     * ⚠ AND IT IS NOT SHADING AT ALL, WHICH IS WHY NONE OF THOSE MOVED IT. A raycast at the
+     * exact spike pixels — found by scanning rather than estimated off a zoomed crop, which is
+     * what four earlier probes got wrong — returns `kit:gilt`. These are the gilt hairline beads
+     * that outline every panel, and at this distance they are SUB-PIXEL: a bead narrower than
+     * one sample against a darker wall resolves to a dotted line no matter what material it
+     * carries. It is geometric aliasing.
+     *
+     * Which means the fixes are all structural rather than a value: thicken the beads so they
+     * hold a pixel and a half at room distance (an architectural change, and they would then be
+     * too heavy close up), or give the pipeline temporal or multi-sample AA (a change to
+     * `post/pipeline.js` that every piece in the project would inherit). Neither is a knob, and
+     * neither should be done casually at the end of a round on one angle's evidence.
+     */
     gilt: mats.gilt,
     frieze: mats.giltFrieze,
     stone: stoneDusty,
@@ -1981,7 +2029,66 @@ export default async function view(args = {}) {
     // room-scale view — this piece's own numeric gate, blown by set dressing nobody can even
     // walk up to. Everything sharing a material is merged: the masonry into one, the recesses
     // into one. Same picture, 27 fewer calls.
-    const outMat = stoneDusty;
+    /**
+     * ---- ROUND 18: THE COURTYARD IS OUTDOORS AND WAS BEING LIT AS IF IT WERE INDOORS -------
+     *
+     * 🚨 **ROUND 17 ADDED THIS COURTYARD TO FIX "WINDOWS ARE FLAT WHITE PLANES" AND IT COST THE
+     * WINDOWS 2.2 STOPS.** Nobody measured them before and after. Same rect on the same
+     * `overlook` frame, one boot each:
+     *
+     *     window glass                      rgb                 L
+     *     refs/bf1/bf1-ballroom-01     212.4, 196.3, 181.9    198.7
+     *     ?outside=0 (the old lightbox) 161.0, 161.1, 162.7    161.2
+     *     ?outside=1 (r17, shipped)      75.1,  71.4,  70.0     72.1
+     *
+     * The bar's windows are the brightest thing in its frame — they are what says the room is
+     * lit by daylight at all. This room's were a third of that, and zoomed in they read as
+     * frosted decorative glass: a flat blue-grey wash with the quarry leading drawn across
+     * every pane, where the bar's leading is invisible because the daylight behind it blows
+     * through. That is a bigger tell in a blind pair than the floor pattern.
+     *
+     * ⚠ THE CAUSE IS ONE LINE AND IT IS THIS ONE. The range was cut from the room's own stone
+     * and therefore lit by `scene.environment` — a shell authored for the INSIDE of a shut-up
+     * ballroom, deliberately dropped to 1.70 in round 12 so the sun patches could read at all.
+     * A wall standing in an open courtyard is not lit by that. It is lit by the whole sky
+     * hemisphere, which is several stops over any interior, and the file already knows this:
+     * the sky card three blocks up is authored at linear 2.60-2.80 precisely because *"an sRGB
+     * white is 1.0 linear, and 1.0 through this room's exposure and ACES lands around 232 — a
+     * pale grey card, dimmer than the sun patches it is supposed to be casting."* The range got
+     * the argument's conclusion applied to the sky and not to the building in front of it.
+     *
+     * ⚠ SO IT IS AN EMISSIVE TERM ON THE SAME BAKE, NOT A NEW MATERIAL AND NOT A LIGHT. Reusing
+     * the stone's own map as an `emissiveMap` keeps every bit of the facade's texture — which
+     * is the whole reason it is stone and not a grey box — and adds a controllable skylight
+     * term on top of the lit result. A light out here would need `castShadow` reasoning against
+     * the note above (nothing out here casts, or the courtyard's shadow lands on the ballroom
+     * floor and deletes the window patches); an emissive needs none.
+     *
+     * ⚠ AND IT DOES NOT MAKE THE FACADE SUNLIT, WHICH THE NOTE ABOVE RULES OUT FOR A GOOD
+     * REASON. The range still faces +x, away from the sun, and still has no directional
+     * modelling on it; it is a silhouette that is now a DAYLIT silhouette rather than an
+     * interior-lit one. What competes with the floor patches is a sunlit facade with its own
+     * highlights, not a bright even one.
+     *
+     * `?yard=N` is the ablation; 0 is round 17's behaviour exactly.
+     */
+    const YARD = qs.has('yard') ? Math.max(0, Math.min(16, Number(qs.get('yard')) || 0)) : 2.5;
+    const outMat = YARD > 0 ? stoneDusty.clone() : stoneDusty;
+    if (YARD > 0) {
+      // ⚠ WARM, BECAUSE THE BAR'S COURTYARD IS SUNLIT AND THE NOTE ABOVE IS WRONG ABOUT THAT.
+      // That note rules out a sunlit facade on the grounds it "would compete with the window
+      // patches on the floor" — and the reference has one: through its arched window is a pale
+      // WARM facade with its own openings, at L 198.7 and r-b 30.5, i.e. (r-b)/L 0.154, while
+      // its floor patches still read at L 217.7. Both can be true because the facade is
+      // brighter but FLAT and the floor patches are shaped; what competes with a floor patch is
+      // another shaped highlight, not an even field.
+      outMat.emissive = new THREE.Color(0xfff0e2);
+      outMat.emissiveMap = outMat.map;
+      outMat.emissiveIntensity = YARD;
+      outMat.name = 'ballroom-courtyard-stone';
+      outMat.needsUpdate = true;
+      engine.onDispose?.(() => outMat.dispose());
+    }
     const stoneParts = [];
     const addStone = (g, x, y, z) => {
       g.applyMatrix4(new THREE.Matrix4().makeTranslation(x, y, z));
@@ -2030,7 +2137,23 @@ export default async function view(args = {}) {
     // Its own windows, as dark recesses. Two storeys, so the range reads as a building with a
     // floor height rather than as a wall — which is also the only cue out there that gives the
     // ballroom's own 9.6 m something to be measured against.
-    const holeMat = new THREE.MeshStandardMaterial({ color: 0x0b0d11, roughness: 0.9, metalness: 0 });
+    /**
+     * ⚠ **THE RECESSES ARE OUTDOORS TOO, AND AT 0x0b0d11 THEY WERE VOID** (round 18). Once the
+     * facade in front of them is lit as daylight rather than as interior (see `?yard=` above),
+     * a near-black recess is a two-hundred-to-two contrast and reads as a rectangle punched
+     * through the picture rather than as a window. The bar's courtyard has its own openings and
+     * they are dark GREY-BLUE, not holes: a recess on a sunlit wall still sees the whole sky
+     * hemisphere and half the yard's bounce.
+     *
+     * They take the same emissive treatment as the facade at a small fraction of it, for the
+     * same reason and by the same mechanism, so the two move together if either is ever
+     * re-solved.
+     */
+    const holeMat = new THREE.MeshStandardMaterial({ color: 0x2b3038, roughness: 0.9, metalness: 0 });
+    if (YARD > 0) {
+      holeMat.emissive = new THREE.Color(0x2b3038);
+      holeMat.emissiveIntensity = YARD * 0.16;
+    }
     engine.onDispose?.(() => holeMat.dispose());
     {
       const holes = [];
