@@ -2053,7 +2053,23 @@ export default async function view(args = {}) {
     //     0xffeeda   171.2, 162.7, 161.9            9.3            0.106
     //     0xffe3c2   171.4, 160.9, 157.7           13.7            0.125
     //     0xffdcb0   171.6, 159.7, 154.1           17.5            0.135   at the target
-    //     0xffe7c8    (shipped — see the second-pass note below)
+    //     0xffe7c8   (trimmed for margin after the exposure lift)
+    //     0xffc87e   163.6, 146.2, 127.7           35.8            0.071   SHIPPED
+    //
+    // 🚨 THE PARAGRAPHS BELOW WERE WRONG AND ARE KEPT AS A RECORD OF HOW. They conclude twice,
+    // over two passes, that the daylight cannot be warmed any further because the gate's
+    // top-decile chroma is spent by this room's GILDING — "a separate round's problem", "the
+    // honest ceiling on this knob". It was never the gilding. Both horizontal bounce fills ran
+    // almost purely along +/-x, the same axis the sun rakes along, so the warm fill and the sun
+    // were loading the SAME surfaces into the same decile. Re-aiming the fills to cover the two
+    // end walls (see the bounceFill note further down, which is what that change was actually
+    // for) separated them, and the gate fell from 0.128 to 0.029 with nothing else touched.
+    // That left room to take the key from 0xffe7c8 to 0xffc87e, and the sun patches now measure
+    // chroma 35.8 against the bar's own 35.9 — matched, from 5.7 when this round opened.
+    //
+    // The lesson is worth more than the number: a gate reading is a property of the whole
+    // frame, and "this knob is at its ceiling" is only true given everything else. Twice this
+    // round a ceiling turned out to be another light standing in the wrong place.
     //
     // ⚠ RE-TRIMMED IN THE SECOND PASS. The numbers above were solved at exposure 1.28; taking
     // the room onto the bar's ladder at 1.45 pushed more warm content into the top decile and
@@ -2070,9 +2086,9 @@ export default async function view(args = {}) {
     // spends the round again. They were running at 5x `sconce`'s own default strength and 2.35x
     // its size (nine 4 m orange sprites on the window wall); bringing them to 0.55 / 2.6 with a
     // cooler tint is a real improvement to the frame in its own right, but it moved the gate
-    // only 0.125 -> 0.119. What is left is the GILDING, which covers the cornice, the frieze,
-    // the coffer ribs and every moulding in the room, and desaturating that would be
-    // desaturating the piece's defining surface. Left as the honest ceiling on this knob.
+    // only 0.125 -> 0.119. The conclusion drawn from that at the time — that what remained was
+    // the GILDING, and that this was therefore the ceiling — was wrong, and the correction is
+    // at the head of this block. The right answer was the direction of the bounce fills.
     color: LIGHTS.sunColor, intensity: LIGHTS.sun,
     position: sunFrom.toArray(),
     target: sunAim.toArray(),
