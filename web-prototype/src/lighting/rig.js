@@ -678,6 +678,47 @@ export const GRADES = {
      * keeps recording. It is a per-piece grade field and it stays on the piece it was measured on.
      */
     toeSat: 0.35,
+    /**
+     * 🆕 **`midWarm` 0.12 — CHROMA BACK IN THE MIDDLE OF THE LADDER, WHERE THE BLUE SHELL TOOK IT.**
+     *
+     * The other end of the same round. Deciles 5-9 read 0.25 / 0.22 / 0.24 / 0.24 / 0.10 against
+     * the bar's flat 0.36 / 0.36 / 0.34 / 0.33 / 0.34, and round 44 located why: `ballroomEnv`'s
+     * window-wall box is [2.60, 2.72, 2.95], r/b 0.881, so every surface the sun does not reach
+     * is lit blue. `_coolmask44` paints it — the halo of floor around every sun bar — and
+     * `_coldwho44 env-off` prices it: deciles 7-9 land on the reference and the median falls
+     * 49.3 to 29.6, because that shell is this room's fill as well as its cold.
+     *
+     * ⚠ **THE LIGHT-SIDE FIX WAS BUILT FIRST AND THE BOARD REFUSED IT.** `?day=` tints that box
+     * with luminance held constant; at 0.5 it buys deciles 5-9 +0.02 to +0.03 and takes
+     * `eye.mirror` PASS -> WARN and `eye.gallery` WARN -> FAIL, i.e. 13/2/2 -> 12/2/3. A light
+     * term reaches the top decile and the chroma gate IS the top decile. Same refusal, same
+     * rule, as `toneChroma` one round earlier.
+     *
+     * This term is shaped so it cannot: the weight rises over L 0.16-0.30 and is zero by 0.60,
+     * and it rotates chroma with the luminance put back, so a sweep can only move colour.
+     * Measured at `overlook`, median 49.3 on every row:
+     *
+     *     midWarm     d1     d2     d3     d4     d5    d6    d7    d8    d9   d10
+     *     bar        0.79   0.40   0.38   0.40   0.36  0.36  0.34  0.33  0.34  0.09
+     *     0.00       0.81   0.78   0.53   0.39   0.25  0.22  0.24  0.24  0.10  0.00
+     *     0.12       0.82   0.78   0.53   0.39   0.28  0.29  0.33  0.33  0.18  0.01
+     *     0.20       0.82   0.78   0.53   0.40   0.31  0.33  0.39  0.39  0.22  0.01
+     *     0.30       0.82   0.78   0.53   0.41   0.34  0.38  0.46  0.47  0.29  0.01
+     *
+     * ⚠ **0.12 BECAUSE IT OVERSHOOTS NOTHING.** 0.20 and 0.30 fit the sum of errors marginally
+     * better and get there by taking deciles 7-8 PAST the bar to 0.39 and 0.47 — a ladder that
+     * crosses the reference is not a closer match, it is a different error, and this room has
+     * spent two rounds learning that a summary can be satisfied by a worse picture. At 0.12
+     * every decile moves toward the reference and none moves past it; deciles 7 and 8 land on
+     * it exactly.
+     *
+     * ⚠ **THE FIRST BAND WAS TUNED IN THE WRONG SPACE.** It rose over L 0.06-0.18 because
+     * deciles 5-9 sit at 0.175-0.378 in the measured ladder — but the ladder is measured on the
+     * final 8-bit frame, after this block and a 1.05 contrast expansion, so the same number
+     * means a lower pixel here. It lifted deciles 2-4 (0.78 / 0.53 / 0.39 -> 0.90 / 0.73 / 0.63)
+     * as hard as the band it was aimed at. Raised, deciles 1-3 do not move at all.
+     */
+    midWarm: 0.12,
     // toeCrush 0 and a small lift, because the rebalance put 6.0% of the frame at L <= 2.6 and
     // the locked art holds 0.1%. Crushed black is a render tell in its own right and it was
     // about to be bought with the macro win.

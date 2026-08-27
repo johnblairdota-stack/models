@@ -8,7 +8,7 @@
 // ⚠ AND THE GRADE IS SNAPSHOT AND RESTORED PER VARIANT. `setGrade` MERGES. Round 18 lost four
 // rows of a sweep to a variant that set `haze: 0` and left it set for everything after it.
 //
-//   node harness/_toesat44.mjs --cams overlook,eye.win --values 0,0.4,0.7 --out DIR
+//   node harness/_toesat44.mjs --cams overlook,eye.win --values 0,0.4,0.7 --out DIR [--field midWarm]
 import { chromium } from 'playwright';
 import net from 'node:net';
 import { writeFileSync, mkdirSync } from 'node:fs';
@@ -18,6 +18,8 @@ const opt = (n, d = null) => (argv.indexOf('--' + n) >= 0 ? argv[argv.indexOf('-
 const OUT = opt('out') || 'out';
 const CAMS = (opt('cams') || 'overlook').split(',');
 const VALUES = (opt('values') || '0,0.4,0.7').split(',').map(Number);
+// which grade field to sweep — the mechanism is the same for any scalar the grade carries
+const FIELD = opt('field') || 'toeSat';
 const portOpen = (p) => new Promise((r) => {
   const s = net.connect(p, '127.0.0.1');
   s.on('connect', () => { s.destroy(); r(true); }); s.on('error', () => r(false));
@@ -36,18 +38,18 @@ for (const cam of CAMS) {
     null, { timeout: 900000 });
   await page.evaluate(() => window.__rrr.settle(8));
   for (const v of VALUES) {
-    await page.evaluate((v) => {
+    await page.evaluate(({ v, field }) => {
       const g = window.__rrr.engine.pipeline.grade;
-      window.__toeSaved = window.__toeSaved ?? (g.toeSat ?? 0);
-      window.__rrr.setGrade({ toeSat: v });
+      window.__toeSaved = window.__toeSaved ?? (g[field] ?? 0);
+      window.__rrr.setGrade({ [field]: v });
       window.__rrr.redraw();
-    }, v);
+    }, { v, field: FIELD });
     const buf = await page.locator('canvas').first().screenshot();
-    const f = `${OUT}/_toe44-${cam.replace(/\./g, '_')}-${String(v).replace('.', 'p')}.png`;
+    const f = `${OUT}/_toe44-${FIELD}-${cam.replace(/\./g, '_')}-${String(v).replace('.', 'p')}.png`;
     writeFileSync(f, buf);
-    console.log(`  ${cam} toeSat ${v} -> ${f}`);
+    console.log(`  ${cam} ${FIELD} ${v} -> ${f}`);
   }
-  await page.evaluate(() => window.__rrr.setGrade({ toeSat: window.__toeSaved ?? 0 }));
+  await page.evaluate((field) => window.__rrr.setGrade({ [field]: window.__toeSaved ?? 0 }), FIELD);
   console.log(`  (${cam} done in ${((Date.now() - t0) / 1000).toFixed(0)} s)`);
 }
 await browser.close();

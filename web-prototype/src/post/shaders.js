@@ -257,6 +257,7 @@ uniform vec3  uGain;
 uniform float uSaturation;
 uniform float uToneChroma;   // 0 = plain ACES - see the tonemap block below
 uniform float uToeSat;       // 0 = no-op - see the toe-saturation block in the grade
+uniform float uMidWarm;      // 0 = no-op - see the mid-band warm block in the grade
 uniform float uContrast;
 uniform vec3  uShadowTint;
 uniform vec3  uHighlightTint;
@@ -417,6 +418,60 @@ void main(){
     float tl = lumaW(col);
     float tw = 1.0 - smoothstep(0.0, 0.20, tl);
     col = mix(col, vec3(tl), uToeSat * tw);
+  }
+  /**
+   * uMidWarm - PUT CHROMA BACK IN THE MIDDLE OF THE LADDER, AND NOWHERE THE GATE CAN SEE IT.
+   * 0 is a literal no-op, so every other piece renders the frame it rendered before.
+   *
+   * Round 44 measured the ballroom's remaining error as a band, not a level. Against the
+   * reference, deciles 5-9 read 0.25 / 0.22 / 0.24 / 0.24 / 0.10 where the bar is flat at
+   * 0.36 / 0.36 / 0.34 / 0.33 / 0.34, and the cause is located: the shell's window-wall box is
+   * r/b 0.881, so every surface the sun does not reach is lit blue. Ablating that box lands
+   * deciles 7-8 on the bar and costs 20 counts of median - it is the room's fill as well as its
+   * cold - and tinting it (?day=) buys +0.02 to +0.03 while taking the seventeen-angle board
+   * from 13/2/2 to 12/2/3, because a light term reaches the top decile and the chroma gate IS
+   * the top decile.
+   *
+   * This term cannot reach it. The weight rises over L 0.06-0.18 and falls to zero by 0.58,
+   * which brackets deciles 5-9 (L 0.175 to 0.378 in this room's own ladder) and stops well under
+   * a top decile that sits at 0.69. It is the same argument that let uToeSat ship: shape the
+   * instrument to the band the measurement indicts, and the gate cannot move.
+   *
+   * ⚠ IT ROTATES CHROMA AND PUTS THE LUMINANCE BACK. A warm multiply is two changes - a hue and
+   * an amount - arriving as one number, and this round has already caught that twice (a haze
+   * sweep that was really a 62% amount change, and an env tint that needed tintLuma to stop
+   * being one). Renormalising means a sweep of this knob can only move chroma, and the median
+   * luminance is a control that must not move.
+   */
+  if (uMidWarm > 0.0) {
+    float ml = lumaW(col);
+    /**
+     * ⚠ THE BAND IS TUNED IN THE PIPELINE'S SPACE, NOT THE HISTOGRAM'S, AND THE FIRST CUT WAS
+     * NOT. It rose over L 0.06-0.18 on the reasoning that deciles 5-9 sit at 0.175-0.378 in this
+     * room's own ladder - but the ladder is measured on the FINAL 8-bit frame, after lgg,
+     * saturation, this block and a 1.05 contrast expansion, so the same number means a lower
+     * pixel here than it does there. Swept, it lifted deciles 2-4 (0.78 / 0.53 / 0.39 -> 0.90 /
+     * 0.73 / 0.63) as hard as the band it was aimed at. Raised so decile 5 gets full weight,
+     * decile 4 a little and decile 3 almost none.
+     *
+     * ⚠ AND THE RISE WAS THEN WIDENED TO 0.11-0.21 AND PUT BACK, WHICH IS THE MORE USEFUL
+     * RECORD. It fits the sum of errors slightly better - deciles 5-8 land at
+     * 0.34 / 0.31 / 0.34 / 0.33 against the bar's 0.36 / 0.36 / 0.34 / 0.33 - and it gets there
+     * by taking decile 4 PAST the reference, 0.39 to 0.45 against 0.40, and decile 3 further
+     * over, 0.53 to 0.56 against 0.38. A ladder that crosses the reference is not a closer
+     * match, it is a different error. At 0.16-0.30 every decile this term touches moves toward
+     * the bar and none moves past it.
+     *
+     * ⚠ AND THE FALL WAS TIGHTENED FOR THE SAME KIND OF REASON, ONE MEASUREMENT LATER. At
+     * 0.42-0.60 the band still had weight where eye.gallery's top decile sits, and the
+     * seventeen-angle board caught it: 0.199 -> 0.203, one angle across the FAIL line for
+     * 0.004. Deciles 7 and 8 sit at final L 0.245 and 0.281, so a fall over 0.32-0.46 keeps
+     * every decile this term is aimed at and gives the gate back what it was taking.
+     */
+    float w  = smoothstep(0.16, 0.30, ml) * (1.0 - smoothstep(0.32, 0.46, ml));
+    vec3 warmed = col * vec3(1.42, 1.0, 0.62);
+    warmed *= max(ml, 1e-4) / max(lumaW(warmed), 1e-4);
+    col = mix(col, clamp(warmed, 0.0, 1.0), uMidWarm * w);
   }
   col = (col - 0.5) * uContrast + 0.5;
 
