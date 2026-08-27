@@ -169,12 +169,40 @@ function followRig(L) {
     for (const k of ['warmA', 'warmB', 'cool']) L[k].position.lerp(want[k].pos, a);
     if (want.up) L.fill.groundColor.lerp(want.up, a);
   };
+  /**
+   * 🚨 **THE INTENSITY COLUMN, WHICH THIS RIG READ INTO `want` AND THEN NEVER WROTE TO A LIGHT.**
+   *
+   * `read()` above fills `want.key.i`, `want.warmA.i`, `want.warmB.i` and `want.cool.i` from the
+   * space's own table, and until now nothing consumed any of them — so every room on the TV ran
+   * on the five CONSTRUCTOR numbers at the call site (key 150, warmA 18, warmB 42, cool 46)
+   * while its colours, positions, cone and distance all came from the table. It is not a subtle
+   * failure: the ballroom's authored key is **360**, and the warm slot — the shot the whole room
+   * watches all night, which is a dolly down that ballroom — was rendering it at 150.
+   *
+   * This is the same defect `game.js` L3247 records for `cool` alone (*"a value that reads like
+   * a decision but is dead code"*), three lights wider and one file over. `views/game.js` L3243
+   * is the formula, carried verbatim rather than imported for the reason `followRig`'s own
+   * header gives: the breathing is a MULTIPLIER on the table value, so the TV and the playable
+   * house light the same room to the same number at the same `t`.
+   *
+   * ⚠️ Intensity is not part of any program cache key and cannot move `numPointLights` — the
+   * count `calls-1` measured at +52 shader compiles. Writing it every frame costs one uniform.
+   */
+  const applyIntensity = (t) => {
+    L.key.intensity = want.key.i * (1 + Math.sin(t * 2.1) * 0.05 + Math.sin(t * 7.7) * 0.02);
+    L.warmA.intensity = want.warmA.i * (1 + Math.sin(t * 5.1) * 0.06);
+    L.warmB.intensity = want.warmB.i * (1 + Math.sin(t * 6.8) * 0.05);
+    // No breathing on the rim, for `game.js`'s reason: a doorway rim that pulses reads as a fault.
+    L.cool.intensity = want.cool.i;
+  };
   return {
-    snapTo(space, view) { read(space); applyBleed(space, view); apply(1); },
-    follow(space, dt, view) {
+    base: want,
+    snapTo(space, view, t = 0) { read(space); applyBleed(space, view); apply(1); applyIntensity(t); },
+    follow(space, dt, view, t = 0) {
       read(space);
       applyBleed(space, view);
       apply(1 - Math.exp(-dt / (LERP / 3)));
+      applyIntensity(t);
     },
   };
 }
@@ -1047,6 +1075,26 @@ export async function buildFollowBed(engine, opts = {}) {
       warmStep(dt, t);
       hunter.step(dt);
       engine.camera.getWorldDirection(_dir);
+      /**
+       * 🚨 **AND THE WARM SLOT WAS THE ONE MODE THAT NEVER RAN THE RIG AT ALL.**
+       *
+       * This branch returned before `rig.follow` and left the lights wherever the ONE `snapTo`
+       * at construction had put them — which happens before the warm camera is placed, so which
+       * room's table the whole night's lobby shot was lit by came down to whether
+       * `room.spaceAt(camera)` resolved at frame zero or fell through to `room.spaces[0]`.
+       *
+       * The shot it lights is a dolly down the ballroom (`warmBox` below), i.e. the room this
+       * project has spent eighteen rounds on, on the biggest screen in the room, for the whole
+       * night. Reading the space it is standing in every frame is what the other two modes do
+       * and costs one `spaceAt` — and it is what makes the intensity fix above reach this slot.
+       */
+      const wspace = room.spaceAt(engine.camera.position);
+      if (wspace) {
+        rig.follow(wspace, dt, {
+          pos: engine.camera.position, dir: _dir,
+          portals: room.portals(), spaces: room.spaces,
+        }, t);
+      }
       room.setViewpoints(_views, dt);
       room.update?.(dt);
       return;
@@ -1060,7 +1108,7 @@ export async function buildFollowBed(engine, opts = {}) {
         rig.follow(space, dt, {
           pos: engine.camera.position, dir: _dir,
           portals: room.portals(), spaces: room.spaces,
-        });
+        }, t);
       }
       const who = intro?.focus();
       if (who?.pos) {
@@ -1178,7 +1226,7 @@ export async function buildFollowBed(engine, opts = {}) {
       rig.follow(space, dt, {
         pos: engine.camera.position, dir: _dir,
         portals: room.portals(), spaces: room.spaces,
-      });
+      }, t);
     }
     room.setViewpoints(_views, dt);
     room.update?.(dt);

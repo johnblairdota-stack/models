@@ -6,6 +6,7 @@ dist/
 web-prototype/progress/
 web-prototype/tmp_critic/
 web-prototype/harness/out/
+web-prototype/out/
 
 # Secrets and local env
 .env
