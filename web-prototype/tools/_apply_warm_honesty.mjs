@@ -63,7 +63,7 @@
       );
     }
     s = s.replace(
-      /t\('W25a — follow ready retries the run cue for the locked pair',\r?\n\s*\/if \\(m\\.ready\\)\/\.test\(hostSrc\)\r?\n\s*&& \/if \\(runnerId\\) cueRun\\(runnerId\/\.test\(hostSrc\)\);/,
+      /t\('W25a — follow ready retries the run cue for the locked pair',\r?\n\s*\/if \(m\.ready\)\/\.test\(hostSrc\)\r?\n\s*&& \/if \(runnerId\) cueRun\(runnerId\/\.test\(hostSrc\)\);/,
       `t('W25a — follow ready retries the run cue for the locked pair',
     /if (m.ready)/.test(hostSrc)
     && /cueRun(runnerId/.test(hostSrc));

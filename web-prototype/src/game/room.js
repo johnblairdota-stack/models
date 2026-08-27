@@ -4208,16 +4208,20 @@ async function loadEstateSurfaces(L) {
         drape: new THREE.MeshStandardMaterial({ color: 0xc02030, roughness: 0.86, metalness: 0 }),
         /**
          * 🆕 **THE PIER GLASS, AND IT IS A DIELECTRIC — MEASURED, NOT PREFERRED**
-         * (`ballroom-fix-1`, 2026-08-09).
+         * (`ballroom-fix-1`, 2026-08-09; re-derived `ballroom-defects-1`, 2026-08-28).
          *
-         * 🚨 **`views/game.js` NEVER ASSIGNS `scene.environment`.** Every showcase view does
-         * (`light-dark.js`, `light-shaft.js`, `prop-chandelier.js`, and `room-ballroom.js`
-         * additionally builds a `CubeCamera` probe per plate) and the playable house does not.
-         * So the showcase's `foxedMirrorMat` — metalness 1.0, roughness 0.055 out of
-         * `MIRROR_SURFACE` — has **no specular source at all** here: a metal with nothing to
-         * reflect returns black, and it would have shipped as a second black rectangle on the
-         * wall this round exists to un-blacken. That is why the plate is not simply the
-         * showcase's material re-used, which is what the other three buckets above are.
+         * 🚨 **THE PREMISE THIS MATERIAL WAS DOCUMENTED ON WAS FALSE, AND TWO FILES CARRIED IT.**
+         * This block used to open *"`views/game.js` NEVER ASSIGNS `scene.environment`" — measured,
+         * not read"*, and `world/ballroom-order.js` said the same. **It does.** `views/game.js`
+         * and `views/party-follow.js` both build through `_studio.js` `estate()`, which sets
+         * `scene.environment = buildEstateEnv(renderer)` unconditionally and runs
+         * `scene.environmentIntensity` at **3.20**. Verified by reading the call chain, and then
+         * live: `?view=party.follow` reports `{hasEnv: true, intensity: 3.2}`.
+         *
+         * So a metal here would NOT have rendered black, and the fear that produced the
+         * dielectric was unfounded. The dielectric is kept anyway — it is what a dead mirror in
+         * a shut-up house is, and re-metallising it is a look change nobody has asked for — but
+         * it is kept on its own merits rather than on a mechanism that does not exist.
          *
          * The clone keeps every baked map — the amalgam bloom, the lifted-tin pinholes, the
          * pouring drift, and the normal map struck from them, which is the whole reason to use
@@ -4225,29 +4229,70 @@ async function loadEstateSurfaces(L) {
          *   · `metalness` 0.26. It MULTIPLIES the baked metalness map, so the silvering keeps
          *     its variation and stops being a mirror; the bloomed and pitted areas, which the
          *     surface already drops toward dielectric, go fully diffuse.
-         *   · `color` 0xc1c5cc, and 🚨 **THE FIRST VALUE TRIED WAS 0x6e767e AND IT SHIPPED THE
-         *     DEFECT BACK.** Reasoning from "0.760 silver is three times this room's boiserie,
-         *     so tint it down hard" ignored the `1 - metalness` the diffuse term is multiplied
-         *     by as well. Measured at `ballroom.east`: the plate area read **93.4 mean luma as
-         *     bare wall and 26.5 with that glass in it** — four rectangles 3.5x DARKER than the
-         *     wall they were added to improve, on the wall this round exists to un-blacken.
-         *     Solved instead of guessed: the effective diffuse is `silver x color x (1 -
-         *     metalness)`, so matching the boiserie's ~0.30 linear needs `color` at ~0.53-0.60
-         *     linear, which is this hex. Cool rather than neutral because that is the one thing
-         *     a dead mirror still does — it is the coldest surface in a candlelit room.
-         *     ⚠️ The foxing then takes large patches BACK down (tarnish 0.150/0.128/0.100,
-         *     pinholes 0.030), so the plate lands a little under the wall in the mean and well
-         *     under it in the blooms, which is the mottle that makes it read as glass and not
-         *     as a panel of paint.
-         * `fox 0.92` (against the showcase's pier default 0.85 and its end plates' 0.52) buys
-         * back some of what a reflection was carrying: with nothing in the glass, the foxing IS
-         * the drawing. ⚠️ `size 512`, not 1024 — the plate subtends ~200 px at the station and
-         * a distinct bake key is what keeps this clone off the showcase's cached material.
+         *   · `color` **0xb0b4bd**, and it is measured at the stations the defect was reported
+         *     from. See below.
+         *
+         * ---------------------------------------------------------------------------------
+         * 🚨 **WHY THE OLD 0xc1c5cc WAS WRONG, AND IT IS NOT THE MISTAKE THE HANDOFF EXPECTED**
+         * ---------------------------------------------------------------------------------
+         * The arithmetic behind 0xc1c5cc was right — effective diffuse is `silver x color x
+         * (1 - metalness)`, and that lands ~0.30 linear against the boiserie's 0.330. What it
+         * could not know is what the pixel does. `harness/ballroom-luma.mjs` masks the plate and
+         * the ballroom's OWN wall and reads the delivered frame; as shipped, the plate was
+         * brighter than the wall behind it at **every** station, not just the far one:
+         *
+         *     station   plate   wall    ratio
+         *     arch       66.1   59.8    1.105
+         *     wide       57.1   53.5    1.067
+         *     mirror     51.0   47.4    1.076
+         *
+         * ⚠️ **THE HANDOFF'S DIAGNOSIS WAS "TUNED AT `ballroom.east`, DOES NOT SURVIVE THE OTHER
+         * WALL". THE MEASUREMENT SAYS IT NEVER SURVIVED ANYWHERE** — `mirror` IS that wall and
+         * it reads 1.076. The end wall is the worst of the three, not the only bad one.
+         *
+         * ⚠️ **AND IT IS DIFFUSE, NOT SPECULAR — WHICH IS THE OPPOSITE OF WHAT WAS EXPECTED.**
+         * "A 26%-metal roughness-0.055 plate under a 3.2x environment probe is floating on its
+         * specular" is the obvious reading and it is wrong. Swept live at `arch`, giving the
+         * material its own `envMap` (the only way `envMapIntensity` does anything at all — see
+         * `setEnvResponse` in `views/_studio.js`) and taking it from 3.20 down to 0.35 moved the
+         * plate 66.1 → 60.0, i.e. **9%**, while `color` alone moved it 66.1 → 49.5. The
+         * environment is not what is carrying this surface, so no env response is added: it
+         * would buy 9% and cost a second shader program for one material.
+         *
+         * 0xb0b4bd is the sweep's landing point — arch **0.909**, wide **0.847**:
+         *
+         *     colour      arch ratio   wide ratio
+         *     0xc1c5cc      1.105        1.067     as shipped
+         *     0xbabec6      1.022        0.975
+         *     0xb5b9c1      0.964        0.903
+         *     0xb0b4bd      0.909        0.847     <- this
+         *     0xa8adb6      0.827        0.764
+         *     0x6e767e      0.333        0.293     the 2026-08-09 failure, reproduced
+         *
+         * 🚨 **THE LAST ROW IS THE CONTROL, AND IT IS WHY THIS IS NOT A GUESS.** 0x6e767e is the
+         * value that shipped the defect back in the other direction; the note it left behind
+         * recorded *"93.4 mean luma as bare wall and 26.5 with that glass in it"*, a ratio of
+         * 0.28. The instrument re-measures it today at 0.333. It reproduces the historical
+         * failure, so its verdict on the fix is worth something. Under the wall by ~10% is a
+         * cold dead mirror; under it by 67% is a black rectangle, and the distance between the
+         * two is now numbered rather than remembered.
+         *
+         * `fox 1.30` (was 0.92; the showcase's pier default is 0.85). `uFox` scales the tarnish
+         * bloom and the lifted-tin pinholes, and `MIRROR_SURFACE` weights both by an `edge` term
+         * — so raising it grows the corroded margin INWARD from the rebate, which is large-scale
+         * structure the delivered frame can actually resolve.
+         *
+         * ⚠️ **`size` STAYS 512, AND THE HANDOFF'S SUGGESTION OF 1024 WOULD HAVE BOUGHT NOTHING
+         * — MEASURED.** The end plates deliver ~11.9k pixels each at `arch`, i.e. about **43-53
+         * px per metre** of plate. A 512 bake across a 1.70 m plate is **301 texels per metre**,
+         * already ~6x finer than the pixels it is resampled into; 1024 makes it 12x finer and
+         * changes no pixel. The foxing was never erased by the texture size — the screen is the
+         * limiter — which is why the mottle is bought with `fox` and not with resolution.
          */
         mirror: (() => {
-          const mm = L.foxedMirrorMat({ fox: 0.92, size: 512 }).clone();
+          const mm = L.foxedMirrorMat({ fox: 1.30, size: 512 }).clone();
           mm.metalness = 0.26;
-          mm.color = new THREE.Color(0xc1c5cc);
+          mm.color = new THREE.Color(0xb0b4bd);
           mm.name = 'ball-pier-glass';
           return mm;
         })(),
