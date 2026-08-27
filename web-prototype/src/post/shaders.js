@@ -256,6 +256,7 @@ uniform vec3  uGamma;
 uniform vec3  uGain;
 uniform float uSaturation;
 uniform float uToneChroma;   // 0 = plain ACES - see the tonemap block below
+uniform float uToeSat;       // 0 = no-op - see the toe-saturation block in the grade
 uniform float uContrast;
 uniform vec3  uShadowTint;
 uniform vec3  uHighlightTint;
@@ -383,6 +384,40 @@ void main(){
 
   col = lgg(col);
   col = mix(vec3(lumaW(col)), col, uSaturation);
+  /**
+   * uToeSat - DESATURATE THE DARK END, AND ONLY THE DARK END. 0 is a literal no-op, so every
+   * piece in the project renders the same frame it rendered before.
+   *
+   * Round 44 measured the ballroom's remaining chroma error by SPLITTING deciles 2-3 by hue
+   * class instead of by object, and the shape it found is not the one four rounds argued about:
+   *
+   *     deciles 2-3        red    amber  warm-grey  neutral   cool      mean (r-b)/L
+   *     bar               12.4%   25.8%    18.3%     18.2%   11.2%          0.39
+   *     here              51.1%   31.1%     7.5%      3.7%    6.0%          0.71
+   *
+   * Our reds are individually LESS saturated than the bar's (mean r-b 26.1 against 34.8). There
+   * are simply four times as many of them, and almost nothing in our dark band is neutral: the
+   * bar's shadows are 47.7% neutral-or-cooler and this room's are 17.2%. So the error is spread
+   * across half the pixels rather than sitting on one object - which is why sweeping the gilt
+   * (_giltdust44) moved decile 2 from 0.90 to 0.82 at FULL strength and cost the gilding
+   * everywhere to do it.
+   *
+   * ⚠ WHY NOT uToneChroma, WHICH IS ALREADY HERE AND ALREADY DOES THIS. Because it does it at
+   * BOTH ENDS. rig.js's note is the measurement: at 0.45 it takes decile 2 from 0.90 to 0.80
+   * and takes the top-decile chroma gate from 0.071 to 0.232 at eye.win, PASS to FAIL, at four
+   * of five angles - *"the term puts saturation BACK into highlights, and the chroma gate is a
+   * measurement OF the highlights."* This term cannot do that: its weight is zero above L 0.20.
+   *
+   * ⚠ AND THE KNEE IS FIXED AT 0.20 RATHER THAN BEING A SECOND KNOB. 0.20 is decile 5 in this
+   * room's own ladder (L 44.6 of 255), so the weight is 0.87 at decile 1, 0.67 at decile 2, and
+   * 0.07 by decile 5 - it reaches exactly the band the measurement indicts and stops. A range
+   * knob would be a second free parameter fitted to one room's ladder.
+   */
+  if (uToeSat > 0.0) {
+    float tl = lumaW(col);
+    float tw = 1.0 - smoothstep(0.0, 0.20, tl);
+    col = mix(col, vec3(tl), uToeSat * tw);
+  }
   col = (col - 0.5) * uContrast + 0.5;
 
   // toe crush — pull the darkest values to true black so shadows read as void,

@@ -595,6 +595,51 @@ export const GRADES = {
      * its own with every piece in the project re-shot.
      */
     toneChroma: 0.0,
+    /**
+     * 🆕 **`toeSat` 0.35 — THE OTHER HALF OF THE RAMP, AND THE HALF `toneChroma` COULD NOT BUY.**
+     *
+     * Round 44 stopped arguing about which OBJECT is too warm and split deciles 2-3 by hue class
+     * instead. The shape it found is not the one the last four rounds assumed:
+     *
+     *     deciles 2-3        red    amber  warm-grey  neutral   cool     mean (r-b)/L
+     *     bar               12.4%   25.8%    18.3%     18.2%   11.2%         0.39
+     *     here              51.1%   31.1%     7.5%      3.7%    6.0%         0.71
+     *
+     * This room's reds are individually LESS saturated than the bar's (mean r-b 26.1 against
+     * 34.8) — there are four times as many of them, and almost nothing in the dark band is
+     * neutral: the bar's shadows are 47.7% neutral-or-cooler and this room's are 17.2%. So the
+     * excess is spread across half the pixels rather than sitting on one object, which is why
+     * `_giltdust44` — desaturating the gilt's own albedo, the thing round 18 named — moved
+     * decile 2 from 0.90 to 0.82 at FULL strength and cost the gilding everywhere to do it.
+     * Rejected on its own measurement.
+     *
+     * `uToeSat` desaturates by pixel luminance with a weight that is zero above L 0.20, i.e.
+     * above this room's own decile 5. Measured on one boot per camera, sweeping the uniform:
+     *
+     *     toeSat        d1     d2     d3     d4     d5    d6    d7    d8    d9   d10
+     *     bar          0.79   0.40   0.38   0.40   0.36  0.36  0.34  0.33  0.34  0.09
+     *     0.00         1.03   0.90   0.57   0.40   0.25  0.22  0.24  0.24  0.10  0.00
+     *     0.35         0.81   0.78   0.53   0.39   0.25  0.22  0.24  0.24  0.10  0.00
+     *     0.55         0.69   0.70   0.51   0.38   0.25  0.22  0.24  0.24  0.10  0.00
+     *     0.75         0.57   0.63   0.48   0.37   0.24  0.22  0.24  0.24  0.10  0.00
+     *
+     * ⚠ **DECILES 3-10 ARE UNCHANGED AT EVERY VALUE AND AT ALL FOUR CAMERAS, WHICH IS THE WHOLE
+     * ARGUMENT FOR THIS TERM OVER `toneChroma`.** The note above records why 0.45 of that one did
+     * not ship: it takes the top-decile chroma gate from 0.071 to 0.232 at `eye.win`, PASS to
+     * FAIL, because it puts saturation back into the highlights and the gate measures the
+     * highlights. This term cannot reach them.
+     *
+     * ⚠ **0.35 RATHER THAN MORE, AND THE VALUE IS NOT FITTED — IT IS WHERE TWO INDEPENDENT
+     * FRAMINGS LAND ON THE REFERENCE.** Decile 1 at 0.35: `overlook` 0.81 and `eye.door` 0.79,
+     * against the bar's 0.79. `eye.win` improves 1.47 -> 1.23 and `eye.mirror`, whose darkest
+     * decile was already BELOW the bar at 0.40, gives up 0.05. Higher values keep taking decile 2
+     * down at `overlook` and push decile 1 under the bar at three cameras out of four.
+     *
+     * ⚠ **THE GAME DOES NOT GET THIS.** `views/game.js` grades the whole house with one block,
+     * so shipping a term there that was derived from one room's ladder is the mistake this file
+     * keeps recording. It is a per-piece grade field and it stays on the piece it was measured on.
+     */
+    toeSat: 0.35,
     // toeCrush 0 and a small lift, because the rebalance put 6.0% of the frame at L <= 2.6 and
     // the locked art holds 0.1%. Crushed black is a render tell in its own right and it was
     // about to be bought with the macro win.

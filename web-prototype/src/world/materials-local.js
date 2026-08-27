@@ -109,13 +109,36 @@ void surface(in vec2 uv, inout Surf s){
 export function giltMat(opts = {}) {
   const o = {
     gold: [0.760, 0.575, 0.230], bole: [0.360, 0.130, 0.085], gesso: [0.760, 0.735, 0.680],
-    wear: 0.55, ornament: 0, leaf: 11, seed: 2.0, size: 1024, repeat: [1, 1], ...opts,
+    wear: 0.55, ornament: 0, leaf: 11, seed: 2.0, size: 1024, repeat: [1, 1],
+    /**
+     * 🆕 **`bakeDust` ON THE GILT, AND THIS ONE IS AIMED AT A SLOPE RATHER THAN A LEVEL.**
+     *
+     * Round 18's last open complaint: *"the chroma ladder is a RAMP where the bar's is FLAT …
+     * every global term ROTATES the ladder, because a global term cannot change a slope. The two
+     * instruments that could are the tonemapper and per-material work."* This is the per-material
+     * half, pointed at the two lines in `GILT_SURFACE` that make dark saturated pixels:
+     *
+     *   · the tarnish, `uGold * 0.42 * vec3(1.0, 0.93, 0.80)` — luminance 0.234, chroma 0.76
+     *   · the bole showing through the rub, `uBole` — luminance 0.185, chroma 0.76
+     *
+     * Both are decile-2/3 pixels by construction, and deciles 2-3 are exactly where this room
+     * sits at 0.90 / 0.57 against the bar's 0.40 / 0.38. `uBakeDust`'s curve
+     * (`baker.js`: `mix(1.0, 0.30, smoothstep(0.05, 0.45, aL))`) desaturates a DARK albedo at
+     * full strength and a bright one at 0.30 — so it takes the tarnish and the bole and leaves
+     * the burnished leaf, which is a slope change and not a rotation.
+     *
+     * ⚠ DEFAULT 0, so every other caller of `giltMat` in the project bakes the same texture it
+     * baked before. It is inside `o` and therefore inside the cache key — `baker.js`'s own
+     * hazard note: an option outside the key serves the wrong bake.
+     */
+    bakeDust: 0,
+    ...opts,
   };
   return baker().standard({
     key: `est-gilt:${JSON.stringify(o)}`,
     size: o.size, surface: GILT_SURFACE,
     heightScale: o.ornament ? 0.10 : 0.045, normalStrength: 1.0,
-    repeat: o.repeat, anisotropy: 8,
+    repeat: o.repeat, anisotropy: 8, bakeDust: o.bakeDust,
     uniforms: {
       uGold: new THREE.Vector3(...o.gold), uBole: new THREE.Vector3(...o.bole),
       uGesso: new THREE.Vector3(...o.gesso),
