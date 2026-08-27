@@ -8,6 +8,7 @@ web-prototype/tmp_critic/
 web-prototype/harness/out/
 web-prototype/out/
 web-prototype/out2/
+web-prototype/out3/
 
 # Secrets and local env
 .env
