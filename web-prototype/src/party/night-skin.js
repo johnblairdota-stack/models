@@ -47,6 +47,15 @@ export function injectNightSkin() {
     .night-code { font-size:clamp(48px, 10vw, 96px); font-weight:800; letter-spacing:.28em;
       color:#fff; line-height:1; font-variant-numeric:tabular-nums; }
     .night-sub { color:#8a7d70; font-size:13px; letter-spacing:.08em; text-transform:uppercase; margin-top:8px; }
+    /* The '?dev=1' skip key's badge. LOUD ON PURPOSE — a dev TV that looks like a real one is
+       how a skipped beat ends up in a playtest note as if the clock had run. Mounted outside
+       '.night' by party-host.js, because paint() rewrites that subtree constantly.
+       NO BACKTICKS IN HERE: this whole block is inside a template literal and one backtick
+       ends the string. That is what the first version of this comment did. */
+    .dev-badge { position:fixed; right:10px; bottom:10px; z-index:9999; pointer-events:none;
+      font:700 11px/1 ui-monospace, monospace; letter-spacing:.14em; text-transform:uppercase;
+      color:#141210; background:#f5a14a; padding:6px 10px; border-radius:4px;
+      box-shadow:0 2px 10px rgba(0,0,0,.5); }
     .night-row { display:flex; gap:28px; align-items:flex-start; flex-wrap:wrap; }
     .night-qr { background:#f4efe6; padding:12px; border-radius:8px; flex:0 0 auto; }
     .night-qr svg { display:block; }
@@ -66,6 +75,86 @@ export function injectNightSkin() {
     .btn:disabled { opacity:.35; cursor:not-allowed; }
     .btn.ghost { background:transparent; color:#e8dcc8; border:1px solid rgba(232,220,200,.3); }
     .btn.wide { width:100%; }
+    /* READY is a TOGGLE, so the two states have to be tellable apart at a glance on a phone
+       held under a table. Un-tapped reads as an outline you have not used yet; tapped reads as
+       filled and green. Same shape, so the row does not jump when it flips. */
+    .btn.ready { background:transparent; color:#e8dcc8; border:1px solid rgba(232,220,200,.35);
+      margin-top:10px; }
+    .btn.ready.on { background:#a8c66c; color:#141210; border-color:#a8c66c; }
+    /* 🚨 THE READY DOCK. Sticky, so eight players cannot push the beat's own end condition off
+       the bottom of the phone — and so the control lands where the thumb already is. */
+    .ready-dock { position:sticky; bottom:0; z-index:5; margin-top:14px;
+      padding:10px 0 6px; background:#0c0a08;
+      box-shadow:0 -14px 18px -6px #0c0a08; }
+    .ready-dock .btn.ready { margin-top:8px; min-height:58px; }
+    .ready-dock .hint { margin:8px 0 0; }
+    .ready-meter { height:8px; border-radius:4px; background:#241f1a; overflow:hidden; }
+    .ready-fill { height:100%; background:#f5a14a; transition:width .3s ease; }
+    .ready-fill.met { background:#a8c66c; }
+    /* 🔢 Which SAM — seat number in that player's own accent, on every tappable row. */
+    .seat-chip { flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center;
+      min-width:30px; height:30px; padding:0 6px; border-radius:15px; color:#141210;
+      font-weight:900; font-size:15px; line-height:1; }
+    .pick-list button { display:flex; align-items:center; gap:11px; }
+    /* The ballot receipt — what the ROOM recorded, not what this phone thinks it sent. */
+    .receipt { margin:10px 0 0; padding:11px 13px; border-radius:10px;
+      background:rgba(168,198,108,.10); border-left:5px solid #a8c66c; }
+    .receipt.coerced { background:rgba(255,138,122,.10); border-left-color:#ff8a7a; }
+    .receipt-k { font-size:11px; letter-spacing:.22em; text-transform:uppercase;
+      font-weight:800; color:#8a7d70; }
+    .receipt-v { display:flex; align-items:center; gap:10px; margin-top:5px;
+      font-size:20px; font-weight:800; color:#a8c66c; }
+    .receipt.coerced .receipt-v { color:#ff8a7a; }
+    .receipt .hint { margin:6px 0 0; }
+    /* The pair sheet. Green is the pair colour and it matches LINK_INK on the 3D plate, so the
+       phone in your hand and the tag on the television are obviously the same thing. */
+    .pairbox { margin-top:14px; padding:12px; border-radius:8px;
+      border:1px solid rgba(143,217,168,.28); background:rgba(31,122,61,.10); }
+    .pairbox.on { border-color:#8FD9A8; background:rgba(31,122,61,.20); }
+    /* THE PAIR BOARD, in the side rail the talk beats already own. Same nom-row language
+       as the nomination board, so the two beats read as one show. */
+    .pair-board-k { color:var(--night-accent); font-size:11px; letter-spacing:.26em;
+      text-transform:uppercase; font-weight:700; margin:0 0 8px 2px; }
+    .pair-row { border-left:4px solid #8FD9A8; }
+    .pair-row.pair-1 { border-left-color:#8FB6F0; }
+    .pair-row .show-third .who { color:#8FD9A8; }
+    .pair-row.pair-1 .show-third .who { color:#8FB6F0; }
+    .pair-faces { display:flex; align-items:center; margin-right:2px; }
+    .pair-faces .bot-face { width:40px; height:40px; }
+    .pair-faces .bot-face + .bot-face { margin-left:-14px; }
+    .pair-wait { border-left:4px solid var(--night-accent); opacity:.85; }
+    .pair-no { border-left:4px solid var(--night-bad); opacity:.85; }
+    .pair-no .show-third .who { color:var(--night-bad); }
+    .pair-head { display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
+    .pair-name { font-size:34px; font-weight:900; letter-spacing:.06em; color:#8FD9A8;
+      line-height:1; margin-bottom:6px; }
+    /* The conversation has a clock. Tabular figures so the number does not jitter. */
+    .pair-clock { font-size:20px; font-weight:800; color:#8FD9A8; font-variant-numeric:tabular-nums;
+      letter-spacing:.04em; }
+    .pair-clock.low { color:#f5a14a; }
+    .pair-actions { display:flex; gap:8px; margin-top:8px; }
+    .pair-actions .btn { flex:1; padding:12px 10px; }
+    .picks { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+    .picks button { flex:1 1 40%; padding:12px 10px; border-radius:6px; font:inherit;
+      font-weight:700; letter-spacing:.06em; text-transform:uppercase; cursor:pointer;
+      background:transparent; color:#e8dcc8; border:1px solid rgba(232,220,200,.28); }
+    .picks button:disabled { opacity:.35; cursor:not-allowed; }
+    /* Fixed height and its own scroll: the log must never push the text field off a phone. */
+    .whispers { max-height:34vh; min-height:64px; overflow-y:auto; margin:8px 0;
+      display:flex; flex-direction:column; gap:6px; }
+    .whisper { margin:0; padding:8px 10px; border-radius:8px; align-self:flex-start;
+      max-width:86%; background:#241f1a; color:#e8dcc8; font-size:15px; letter-spacing:.01em; }
+    .whisper.me { align-self:flex-end; background:#1F7A3D; color:#f2fff5; }
+    .charcount { text-align:right; margin:-8px 0 8px; font-size:12px; opacity:.7; }
+    /* Disconnect cannot be undone and costs your conversation for the beat. It sits under the
+       send button, so it has to look like the other kind of thing. */
+    /* DONE is the friendly exit and has to look unlike Disconnect, which is the unfriendly
+       one directly beneath it. Outline while it is your tap; filled once you have made it. */
+    .btn.done { margin-top:8px; background:transparent; color:#8FD9A8;
+      border:1px solid rgba(143,217,168,.5); }
+    .btn.done.on { background:rgba(31,122,61,.35); color:#dffbe8; border-color:#8FD9A8; }
+    .btn.ghost.danger { border-color:rgba(217,90,138,.5); color:#e8b6c6; margin-top:6px;
+      font-size:12px; padding:12px 10px; }
     .send-go { display:flex; flex-direction:column; align-items:flex-start; gap:0;
       pointer-events:none; margin:8px 0 4px; }
     .send-go-k { color:#f5a14a; font-size:12px; letter-spacing:.28em; text-transform:uppercase;
@@ -91,12 +180,73 @@ export function injectNightSkin() {
        With a live camera in the frame that split is backwards: the first drive photographed a
        1024x215 letterbox strip with the runner four storeys of type below it. The hero is now a
        strapline under the picture, and the picture takes the height. */
-    .run-stage { display:flex; flex-direction:column; gap:2px; }
+    .run-stage { display:flex; flex-direction:column; gap:2px; min-height:0; }
+    /* 📺 **THE PICTURE TAKES WHAT IS LEFT OVER — IT DOES NOT TAKE 90% AND LET THE REST FALL OFF.**
+       The run beat stacks a 'TV_FRAME_PCT'vh frame plus the hero line plus the facts line plus
+       the reaction strip inside a 'night-main' that hides its overflow. Those four do not fit in
+       what the chrome leaves: measured on a 1920x1080 set, 24 px of every 74 px reaction chip
+       was below the screen edge and the player's NAME was not on the television at all — 39 px
+       and no names at 1280x720. Nothing looked broken, because hidden overflow does not look
+       like anything. It just quietly cut the bottom off the feature whose whole premise is that
+       a reaction is attributed.
+       The frame keeps its 'TV_FRAME_PCT' height as a CEILING and is now allowed to shrink below
+       it, so the strip is laid out first and the picture fills the remainder at its 16:9. That
+       is self-correcting at every resolution instead of tuned to one — the alternative was
+       trimming the percentage until 720p happened to fit, which leaves nothing for the next
+       thing anyone adds under the picture.
+       ⚠️ 'min-height:0' on both is load-bearing: a flex item's default 'min-height:auto' refuses
+       to shrink below its content, which is exactly the refusal that produced the clipping.
+       The camera is a layer parented to body and re-registered from the frame's client rect
+       every frame (see '.run-cam-layer'), so a frame that changes size is followed, not broken.
+       Gate: 'party-warm' W41. */
+    .night.on-run .run-stage { flex:1 1 auto; min-height:0; justify-content:flex-end; }
+    .night.on-run .run-frame { flex:0 1 auto; min-height:0; }
     .run-stage .pair-hero { margin:6px 0 0; font-size:clamp(15px, 1.7vw, 28px); line-height:1.05;
       text-align:center; }
     .run-stage .pair-hero br { display:none; }
     .run-stage .run-facts { text-align:center; color:var(--night-dim); font-size:12px;
       letter-spacing:.16em; text-transform:uppercase; margin-top:2px; }
+    /* 👏 THE REACTION STRIP — the six people who are not in the mansion, along the bottom.
+       ⚠️ It sits UNDER the run frame and never over it. D13 and the chase-only rule make the
+       run picture the product; a strip floated across it would be chrome covering the one thing
+       the room is watching. The min-height holds the space whether or not anyone has reacted, so
+       the frame above does not jump every time a face arrives or ages out. */
+    .react-strip { display:flex; justify-content:center; align-items:flex-start; gap:18px;
+      min-height:78px; padding:6px 12px 0; }
+    .react-chip { display:flex; flex-direction:column; align-items:center; gap:3px;
+      animation: night-rise .22s ease; }
+    .react-chip .react-who { font-size:11px; letter-spacing:.08em; color:var(--night-soft);
+      max-width:96px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    /* 🏷️ THE BADGE MOVES; THE FACE NEVER DOES.
+       John's partner asked for "slightly animated", and slightly is the whole spec — about one
+       pixel at the 56 px the strip uses. At sofa distance the motion is invisible anyway and the
+       COLOUR is doing the work; the movement is for the person holding the phone and for the
+       corner of your eye across the room. Bigger reads as the strip wobbling under the picture.
+       ⚠️ EVERY LOOP RESTS AT 0% AND 100%, AND NONE OF THEM ALTERNATE. A chip can still be
+       replaced mid-flight (a player reacting again swaps their face), and a loop that rests at
+       both ends lands where it already was — an 'alternate' loop snaps to the bottom of its
+       cycle instead, which is a visible tick. 'transform' only, so this stays on the compositor:
+       the main thread on this beat is also feeding a WebGL mansion, and the run picture is the
+       product. Gate: 'party-warm' W43. */
+    .bot-badge { transform-box: fill-box; transform-origin: center;
+      animation: badge-lift 1.1s ease-in-out infinite; will-change: transform; }
+    .bot-badge[data-react="boo"]   { animation: badge-drop 1.0s ease-in-out infinite; }
+    .bot-badge[data-react="sus"]   { animation: badge-tilt 1.4s ease-in-out infinite; }
+    .bot-badge[data-react="shock"] { animation: badge-pulse .9s ease-in-out infinite; }
+    @keyframes badge-lift  { 0%,100% { transform:none; } 50% { transform: translateY(-4%); } }
+    @keyframes badge-drop  { 0%,100% { transform:none; } 50% { transform: translateY(5%); } }
+    @keyframes badge-tilt  { 0%,100% { transform:none; } 50% { transform: rotate(4deg); } }
+    @keyframes badge-pulse { 0%,100% { transform:none; } 50% { transform: scale(1.06); } }
+    /* ♿ THE NIGHT SCREEN HAD NO REDUCED-MOTION BLOCK AT ALL, and it was already running three
+       unguarded animations — two of them infinite. One goes in with the badge rather than after
+       it. Nothing is lost when it applies: the badge's meaning is its SHAPE and its COLOUR, both
+       of which are still. That is the test this had to pass — if switching the motion off
+       destroyed the information, the motion was carrying the information, which would have been
+       the wrong design. Gate: 'party-warm' W43b. */
+    @media (prefers-reduced-motion: reduce) {
+      .bot-badge, .run-face, .fl-rec, .react-chip, .look-stage.connecting .bot-face {
+        animation: none !important; }
+    }
     /* 📺 THE 90% FRAME ONLY FITS IF THE CHROME AROUND IT GETS OUT OF THE WAY, AND THAT IS THE
        HALF OF "less chrome" THAT IS EASY TO FORGET. A 90vh picture leaves ten per cent of a
        television for everything else, so on the run beat the top strip, the main padding and the
@@ -256,6 +406,17 @@ export function injectNightSkin() {
     .pad button { min-height:100px; font-size:18px; letter-spacing:.1em; text-transform:uppercase;
       font-weight:700; border:0; border-radius:10px; background:#1c1712; color:#f3ece3; }
     .pad button.on { background:#f5a14a; color:#1a1208; }
+    /* 👏 THE REACTION PAD. Each button carries the player's own face wearing that reaction, so a
+       thumb picks a picture rather than a word — and the picture is what the TV is about to show.
+       Two columns of 100px targets, well past the 44px floor, because this is tapped in the dark
+       while the player is watching the television and not the phone. */
+    .react-pad button { display:flex; align-items:center; justify-content:flex-start; gap:14px;
+      padding:10px 16px; text-align:left; transition: transform .12s ease, opacity .2s ease; }
+    .react-pad button .bot-face { flex:0 0 auto; }
+    .react-pad button:active { transform: scale(.96); background:#241f1a; }
+    /* The local cooldown is FEEL only — the server keeps the clock that counts. Dimmed rather
+       than disabled so the four faces stay legible as a set while it runs. */
+    .react-pad.cooling button { opacity:.45; pointer-events:none; }
     .pick-list { display:flex; flex-direction:column; gap:8px; margin:8px 0 16px; }
     .pick-list button { text-align:left; padding:14px 16px; border-radius:8px; border:1px solid rgba(245,161,74,.2);
       background:#161310; color:#f3ece3; font-size:18px; font-weight:700;
@@ -283,7 +444,10 @@ export function injectNightSkin() {
     .lock-btn.in { animation: night-rise .4s ease; }
     .hint { color:#8a7d70; font-size:14px; line-height:1.45; }
     .bot-face { display:block; }
-    .bot-shell, .bot-wedge { transition: fill .4s ease; }
+    /* Every coloured part of the face carries data-paint / data-stroke, so the picker's
+       cross-fade follows the drawing instead of naming two elements that no longer exist. */
+    .bot-face [data-paint], .bot-face [data-stroke] {
+      transition: fill .4s ease, stroke .4s ease; }
     .look-stage { display:flex; flex-direction:column; align-items:center; gap:10px;
       padding:12px 0 8px; animation: night-rise .45s ease; }
     .look-stage .bot-face { width:min(42vw, 168px); height:auto; filter: drop-shadow(0 10px 24px rgba(245,161,74,.18)); }

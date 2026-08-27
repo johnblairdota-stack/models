@@ -1,0 +1,115 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; }
+    a { color: #f5a14a; } a:hover { color: #ffbe7d; }
+  </style>
+</helmet>
+
+<!-- ═══════ S11 · THE BLANK CASTING TV ═══════
+     For the first ~20 seconds of Casting every player is head-down reading a role card, and the
+     TV shows an empty ballroom. It is the one moment in the night where the room is guaranteed
+     to be silent and looking at their hands — the perfect place to teach the show's language.
+     This leaks nothing: it names no role and no seat, it only counts. -->
+
+<div style="width: 1600px; height: 900px; position: relative; background: #0c0a08; color: #f3ece3; overflow: hidden;">
+  <div style="position: absolute; inset: 0; background:
+      radial-gradient(1000px 560px at 50% 24%, rgba(245,161,74,.10), transparent 62%),
+      linear-gradient(180deg, #171310 0%, #0e0b09 62%, #0a0806 100%);"></div>
+  <div style="position: absolute; left: 50%; top: 72%; transform: translate(-50%,-50%); width: 1100px; height: 300px; border-radius: 50%; background: radial-gradient(ellipse at center, rgba(94,44,38,.42), rgba(20,14,11,0) 70%);"></div>
+
+  <div style="position: absolute; left: 28px; top: 18px; display: flex; align-items: center; gap: 10px; font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: #f5a14a; font-weight: 700;">
+    <span style="width: 9px; height: 9px; border-radius: 50%; background: #ff8a7a;"></span> Prime Time · on air
+  </div>
+  <div style="position: absolute; right: 28px; top: 16px; font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: #8a7d70;">Episode 1 · Casting</div>
+
+  <div style="position: absolute; left: 0; right: 0; top: 118px; display: flex; flex-direction: column; align-items: center; gap: 20px;">
+    <div style="font-size: 12px; letter-spacing: .26em; text-transform: uppercase; font-weight: 700; color: #f5a14a;">Read your card</div>
+    <div style="font-size: 74px; font-weight: 800; line-height: 1;">{{headline}}</div>
+
+    <!-- eight seats, one lamp each: the shape of the room, and who is still reading.
+         The dot is the player's own accent — the same colour their row carries everywhere
+         else, so the room learns "seat 4 is pink" before it ever matters. -->
+    <div style="display: flex; gap: 14px; margin-top: 6px;">
+      <sc-for list="{{seats}}" as="s" hint-placeholder-count="8">
+        <div style="width: 132px; padding: 16px 10px 14px; border-radius: 12px; background: rgba(0,0,0,.55); border: 1px solid {{s.edge}}; display: flex; flex-direction: column; align-items: center; gap: 10px; opacity: {{s.fade}};">
+          <div style="width: 40px; height: 40px; border-radius: 50%; background: {{s.accent}}; color: #141210; font-weight: 900; font-size: 19px; display: flex; align-items: center; justify-content: center;">{{s.seat}}</div>
+          <div style="font-size: 17px; font-weight: 800; line-height: 1.1; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 110px;">{{s.name}}</div>
+          <div style="font-size: 10px; letter-spacing: .2em; text-transform: uppercase; font-weight: 700; color: {{s.tint}};">{{s.state}}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <!-- ═══════ SHIPPED CHANGE · THE FOOT OF THIS BOARD IS THE BAKE, NOT A BALLOT COUNT ═══════
+         The first build of this artboard put "N of 8 have sent a ballot" here. An eight-phone
+         probe sampled the real screen ninety times and never saw the number move — and it never
+         can: the intros do not fire until the mansion has finished baking, and the first ballot
+         cannot land until after the intros. The counter was pinned at zero by construction.
+         The bake is what this window IS. So the bar is the bake while it is baking, and the
+         ballot count only once the house is ready. -->
+    <div style="margin-top: 18px; width: 780px;">
+      <div style="display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; letter-spacing: .2em; text-transform: uppercase; font-weight: 700; color: {{tint}};">
+        <span>{{footK}}</span><span>{{footV}}</span>
+      </div>
+      <div style="margin-top: 8px; height: 12px; border-radius: 6px; background: #241f1a; overflow: hidden;">
+        <div style="height: 100%; width: {{pct}}%; background: {{tint}};"></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 96px; display: flex; align-items: center;">
+    <div style="padding: 12px 26px 10px 20px; background: rgba(0,0,0,.62); border-radius: 0 12px 12px 0;">
+      <div style="font-size: 30px; font-weight: 800; line-height: 1;">Casting</div>
+      <div style="margin-top: 5px; font-size: 12px; letter-spacing: .26em; text-transform: uppercase; color: #f5a14a;">live · read your card</div>
+    </div>
+    <p style="margin: 0 0 0 22px; font-size: 20px; color: #a89884;">{{footer}}</p>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{
+  "window": {"editor": "select", "options": ["baking", "ballots"], "default": "baking", "section": "Casting"},
+  "doneCount": {"editor": "int", "default": 3, "min": 0, "max": 8, "section": "Casting"},
+  "bakePct": {"editor": "int", "default": 55, "min": 0, "max": 100, "section": "Casting"}
+}'>
+class Component extends DCLogic {
+  renderVals() {
+    const ACCENTS = ['#f5a14a','#e8d5a3','#ff7a59','#f0ebe3','#c47a4a','#9ad7c2','#7fb3e8','#e5c04a'];
+    const NAMES = ['John','Ellie','Sam','Sam','Bo','Mary-Kate 3','Alexandria','Jo'];
+    const baking = (this.props.window ?? 'baking') === 'baking';
+    const done = baking ? 0 : Math.max(0, Math.min(this.props.doneCount ?? 3, 8));
+    const pctIn = Math.max(0, Math.min(this.props.bakePct ?? 55, 100));
+    const all = done >= 8;
+    const stage = pctIn >= 100 ? 'the mansion is ready' : (pctIn >= 70 ? 'dressing the rooms' : 'warming the mansion');
+    return {
+      tint: baking ? '#f5a14a' : (all ? '#9ff2c8' : '#f5a14a'),
+      pct: baking ? pctIn : Math.round((done / 8) * 100),
+      footK: baking ? stage : 'ballots in',
+      footV: baking ? `${pctIn}%` : `${done} of 8`,
+      headline: all ? 'Every ballot is in.' : 'Nobody says a word yet.',
+      footer: baking ? 'Eight cards. One of them is lying to you.' : 'Choose your crew.',
+      seats: NAMES.map((name, i) => {
+        const sent = i < done;
+        return {
+          seat: String(i + 1),
+          name,
+          accent: ACCENTS[i],
+          state: sent ? 'ballot in' : 'reading',
+          tint: sent ? '#9ff2c8' : '#8a7d70',
+          edge: sent ? 'rgba(159,242,200,.45)' : 'rgba(245,161,74,.16)',
+          fade: sent ? '1' : '.58',
+        };
+      }),
+    };
+  }
+}
+</script>
+</body>
+</html>

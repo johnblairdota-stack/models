@@ -1,0 +1,7 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html",      "x": 0,    "y": 0, "w": 1600, "h": 900, "title": "The stream - pick a green" },
+    { "file": "Behaviour.dc.html", "x": 1700, "y": 0, "w": 1600, "h": 900, "title": "When it starts, lives, stops" }
+  ],
+  "launch": { "view": "focused", "file": "Main.dc.html" }
+}

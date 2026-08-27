@@ -10,14 +10,23 @@
  *   somebody's lift arrives. `EPISODE_CAP` plus W5 is the belt and braces; R1 runs hundreds of
  *   matches across every player count and every take pattern and requires every one to stop.
  *
- *   **It fits.** `rrr-social-round.md` §1 budgets 26:25 / 31:50 / 37:15 for 4/5/6 episodes, and
- *   `EPISODE_CAP = 6` is chosen precisely to keep the worst case under forty minutes. R2 asserts
- *   the arithmetic still says so, because a phase whose length drifts by fifteen seconds is
- *   invisible until it has cost four minutes.
+ *   **It fits.** R2 asserts the arithmetic still says so, because a phase whose length drifts by
+ *   fifteen seconds is invisible until it has cost four minutes.
+ *
+ * ⚠️ **THE SECOND PROPERTY CHANGED SHAPE ON 2026-08-25 AND THE HEADER USED TO LIE ABOUT IT.**
+ * It said `EPISODE_CAP = 6` (it is 5) and quoted a 26:25/31:50/37:15 budget that two later
+ * decisions had already moved. Both numbers were stale for long enough to be quoted in a design
+ * argument. The live figures are in the R2 block, computed from `phases.js` rather than restated
+ * here, so this header cannot drift again.
+ *
+ * What changed: Debrief became a five-minute CEILING ended by a majority of the room tapping
+ * READY, so "does the night fit" split into the night a table PLAYS (R2b/R2c, under 40 min) and
+ * the night a silent table SUFFERS (R2e, under 60). The old flat forty-minute guarantee is gone
+ * on purpose — see the R2 block for the measurement that made it unaffordable.
  */
 
 import { createRoom } from '../src/party/room.js';
-import { sessionSeconds, episodeSeconds, orderFor, PHASE, EPISODE_CAP, reckoningSeconds, RECKONING_CAP } from '../src/party/phases.js';
+import { sessionSeconds, episodeSeconds, orderFor, PHASE, EPISODE_CAP, reckoningSeconds, RECKONING_CAP, SECONDS } from '../src/party/phases.js';
 import { OUTCOME } from '../src/party/win.js';
 
 let pass = 0, fail = 0;
@@ -56,18 +65,57 @@ const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' �
 // ---------------------------------------------------------------- R2 · the session budget
 {
   const mins = (n) => sessionSeconds(n) / 60;
-  // ⚠️ These three moved on 2026-08-25 when the premiere stopped skipping the vote: +105s on
-  // ep1, so 26:25/31:50/37:15 became 28:10/33:35/39:00. The decision and the arithmetic are in
-  // `phases.js` `orderFor`. R2c below is the assertion that says the new numbers still fit.
-  t('R2 · 4/5/6 episodes land on the budgeted 28:10 / 33:35 / 39:00',
-    Math.abs(sessionSeconds(4) - 1690) < 1 && Math.abs(sessionSeconds(5) - 2015) < 1 && Math.abs(sessionSeconds(6) - 2340) < 1,
+
+  /* ==========================================================================================
+   * 🚨 THE FORTY-MINUTE PROMISE BECAME A FORTY-MINUTE EXPECTATION ON 2026-08-25.
+   *
+   * Debrief went 75s -> 300s (John: he wanted Blood on the Clocktower's long day). At five
+   * episodes that makes the ABSOLUTE worst case 56.1 min, and it cannot be bought back by
+   * shortening the night — 600 simulated matches showed only 7.3% finish by episode 3, and an
+   * eight-player table averages 4.98 episodes, so a smaller `EPISODE_CAP` would force-end ~93%
+   * of games on a technicality rather than a win.
+   *
+   * ⚠️ **WHAT MAKES THIS AFFORDABLE IS THE READY BUTTON, NOT THE ARITHMETIC.** Debrief is a
+   * CEILING now: a majority of the living ends it (`show.js` `readyNeeded`). So the number worth
+   * guarding is the night a real table plays, and R2c measures exactly that — every Debrief
+   * ended at `TYPICAL_DEBRIEF_S`, which is 38.6 min.
+   *
+   * R2e is the replacement for the old guarantee: a hard sixty-minute ceiling on the case where
+   * NOBODY ever taps. It exists so the drift this block was written to catch is still caught —
+   * "a phase whose length drifts by fifteen seconds is invisible until it has cost four minutes"
+   * is as true now as it was, and the only thing that changed is which number is the promise.
+   *
+   * If a five-minute Debrief drags at a real table, `phases.js` `SECONDS[DEBRIEF]` is the line to
+   * change and these four assertions are what will tell you everything that moves with it.
+   * ========================================================================================== */
+
+  t('R2 · 4/5/6 episodes land on the budgeted 43:10 / 52:20 / 61:30',
+    Math.abs(sessionSeconds(4) - 2590) < 1 && Math.abs(sessionSeconds(5) - 3140) < 1 && Math.abs(sessionSeconds(6) - 3690) < 1,
     `${mins(4).toFixed(1)} / ${mins(5).toFixed(1)} / ${mins(6).toFixed(1)} min`);
+
+  /*
+   * The Debrief a real table actually plays. Not a guess: `readyNeeded` makes the beat end when a
+   * majority has said their piece, and 90s is the number this assertion is pinned to so that
+   * raising it is a visible, argued change rather than a quiet one.
+   */
+  const TYPICAL_DEBRIEF_S = 90;
+  const typical = (eps, noms) => {
+    const saved = (SECONDS[PHASE.DEBRIEF] - TYPICAL_DEBRIEF_S) * eps;
+    return (sessionSeconds(eps, noms) - saved) / 60;
+  };
+
+  t('R2b · a typical night at the episode cap fits the window', typical(EPISODE_CAP, 0) <= 40,
+    `${typical(EPISODE_CAP, 0).toFixed(1)} min at ${EPISODE_CAP} episodes, Debrief ended at ${TYPICAL_DEBRIEF_S}s`);
+  t('R2c · THE TYPICAL WORST CASE fits it too — three nominations every episode',
+    typical(EPISODE_CAP, 3) < 40,
+    `${typical(EPISODE_CAP, 3).toFixed(1)} min · the night a real table plays, with READY ending `
+    + `every Debrief at ${TYPICAL_DEBRIEF_S}s. R2e guards the table that never taps.`);
+
   const worst = sessionSeconds(EPISODE_CAP, 3) / 60;
-  t('R2b · the base case fits the window at the episode cap', mins(EPISODE_CAP) <= 40,
-    `${mins(EPISODE_CAP).toFixed(1)} min base at ${EPISODE_CAP} episodes`);
-  t('R2c · THE WORST CASE fits it too — three nominations every episode', worst < 40,
-    `${worst.toFixed(1)} min · this is the assertion that caught the 42.0 min bug at EPISODE_CAP 6, `
-    + `so it asserts the worst case and not the comfortable one`);
+  t('R2e · and the room that NEVER taps READY still stops inside an hour', worst < 60,
+    `${worst.toFixed(1)} min · every Debrief run to its full ${SECONDS[PHASE.DEBRIEF]}s ceiling. `
+    + `This is the assertion that replaced the old flat 40-minute guarantee.`);
+
   t('R2d · the reckoning is capped', reckoningSeconds(99) === RECKONING_CAP, `${reckoningSeconds(99)}s`);
 }
 

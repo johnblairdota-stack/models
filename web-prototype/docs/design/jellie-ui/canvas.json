@@ -1,0 +1,32 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 1600, "h": 900, "title": "TV · the pair rail" },
+    { "file": "Tags.dc.html", "x": 1680, "y": 0, "w": 1600, "h": 900, "title": "TV · paired name tags" },
+    { "file": "PhonePick.dc.html", "x": 0, "y": 1000, "w": 390, "h": 844, "title": "Phone · choosing" },
+    { "file": "PhonePaired.dc.html", "x": 470, "y": 1000, "w": 390, "h": 844, "title": "Phone · paired" }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -200,
+      "w": 700,
+      "text": "JELLIE — the pairing UI, planned before building.\n\nThree critics played the shipped version. What they could not do was READ it:\n\n· the public feed was 12px grey in the bottom-left gutter — invisible from a sofa\n· two identical green tags on opposite sides of the ring never read as one pair\n· nothing said it was a text chat before you committed\n· a left-out player had no read on who was talking\n\nEverything here is built from the show's existing vocabulary: --night tokens, the\nlower-third black panel with its right-rounded corner, the 11px/.26em amber key line."
+    },
+    {
+      "id": "rail-note",
+      "x": 940,
+      "y": 960,
+      "w": 620,
+      "text": "THE PAIR RAIL replaces the caption.\n\nMerged name at 54px where it was 12px. Each pair carries its own HUE, and the two\nmember names sit under it so OARA and BAM decode without touching the 3D plate —\nJohn chose the merged word alone up there, and that stands.\n\nRefusals and reach-outs get 24px in the event column, not a grey line nobody saw."
+    },
+    {
+      "id": "tag-note",
+      "x": 1680,
+      "y": 960,
+      "w": 620,
+      "text": "THE TAGS get three cheap additions, all on a plate that already re-renders:\n\n1 · a per-pair HUE — two pairs are never the same colour\n2 · a TETHER — a dashed arc in that hue, joining the two plates across the ring\n3 · a LINK GLYPH on the plate, so the pairing survives a still frame\n\nUnpaired plates keep the shipped INK #054E84 / CHROME #B9BEC2 exactly."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

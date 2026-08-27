@@ -693,6 +693,29 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
         ? { ok: true, choice: pick }
         : { ok: true, choice: pick, why: allowed.why };
     },
+    /**
+     * 📊 **HOW FULL THE BALLOT BOX IS — A COUNT AND A THRESHOLD, NEVER A NAME.**
+     *
+     * The deadest stretch in the night was a Vote with every ballot already in and twenty-two
+     * seconds still on the clock, on a television that said nothing about either. Casting already
+     * arms a 3·2·1 when the last ballot lands and Debrief already shows "0 of 5 ready"; the lynch
+     * ballot was the one that showed neither.
+     *
+     * ⚠️ **NO `who` AND NO `counts`.** Who has voted is a live read on the room, and what they
+     * voted for is aired at the Execution twenty-five seconds later — either one on the wire
+     * during the Vote would hand the room the result early and turn the last ballot into a
+     * formality. `in` is a cardinality of the ballot box, nothing more. Same reasoning, and the
+     * same shape, as `FANOUT_KEYS.ready`.
+     *
+     * Nominators are pre-filled by `assumedLynchVotes` on `enterVote`, so they are counted in
+     * from the first frame — which is correct: their nomination IS their ballot and they are not
+     * asked again.
+     */
+    lynchProgress() {
+      const living = episodeLiving();
+      const cast = living.filter((id) => state.lynchVotes[id] !== undefined).length;
+      return { in: cast, living: living.length, need: Math.floor(living.length / 2) + 1 };
+    },
     closeVote,
     enterExecution() {
       if (!state.voteResult) closeVote();

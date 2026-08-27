@@ -1,0 +1,117 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; }
+    a { color: #f5a14a; } a:hover { color: #ffbe7d; }
+  </style>
+</helmet>
+
+<div style="width: 1600px; height: 900px; position: relative; background: #0c0a08; color: #f3ece3; overflow: hidden; display: flex; flex-direction: column;">
+
+  <div style="flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; padding: 16px 28px 10px;">
+    <div style="display: flex; align-items: center; gap: 10px; font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: #f5a14a; font-weight: 700;">
+      <span style="width: 9px; height: 9px; border-radius: 50%; background: #ff8a7a;"></span> Prime Time · on air
+    </div>
+    <!-- one clock only: the mast carries the LABEL, the plate below carries the NUMBER -->
+    <div style="font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: #8a7d70;">Episode 1 · Vote</div>
+  </div>
+
+  <div style="flex: 1 1 auto; min-height: 0; display: flex; gap: 14px; padding: 0 28px 14px;">
+
+    <div style="flex: 1 1 auto; position: relative; border-radius: 14px; overflow: hidden; background:
+        radial-gradient(900px 480px at 50% 30%, rgba(245,161,74,.09), transparent 62%),
+        linear-gradient(180deg, #171310 0%, #0e0b09 62%, #0a0806 100%);">
+      <div style="position: absolute; left: 50%; top: 66%; transform: translate(-50%,-50%); width: 780px; height: 250px; border-radius: 50%; background: radial-gradient(ellipse at center, rgba(94,44,38,.45), rgba(20,14,11,0) 70%);"></div>
+
+      <div style="position: absolute; left: 22px; bottom: 20px; padding: 12px 26px 10px 18px; background: rgba(0,0,0,.62); border-radius: 0 12px 12px 0;">
+        <div style="font-size: 30px; font-weight: 800; line-height: 1;">The ballot</div>
+        <div style="margin-top: 5px; font-size: 12px; letter-spacing: .26em; text-transform: uppercase; color: #f5a14a;">live · vote</div>
+      </div>
+    </div>
+
+    <div style="flex: 0 0 320px; display: flex; flex-direction: column; gap: 12px;">
+
+      <div style="display: flex; flex-direction: column; align-items: flex-end; text-align: right;">
+        <div style="font-size: 11px; letter-spacing: .22em; text-transform: uppercase; font-weight: 700; color: #f5a14a;">Vote</div>
+        <div style="font-size: 66px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums;">{{clock}}</div>
+      </div>
+
+      <!-- ═══════ BALLOT PROGRESS ═══════
+           The deadest stretch in the loop: every ballot in, 22 seconds still running, and the TV
+           showing nothing about it. Casting already arms a 3·2·1 when all living ballots land;
+           Debrief and Reckoning already show "0 of 5 ready". Only the lynch ballot showed neither
+           a count nor the threshold. It leaks nothing — the names are aired 25 seconds later at
+           the Execution — and it turns dead air into the tensest moment in the night. -->
+      <div style="padding: 14px 16px 16px; border-radius: 10px; background: rgba(0,0,0,.62);">
+        <div style="font-size: 11px; letter-spacing: .26em; text-transform: uppercase; font-weight: 700; color: #8a7d70;">Ballots in</div>
+        <div style="display: flex; align-items: baseline; gap: 8px; margin-top: 4px;">
+          <span style="font-size: 56px; font-weight: 800; line-height: 1; color: {{tint}}; font-variant-numeric: tabular-nums;">{{inCount}}</span>
+          <span style="font-size: 24px; font-weight: 700; color: #8a7d70;">of {{living}}</span>
+        </div>
+        <div style="margin-top: 10px; height: 10px; border-radius: 5px; background: #241f1a; overflow: hidden;">
+          <div style="height: 100%; width: {{pct}}%; background: {{tint}};"></div>
+        </div>
+        <div style="margin-top: 8px; font-size: 14px; letter-spacing: .06em; color: #a89884;">{{note}}</div>
+      </div>
+
+      <!-- ═══════ WHO IS ON TRIAL, AND WHICH ONE ═══════
+           Duplicate names are locked and stay legal — but the rule allows duplicates, it does not
+           require them to be indistinguishable. The aired ballot is described in room.js as "the
+           cheapest deduction fuel in the game", and two players called Sam turn it off. A seat
+           number and the player's own accent colour cost nothing and break no rule. -->
+      <div style="flex: 1 1 auto; min-height: 0; padding: 12px 14px; border-radius: 10px; background: rgba(0,0,0,.62); overflow: hidden;">
+        <div style="font-size: 11px; letter-spacing: .26em; text-transform: uppercase; font-weight: 700; color: #8a7d70; margin-bottom: 10px;">Standing</div>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <sc-for list="{{nominees}}" as="n" hint-placeholder-count="2">
+            <div style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 8px; background: #161310; border-left: 5px solid {{n.accent}};">
+              <div style="flex: 0 0 auto; width: 30px; height: 30px; border-radius: 50%; background: {{n.accent}}; color: #141210; font-weight: 900; font-size: 15px; display: flex; align-items: center; justify-content: center;">{{n.seat}}</div>
+              <div style="min-width: 0;">
+                <div style="font-size: 22px; font-weight: 800; line-height: 1.05; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{n.name}}</div>
+                <div style="margin-top: 3px; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: #8a7d70;">named by {{n.by}}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="flex: 0 0 auto; padding: 0 28px 16px;">
+    <p style="margin: 0; font-size: 20px; letter-spacing: .02em; color: #a89884;">One ballot. Living majority.</p>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{
+  "inCount": {"editor": "int", "default": 5, "min": 0, "max": 8, "section": "Ballot"},
+  "living": {"editor": "int", "default": 8, "min": 2, "max": 8, "section": "Ballot"},
+  "clock": {"editor": "text", "default": "22s", "section": "Ballot"}
+}'>
+class Component extends DCLogic {
+  renderVals() {
+    const living = this.props.living ?? 8;
+    const inCount = Math.min(this.props.inCount ?? 5, living);
+    const all = inCount >= living;
+    return {
+      inCount, living,
+      clock: all ? '3' : (this.props.clock ?? '22s'),
+      pct: Math.round((inCount / Math.max(1, living)) * 100),
+      tint: all ? '#9ff2c8' : '#f5a14a',
+      note: all ? 'Every ballot in — closing.' : `needs ${Math.floor(living / 2) + 1} to carry`,
+      nominees: [
+        { seat: '4', name: 'Sam', by: 'Ellie', accent: '#d95a8a' },
+        { seat: '7', name: 'Mary-Kate 3', by: 'John', accent: '#7fb3e8' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

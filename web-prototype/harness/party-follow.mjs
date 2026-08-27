@@ -21,8 +21,12 @@
 import {
   CAM_LABEL, FOLLOW_BEATS, FOLLOW_CHROME_CSS, FOLLOW_INSTRUMENTS, FOLLOW_KEYS, FOLLOW_FORBIDDEN,
   FOLLOW_VIEW, SHOT_NAMES, THROTTLES,
+  CAM_MIN_DIST, CAM_LIFT, CAM_SWING, CHASE_DIST, CHASE_HEIGHT, CHASE_LOOK_Y,
+  CUT_SHOTS, OVERHEAD, PERSPECTIVES, PERSPECTIVE_RIG, cueViolations, isOverhead,
+  nextPerspective, perspectiveEye, runPerspective, cleanCampose,
   cleanThrottle, followParams, followUrl, followViolations, isFollowBeat,
 } from '../src/party/follow.js';
+import { readFile } from 'node:fs/promises';
 import { ACCENTS, SHELLS } from '../src/party/look.js';
 import { isNightToken } from '../src/party/palette.js';
 import { STUB_SHOW_PLAN, recapAfterMs } from '../src/party/show.js';
@@ -225,6 +229,238 @@ console.log('\nparty-follow — the TV follow slot');
     overlap.length === 0, overlap.join(',') || `${FOLLOW_KEYS.length} sent, ${FOLLOW_INSTRUMENTS.length} typed`);
   t('F9f · an instrument cannot smuggle a forbidden name',
     FOLLOW_INSTRUMENTS.every((k) => !FOLLOW_FORBIDDEN.includes(k)));
+}
+
+/* =============================================================================================
+ * F10 · 🎥 THE LENS STOPPED CLIMBING INSIDE THE PLAYER, AND THE STICK STOPPED ROTATING WITH IT.
+ *
+ * John, playing the expedition: *"navigating the mansion is clunky with the camera and controls
+ * (if the camera clips the wall it pushes into the players robot and the direction of the
+ * movement is affected)."* One sentence, one root cause, two symptoms — and the second one is
+ * the serious half, because controls that rotate under a thumb read as the game being broken.
+ *
+ * `follow-bed.js` imports THREE, so the operator is read as text here and the geometry is
+ * re-derived from the exported constants. The FELT behaviour is measured in a real browser by
+ * `harness/cam-clip-drive.mjs`, which walks a runner into walls and records the closest the lens
+ * ever gets and how far the stick's frame moves while it does.
+ * ============================================================================================= */
+{
+  const bed = await readFile(new URL('../src/game/follow-bed.js', import.meta.url), 'utf8');
+
+  /*
+   * ⚠️ THE CONTROL IS THE ARITHMETIC. The old ladder pulled in to 0.20 of the chase distance —
+   * 0.58 m from the chest of a robot about half a metre across. The floor has to EXCLUDE that
+   * case by number, not by taste, or a later tune could quietly walk back into it.
+   */
+  t('F10 · the lens has a minimum distance, and it excludes the old worst case',
+    CAM_MIN_DIST >= 1.0 && CAM_MIN_DIST < CHASE_DIST
+      && 0.20 * CHASE_DIST < CAM_MIN_DIST,
+    `floor ${CAM_MIN_DIST}m · the old ladder reached ${(0.2 * CHASE_DIST).toFixed(2)}m`);
+
+  t('F10a · and the reel clamps to it on every candidate, not just the last',
+    /Math\.max\(CAM_MIN_DIST, dist \* c\.k\)/.test(bed));
+
+  /*
+   * ⚠️ **BOTH REELS, NOT JUST THE ONE JOHN HIT.** This control was written for the run camera and
+   * immediately failed on a SECOND copy of the same ladder in `reelToSight` — the warm and intro
+   * cameras — whose own last resort put the eye ON the target and lifted it 30 cm, i.e. inside
+   * the head of the robot walking in. That is the camera the room stares at for half a minute
+   * while the mansion bakes, and nothing had ever flagged it.
+   */
+  t('F10b control · neither reel walks the eye down a ladder into the target any more',
+    !/lerp\(eye, k\)/.test(bed)
+      && !/for \(let k = 0\.75; k >= 0\.2/.test(bed)
+      && !/eye\.copy\(at\);/.test(bed)
+      && (bed.match(/Math\.max\(CAM_MIN_DIST/g) || []).length === 2,
+    `${(bed.match(/Math\.max\(CAM_MIN_DIST/g) || []).length} of 2 reels floored`);
+
+  /*
+   * Pulling in is the most destructive correction — it changes how big the player is on screen,
+   * which is the framing cue the runner steers by. Swinging and lifting must be tried first.
+   */
+  const tries = bed.slice(bed.indexOf('const REEL_TRIES'), bed.indexOf('class FollowOperator'));
+  const first = tries.slice(0, tries.indexOf('{ k: 0.75'));
+  t('F10c · swing and lift are tried at full distance BEFORE the lens pulls in',
+    /CAM_SWING/.test(bed) && /CAM_LIFT/.test(bed)
+      && (first.match(/k: 1,/g) || []).length >= 5
+      && /swing: 0\.5/.test(first) && /swing: -0\.5/.test(first) && /lift: 1/.test(first),
+    `${(first.match(/k: 1,/g) || []).length} full-distance tries first`);
+  // Every swing magnitude, not a hand-listed few — the ladder has been retuned once already.
+  const swings = [...tries.matchAll(/swing: (-?[\d.]+)/g)].map((m) => Number(m[1])).filter((v) => v !== 0);
+  const bag = swings.slice().sort((a, b) => a - b);
+  t('F10c2 control · every swing is paired with its mirror — no favourite shoulder',
+    swings.length >= 8 && bag.every((v, i) => v === -bag[bag.length - 1 - i]),
+    `${swings.length} swings: ${[...new Set(bag.map(Math.abs))].join('/')}`);
+
+  /* =========================================================================================
+   * 🚨 **THE FLOOR IS ENFORCED ON THE DELIVERED EYE, NOT ONLY ON THE TARGET.**
+   *
+   * This project has paid for that distinction before: a correctly-derived constant can still
+   * ship wrong. Every `_reel` candidate was a legal 1.15 m or more and the drive still measured
+   * the lens at **0.42 m** — worse than the 0.58 m defect it replaced — because the eye is LERPED
+   * toward its target in a straight line, and the chord of a wide swing passes through the
+   * runner. A gate that only reads the candidate ladder would have called that fixed.
+   * ========================================================================================= */
+  t('F10f · and the floor is re-applied AFTER the smoothing, to the eye the player looks through',
+    /this\.eye\.lerp\(this\._want, k\);/.test(bed)
+      && bed.indexOf('eDist < CAM_MIN_DIST') > bed.indexOf('this.eye.lerp(this._want, k);')
+      && /this\.eye\.x = runner\.pos\.x \+ ex \* s;/.test(bed));
+
+  /*
+   * 🕹️ THE HALF THAT MATTERS. `_lockYaw` is the yaw the player is steering; nothing but the look
+   * stick writes it. Reading it FIRST is what makes the frame immune to any camera correction.
+   */
+  const basis = bed.slice(bed.indexOf('basisYaw() {'), bed.indexOf('basisYaw() {') + 320);
+  t('F10d · the stick frame is the STEERED yaw, read before anything measures the lens',
+    /if \(this\._lockYaw != null\) return this\._lockYaw;/.test(basis)
+      && basis.indexOf('this._lockYaw') < basis.indexOf('this.look.x'));
+  t('F10d2 control · and the last resort no longer snaps the frame onto the body',
+    !/runner\.facing\), -1\.2\)/.test(bed)
+      && /const f = this\.basisYaw\(\);/.test(bed));
+
+  /*
+   * The old fallback dropped the eye behind `runner.facing`. On a live run the player may be
+   * steering a lens up to 180° from the way the body happens to point, so that single line could
+   * reverse the controls in one frame at the worst possible moment.
+   */
+  t('F10e · a chase-locked run therefore cannot have its controls rotated by geometry at all',
+    /liveRunShot/.test(bed) && /this\._lockYaw = orbit\.yaw;/.test(bed)
+      && (bed.match(/this\._lockYaw = /g) || []).length <= 6);
+}
+
+/* =============================================================================================
+ * F11 · 🎥 THE FOUR PERSPECTIVES — chase · wide · iso · top, on one live key.
+ *
+ * John: *"ship the perspective toggles. The roof will probably need to be see through so they
+ * work. The control and camera may also need to adapt the method for the different perspective
+ * positions."* All three sentences are asserted below; the pictures are taken by
+ * `harness/perspective-shots.mjs`, which also proves the roof actually came off.
+ * ============================================================================================= */
+{
+  const bed = await readFile(new URL('../src/game/follow-bed.js', import.meta.url), 'utf8');
+  const host = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
+
+  t('F11 · four perspectives, and the key cycles them in a closed loop',
+    PERSPECTIVES.length === 4
+      && PERSPECTIVES.every((p) => !!PERSPECTIVE_RIG[p])
+      && nextPerspective(PERSPECTIVES[PERSPECTIVES.length - 1]) === PERSPECTIVES[0]
+      && nextPerspective('nonsense') === PERSPECTIVES[0],
+    PERSPECTIVES.join(' → '));
+
+  /*
+   * ⚠️ **THE DIRECTOR MUST NEVER CUT TO A PERSPECTIVE.** It cuts between its shots on a timer.
+   * A director that decided to try `top` for five seconds mid-corridor would be taking the
+   * controls off the player — the same class of defect as the auto-cuts a live run already
+   * forbids, which is why `liveRunShot` exists at all.
+   */
+  t('F11a · a perspective is HELD, never cut to — the director cannot reach one',
+    PERSPECTIVES.filter((p) => p !== 'chase').every((p) => !CUT_SHOTS.includes(p))
+      && bed.includes('const DIRECTOR_SHOTS = CUT_SHOTS;')
+      && /_pick\(\) \{\s*\r?\n\s*const pool = DIRECTOR_SHOTS/.test(bed),
+    `director pool: ${CUT_SHOTS.join(' ')}`);
+  t('F11a2 control · but they are still valid names, or the cue and ?shot= could not carry one',
+    PERSPECTIVES.every((p) => SHOT_NAMES.includes(p))
+      && PERSPECTIVES.every((p) => cueViolations({ kind: 'shot', shot: p }).length === 0)
+      && cueViolations({ kind: 'shot', shot: 'godview' }).length > 0);
+
+  /*
+   * 🎥 The rigs, as geometry. An overhead view that could be pitched is a chase camera with extra
+   * steps, and tilting it is how a player loses the map they came to the view for.
+   */
+  const pitchMoves = (p) => {
+    const a = perspectiveEye(p, 0, 0);
+    const b = perspectiveEye(p, 0, 0.5);
+    return Math.abs(a.y - b.y) > 0.01;
+  };
+  t('F11b · the ground rigs pitch with the look stick and the overhead rigs refuse to',
+    pitchMoves('chase') && pitchMoves('wide')
+      && !pitchMoves('iso') && !pitchMoves('top')
+      && PERSPECTIVE_RIG.iso.orbit === false && PERSPECTIVE_RIG.top.orbit === false);
+
+  /*
+   * 🏠 **THE ROOF.** John called this before a line was written. The overhead eyes are ABOVE a
+   * storey by construction, so the lid HAS to come off — and `_valid` has to stop refusing them,
+   * or the reel fights the rig on every frame.
+   */
+  const STOREY = 4.8;
+  t('F11c · the overhead eyes really are above the roof — so the lid must come off',
+    OVERHEAD.every((p) => PERSPECTIVE_RIG[p].height > STOREY)
+      && !OVERHEAD.includes('chase') && !OVERHEAD.includes('wide')
+      && PERSPECTIVE_RIG.wide.height < STOREY,
+    OVERHEAD.map((p) => `${p} ${PERSPECTIVE_RIG[p].height}m vs storey ${STOREY}m`).join(' · '));
+  t('F11c2 · and the bed takes it off, plus what HANGS from it, on change only',
+    /room\.setLid\?\.\(!overhead\)/.test(bed)
+      && /setHangers\(overhead\)/.test(bed)
+      && /chandelier\|pendant/.test(bed)
+      && /if \(overhead !== perf\.lidOff\)/.test(bed));
+  t('F11c3 control · and it restores only what it took, never what something else hid',
+    /if \(e\.o\.visible\) \{ e\.o\.visible = false; e\.took = true; \}/.test(bed)
+      && /else if \(e\.took\) \{ e\.o\.visible = true; e\.took = false; \}/.test(bed));
+
+  /*
+   * The two adaptations John predicted the camera would need. The CONTROLS needed none, and that
+   * is a result rather than an omission — F10d made the stick's frame `_lockYaw`, which is a real
+   * yaw even looking straight down, where a camera-derived frame is degenerate.
+   */
+  t('F11d · the shot-correction logic stands down for an overhead rig',
+    /if \(isOverhead\(this\.shot\)\) return true;/.test(bed)
+      && /!isOverhead\(this\.shot\) && eDist > 1e-4/.test(bed));
+  t('F11d2 · and the key light moves over the runner, because a point light 9 m up never arrives',
+    /if \(isOverhead\(want\)\) \{/.test(bed)
+      && /camLight\.distance = up \* 1\.5;/.test(bed));
+
+  t('F11e · a live run holds the chosen perspective, and a typed ?shot= still wins',
+    runPerspective('run', null, 'top') === 'top'
+      && runPerspective('run', null, null) === 'chase'
+      && runPerspective('run', null, 'garbage') === 'chase'
+      && runPerspective('run', 'lead', 'top') === 'lead'
+      && runPerspective('warm', null, 'top') === null);
+
+  t('F11f · P cycles it on the dev TV, over the cue channel that already exists',
+    /e\.key !== 'p' && e\.key !== 'P'/.test(host)
+      && /ui\.perspective = nextPerspective\(ui\.perspective \|\| 'chase'\)/.test(host)
+      && /sendCue\(\{ kind: 'shot', shot: ui\.perspective \}\)/.test(host)
+      && /P CAMERA/.test(host));
+  t('F11f2 control · and it is behind ?dev=1, like every other key that changes the show',
+    host.indexOf("params.get('dev') === '1'") < host.indexOf("e.key !== 'p'"));
+
+  /* ===========================================================================================
+   * 📐 F12 · `?campose=` — STAND THE SHOW CAMERA WHERE THE ASSET'S CAMERA STANDS.
+   *
+   * John: *"how can we verify that we actually have everything? We need to compare the exact
+   * files visibly open and compare each until it is perfect."* `shoot.mjs --cam` could already
+   * pose the asset; the show camera could not be posed at all, so the two rooms could never be
+   * photographed from the same spot and "is it ported yet" was answered from memory — wrongly,
+   * three times.
+   * =========================================================================================== */
+  t('F12 · a pose is six or seven finite numbers, and nothing else',
+    !!cleanCampose('1,2,3,4,5,6')
+      && cleanCampose('1,2,3,4,5,6,50')?.fov === 50
+      && cleanCampose('1,2,3,4,5,6')?.fov === null);
+  t('F12a control · anything else is refused rather than half-applied',
+    cleanCampose(null) === null
+      && cleanCampose('1,2,3') === null
+      && cleanCampose('1,2,3,4,5,6,7,8') === null
+      && cleanCampose('1,2,3,4,5,six') === null
+      && cleanCampose('1,2,3,1,2,3') === null            // a camera cannot look at itself
+      && cleanCampose('1,2,3,4,5,6,900') !== null
+      && cleanCampose('1,2,3,4,5,6,900')?.fov === null); // an absurd fov is dropped, not obeyed
+
+  t('F12b · it is an INSTRUMENT — typed at the door, never emitted by a host-built slot',
+    FOLLOW_INSTRUMENTS.includes('campose')
+      && !FOLLOW_KEYS.includes('campose')
+      && followViolations({ ...followParams(SLOT), campose: '1,2,3,4,5,6' }).length === 0);
+
+  /*
+   * ⚠️ **A PINNED POSE MUST OWN THE CAMERA OUTRIGHT.** An operator that still lagged, swayed and
+   * handheld-jittered a "fixed" pose would put every pair on the contact sheet a few centimetres
+   * and a few degrees apart, and bury every real difference in that noise — which is exactly the
+   * failure this instrument exists to end.
+   */
+  t('F12c control · and the operator never gets to touch a pinned frame',
+    /if \(opts\.campose\) \{/.test(bed)
+      && bed.indexOf('if (opts.campose) {') < bed.indexOf('const want = runPerspective(')
+      && /engine\.camera\.lookAt\(c\.at\[0\], c\.at\[1\], c\.at\[2\]\);/.test(bed));
 }
 
 console.log(`\nparty-follow: ${pass} passed, ${fail} failed`);

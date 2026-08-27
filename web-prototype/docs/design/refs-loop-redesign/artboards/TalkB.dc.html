@@ -1,0 +1,187 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&display=swap">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    :root{
+      --bg:#0c0a08; --deep:#080604; --panel:#161310; --well:#12100c;
+      --accent:#f5a14a; --accent-rgb:245,161,74;
+      --ink:#f3ece3; --soft:#a89884; --dim:#8a7d70;
+      --live:#9ff2c8; --live-well:#122019;
+      --bad:#ff8a7a; --bad-rgb:255,138,122;
+      --rec:#e8452f;                       /* PROPOSED: the on-air dot. --bad is a text salmon. */
+      --scrim:rgba(8,6,4,.78);             /* PROPOSED: safe-area bed over live picture */
+    }
+    body{width:1280px;height:720px;overflow:hidden;background:var(--bg);color:var(--ink);
+      font-family:'Archivo',ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased;
+      font-variant-numeric:tabular-nums;}
+    a{color:var(--accent);} a:hover{color:#ffc07f;}
+
+    /* THE FRAME ------------------------------------------------------- */
+    .tv{position:relative;width:1280px;height:720px;display:flex;flex-direction:column;
+      background:radial-gradient(900px 520px at 50% -8%,rgba(var(--accent-rgb),.10),transparent 58%),var(--bg);}
+
+    /* TOP BAR — brand, on-air dot, episode, beat, clock ---------------- */
+    .bar{flex:0 0 auto;height:46px;display:flex;align-items:center;justify-content:space-between;
+      padding:0 30px;gap:20px;}
+    .brand{display:flex;align-items:center;gap:10px;}
+    .brand .mark{font-size:15px;font-weight:900;letter-spacing:.22em;color:var(--accent);}
+    .rec{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:800;letter-spacing:.20em;
+      color:var(--ink);}
+    .rec i{width:9px;height:9px;border-radius:50%;background:var(--rec);display:block;
+      box-shadow:0 0 0 3px rgba(232,69,47,.22);}
+    .barR{display:flex;align-items:center;gap:16px;}
+    .ep{font-size:13px;font-weight:700;letter-spacing:.20em;color:var(--dim);}
+    .clock{font-size:34px;font-weight:900;letter-spacing:.01em;line-height:1;color:var(--ink);}
+    .clock.hot{color:var(--accent);}
+
+    /* THE RUNDOWN RAIL — the whole shooting schedule, always on screen -- */
+    .rail{flex:0 0 auto;display:flex;gap:3px;height:50px;padding:0 30px 10px;}
+    .rail .b{flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:6px;
+      padding:0 10px 7px;border-bottom:3px solid rgba(var(--accent-rgb),.16);position:relative;}
+    .rail .b span{font-size:13px;font-weight:800;letter-spacing:.14em;color:#544a40;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .rail .b.done span{color:var(--dim);}
+    .rail .b.done{border-bottom-color:rgba(var(--accent-rgb),.34);}
+    .rail .b.now span{color:var(--accent);}
+    .rail .b.now{border-bottom-color:rgba(var(--accent-rgb),.28);}
+    .rail .b.now::after{content:"";position:absolute;left:0;bottom:-3px;height:3px;
+      background:var(--accent);box-shadow:0 0 12px rgba(var(--accent-rgb),.7);}
+
+    /* Slim variant — over live picture the rail gives the frame its height back */
+    .rail.thin{height:22px;padding:0 30px 6px;}
+    .rail.thin .b{padding-bottom:4px;}
+    .rail.thin .b span{display:none;}
+    .rail.thin .b.now span{display:block;font-size:11px;letter-spacing:.16em;}
+
+    /* STAGE ----------------------------------------------------------- */
+    .stage{flex:1;min-height:0;position:relative;padding:0 30px;}
+    .stage.bleed{padding:0;}
+    .plate{position:absolute;inset:0;overflow:hidden;background:#05070a;}
+    .plate img{width:100%;height:100%;object-fit:cover;display:block;}
+    .plate.dim img{filter:brightness(.30) saturate(.7);}
+    .scrimT{position:absolute;left:0;right:0;top:0;height:120px;
+      background:linear-gradient(180deg,var(--scrim),transparent);}
+    .scrimB{position:absolute;left:0;right:0;bottom:0;height:190px;
+      background:linear-gradient(0deg,var(--scrim) 30%,transparent);}
+
+    /* LOWER THIRD — one nameplate language, Lobby to Reunion ----------- */
+    .lt{position:absolute;left:30px;bottom:22px;display:flex;align-items:center;gap:16px;}
+    .lt .chev{width:52px;height:52px;flex:0 0 auto;}
+    .lt .who{font-size:46px;font-weight:900;line-height:1;letter-spacing:-.01em;}
+    .lt .role{margin-top:7px;display:flex;align-items:center;gap:9px;font-size:13px;font-weight:800;
+      letter-spacing:.20em;color:var(--live);}
+    .lt .role b{color:var(--soft);font-weight:800;}
+    .cam{position:absolute;right:30px;bottom:30px;display:flex;align-items:center;gap:9px;
+      font-size:13px;font-weight:800;letter-spacing:.20em;color:var(--soft);}
+    .cam i{width:8px;height:8px;border-radius:50%;background:var(--rec);}
+
+    /* TYPE RAMP ------------------------------------------------------- */
+    .hero{font-size:132px;font-weight:900;line-height:.88;letter-spacing:-.025em;}
+    .big{font-size:74px;font-weight:900;line-height:.94;letter-spacing:-.015em;}
+    .name{font-size:44px;font-weight:800;line-height:1;}
+    .beat{font-size:30px;font-weight:900;letter-spacing:.10em;text-transform:uppercase;}
+    .body{font-size:20px;font-weight:500;color:var(--soft);line-height:1.35;}
+    .lab{font-size:13px;font-weight:800;letter-spacing:.20em;text-transform:uppercase;color:var(--dim);}
+    .mint{color:var(--live);} .salmon{color:var(--bad);} .amber{color:var(--accent);}
+
+    /* PANELS ---------------------------------------------------------- */
+    .card{background:var(--panel);border:1px solid rgba(var(--accent-rgb),.16);border-radius:10px;}
+    .card.lit{border-color:var(--accent);box-shadow:0 0 0 1px rgba(var(--accent-rgb),.30);}
+
+    /* BOTTOM STRIP ---------------------------------------------------- */
+    .strip{flex:0 0 auto;height:76px;display:flex;flex-direction:column;align-items:center;
+      justify-content:center;gap:5px;padding:0 30px;}
+    .strip .line{font-size:26px;font-weight:800;letter-spacing:-.005em;}
+    .strip .facts{font-size:13px;font-weight:700;letter-spacing:.20em;color:var(--dim);
+      text-transform:uppercase;}
+  
+    /* SAFE AREA. The seated circle sits in the middle of the ballroom shot, so the middle of the
+       shot is not available. Chrome gets the top band and the bottom band and nothing else. */
+    :root { --safe-t: 26%; --safe-b: 78%; }
+    /* The frame is sized off the STAGE, never off a hard pixel number — a frame taller than the
+       stage is exactly how the live build ended up with chrome outside its own picture. */
+    .frame { position:relative; height:100%; aspect-ratio:16/9; width:auto; max-width:100%;
+      margin:0 auto; overflow:hidden;
+      border:2px solid rgba(var(--accent-rgb),.42); border-radius:12px; background:#05070a; }
+    .frame > img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+    .frame.dim > img { filter:brightness(.42) saturate(.8); }
+    /* The overlay is anchored to the FRAME. This one line is the bug fix. */
+    .ov { position:absolute; inset:0; display:flex; flex-direction:column;
+      justify-content:space-between; pointer-events:none; }
+    .band { padding:14px 20px; display:flex; align-items:flex-start; gap:16px; }
+    .band.top { background:linear-gradient(180deg, var(--scrim) 22%, transparent); }
+    .band.bot { background:linear-gradient(0deg, var(--scrim) 34%, transparent);
+      align-items:flex-end; padding:20px 20px 16px; }
+    /* The forbidden middle, drawn only on the annotated boards. */
+    .chairband { position:absolute; left:0; right:0; top:var(--safe-t); bottom:calc(100% - var(--safe-b));
+      border-top:1px dashed rgba(159,242,200,.5); border-bottom:1px dashed rgba(159,242,200,.5);
+      background:rgba(159,242,200,.06); display:flex; align-items:center; justify-content:center; }
+    .chairband span { font-size:13px; font-weight:800; letter-spacing:.22em; color:var(--live);
+      background:rgba(8,6,4,.7); padding:6px 12px; border-radius:5px; }
+    .chip { display:flex; align-items:center; gap:10px; padding:9px 14px; border-radius:7px;
+      background:rgba(12,10,8,.82); border:1px solid rgba(var(--accent-rgb),.30); }
+    .chip .n { font-size:22px; font-weight:900; line-height:1; }
+    .chip .k { font-size:12px; font-weight:800; letter-spacing:.16em; color:var(--dim); }
+    .mini { display:flex; gap:9px; }
+    .mini b { font-size:13px; font-weight:800; letter-spacing:.16em; padding:7px 11px;
+      border-radius:6px; background:rgba(12,10,8,.82);
+      border:1px solid rgba(var(--accent-rgb),.24); }
+    /* Side dock (option B) */
+    .dock { position:absolute; left:0; top:0; bottom:0; width:38%;
+      background:linear-gradient(90deg, var(--scrim) 62%, transparent);
+      padding:18px 20px; display:flex; flex-direction:column; gap:12px; }
+  </style>
+</helmet>
+<div class="tv">
+  <div class="bar">
+      <div class="brand"><div class="mark">PRIME TIME</div><div class="rec"><i></i>ON AIR</div></div>
+      <div class="barR"><div class="ep">EPISODE 2 &middot; RECKONING</div><div class="clock">0:31</div></div>
+    </div>
+  <div class="rail"><div class="b done"><span>CASTING</span></div><div class="b done"><span>EXPEDITION</span></div><div class="b done"><span>RECAP</span></div><div class="b done"><span>DEBRIEF</span></div><div class="b now"><style>.rail .b.now::after{width:45%;}</style><span>RECKONING</span></div><div class="b"><span>VOTE</span></div><div class="b"><span>EXECUTION</span></div><div class="b"><span>VERDICT</span></div></div>
+  <div class="stage" style="display:flex;align-items:center;justify-content:center;padding:0 24px 10px;">
+    <div class="frame">
+      <img src="plate-ballroom.jpg" alt="">
+      <div class="chairband"><span>THE SEATED CIRCLE &middot; NO CHROME HERE</span></div>
+      <div class="dock">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;">
+          <div class="lab" style="color:var(--accent);font-size:12px;">NOMINATE</div>
+          <div class="clock" style="font-size:40px;">0:31</div>
+        </div>
+        <div class="mini" style="flex-wrap:wrap;">
+          <b class="salmon">CAM DARK</b><b class="mint">CAME BACK</b>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:9px;margin-top:2px;">
+          <div class="card lit" style="padding:10px 14px;display:flex;
+          align-items:center;gap:11px;background:rgba(12,10,8,.86);">
+          <div style="color:var(--accent);font-size:18px;font-weight:900;">1</div>
+          <div>
+            <div class="lab" style="font-size:11px;">NAMED BY JOHN</div>
+            <div style="font-size:29px;font-weight:900;line-height:1.05;">Ellie</div>
+          </div>
+        </div><div class="card lit" style="padding:10px 14px;display:flex;
+          align-items:center;gap:11px;background:rgba(12,10,8,.86);">
+          <div style="color:var(--accent);font-size:18px;font-weight:900;">2</div>
+          <div>
+            <div class="lab" style="font-size:11px;">NAMED BY BEX</div>
+            <div style="font-size:29px;font-weight:900;line-height:1.05;">Mara</div>
+          </div>
+        </div>
+        </div>
+        <div style="margin-top:auto;">
+          <div class="body" style="font-size:16px;">First tap stands. You cannot name yourself.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

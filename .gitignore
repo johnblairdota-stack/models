@@ -6,6 +6,7 @@ dist/
 web-prototype/progress/
 web-prototype/tmp_critic/
 web-prototype/harness/out/
+web-prototype/harness/tmp/
 
 # Secrets and local env
 .env
@@ -18,3 +19,7 @@ Thumbs.db
 *.log
 __pycache__/
 *.pyc
+
+# Seeded design canvases (2.5 MB payload each; rebuild with the _build scripts + /design)
+web-prototype/docs/design/refs-loop-redesign/artboards/*.html
+!web-prototype/docs/design/refs-loop-redesign/artboards/*.dc.html

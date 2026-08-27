@@ -1,0 +1,10 @@
+﻿import { readFileSync, writeFileSync } from 'fs';
+const r = readFileSync('src/party/room.js', 'utf8');
+const i = r.indexOf("setPhase('EXPEDITION')");
+console.log('i', i);
+console.log(JSON.stringify(r.slice(i, i + 250)));
+const j = r.indexOf('alarms += 2');
+console.log('j', j);
+console.log(JSON.stringify(r.slice(j - 100, j + 200)));
+const k = r.indexOf('One miss and one alarm');
+console.log('k', k);

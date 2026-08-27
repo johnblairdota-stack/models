@@ -1,0 +1,26 @@
+browser chrome headless
+browser_ready true
+CODE xs5r
+HEAD 027a078 chase-shot operator.shot/until probe
+JOIN Ada
+JOIN Ben
+START ok
+CARD_DOWN Ada
+CARD_DOWN Ben
+CAST Ada
+CAST Ben
+LOCK sent
+LIVE_POLL_0 {"beat":"expedition","warm":"house","live":false}
+LIVE_READY {"i":5,"shot":"chase","until":3,"keys":["shot","until","cutGen","throttle","speed"]}
+ROLES [{"name":"Ada","iAmRunner":true,"iAmGuide":false,"hasStick":true},{"name":"Ben","iAmRunner":false,"iAmGuide":true,"hasStick":false}]
+PROBE_START {"shot":"chase","until":3,"cutGen":0}
+RUN_HELD {"hasRun":true,"runOn":true}
+SAMP_1 {"t":1719,"dir":0,"shot":"chase","slugShot":"chase","until":5.315,"cutGen":1,"throttle":"WALK","speed":2.45,"runOn":true,"posX":14.189,"posZ":46.194,"keys":["shot","until","cutGen","throttle","speed"]}
+SAMP_8 {"t":6369,"dir":1,"shot":"chase","slugShot":"chase","until":4.615,"cutGen":1,"throttle":"RUN","speed":4.52,"runOn":true,"posX":15.881,"posZ":43.642,"keys":["shot","until","cutGen","throttle","speed"]}
+SAMP_16 {"t":11167,"dir":2,"shot":"chase","slugShot":"chase","until":3.815,"cutGen":1,"throttle":"RUN","speed":4.69,"runOn":true,"posX":19.373,"posZ":42.76,"keys":["shot","until","cutGen","throttle","speed"]}
+SAMP_24 {"t":16100,"dir":3,"shot":"chase","slugShot":"chase","until":3.015,"cutGen":1,"throttle":"RUN","speed":2.11,"runOn":true,"posX":22.375,"posZ":44.12,"keys":["shot","until","cutGen","throttle","speed"]}
+SAMP_32 {"t":20938,"dir":4,"shot":"chase","slugShot":"chase","until":2.215,"cutGen":1,"throttle":"RUN","speed":4.3,"runOn":true,"posX":23.171,"posZ":46.762,"keys":["shot","until","cutGen","throttle","speed"]}
+SAMP_40 {"t":25540,"dir":5,"shot":"chase","slugShot":"chase","until":1.315,"cutGen":1,"throttle":"RUN","speed":4.65,"runOn":true,"posX":20.834,"posZ":49.296,"keys":["shot","until","cutGen","throttle","speed"]}
+SAMP_48 {"t":29967,"dir":7,"shot":"shoulder","slugShot":"shoulder","until":5.518,"cutGen":2,"throttle":"RUN","speed":4.78,"runOn":true,"posX":14.548,"posZ":46.745,"keys":["shot","until","cutGen","throttle","speed"]}
+VERDICT {"head":"027a078","code":"xs5r","durationMs":33838,"sampleCount":55,"instrumentOk":true,"uniqueShots":["chase","shoulder"],"slugShots":["chase","shoulder"],"shotChanges":1,"until":{"min":0.015,"max":5.518,"decreased":true,"reset":true,"n":55},"cutGen":{"start":1,"end":2,"cutsObserved":1},"diagnosis":"shots_changing_ok","prTonight":false,"prReason":"report-only; NO cut PR — morning brief","sampleHead":[{"t":1719,"dir":0,"shot":"chase","slugShot":"chase","until":5.315,"cutGen":1,"throttle":"WALK","speed":2.45,"runOn":true,"posX":14.189,"posZ":46.194,"keys":["shot","until","cutGen","throttle","speed"]},{"t":2336,"dir":0,"shot":"chase","slugShot":"chase","until":5.215,"cutGen":1,"throttle":"RUN","speed":2.51,"runOn":true,"posX":14.337,"posZ":45.992,"keys":["shot","until","cutGen","throttle","speed"]},{"t":3434,"dir":0,"shot":"chase","slugShot":"chase","until":5.115,"cutGen":1,"throttle":"RUN","speed":4.53,"runOn":true,"posX":14.583,"posZ":45.612,"keys":["shot","until","cutGen","throttle","speed"]}],"sampleMid":{"t":18583,"dir":4,"shot":"chase","slugShot":"chase","until":2.615,"cutGen":1,"throttle":"RUN","speed":4.78,"runOn":true,"posX":23.325,"posZ":44.978,"keys":["shot","until","cutGen","throttle","speed"]},"sampleTail":[{"t":32470,"dir":7,"shot":"shoulder","slugShot":"shoulder","until":4.518,"cutGen":2,"throttle":"RUN","speed":5.06,"runOn":true,"posX":12.746,"posZ":42.362,"keys":
+DONE C:\Users\John\Documents\models\web-prototype\progress\overnight-chase-shot\summary.md

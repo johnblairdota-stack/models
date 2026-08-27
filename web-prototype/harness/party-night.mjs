@@ -8,10 +8,11 @@
  * This one proves a reviewer can open a host, two phones, see the lobby, and advance.
  */
 
-import { startServer, fanoutViolations, lobbySnapshot, progressShow, expireShowHold, applyNominate, castingBackstop, MAX_PHONES } from '../net/party/local.mjs';
+import { startServer, fanoutViolations, lobbySnapshot, progressShow, expireShowHold, applyNominate, castingBackstop, applyReady, readyCountdownNow, MAX_PHONES } from '../net/party/local.mjs';
 import { recapFromEvents } from '../src/party/recap.js';
 import { qrMatrix } from '../src/party/qr.js';
 import {
+  PartyNightClient,
   tokenKey, STUB_SHOW_PLAN, AFTER_RUN_BEATS, nextShowBeat, holdMsFor,
   RECAP_HOLD_MS, DEBRIEF_HOLD_MS, RECKONING_HOLD_MS, VOTE_HOLD_MS, EXECUTION_HOLD_MS,
   LATE_DEBRIEF_MS, EMPTY_RECKONING_EXTEND_CAP,
@@ -19,7 +20,7 @@ import {
 } from '../src/party/night-client.js';
 import { PHASE, SECONDS } from '../src/party/phases.js';
 import { missionFor, MISSION_PAINTING, MISSION_TABLE } from '../src/party/mission.js';
-import { RUN_END, CASTING_BACKSTOP_MS } from '../src/party/show.js';
+import { RUN_END, CASTING_BACKSTOP_MS, readyNeeded } from '../src/party/show.js';
 import { CAST_BACKSTOP_MS } from '../src/party/ballot.js';
 import { ACCENTS, SHELLS, cleanLook } from '../src/party/look.js';
 import { applyCastLock, applyCastTap, ballotFromCast, CAST_BLOCK_WHY, castPrompt, castRowBlock, castRowMark, freshCast, mergePublicNames, nominationPlayers, publicName } from '../src/party/cast-ui.js';
@@ -148,9 +149,20 @@ t('N1c · stub show plan walks recap → debrief → reckoning → vote → exec
   STUB_SHOW_PLAN.map((s) => s.beat).join(',') === 'expedition,recap,debrief,reckoning,vote,execution,casting');
 t('N1c2 · expedition is immediate — the TV does not wait on Watch the run',
   (STUB_SHOW_PLAN.find((s) => s.beat === 'expedition')?.ms ?? 1) === 0);
-t('N1c3 · recap hold is 10s and debrief hold is 75s — the shooting schedule, not a new table',
+/*
+ * ⚠️ TWO CHECKS IN ONE, AND BOTH HALVES EARN THEIR PLACE.
+ *   `=== SECONDS[PHASE.X] * 1000` is the one that matters: the wire reads the design table rather
+ *   than carrying a second copy. That is the two-machines-disagreeing bug this repo has already
+ *   paid for once, in the premiere.
+ *   The LITERALS are what make a duration change visible. Agreement alone would stay green while
+ *   someone quietly doubled a beat.
+ *
+ * Debrief moved 75000 -> 300000 on 2026-08-25 (John: Blood on the Clocktower's long day). It is a
+ * ceiling now, ended by a majority tapping READY — N21. What it cost is in `round-loop` R2.
+ */
+t('N1c3 · recap hold is 10s and debrief hold is 300s — the shooting schedule, not a new table',
   RECAP_HOLD_MS === SECONDS[PHASE.RECAP] * 1000 && RECAP_HOLD_MS === 10000
-    && DEBRIEF_HOLD_MS === SECONDS[PHASE.DEBRIEF] * 1000 && DEBRIEF_HOLD_MS === 75000
+    && DEBRIEF_HOLD_MS === SECONDS[PHASE.DEBRIEF] * 1000 && DEBRIEF_HOLD_MS === 300000
     && holdMsFor('recap') === RECAP_HOLD_MS && holdMsFor('debrief') === DEBRIEF_HOLD_MS);
 t('N1c4 · after a finished run the clock is Recap → Debrief → Reckoning → Vote → Execution → Casting',
   AFTER_RUN_BEATS.join(',') === 'recap,debrief,reckoning,vote,execution,casting'
@@ -736,6 +748,162 @@ t('N14 · host can pace the room onto the recap beat',
     castingBackstop(net) === null);
 
   for (const c of [p1, p2]) c.close();
+}
+
+// ------------------------------------------------------------------ N21 · READY ends the talk
+/*
+ * ✋ **DEBRIEF IS A FIVE-MINUTE CEILING, AND THE ROOM IS THE CLOCK.** John wanted Blood on the
+ * Clocktower's long day; five minutes of dead air once everyone has finished talking is the
+ * version of that nobody wants. A MAJORITY of the living ends the beat (his call — unanimity
+ * hands one distracted player a veto over everyone's evening).
+ *
+ * ⚠️ **THIS IS NOT THE CASTING RULE.** `cast-ballot` B12b-e locks *"all living ballots in, or a
+ * ~20s backstop, never on the first ballot"*, because an early cast lock robs a big table of its
+ * vote. Ending a conversation early costs nothing that not-tapping cannot get back. Same shape,
+ * opposite answer, deliberately — N21b is the assertion that keeps them from being merged.
+ *
+ * The properties that matter, each with the failure it is standing in front of:
+ *   N21a  a minority does NOT end the beat        — two players must not silence six
+ *   N21b  majority cannot fire on a first tap     — the B12b bug, arriving through a new door
+ *   N21c  a majority DOES end it                  — the feature actually works
+ *   N21d  un-tapping disarms                      — a mis-tap must be takeable back
+ *   N21e  the beat change clears the set          — a thumb must not survive into the next beat
+ *   N21f  the TV cannot vote                      — it holds no seat in the room
+ *   N21g  the fanout carries counts, never names  — who wants it over is a live read on the room
+ */
+{
+  const rBase = `ws://localhost:${PORT}/?room=rdy`;
+  const rtv = await open(`${rBase}&host=1`);
+  const ph = [];
+  for (let i = 0; i < 5; i++) ph.push(await open(rBase));
+  await sleep(80);
+  rtv.send({ t: 'start' });
+  await sleep(60);
+  const rm = srv.rooms.get('rdy');
+  const ids = ph.map((p) => p.welcome.playerId);
+
+  // Straight to the beat under test. `t:'show'` is the same door the host workaround uses.
+  rtv.send({ t: 'show', beat: 'debrief' });
+  await sleep(60);
+
+  t('N21 · five living players need a majority of three',
+    readyNeeded(5) === 3 && readyNeeded(8) === 5 && readyNeeded(2) === 2,
+    `5->${readyNeeded(5)} 8->${readyNeeded(8)} 2->${readyNeeded(2)}`);
+
+  /*
+   * 🚨 **N21h IS THE DEADLOCK.** The phone cannot draw a READY button until it knows the
+   * threshold, and the threshold only ever rode on a `ready` fanout — which only fires when
+   * somebody taps. The button therefore did not exist until it had been pressed, and the beat
+   * could only ever run its full five minutes.
+   *
+   * Every other N21 assertion passed while that was true, because they call `applyReady` on the
+   * server directly and never ask whether a phone could reach it. This one asserts the phones
+   * were TOLD, on arrival, with nobody having tapped anything.
+   */
+  const firstReady = last(ph[0], 'ready');
+  t('N21h · entering a talk beat tells every phone the threshold, before any tap',
+    firstReady?.need === readyNeeded(5) && firstReady?.count === 0,
+    JSON.stringify(firstReady));
+
+
+  applyReady(rm, ids[0], true);
+  applyReady(rm, ids[1], true);
+  await sleep(40);
+  t('N21a · a MINORITY does not end the beat — two thumbs of five leaves it on debrief',
+    rm.show === 'debrief' && rm.readyClock == null,
+    `${rm.ready.size}/${readyNeeded(5)} ready, beat=${rm.show}`);
+
+  t('N21b · and a majority can never fire on a FIRST tap at any table of two or more',
+    [2, 3, 4, 5, 6, 7, 8].every((n) => readyNeeded(n) >= 2),
+    [2, 3, 4, 5, 6, 7, 8].map((n) => `${n}->${readyNeeded(n)}`).join(' '));
+
+  applyReady(rm, ids[2], true);
+  await sleep(40);
+  t('N21c · the third thumb is the majority, and it ARMS rather than cutting mid-sentence',
+    rm.show === 'debrief' && rm.readyClock != null, `beat=${rm.show}, armed=${rm.readyClock != null}`);
+
+  applyReady(rm, ids[2], false);
+  await sleep(40);
+  t('N21d · un-tapping drops it back below the majority and disarms — READY is a toggle',
+    rm.readyClock == null && rm.show === 'debrief', `armed=${rm.readyClock != null}`);
+
+  applyReady(rm, ids[2], true);
+  await sleep(40);
+  const walked = readyCountdownNow(rm);
+  t('N21c2 · and when the countdown lands, the beat actually moves on',
+    walked === 'reckoning' && rm.show === 'reckoning', `beat=${rm.show}`);
+
+  t('N21e · the new beat starts with an EMPTY set — a thumb belongs to one beat only',
+    rm.ready.size === 0, `${rm.ready.size} carried over`);
+
+  applyReady(rm, ids[0], true);
+  applyReady(rm, ids[1], true);
+  applyReady(rm, ids[2], true);
+  await sleep(40);
+  const before = rm.show;
+  applyReady(rm, rtv.welcome?.playerId ?? 'tv', true);
+  t('N21f · the television holds no seat, so it cannot vote a beat closed',
+    rm.show === before && !rm.ready.has(rtv.welcome?.playerId),
+    `beat=${rm.show}`);
+
+  const fan = { t: 'ready', count: 3, need: 3 };
+  t('N21g · the ready fanout is a COUNT and a THRESHOLD — never a list of who',
+    fanoutViolations(fan).length === 0
+      && fanoutViolations({ ...fan, who: ['p1'] }).length > 0
+      && fanoutViolations({ ...fan, players: ['p1'] }).length > 0,
+    'a `who` or `players` key on it is a violation, not a pass');
+
+  /*
+   * N21i IS THE OTHER HALF OF THE SAME DEADLOCK, and it is the half that would have survived.
+   * N21h covers the phones that were in the room when the beat began. Every reconnect, refresh
+   * and latecomer arrives AFTER that fanout, hears nothing, and shows the READY copy above a
+   * missing READY button. Found by driving a real phone into a running Debrief — no gate saw it,
+   * because every other N21 assertion calls `applyReady` on the server and never asks whether a
+   * phone could reach it.
+   *
+   * ⚠️ LAST IN THE BLOCK ON PURPOSE. Joining raises the living count, which moves the majority
+   * under everything above it — putting this earlier turned N21c/N21c2/N21e red for a reason
+   * that had nothing to do with them.
+   */
+  {
+    rtv.send({ t: 'show', beat: 'debrief' });
+    await sleep(60);
+    const latecomer = await open(rBase);
+    await sleep(120);
+    const lateReady = last(latecomer, 'ready');
+    t('N21i · and a phone that joins mid-talk is told it on arrival',
+      lateReady?.need > 0 && Number.isFinite(lateReady?.count),
+      JSON.stringify(lateReady));
+    latecomer.close();
+  }
+
+  /*
+   * N21j · THE THIRD DOOR ON THE SAME DEADLOCK, and the one that actually shipped broken.
+   *
+   * The server sends `show` MORE THAN ONCE per beat: `setShow` fans the beat, then
+   * `scheduleShowProgress` fans it again carrying `until`. The client cleared its ready tally on
+   * every `show`, so the threshold the server had just sent was wiped milliseconds later by the
+   * deadline broadcast — and a Debrief with no READY button on it can only run its full five
+   * minutes. Three separate mechanisms had to be right for one button to exist; N21h, N21i and
+   * this one are one each.
+   */
+  {
+    const c = new PartyNightClient({ url: rBase, onMessage: () => {} });
+    await c.connect();
+    await sleep(150);
+    const beforeShow = c.ready;
+    // The same beat, re-broadcast — exactly what scheduleShowProgress does.
+    rtv.send({ t: 'show', beat: rm.show });
+    await sleep(150);
+    t('N21j · a re-broadcast of the SAME beat does not wipe the ready threshold',
+      beforeShow?.need > 0 && c.ready?.need === beforeShow.need,
+      `before ${JSON.stringify(beforeShow)} after ${JSON.stringify(c.ready)}`);
+    c.close?.();
+    await sleep(60);
+  }
+
+  for (const p of ph) p.close();
+  rtv.close();
 }
 
 for (const c of [host, a, b, back]) c.close();

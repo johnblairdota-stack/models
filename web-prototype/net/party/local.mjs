@@ -43,8 +43,15 @@ import {
   isShowBeat, missionEndsRun, recapAfterMs, nextShowBeat, holdMsFor, remainingMs,
   CASTING_BACKSTOP_MS,
   RUN_END, LATE_DEBRIEF_MS, EMPTY_RECKONING_EXTEND_CAP,
+  isReadyBeat, readyNeeded, readyMet, READY_COUNTDOWN_MS,
 } from '../../src/party/show.js';
 import { reckoningSeconds } from '../../src/party/phases.js';
+import { reactCheck } from '../../src/party/react.js';
+import {
+  freshLinks, pruneLinks, publicLinks, linkBlock, requestLink, acceptLink, declineLink, unlink,
+  whisperAudience, whisperViolations, cleanWhisper, isLinkBeat, expirePending, expirePairs,
+  finishPair,
+} from '../../src/party/link.js';
 
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 export const MAX_PHONES = 8;
@@ -160,8 +167,288 @@ function showPayload(room) {
   };
 }
 
+/* =============================================================================================
+ * ✋ READY — the room ending its own talk beat. Rule lives in `show.js`; this is the plumbing.
+ *
+ * ⚠️ **THE SET IS CLEARED ON EVERY BEAT CHANGE.** A thumb that meant "I am done talking about
+ * the cellar" must not still mean "I am done" two beats later. `setShow` is the single door every
+ * beat change goes through, including the host workaround and the casting backstop, which is why
+ * the clear lives there and not in each `enter*Live`.
+ * ============================================================================================= */
+
+function readyState(room) {
+  const living = livingSeatedIds(room);
+  const set = room.ready || (room.ready = new Set());
+  // A player who died, left their seat, or was evicted must stop counting toward the majority.
+  for (const id of [...set]) if (!living.includes(id)) set.delete(id);
+  return { count: set.size, living: living.length, need: readyNeeded(living.length) };
+}
+
+function fanoutReady(room) {
+  const { count, need } = readyState(room);
+  fanout(room, { t: 'ready', count, need });
+}
+
+function clearReady(room) {
+  if (room.ready?.size) room.ready.clear();
+  if (room.readyClock) { clearTimeout(room.readyClock); room.readyClock = null; }
+}
+
+/**
+ * 👏 ONE TAP ON THE REACTION PAD. See `src/party/react.js` for the four decisions this enforces;
+ * everything here is the plumbing of them.
+ *
+ * ⚠️ **A REFUSAL IS SILENT.** Every failing branch returns without sending anything, to the
+ * tapper as well as to the room. A refusal receipt would be a signal in itself — "JOHN tried to
+ * react" is information about a dead player or a player on cooldown, aired to eight phones, in
+ * the one beat where reading the room is the game. The phone runs its own cooldown for feel; the
+ * server's is the one that counts, and the two disagreeing is a UI bug, never a leak.
+ *
+ * Returns the reaction it aired, or null — gates assert on the return rather than on a socket.
+ */
+export function applyReact(room, playerId, raw, now = Date.now()) {
+  if (!room || !playerId) return null;
+  const last = room.reactAt || (room.reactAt = new Map());
+  const check = reactCheck({
+    reaction: raw,
+    beat: room.show,
+    alive: livingSeatedIds(room).includes(playerId),
+    lastAt: last.get(playerId),
+    now,
+  });
+  if (!check.ok) return null;
+  last.set(playerId, now);
+  /*
+   * 🚨 THE PAYLOAD IS THE WHOLE PAYLOAD. No name, no shell, no accent — the TV already holds all
+   * three on the lobby seat, and re-sending them here would put a second, unversioned copy of a
+   * player's identity on a hot path that fires several times a second. `from` is the seat's
+   * playerId, which is what every other public fanout already keys on.
+   */
+  fanout(room, { t: 'react', from: playerId, r: check.reaction, at: now });
+  return check.reaction;
+}
+
+/**
+ * One thumb, up or down. Returns the beat the room is on afterwards so gates can assert without
+ * sitting through a countdown.
+ *
+ * A majority arms `READY_COUNTDOWN_MS` rather than ending instantly — see `show.js`. Dropping
+ * back below the majority DISARMS it, because ready is a toggle and someone who thinks of one
+ * more thing should be able to take it back.
+ */
+export function applyReady(room, playerId, on = true) {
+  if (!room || !playerId) return null;
+  if (!isReadyBeat(room.show)) return room.show;
+  if (!livingSeatedIds(room).includes(playerId)) return room.show;
+
+  const set = room.ready || (room.ready = new Set());
+  if (on) set.add(playerId); else set.delete(playerId);
+
+  const { count, living } = readyState(room);
+  const met = readyMet(count, living);
+  if (met && !room.readyClock) {
+    room.readyClock = setTimeout(() => {
+      room.readyClock = null;
+      // Re-check on arrival: the room can fall below the majority while the countdown runs.
+      const s = readyState(room);
+      if (!readyMet(s.count, s.living) || !isReadyBeat(room.show)) return;
+      progressShow(room);
+    }, READY_COUNTDOWN_MS);
+    room.readyClock.unref?.();
+  } else if (!met && room.readyClock) {
+    clearTimeout(room.readyClock);
+    room.readyClock = null;
+  }
+  fanoutReady(room);
+  return room.show;
+}
+
+/* =============================================================================================
+ * 🍮 THE PAIR — "public that it happened, private what was said."
+ *
+ * Rules and name generation live in `src/party/link.js`; this is the transport. The one thing
+ * that matters here and nowhere else:
+ *
+ * 🚨 **A WHISPER IS PUSHED TO EXACTLY TWO SOCKETS AND IS NEVER, EVER `fanout`ED.** It is the
+ * first player-authored content in this codebase that some sockets may read and others may not.
+ * `fanoutViolations` does not know the word `whisper` and MUST NOT learn it — a whisper is not a
+ * broadcast with a filter on it, it is a different verb. `link-merge` L10-L13 assert exactly
+ * that, by feeding a whisper to the fanout validator and requiring a refusal.
+ * ============================================================================================= */
+
+/**
+ * ⚠️ **PRUNE AGAINST LIVE SOCKETS, NOT SEATED IDS — AND EXPIRE THE STALE REQUESTS.**
+ *
+ * Two holes an adversarial playtester proved, both here:
+ *
+ *  1. **The ghost pair.** `seatsTaken` is never cleared when a socket dies, so a player who
+ *     yanked their cable was still "living and seated" and their partner stayed locked to
+ *     nobody. Accept, destroy the socket, and the victim is held for the whole beat — and their
+ *     only escape was Disconnect, which charged THEM the turn while the griefer, who never sent
+ *     `unlink`, paid nothing and reconnected by token to do it again down the table.
+ *  2. **`LINK_REQUEST_MS` was dead code.** `expirePending` was written, exported, documented —
+ *     and never called. A request from someone who has walked away stood for the entire beat and
+ *     could still be accepted into a pair with a phone that was not there.
+ */
+/** Test seam: the same prune the live paths run, so a gate can observe it without a socket. */
+export function roomLinks(room) { return linksOf(room); }
+
+function linksOf(room) {
+  if (!room.links) room.links = freshLinks();
+  const live = livingSeatedIds(room).filter((pid) => {
+    const sid = socketIdFor(room, pid);
+    return sid != null && room.conns.has(sid);
+  });
+  const now = Date.now();
+  room.links = expirePairs(expirePending(pruneLinks(room.links, live), now), now);
+  return room.links;
+}
+
+/* =============================================================================================
+ * ⏱️ **THE PAIR CLOCK — the first timer this subsystem has ever had, and it was the hole.**
+ *
+ * `expirePending` and `expirePairs` are pure functions that only ran when `linksOf` was called,
+ * and `linksOf` only ran when SOMEBODY ELSE sent a link message. A play critic measured the
+ * consequence: a request stood unanswered for 26 seconds against a 20-second limit, because no
+ * other traffic happened to arrive. The default no-input path — reach out to someone who is
+ * mid-conversation and not looking at their phone — pinned the asker indefinitely with their
+ * unanswered pass broadcast to the room.
+ *
+ * So the room gets a heartbeat while a link beat is running. One interval per room, cleared in
+ * `clearLinks` and on every beat change, and it only fans out when something actually changed —
+ * a timer that broadcasts every second would be the amplification hole all over again.
+ * ============================================================================================= */
+const LINK_TICK_MS = 1000;
+
+function stopLinkClock(room) {
+  if (room.linkClock) { clearInterval(room.linkClock); room.linkClock = null; }
+}
+
+function startLinkClock(room) {
+  stopLinkClock(room);
+  room.linkClock = setInterval(() => {
+    if (!isLinkBeat(room.show)) { stopLinkClock(room); return; }
+    const before = JSON.stringify(publicLinks(room.links || freshLinks()));
+    linksOf(room);                                   // expires pending AND pairs
+    if (JSON.stringify(publicLinks(room.links)) !== before) fanoutLinks(room);
+  }, LINK_TICK_MS);
+  room.linkClock.unref?.();
+}
+
+function fanoutLinks(room) {
+  fanout(room, { t: 'links', ...publicLinks(linksOf(room)) });
+}
+
+function clearLinks(room) {
+  room.links = freshLinks();
+  stopLinkClock(room);
+}
+
+/** Socket id for a playerId, so a whisper can be addressed rather than broadcast. */
+function socketIdFor(room, playerId) {
+  const s = room.game.sockets.find((x) => !x.isTV && x.playerId === playerId);
+  return s ? s.id : null;
+}
+
+export function applyLinkRequest(room, from, to) {
+  if (!room || !from || !to) return null;
+  const opts = { living: livingSeatedIds(room), beat: room.show, now: Date.now() };
+  const why = linkBlock(linksOf(room), from, to, opts);
+  if (why) return why;
+  room.links = requestLink(room.links, from, to, opts);
+  fanoutLinks(room);
+  return null;
+}
+
+export function applyLinkAccept(room, from, to) {
+  if (!room) return null;
+  const names = {};
+  for (const p of room.game.state.players) names[p.id] = p.name;
+  const before = linksOf(room).pairs.length;
+  room.links = acceptLink(room.links, from, to, { names, now: Date.now() });
+  if (room.links.pairs.length === before) return 'nothing to accept';
+  fanoutLinks(room);
+  return null;
+}
+
+/*
+ * 🚨 **A REFUSAL IS THE BEST TELEVISION THIS MECHANIC MAKES, AND IT USED TO BE SILENT.**
+ * `declineLink` filtered the row out of `pending` and nothing else happened — from the room's
+ * side a refusal was indistinguishable from a request that lapsed, and the refused player was
+ * not told either. Being turned down in front of everybody is exactly the public cost that makes
+ * reaching out a real decision, so it is broadcast.
+ *
+ * It rides ON the links fanout as a TRANSIENT rather than living in the links state, because it
+ * is an event, not a fact: there is nothing for a reconnecting phone to catch up on.
+ */
+export function applyLinkDecline(room, from, to) {
+  if (!room) return null;
+  const had = (linksOf(room).pending || []).some((r) => r.from === from && r.to === to);
+  room.links = declineLink(room.links, from, to);
+  if (had) fanout(room, { t: 'links', ...publicLinks(room.links), refused: { from, to } });
+  else fanoutLinks(room);
+  return null;
+}
+
+export function applyUnlink(room, id) {
+  if (!room) return null;
+  room.links = unlink(linksOf(room), id);
+  fanoutLinks(room);
+  return null;
+}
+
+/**
+ * ✅ One thumb on DONE. The pair only dissolves when both are in — see `finishPair`'s header for
+ * why that matters, and why this is a different verb from `unlink` rather than a nicer one.
+ */
+export function applyFinish(room, id, on = true) {
+  if (!room || !id) return null;
+  room.links = finishPair(linksOf(room), id, on);
+  fanoutLinks(room);
+  return null;
+}
+
+/**
+ * Route one whisper. Returns the socket ids it reached, so a gate can assert "exactly two" and
+ * `party-sockets` can assert nobody else's socket saw a byte of it.
+ */
+export function applyWhisper(room, from, text) {
+  if (!room || !from) return [];
+  const clean = cleanWhisper(text);
+  if (!clean) return [];
+  const audience = whisperAudience(linksOf(room), from);
+  if (!audience.length) return [];
+  const msg = { t: 'whisper', from, text: clean, at: Date.now() };
+  if (whisperViolations(msg).length) return [];
+  const sent = [];
+  for (const pid of audience) {
+    const sid = socketIdFor(room, pid);
+    if (sid) { push(room, sid, msg); sent.push(sid); }
+  }
+  return sent;
+}
+
+/** Test seam: fire the armed countdown now instead of waiting three seconds. */
+export function readyCountdownNow(room) {
+  if (!room?.readyClock) return null;
+  clearTimeout(room.readyClock);
+  room.readyClock = null;
+  const s = readyState(room);
+  if (!readyMet(s.count, s.living) || !isReadyBeat(room.show)) return room.show;
+  return progressShow(room);
+}
+
 function setShow(room, beat, end = null) {
   if (!isShowBeat(beat)) return;
+  clearReady(room);
+  /*
+   * 🍮 **A PAIR LASTS ONE BEAT.** Deliberate, and the most important rule in the mechanic after
+   * privacy: a channel that survived into the vote would be a permanent private line between two
+   * players, which is a different and much worse game. You get the Debrief, and then you are
+   * back in the room with everyone else and have to decide whether to do it again in front of
+   * them. Gate: `link-merge` L20.
+   */
+  if (room.show !== beat) clearLinks(room);
   room.show = beat;
   if (beat === 'expedition' || beat === 'lobby' || beat === 'casting') {
     if (beat === 'expedition') room.runEnd = null;
@@ -173,6 +460,18 @@ function setShow(room, beat, end = null) {
   // rather than in `enterNextCasting` so every path into casting is covered, including the
   // host's `t:'show'` workaround.
   if (beat === 'casting') startCastingClock(room);
+  /*
+   * ✋ **THE THRESHOLD HAS TO ARRIVE BEFORE THE FIRST TAP, OR THE BEAT DEADLOCKS.** `readyHtml`
+   * on the phone draws nothing until it knows `need`, and `need` only ever arrived on a `ready`
+   * fanout — which only fires when somebody taps. So the button did not exist until it had been
+   * pressed. Found by driving a real phone through a real Debrief, not by any gate: every
+   * assertion about the rule itself passed, because the rule was right and the plumbing never
+   * ran. Gate: `party-night` N21h.
+   */
+  if (isReadyBeat(beat)) fanoutReady(room);
+  // Same arrival problem as READY: the phone cannot draw a pair list it has never been sent.
+  // The heartbeat runs only while a link beat does — see the pair clock block.
+  if (isLinkBeat(beat)) { fanoutLinks(room); startLinkClock(room); } else stopLinkClock(room);
 }
 
 /** Valid cast ballots — seated, distinct, both roles filled. The ONE definition. */
@@ -398,6 +697,7 @@ function enterVoteLive(room) {
   setShow(room, 'vote');
   fanout(room, nomsPayload(room));
   fanout(room, lynchPayload(room));
+  fanout(room, tallyPayload(room));
   scheduleShowProgress(room, holdMsFor('vote'));
 }
 
@@ -420,6 +720,7 @@ function enterNextCasting(room) {
   fanout(room, { t: 'ballots', votes: [] });
   fanout(room, nomsPayload(room));
   fanout(room, lynchPayload(room));
+  fanout(room, tallyPayload(room));
   fanout(room, lobbySnapshot(room));
 }
 
@@ -430,6 +731,15 @@ function nomsPayload(room) {
       nominator: n.nominator, target: n.target,
     })),
   };
+}
+
+/**
+ * 📊 How full the ballot box is. See `lynchProgress` in `src/party/room.js` for why this carries
+ * a count and a threshold and never a name or a tally.
+ */
+function tallyPayload(room) {
+  const p = room.game.lynchProgress?.() || { in: 0, living: 0, need: 0 };
+  return { t: 'tally', in: p.in, living: p.living, need: p.need };
 }
 
 function lynchPayload(room) {
@@ -540,6 +850,48 @@ export const FANOUT_KEYS = {
    * payload — there is no room, no seed and no cast on it, so there is nothing here to filter.
    */
   warm: ['t', 'pct', 'stage'],
+  /*
+   * ✋ How many of the room have tapped READY, and how many it takes. A count and a threshold —
+   * deliberately NOT a list of who. Naming the thumbs would turn "are we done talking" into a
+   * public loyalty test, and it would leak a signal about who is coordinating with whom into the
+   * one beat where reading the room is the entire game.
+   */
+  ready: ['t', 'count', 'need'],
+  /*
+   * 📊 How full the lynch ballot box is: a cardinality and the living majority it takes. There is
+   * NO `who` and NO `counts` here — see `lynchProgress` in `src/party/room.js`. Listed so that a
+   * later "while we are at it, put the tally on the wire" fails closed rather than airing the
+   * result twenty-five seconds before the Execution does.
+   */
+  tally: ['t', 'in', 'living', 'need'],
+  /*
+   * 👏 One tap on the reaction pad. Attributed on purpose — an anonymous burst is weather, and
+   * the point of the feature is that a boo is evidence with a name on it.
+   *
+   * ⚠️ **NO `name`, NO `shell`, NO `accent`, AND NEVER A `text`.** The TV already holds all three
+   * on the lobby seat, so a copy here would be a second unversioned identity on a path that
+   * fires several times a second. A free-text field would be a whisper channel with no pair, no
+   * clock and no cap — which is the one thing the link system exists to prevent. Listed so that
+   * a later "let them type a short one" fails closed instead of shipping.
+   */
+  react: ['t', 'from', 'r', 'at'],
+  /* A voter's own receipt. PUSHED to one socket, never fanned — how the ballot is filling is
+     aired at Execution and must not leak before it. Listed so the shape is still closed. */
+  ballotOk: ['t', 'ok', 'choice', 'why'],
+  /*
+   * 🍮 WHO IS PAIRED, AND WHAT THEY ARE CALLED NOW. Public by design — the room watching JOHN
+   * reach out to ELLIE is the entire point, and both names are already on the television.
+   *
+   * ⚠️ **THERE IS NO `text` HERE AND THERE MUST NEVER BE ONE.** The words are pushed to two
+   * sockets by `applyWhisper` and are not a broadcast of any kind — `fanoutViolations` refuses
+   * `t:'whisper'` outright rather than filtering it, which is why the `else` branch below is
+   * load-bearing. Gate: `link-merge` L10-L13.
+   */
+  links: ['t', 'pending', 'pairs', 'used', 'refused'],
+  /** Transient: who just turned whom down. An EVENT on the links fanout, not a stored fact. */
+  linkRefused: ['from', 'to'],
+  linkPend: ['from', 'to'],
+  linkPair: ['a', 'b', 'name', 'at', 'done'],
 };
 export const FANOUT_FORBIDDEN = ['role', 'alignment', 'cover', 'claim', 'castSeed', 'you', 'teammates', 'flyover', 'hunter', 'deal'];
 
@@ -576,6 +928,19 @@ export function fanoutViolations(msg) {
     if (msg.result) extraKeys(msg.result, FANOUT_KEYS.lynchResult, 'lynch.result', bad);
   } else if (msg.t === 'warm') {
     extraKeys(msg, FANOUT_KEYS.warm, 'warm', bad);
+  } else if (msg.t === 'ballotOk') {
+    extraKeys(msg, FANOUT_KEYS.ballotOk, 'ballotOk', bad);
+  } else if (msg.t === 'ready') {
+    extraKeys(msg, FANOUT_KEYS.ready, 'ready', bad);
+  } else if (msg.t === 'tally') {
+    extraKeys(msg, FANOUT_KEYS.tally, 'tally', bad);
+  } else if (msg.t === 'react') {
+    extraKeys(msg, FANOUT_KEYS.react, 'react', bad);
+  } else if (msg.t === 'links') {
+    extraKeys(msg, FANOUT_KEYS.links, 'links', bad);
+    for (let i = 0; i < (msg.pending || []).length; i++) extraKeys(msg.pending[i], FANOUT_KEYS.linkPend, `links.pending[${i}]`, bad);
+    for (let i = 0; i < (msg.pairs || []).length; i++) extraKeys(msg.pairs[i], FANOUT_KEYS.linkPair, `links.pairs[${i}]`, bad);
+    if (msg.refused) extraKeys(msg.refused, FANOUT_KEYS.linkRefused, 'links.refused', bad);
   } else {
     bad.push(`t:${msg.t}`);
   }
@@ -701,6 +1066,25 @@ export function startServer({ port = 5181, count = 8, castSeed = null, worldSeed
     if (room.show === 'reckoning' || room.show === 'vote' || room.show === 'execution') {
       push(room, bound.id, nomsPayload(room));
       push(room, bound.id, lynchPayload(room));
+      // Same reason as the ready threshold below: a refreshed TV mid-Vote must not lose the
+      // ballot count until the next ballot happens to land.
+      push(room, bound.id, tallyPayload(room));
+    }
+    /*
+     * ✋ **A PHONE THAT JOINS MID-TALK STILL NEEDS THE THRESHOLD.** `setShow` fans it on beat
+     * entry, which covers everyone already in the room and nobody who arrives afterwards — and
+     * "afterwards" includes every reconnect and every refresh, not just a latecomer. Without
+     * this line that phone shows the READY copy and no READY button, which is the deadlock N21h
+     * guards one door of. This is the other door. Gate: `party-night` N21i.
+     */
+    if (isReadyBeat(room.show)) {
+      const rs = readyState(room);
+      push(room, bound.id, { t: 'ready', count: rs.count, need: rs.need });
+    }
+    // Same door for the pairs. A reconnecting phone must come back to its own conversation, not
+    // to a sheet that has forgotten it is in one.
+    if (isLinkBeat(room.show)) {
+      push(room, bound.id, { t: 'links', ...publicLinks(linksOf(room)) });
     }
     fanout(room, lobbySnapshot(room));
 
@@ -714,11 +1098,42 @@ export function startServer({ port = 5181, count = 8, castSeed = null, worldSeed
         if (f.opcode === 9) { sock.write(encodeFrame(f.payload, 10)); continue; }
         if (f.opcode !== 1) continue;
         let msg; try { msg = JSON.parse(f.payload.toString('utf8')); } catch { continue; }
-        handleClient(room, bound, self, msg);
+        /*
+         * 🚨 **ONE MALFORMED MESSAGE USED TO KILL THE WHOLE PROCESS — EVERY ROOM, EVERY PLAYER,
+         * THE TELEVISION.** An adversarial playtester sent `{t:'whisper', text:{toString:'x'}}`
+         * from an ordinary seated phone. `String(text)` on an object whose `toString` is not
+         * callable throws `TypeError: Cannot convert object to primitive value`, nothing caught
+         * it here, and node exited. They demonstrated it across rooms: a phone in one room
+         * killed a game running in another. Six of ten crafted payloads did it, through
+         * `whisper.text`, `link.to`, `link.accept`, `link.decline` and the pre-existing `name`.
+         *
+         * The JSON above is already untrusted input from a stranger's handset. Everything past
+         * this line has to be treated the same way. A room that drops one bad message keeps
+         * playing; a process that exits ends somebody's evening.
+         */
+        try {
+          handleClient(room, bound, self, msg);
+        } catch (e) {
+          console.error(`[room ${room.code}] dropped a message from ${bound.id}: ${e?.message}`);
+        }
       }
     });
-    sock.on('close', () => { room.conns.delete(bound.id); fanout(room, lobbySnapshot(room)); });
-    sock.on('error', () => { room.conns.delete(bound.id); fanout(room, lobbySnapshot(room)); });
+    /*
+     * ⚠️ **ONLY DELETE THE ENTRY IF IT IS STILL YOURS.** `room.conns.set(bound.id, …)` overwrites
+     * on a token resume, so when the OLD socket then closes gracefully its handler deleted the
+     * NEW one's entry — leaving a one-way zombie that can still send but receives nothing, looks
+     * paired, and never sees a reply. Reproduced by resuming a token on a second socket and
+     * closing the first; a duplicated tab does exactly that, because `sessionStorage` copies the
+     * token. A hard destroy did not trigger it, which is why it survived.
+     */
+    const dropIfMine = () => {
+      if (room.conns.get(bound.id)?.sock === sock) {
+        room.conns.delete(bound.id);
+        fanout(room, lobbySnapshot(room));
+      }
+    };
+    sock.on('close', dropIfMine);
+    sock.on('error', dropIfMine);
   });
 
   server.listen(port);
@@ -726,7 +1141,7 @@ export function startServer({ port = 5181, count = 8, castSeed = null, worldSeed
     server,
     rooms,
     close: () => {
-      for (const room of rooms.values()) clearShowClock(room);
+      for (const room of rooms.values()) { clearShowClock(room); stopLinkClock(room); }
       return new Promise((r) => server.close(r));
     },
   };
@@ -763,13 +1178,48 @@ function handleClient(room, bound, self, msg) {
     applyNominate(room, self.playerId, msg.target);
     return;
   }
+  /*
+   * 🚨 **THE SERVER NEVER TOLD ANYONE THEIR VOTE LANDED, OR WHAT IT LANDED AS.**
+   *
+   * `castLynchVote` returns `{ok, choice, why}` and the result was thrown away. Three
+   * consequences a play critic measured:
+   *   · "Ballot in" was purely OPTIMISTIC local state, so a dropped message showed a confirmed
+   *     ballot while the server held nothing.
+   *   · A self-vote is silently coerced to NO ONE — correct, and completely invisible to the
+   *     person who cast it. Her phone was byte-identical before and after.
+   *   · Nobody could ever see what they had voted for.
+   *
+   * The receipt goes to ONE socket — the voter's. It is not a fanout: how the ballot is filling
+   * is aired at Execution and must not leak before it.
+   */
   if (msg.t === 'lynchVote' && self && !isTV && self.playerId) {
     if (room.show !== 'vote') return;
-    room.game.castLynchVote(self.playerId, msg.choice, livingSeatedIds(room));
+    const r = room.game.castLynchVote(self.playerId, msg.choice, livingSeatedIds(room)) || {};
+    push(room, bound.id, {
+      t: 'ballotOk',
+      ok: r.ok !== false,
+      choice: r.choice ?? msg.choice,
+      ...(r.why ? { why: r.why } : {}),
+    });
+    // The count moves. The receipt above is the only message that names a choice.
+    fanout(room, tallyPayload(room));
     return;
   }
+  /*
+   * 🚨 **THE DEAD DO NOT CHOOSE WHO GOES INTO THE MANSION.**
+   *
+   * This used `seatedPlayerIds`, which deliberately has NO alive filter — it is the occupancy
+   * list, and `livingSeatedIds` is the one that means "still in the show". So an executed player
+   * kept being served a casting sheet and kept casting a valid ballot. A play critic caught it
+   * in episode 2 with a player evicted in episode 1: *"the dead help choose who goes into the
+   * mansion."* They were correctly blocked from nominating and voting; casting was missed.
+   *
+   * Both ends of the ballot are filtered: the voter must be living, and so must the pair they
+   * name — a ballot for a corpse is not a ballot either.
+   */
   if (msg.t === 'ballot' && self && !isTV && self.playerId) {
-    const seated = new Set(seatedPlayerIds(room));
+    const seated = new Set(livingSeatedIds(room));
+    if (!seated.has(self.playerId)) return;
     const runner = seated.has(msg.runner) ? msg.runner : null;
     const guide = seated.has(msg.guide) ? msg.guide : null;
     if (runner && guide && runner !== guide) {
@@ -838,7 +1288,59 @@ function handleClient(room, bound, self, msg) {
     return;
   }
 
-  if (msg.t === 'show' && typeof msg.beat === 'string') {
+  // ✋ One thumb. Phones only — the TV has no seat in the room and cannot vote to end a beat.
+  if (msg.t === 'ready' && self && !isTV) {
+    applyReady(room, self.playerId, msg.on !== false);
+    return;
+  }
+
+  /*
+   * 👏 Phones only — a television has no seat, and a broadcast truck that could boo the runner
+   * is a camera crew with an opinion. Same reasoning as READY and the pair verbs above.
+   */
+  if (msg.t === 'react' && self && !isTV) {
+    applyReact(room, self.playerId, msg.r);
+    return;
+  }
+
+  /*
+   * 🍮 PAIRING. Phones only, for the same reason as READY: the television holds no seat, and a
+   * TV that could reach out to somebody would be a camera crew joining the conspiracy.
+   */
+  if (msg.t === 'link' && self && !isTV) {
+    const me = self.playerId;
+    if (msg.accept) applyLinkAccept(room, String(msg.accept), me);
+    else if (msg.decline) applyLinkDecline(room, String(msg.decline), me);
+    else if (msg.to) applyLinkRequest(room, me, String(msg.to));
+    return;
+  }
+  if (msg.t === 'unlink' && self && !isTV) {
+    applyUnlink(room, self.playerId);
+    return;
+  }
+  // ✅ 'We are finished' — takes both, and is not the same verb as walking out. See finishPair.
+  if (msg.t === 'finish' && self && !isTV) {
+    applyFinish(room, self.playerId, msg.on !== false);
+    return;
+  }
+  /*
+   * 🔒 THE WORDS. Two sockets, addressed by id. Not a fanout with a filter — a different verb.
+   * An unlinked socket shouting `whisper` reaches nobody: `whisperAudience` returns [] and the
+   * loop below never runs. That is the fail-CLOSED direction, and it is the one that matters.
+   */
+  if (msg.t === 'whisper' && self && !isTV) {
+    applyWhisper(room, self.playerId, msg.text);
+    return;
+  }
+
+  /*
+   * ⚠️ **isTV, AND IT WAS MISSING.** This branch is the host's 'Watch the run' workaround and
+   * the gates' pacing seam, and it had no sender check — so ANY seated phone could send
+   *  and drive the whole room's night. An adversarial playtester did
+   * exactly that and wiped two live pairs mid-conversation, repeatably.  and 
+   * already carried this guard; this one did not.
+   */
+  if (msg.t === 'show' && isTV && typeof msg.beat === 'string') {
     // Host workaround ("Watch the run") and N14 pacing. Not the product clock.
     if (msg.beat !== 'expedition') clearShowClock(room);
     setShow(room, msg.beat);

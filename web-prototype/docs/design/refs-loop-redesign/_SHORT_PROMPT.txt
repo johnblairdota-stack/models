@@ -1,0 +1,9 @@
+You are in C:\Users\John\Documents\models\web-prototype.
+
+1. Read docs/design/PROMPT-claude-loop-redesign.md and docs/design/prime-time-loop-redesign-plan.md and docs/design/refs-loop-redesign/README.md.
+2. Open and look at the PNGs in docs/design/refs-loop-redesign/ especially 15-tv-recap-live.png, 16-phone-recap-john.png, 17-phone-recap-ellie.png, 11-tv-run-chrome.png, 12-phone-runner-pad.png, 13-phone-guide-map.png.
+3. Immediately run the Claude Code slash command /design with this request:
+
+/design a few options for the Prime Time TV host reality-show chrome system (Lobby, Casting, Expedition lower-thirds, Recap, Debrief+timer, Reckoning, Vote, Execution, Verdict, Reunion). 16:9, 10-foot UI. Jackbox phone / reality-TV host feel. STYLE_CONTRACT palette. Study the refs as BEFORE.
+
+4. After artboards exist, summarize the options in docs/design/refs-loop-redesign/ARTBOARD-NOTES.md and save any exported artboards under docs/design/refs-loop-redesign/artboards/. Do not implement production CSS until artboards are chosen — for this run, pick the strongest TV direction yourself and note why, then implement night-skin + host/phone chrome for Lobby + Expedition lower-thirds + Debrief/Reckoning/Vote to match it.

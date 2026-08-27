@@ -1,0 +1,58 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1180,
+      "h": 700
+    },
+    {
+      "file": "Symbols.dc.html",
+      "x": 1280,
+      "y": 0,
+      "w": 1180,
+      "h": 700
+    },
+    {
+      "file": "Sizes.dc.html",
+      "x": 0,
+      "y": 800,
+      "w": 1180,
+      "h": 720
+    },
+    {
+      "file": "Motion.dc.html",
+      "x": 1280,
+      "y": 800,
+      "w": 1180,
+      "h": 620
+    },
+    {
+      "file": "Plan.dc.html",
+      "x": 0,
+      "y": 1620,
+      "w": 1180,
+      "h": 620
+    }
+  ],
+  "annotations": [
+    {
+      "id": "start-here",
+      "x": 2520,
+      "y": 40,
+      "w": 300,
+      "text": "Read Main first — the strip falling off the television is the finding that reorders everything.\n\nThen Symbols for your partner’s idea in the robot’s own vocabulary, and Plan for the order I’d build it in."
+    },
+    {
+      "id": "decision",
+      "x": 2520,
+      "y": 840,
+      "w": 300,
+      "text": "One thing still needs you: Option A or B on Main. I’d take B.\n\nCLAP is settled — it is boo’s chevron mirrored, so up and down read as one control."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}

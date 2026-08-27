@@ -16,13 +16,15 @@ import { injectNightSkin, markPartyReady, playerName } from '../party/night-skin
 import { qrSvg } from '../party/qr.js';
 import {
   DEFAULT_LOOK, SHOW_LINE, SHOW_TITLE, cleanLook, codeBugHtml, countdownHtml, nameplateHtml,
-  recBugHtml, robotFaceSvg, rundownRailHtml, titlePlateHtml, verdictPlateHtml,
+  paintLook, recBugHtml, robotFaceSvg, rundownRailHtml, titlePlateHtml, verdictPlateHtml,
 } from '../party/look.js';
+import { REACT_MOOD, onAir } from '../party/react.js';
 import { mergePublicNames, publicName } from '../party/cast-ui.js';
-import { cueViolations, warmLabel, warmPct, warmUrl } from '../party/follow.js';
-import { formatRemain, holdMsFor, isTalkBeat, remainingMs, rundownRibbon } from '../party/show.js';
+import { cueViolations, nextPerspective, warmLabel, warmPct, warmUrl } from '../party/follow.js';
+import { formatRemain, holdMsFor, isTalkBeat, nextShowBeat, remainingMs, rundownRibbon } from '../party/show.js';
 import { NO_ONE, SHOWRUNNER } from '../party/vote.js';
 import { describeCastTiebreaks, previewCastTiebreaks, shouldArmCastSend } from '../party/ballot.js';
+import { MAX_PAIRS } from '../party/link.js';
 
 /** TV chrome 3·2·1 after every living ballot (or the 20s backstop), then `{ t: 'episode' }`. */
 const SEND_COUNTDOWN_MS = 3000;
@@ -33,6 +35,12 @@ const SEND_COUNTDOWN_MS = 3000;
  * Visible nights wait for the real walk-in — 8-player intros are longer than 12s.
  */
 const INTROS_DONE_MS = 12000;
+/**
+ * How long 'BEX TURNED MARA DOWN' stays on the television. Long enough that a room looking at
+ * each other rather than the screen still catches it; short enough that it does not stack up
+ * over a five-minute Debrief and bury the live requests underneath it.
+ */
+const REFUSAL_HOLD_MS = 6000;
 
 export default async function partyHost({ params }) {
   injectNightSkin();
@@ -86,6 +94,10 @@ export default async function partyHost({ params }) {
     /** Seated-circle cue after the run, so debrief is not an empty ballroom. */
     sitCued: false,
     nomsKey: '',
+    /** Refusals still on air. Transient — an event, not a fact. See REFUSAL_HOLD_MS. */
+    refusals: [],
+    /** Last pair set pushed into the mansion, so a links fanout on every tap does not churn it. */
+    pairKey: '',
   };
 
   /**
@@ -144,6 +156,18 @@ export default async function partyHost({ params }) {
        * reads once per `step`. `pending` holds the latest and the rAF delivers it.
        */
       if (m.t === 'move') { queueMove(m); return; }
+      /*
+       * A refusal is an EVENT, so the TV holds it itself rather than the server storing it —
+       * there is nothing here for a reconnecting screen to catch up on, and a refusal that
+       * persisted in state would still be on air two minutes later.
+       */
+      if (m.t === 'links' && m.refused) {
+        ui.refusals.push({ ...m.refused, until: Date.now() + REFUSAL_HOLD_MS });
+        setTimeout(() => {
+          ui.refusals = ui.refusals.filter((r) => r.until > Date.now());
+          paint();
+        }, REFUSAL_HOLD_MS + 50);
+      }
       if (m.t === 'warm' && !follow.el) {
         // A second TV, or a host that reloaded mid-night: adopt the reported progress rather than
         // showing a bar at zero next to a mansion somebody else already baked.
@@ -174,10 +198,163 @@ export default async function partyHost({ params }) {
     return mergePublicNames(client.frame?.players, client.lobby);
   }
 
+  /**
+   * ✋ "4 of 5 ready" under a talk beat. The COUNT, never the names — `FANOUT_KEYS.ready` carries
+   * no list and the TV must not invent one. Who wants the conversation over is a read on the
+   * room, and putting it on the shared screen would turn it into a public loyalty test in the one
+   * beat where reading the room is the whole game.
+   */
+  /**
+   * 🍮 THE PUBLIC HALF OF THE PAIR, ON THE SHARED SCREEN.
+   *
+   * *"JOHN reaches out to ELLIE"* while it is pending, then the merged name once they connect.
+   * This line is the entire notification system for the mechanic and it is deliberately the
+   * television rather than a buzz: `navigator.vibrate` does not exist on iOS Safari at all, so a
+   * phone nudge would reach roughly half a room and silently miss the rest. The TV reaches every
+   * guest on every handset, and a request everyone can see is better design than a private one —
+   * crossing the room to whisper is a move the room is supposed to watch you make.
+   *
+   * ⚠️ **NEVER THE WORDS.** `FANOUT_KEYS.links` carries `from`/`to`/`name` and no text, and the
+   * TV socket is not in any pair's audience, so there is nothing here to leak even by mistake.
+   */
+  /*
+   * ⚠️ **THREE BUGS LIVED IN THE FIRST VERSION OF THIS FUNCTION, AND THEY ALL DELETED THE
+   * MECHANIC'S PUBLIC HALF** — the half the whole design rests on. A play critic caught them by
+   * running eight real phones:
+   *
+   *   1. It rendered `pend[0]` ONLY. With four requests standing at once the television showed
+   *      one of them. The other three reaches happened in silence.
+   *   2. `if (pairs.length)` returned early, so the instant ANY pair formed, every pending
+   *      request vanished from the screen. A live request to a third player simply disappeared.
+   *   3. A REFUSAL left no trace anywhere — the row was filtered out of `pending` and that was
+   *      that. Being turned down in front of the room is the juiciest event this mechanic can
+   *      produce, and the show did not air it.
+   *
+   * Pending and paired are DIFFERENT FACTS and the room wants both. `link.js`' header claims
+   * reaching out is "a move everybody gets to see you make"; that claim was false on screen.
+   */
+  function linkNames(names, id, fallback) {
+    return publicName(playerName(names, id), id, fallback);
+  }
+
+  function linkKicker(names, fallback) {
+    const L = client.links || { pending: [], pairs: [] };
+    const pairs = L.pairs || [];
+    const pend = L.pending || [];
+    const parts = [];
+
+    // A refusal is loud and brief. Newest first, and it outranks everything else on the line.
+    for (const r of ui.refusals) {
+      parts.push(`${linkNames(names, r.to, 'Someone')} TURNED ${linkNames(names, r.from, 'someone')} DOWN`);
+    }
+    for (const r of pend) {
+      parts.push(`${linkNames(names, r.from, 'Someone')} reaches out to ${linkNames(names, r.to, 'someone')}…`);
+    }
+    for (const p of pairs) {
+      parts.push(`${p.name} — ${linkNames(names, p.a, 'someone')} + ${linkNames(names, p.b, 'someone')}`);
+    }
+    /*
+     * The room is only allowed two private conversations at once (`MAX_PAIRS`), so say when it
+     * is full. Scarcity is the thing that makes pairing conspicuous rather than camouflaged, and
+     * scarcity nobody can see is just a refusal that looks like a bug.
+     */
+    if (pairs.length >= MAX_PAIRS) parts.push('the room is full');
+    if (!parts.length) return fallback;
+    // The pair line earns its explanation; a list of four does not have room for it.
+    if (parts.length === 1 && pairs.length === 1) return `${parts[0]} · connected. You can see it. You cannot read it.`;
+    return parts.join('  ·  ');
+  }
+
+  function readyKicker(u, fallback) {
+    const r = client.ready;
+    if (!r?.need) return fallback;
+    const left = Math.max(0, r.need - r.count);
+    return left
+      ? `${Math.min(r.count, r.need)} of ${r.need} ready · ${fallback}`
+      : `${Math.min(r.count, r.need)} of ${r.need} ready · wrapping up…`;
+  }
+
   function setBeat(beat) {
     ui.beat = beat;
     client.send({ t: 'show', beat });
     paint();
+  }
+
+  /**
+   * ⏭️ THE SKIP KEY — `?dev=1` only.
+   *
+   * John, on wanting a five-minute Debrief: *"I didn't want to wait 5mins each time I have to
+   * test it."* A designer who has to sit through a beat to reach the one after it stops testing
+   * the one after it. `{t:'show', beat}` is already accepted from any socket — it is how the TV's
+   * own "Watch the run" workaround moves the night — so this is a key on top of an existing door,
+   * not a new one.
+   *
+   * ⚠️ IT IS NOT THE PRODUCT CLOCK AND MUST NEVER BE MISTAKEN FOR IT. Two guards:
+   *   1. Opt-in on the URL. A guest's TV never has `?dev=1`.
+   *   2. It SAYS SO ON SCREEN, permanently, whenever it is armed. A dev build that looks exactly
+   *      like a real one is how a timing bug gets explained away as "that's just dev mode" — or
+   *      worse, how a real playtest gets run on skipped beats and believed.
+   *
+   * The badge is mounted OUTSIDE `root` for the same reason the role card is: `paint()` rewrites
+   * `root.innerHTML` on every socket message and would delete it several times a second.
+   */
+  if (params.get('dev') === '1') {
+    const badge = document.createElement('div');
+    badge.className = 'dev-badge';
+    badge.textContent = 'DEV · ] BEAT · P CAMERA';
+    document.body.appendChild(badge);
+    /* The badge is the toast. It is mounted outside `.night`, so paint() cannot delete it. */
+    let toastTimer = 0;
+    const showDevToast = (msg) => {
+      badge.textContent = msg.toUpperCase();
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { badge.textContent = 'DEV · ] BEAT · P CAMERA'; }, 2200);
+    };
+    /*
+     * ⚠️ `nextShowBeat` DOES NOT COVER THE WHOLE NIGHT, and the first version of this key was
+     * useless because of it. `AFTER_RUN_NEXT` is the post-run chain — it has no entry for lobby,
+     * casting or expedition, because those beats are ended by a thing happening (a ballot pair
+     * locking, the runner reaching the ballroom) rather than by a clock. So `]` did nothing at
+     * casting, which is exactly where a designer heading for the Debrief gets stuck: the only way
+     * past was to cast a real pair and sit through a real expedition.
+     *
+     * These three entries are DEV-ONLY and deliberately jump OVER the expedition. They are not a
+     * second running order — `AFTER_RUN_NEXT` is still the product's chain and this table cannot
+     * be reached without `?dev=1`.
+     */
+    const DEV_SKIP = { lobby: 'casting', casting: 'recap', expedition: 'recap' };
+    window.addEventListener('keydown', (e) => {
+      if (e.key !== ']' || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      const tgt = e.target;
+      if (tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA' || tgt.isContentEditable)) return;
+      const next = nextShowBeat(ui.beat) || DEV_SKIP[ui.beat];
+      if (!next) return;
+      e.preventDefault();
+      setBeat(next);
+    });
+
+    /* =========================================================================================
+     * 🎥 **`P` CYCLES THE PERSPECTIVE — chase → wide → iso → top.**
+     *
+     * John cannot judge a camera from a description: *"3rd person but further back or top down or
+     * isometric… I'm not sure where it will go yet."* So all four ship live on one key and he
+     * picks by feel, which is the only way this project has ever settled a taste call.
+     *
+     * It rides the `shot` cue, which already exists, is already in `CUE_KINDS`, and is already
+     * validated at the iframe's door by `cueViolations` — no new channel and no new hole. The
+     * held perspective survives the cue being re-sent, so a repeat is a no-op rather than a
+     * flicker.
+     * ========================================================================================= */
+    window.addEventListener('keydown', (e) => {
+      if (e.key !== 'p' && e.key !== 'P') return;
+      if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      const tgt = e.target;
+      if (tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA' || tgt.isContentEditable)) return;
+      e.preventDefault();
+      ui.perspective = nextPerspective(ui.perspective || 'chase');
+      sendCue({ kind: 'shot', shot: ui.perspective });
+      showDevToast(`camera · ${ui.perspective}`);
+    });
   }
 
   /**
@@ -507,10 +684,94 @@ export default async function partyHost({ params }) {
     if (sendCue({ kind: 'noms', standing })) ui.nomsKey = key;
   }
 
+  /**
+   * 🍮 Push the merged names into the mansion so the plates over the two robots change.
+   *
+   * ⚠️ **KEYED, LIKE `cueNominees`.** The links fanout arrives on EVERY tap by anybody — a
+   * request, a decline, a disconnect — and `postMessage` into the iframe on each of those, for a
+   * value the bed reads once per frame, is the churn `queueMove`'s header warns about one layer
+   * up. The key is the thing the mansion can actually see: who is paired and what they are
+   * called. Requests are deliberately absent from it — a pending request changes the TV's
+   * caption, not anybody's plate.
+   */
+  function cuePairs() {
+    const live = isTalkBeat(ui.beat);
+    const pairs = live
+      ? (client.links?.pairs || []).map((p) => ({ a: p.a, b: p.b, name: p.name }))
+      : [];
+    const key = `${ui.beat}|${pairs.map((p) => `${p.a}>${p.b}=${p.name}`).join(',')}`;
+    if (key === ui.pairKey) return;
+    if (sendCue({ kind: 'pair', pairs })) ui.pairKey = key;
+  }
+
+  /**
+   * 👏 THE REACTION STRIP, patched in place along the bottom of the run.
+   *
+   * `onAir()` decides what is still up — newest first, one row per player, capped at six. The
+   * rebuild is keyed so an unchanged strip is not re-written four times a second: an `innerHTML`
+   * assignment on every tick would restart the entrance animation on every face and make a quiet
+   * strip flicker for the whole run.
+   */
+  function paintReactStrip() {
+    const mount = root.querySelector('[data-react-strip]');
+    if (!mount) return;
+    const live = onAir(client.reacts || [], Date.now());
+    const key = live.map((e) => `${e.from}:${e.r}`).join(',');
+    if (key === ui.reactKey) return;
+    ui.reactKey = key;
+    const names = mergePublicNames(client.lobby, client.links?.pairs);
+    const seatOf = (id) => (client.lobby?.seats || []).find((s) => s.playerId === id)?.seat ?? 99;
+    /*
+     * 🪑 **SORTED BY SEAT, NOT BY WHO REACTED LAST.** `onAir` picks the six by recency, but
+     * DISPLAYING them by recency means every arrival shoves everyone along one place — which
+     * both restarts their animation and makes a player's reaction appear somewhere new each
+     * time. Seat order is stable, so a face stays where the room learned to look for it.
+     */
+    const rows = [...live].sort((a, b) => seatOf(a.from) - seatOf(b.from));
+    const want = new Map(rows.map((e) => [e.from, e]));
+
+    /*
+     * 👉 **ADD AND REMOVE ONE CHIP — NEVER REBUILD THE ROW.** This used to assign `innerHTML`,
+     * which destroys and recreates all six chips every time ANY of them changes. During a busy
+     * run that fires several times a second, and each rebuild restarted the `night-rise`
+     * entrance on every face — so the strip juddered continuously, directly under the one thing
+     * the room is watching. It was doing that before a single symbol was added.
+     *
+     * Keyed on the PLAYER, not on the timestamp: a player who reacts again keeps their node and
+     * only their face is swapped, so the badge's loop carries on instead of snapping back to the
+     * start of its entrance. Gate: `party-warm` W42.
+     */
+    for (const el of [...mount.children]) {
+      if (!want.has(el.dataset.rk)) el.remove();
+    }
+    let prev = null;
+    for (const e of rows) {
+      const look = seatLook(client.lobby, e.from) || DEFAULT_LOOK;
+      const mood = REACT_MOOD[e.r] || 'idle';
+      let el = [...mount.children].find((c) => c.dataset.rk === e.from);
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'react-chip';
+        el.dataset.rk = e.from;
+        el.innerHTML = `${robotFaceSvg(look.shell, look.accent, { size: 56, mood })}
+          <span class="react-who">${esc(joinedName(names, e.from, 'Someone'))}</span>`;
+        // Insert in seat order without touching the siblings already on air.
+        if (prev) prev.after(el); else mount.prepend(el);
+      } else if (el.dataset.rr !== e.r) {
+        // Same player, new reaction — swap the face only, leave the node and its name alone.
+        const face = el.querySelector('.bot-face');
+        if (face) face.outerHTML = robotFaceSvg(look.shell, look.accent, { size: 56, mood });
+      }
+      el.dataset.rr = e.r;
+      prev = el;
+    }
+  }
+
   function startClockTick() {
     if (ui.clockTimer) return;
     ui.clockTimer = setInterval(() => {
       maybeArmFromBackstop();
+      paintReactStrip();
       const sendLeft = sendCountdownLeft();
       if (sendLeft != null) {
         if (sendLeft <= 0) { sendThemIn(); return; }
@@ -632,6 +893,15 @@ export default async function partyHost({ params }) {
     </div>`;
   }
 
+  /*
+   * The bake, for the casting board. `paintWarm` already patches `[data-warm-fill]` in place on
+   * every warm message, so the bar animates on the casting screen exactly as it does in the
+   * lobby without a repaint — same element, same hooks, one instance on screen at a time.
+   */
+  function castWarm() {
+    return { stage: ui.warm, pct: ui.warmPct, bar: warmBar() };
+  }
+
   function seatedLivingIds() {
     const dead = new Set((client.frame?.players || []).filter((p) => p.alive === false).map((p) => p.id));
     return phones().map((s) => s.playerId).filter((id) => id && !dead.has(id));
@@ -710,21 +980,40 @@ export default async function partyHost({ params }) {
        * refreshed TV can jump back onto the run; recap keeps "Run" for the same recovery.
        */
     } else if (show === 'recap') {
+      /*
+       * 🗞️ **THE FACTS ARE THE RECAP.** This beat used to carry the same lower-third nameplate as
+       * every other talk beat and nothing else, so ten seconds of the show consisted of the
+       * runner's name — a name the room had just watched for a whole expedition — while the
+       * outcome it is supposed to establish sat in two 13px chips at the top of the screen.
+       * `recapFacts` is the board that has been written and uncalled in this file all along.
+       */
       body += talkStage({
         recap, names, lobby: client.lobby, runEnd: ui.runEnd, clock,
         kicker: 'Phones down. Debrief is next.', beat: 'recap',
         who: joinedName(names, recap.runner, 'The circle'),
         whoSub: 'live · recap',
         whoId: recap.runner,
+        facts: recapFacts(recap, names, ui.runEnd),
       });
       body += `<div class="actions recap-actions"><button class="btn ghost" id="to-run">Run</button></div>`;
     } else if (show === 'debrief') {
+      /*
+       * ⚠️ **THE READY COUNT IS NO LONGER A FALLBACK.** `linkKicker(names, readyKicker(...))`
+       * passed the ready line as the thing to show WHEN THERE WAS NO LINK ACTIVITY — so the
+       * instant anybody reached out, the beat's own end condition vanished from the television.
+       * A play critic caught it: the count disappears exactly when the room is most engaged.
+       * The pairs moved to the side board, so the kicker is the ready line, always.
+       *
+       * ⚠️ **AND THE LOWER THIRD NO LONGER NAMES THE RUNNER.** During Debrief it named whoever
+       * went on the expedition — the biggest thing in the band, about the wrong beat, drowning
+       * the pair feed underneath it.
+       */
       body += talkStage({
         recap, names, lobby: client.lobby, runEnd: ui.runEnd, clock,
-        kicker: 'Phones down — talk.', beat: 'debrief',
-        who: joinedName(names, recap.runner, 'The circle'),
+        kicker: readyKicker(ui, 'Talk. A majority taps READY to move on.'), beat: 'debrief',
+        who: 'The circle',
         whoSub: 'live · debrief',
-        whoId: recap.runner,
+        aside: pairBoard(client.links, names, client.lobby, ui.refusals),
       });
     } else if (show === 'reckoning') {
       body += talkStage({
@@ -744,6 +1033,10 @@ export default async function partyHost({ params }) {
         whoId: client.noms?.[0]?.target,
         standing: client.noms,
         tally: client.lynchResult ? { votes: client.lynchVotes, result: client.lynchResult } : null,
+        // The ballot box filling up, above the nominees. Count and threshold only — see
+        // `tallyBoard`. It disappears the moment the result is aired, because the result is
+        // then the loudest true thing on the screen.
+        aside: client.lynchResult ? '' : tallyBoard(client.tally),
       });
     } else if (show === 'execution') {
       const executed = client.lynchResult?.executed;
@@ -770,8 +1063,21 @@ export default async function partyHost({ params }) {
           whoSub: 'live · casting',
           whoId: pair.runner || recap.runner,
           aside: ballotBoard(votes, names, pair, recap, episode, castTiebreaks(votes, episode)),
+          /*
+           * 🎬 **THE BOARD HAS TO OUTLIVE THE ROLE-CARD WINDOW OR ITS COUNTER IS A LIE.**
+           *
+           * First cut drew `castBoard` only on the pre-intros screen — which is the blank window
+           * the critic complained about, so that looked right. It is not: intros only fire once
+           * the mansion has finished baking, and the first ballot cannot land until after that.
+           * The board therefore vanished a beat BEFORE the number it prints could ever move, and
+           * "0 of 8 have sent a ballot" was structurally unable to say anything else. A probe
+           * driving eight real phones caught it — the lamps never lit, in either window.
+           */
+          facts: castBoard(client.lobby, votes, castWarm()),
         });
       } else {
+        // The role-card window: the room's own shape, instead of an empty ballroom.
+        body += castBoard(client.lobby, votes, castWarm());
         body += ballotBoard(votes, names, pair, recap, episode, castTiebreaks(votes, episode));
       }
       body += `<div class="actions">`;
@@ -815,6 +1121,19 @@ export default async function partyHost({ params }) {
      */
     const onIntro = show === 'casting' && ui.introsSent && !ui.introsDone;
     const onTalkFrame = onStage || onRecap || (show === 'casting' && ui.introsSent && ui.introsDone);
+    /* =========================================================================================
+     * ⏱️ ONE CLOCK. NOT TWO.
+     *
+     * The mast printed `EPISODE 1 · RECAP 12S` at 36px, and four inches below it the stage's own
+     * `countdownHtml` printed `RECAP / 12s` at 64px — the same number, from the same tick loop,
+     * twice on one screen, occasionally a frame out of step with itself. A play critic
+     * photographed it on every talk beat and read the pair as a bug before reading it as a clock.
+     *
+     * The rule is measured, not guessed at: the mast prints the number ONLY when the body did
+     * not. Asking the built HTML means the two can never drift apart the way a hand-maintained
+     * list of "beats that have a stage clock" would the first time a beat is added.
+     * ========================================================================================= */
+    const stageHasClock = body.includes('data-show-clock');
     const ribbon = onRun || rundownRibbon(show);
     const hold = holdMsFor(show, client.noms?.length ?? 0);
     root.className = `night${onRun ? ' on-run' : ''}${onIntro ? ' on-intro' : ''}${onTalkFrame ? ' on-talk' : ''}${onRecap ? ' on-recap' : ''}`;
@@ -826,7 +1145,7 @@ export default async function partyHost({ params }) {
         </div>
         <div class="night-phase">
           <span class="show-ep">episode ${esc(String(episode))} · ${esc(show)}</span>
-          ${clock ? `<span class="show-mast-clock" data-show-clock>${esc(clock)}</span>` : ''}
+          ${clock && !stageHasClock ? `<span class="show-mast-clock" data-show-clock>${esc(clock)}</span>` : ''}
         </div>
       </div>
       ${rundownRailHtml({ beat: show, until: ui.showUntil, holdMs: hold, ribbon })}
@@ -886,6 +1205,7 @@ export default async function partyHost({ params }) {
     if (onStage || onRecap || (show === 'casting' && ui.introsDone)) cueSitDown();
     if (show === 'expedition') ui.sitCued = false;
     cueNominees();
+    cuePairs();
     mountFollow();
     placeFollow();
     startClockTick();
@@ -913,6 +1233,27 @@ function joinedName(names, id, fallback) {
 function seatLook(lobby, playerId) {
   const seat = (lobby?.seats || []).find((s) => s.playerId === playerId);
   return cleanLook(seat);
+}
+
+/* =============================================================================================
+ * 🔢 THE SEAT CHIP — which SAM is this one.
+ *
+ * Duplicate names are legal and stay legal; John was clear that the room sorting out two Sams is
+ * part of the fun. But the rule ALLOWS duplicates, it does not require them to be
+ * indistinguishable — and `room.js` calls the aired ballot "the cheapest deduction fuel in the
+ * game", which two identical rows switch off entirely. A play critic ran a night with two players
+ * called Sam and could not tell, on any list or on the aired ballot, which one had been named or
+ * which one had been executed.
+ *
+ * The seat index and the player's own accent are already on the lobby snapshot and already on the
+ * robot in the ballroom, so this leaks nothing and invents nothing — it puts the identity the
+ * room can SEE next to the name it cannot.
+ * ============================================================================================= */
+function seatChip(lobby, playerId) {
+  const seat = (lobby?.seats || []).find((s) => s.playerId === playerId);
+  if (!seat || seat.seat == null) return '';
+  const accent = cleanLook(seat)?.accent || DEFAULT_LOOK.accent;
+  return `<span class="seat-chip" style="background:${esc(accent)}">${esc(String(seat.seat + 1))}</span>`;
 }
 
 /**
@@ -950,6 +1291,10 @@ function runStage({ names, lobby, runnerId, guideId, cameras, alarms, followLive
       </div>
       <div class="pair-hero">${esc(runner)} walks. ${esc(guide)} talks.</div>
       <div class="run-facts">Cameras ${cams?.unlocked ?? '—'} / ${cams?.needed ?? '—'} · alarms ${alarms ?? 0}</div>
+      <!-- 👏 Filled by paintReactStrip on the 250 ms tick, NOT by paint(). A reaction expires by
+           wall clock, and repainting the run frame four times a second to age it out would
+           remount the follow camera's canvas mid-chase. Empty mount, patched in place. -->
+      <div class="react-strip" data-react-strip aria-live="off"></div>
     </div>`;
 }
 
@@ -970,7 +1315,7 @@ function seatCard(s) {
 function seatFace(s) {
   const look = cleanLook(s);
   if (!look) return `<div class="seat-face" hidden></div>`;
-  return `<div class="seat-face">${robotFaceSvg(look.shell, look.accent, { size: 52 })}</div>`;
+  return `<div class="seat-face">${robotFaceSvg(look.shell, look.accent, { size: 52, treatment: 'chip' })}</div>`;
 }
 
 /** In-place lobby update so a locked colour animates instead of remounting the page. */
@@ -1009,15 +1354,12 @@ function patchSeats(root, lobby) {
       el.insertAdjacentHTML('afterbegin', look ? seatFace(s) : `<div class="seat-face" hidden></div>`);
       continue;
     }
-    const shell = faceWrap.querySelector('.bot-shell');
-    const wedge = faceWrap.querySelector('.bot-wedge');
-    if (look && shell && wedge) {
+    const mounted = faceWrap.querySelector('.bot-face');
+    if (look && mounted && paintLook(mounted, look)) {
       faceWrap.hidden = false;
-      shell.setAttribute('fill', look.shell);
-      wedge.setAttribute('fill', look.accent);
     } else if (look) {
       faceWrap.hidden = false;
-      faceWrap.innerHTML = robotFaceSvg(look.shell, look.accent, { size: 52 });
+      faceWrap.innerHTML = robotFaceSvg(look.shell, look.accent, { size: 52, treatment: 'chip' });
     } else {
       faceWrap.hidden = true;
       faceWrap.innerHTML = '';
@@ -1056,12 +1398,19 @@ function standingLead(standing, names) {
 
 function talkStage({
   recap, names, lobby, runEnd, clock, kicker, beat,
-  who, whoSub, whoId, standing, tally, verdict, executed, aside,
+  who, whoSub, whoId, standing, tally, verdict, executed, aside, facts,
 }) {
   const look = whoId ? seatLook(lobby, whoId) : null;
-  const face = look ? robotFaceSvg(look.shell, look.accent, { size: 64 }) : '';
+  const face = look ? robotFaceSvg(look.shell, look.accent, { size: 64, treatment: 'chip' }) : '';
+  /*
+   * 🔢 The lower third names ONE person and it is the biggest thing on the screen — so when two
+   * players are called Sam it is also the least useful thing on the screen. Every list already
+   * carries the seat; the plate the room actually reads has to as well.
+   */
+  const seatNo = whoId ? (lobby?.seats || []).find((s) => s.playerId === whoId)?.seat : null;
+  const sub = whoSub || `live · ${beat || 'debrief'}`;
   const plate = who
-    ? nameplateHtml({ name: who, sub: whoSub || `live · ${beat || 'debrief'}`, face })
+    ? nameplateHtml({ name: who, sub: seatNo == null ? sub : `${sub} · seat ${seatNo + 1}`, face })
     : '';
   const spectacle = verdict
     ? verdictPlateHtml({
@@ -1072,11 +1421,11 @@ function talkStage({
         : '',
     })
     : '';
-  const side = `${aside || ''}${nomBoard(standing, names, lobby)}${tally ? lynchBoard(tally.votes, tally.result, names) : ''}`;
+  const side = `${aside || ''}${nomBoard(standing, names, lobby, beat)}${tally ? lynchBoard(tally.votes, tally.result, names) : ''}`;
   return `
     <div class="talk-stage${side ? ' has-side' : ''}">
       <div class="talk-chrome-top">
-        ${recapMini(recap, names, runEnd)}
+        ${facts ? '' : recapMini(recap, names, runEnd)}
         ${countdownHtml({ clock, label: (beat || 'debrief').toUpperCase() })}
       </div>
       <div class="talk-well">
@@ -1087,12 +1436,19 @@ function talkStage({
       </div>
       <div class="talk-chrome-bot">
         ${spectacle}
+        ${facts || ''}
         ${plate}
-        <p class="talk-kicker">${esc(kicker || 'Phones down — talk.')}</p>
+        <p class="talk-kicker">${esc(kicker || 'Talk.')}</p>
       </div>
     </div>`;
 }
 
+/*
+ * The two-chip strip in the top chrome. It carries the LAST expedition into the beats that argue
+ * about it, so Debrief / Reckoning / Vote all want it — but on the Recap itself the same three
+ * facts are 56px high in the lower band, and printing them twice on one screen is the D8 double
+ * clock in another costume. `talkStage` stands it down whenever a `facts` board is on screen.
+ */
 function recapMini(recap, names, runEnd) {
   const taken = recap.taken?.length
     ? recap.taken.map((t) => joinedName(names, t.id, 'The runner')).join(', ')
@@ -1105,11 +1461,16 @@ function recapMini(recap, names, runEnd) {
   </div>`;
 }
 
-function nomBoard(standing, names, lobby) {
+/*
+ * ⚠️ THE EMPTY STATE HAS TO KNOW WHICH BEAT IT IS ON. It read "Waiting on phones — nominate."
+ * on the VOTE beat as well, where nominating is over and the instruction is impossible. A play
+ * critic photographed a Vote screen telling the room to do something it could no longer do.
+ */
+function nomBoard(standing, names, lobby, beat) {
   if (!standing) return '';
   const rows = standing.map((n, i) => {
     const look = seatLook(lobby, n.target) || DEFAULT_LOOK;
-    const face = robotFaceSvg(look.shell, look.accent, { size: 48 });
+    const face = robotFaceSvg(look.shell, look.accent, { size: 48, treatment: 'chip' });
     return `
     <div class="nom-row show-nom">
       <div class="nom-n">${i + 1}</div>
@@ -1118,9 +1479,63 @@ function nomBoard(standing, names, lobby) {
         sub: `named by ${joinedName(names, n.nominator, 'a player')}`,
         face,
       })}
+      ${seatChip(lobby, n.target)}
     </div>`;
   }).join('');
-  return `<div class="nom-board">${rows || '<p class="hint">Waiting on phones — nominate.</p>'}</div>`;
+  const empty = beat === 'reckoning' ? 'Waiting on phones — nominate.' : 'Nobody was named.';
+  return `<div class="nom-board">${rows || `<p class="hint">${empty}</p>`}</div>`;
+}
+
+/* =============================================================================================
+ * 🍮 THE PAIR BOARD — the public half of the mechanic, finally on the shared screen.
+ *
+ * A play critic simulated three metres from a 55" panel and could not read any of it: *"who
+ * paired into what, who refused whom, who is waiting, and how many are ready are all invisible
+ * from a sofa."* The whole thing lived in `linkKicker` — 12px `--night-dim`, in the bottom-left
+ * gutter, under a lower-third naming the EXPEDITION RUNNER, which is the biggest thing in the
+ * band and irrelevant during Debrief.
+ *
+ * The slot for it already existed and was empty: `talkStage`'s `aside` renders into `.talk-side`,
+ * which `look.js` already styles at 26% / 280px with names at `clamp(16px,1.8vw,24px)`. Casting
+ * fills it with `ballotBoard`, Reckoning with `nomBoard`, and **Debrief passed nothing at all**.
+ *
+ * ⚠️ IT CARRIES BOTH REAL NAMES. Merging overwrites the plate above each robot, so during a pair
+ * the television knows four people only as JELLIE and JELLIE — it erases the identity of everyone
+ * who is doing something, in the beat whose whole job is tracking who said what. John chose the
+ * merged word alone on the 3D plate and that stands; this is where the names come back.
+ * ============================================================================================= */
+function pairBoard(links, names, lobby, refusals) {
+  const L = links || { pending: [], pairs: [] };
+  const face = (id) => {
+    const look = seatLook(lobby, id) || DEFAULT_LOOK;
+    return robotFaceSvg(look.shell, look.accent, { size: 40, treatment: 'chip' });
+  };
+  const who = (id) => joinedName(names, id, 'Someone');
+
+  const pairs = (L.pairs || []).map((p, i) => `
+    <div class="nom-row show-nom pair-row pair-${i}">
+      <div class="pair-faces">${face(p.a)}${face(p.b)}</div>
+      ${nameplateHtml({ name: p.name, sub: `${who(p.a)} + ${who(p.b)}` })}
+    </div>`).join('');
+
+  const waiting = (L.pending || []).map((r) => `
+    <div class="nom-row show-nom pair-wait">
+      ${nameplateHtml({ name: who(r.from), sub: `reaching out to ${who(r.to)}` })}
+    </div>`).join('');
+
+  const said = (refusals || []).map((r) => `
+    <div class="nom-row show-nom pair-no">
+      ${nameplateHtml({ name: who(r.to), sub: `turned ${who(r.from)} down` })}
+    </div>`).join('');
+
+  const body = pairs + waiting + said;
+  const full = (L.pairs || []).length >= MAX_PAIRS
+    ? '<p class="hint">Two conversations · the room is full</p>' : '';
+  return `<div class="nom-board pair-board">
+    <div class="pair-board-k">Connections</div>
+    ${body || '<p class="hint">Nobody has reached out yet.</p>'}
+    ${full}
+  </div>`;
 }
 
 function lynchBoard(votes, result, names) {
@@ -1151,7 +1566,20 @@ function executionLine(result, names) {
   return `${who} is out. ${swing} swings.`;
 }
 
-function recapBoard(recap, names, runEnd, clock) {
+/* =============================================================================================
+ * 🗞️ THE RECAP FACTS — ten seconds of designed airtime that used to say nothing.
+ *
+ * These four facts have existed in this file since the beat did, inside a `recapBoard()` that was
+ * **defined and never called**: `show === 'recap'` renders `talkStage`, whose only recap content
+ * is `recapMini` — two 13px chips in the top chrome. A play critic photographed a Recap from
+ * sofa distance and could not read the outcome of the expedition the whole room had just
+ * watched. The Recap is the beat that sets up what the Debrief argues about; it has to be able
+ * to be read from a sofa.
+ *
+ * `recapBoard`'s own `countdownHtml({label:'RECAP'})` head is deliberately NOT carried over. It
+ * was the second clock in a beat that already had one — the D8 defect on the same screen.
+ * ============================================================================================= */
+function recapFacts(recap, names, runEnd) {
   const taken = recap.taken?.length
     ? recap.taken.map((t) => joinedName(names, t.id, 'The runner')).join(', ')
     : 'CAME BACK';
@@ -1161,14 +1589,85 @@ function recapBoard(recap, names, runEnd, clock) {
   const outcome = runEnd
     ? `<div class="fact"><div class="k">Outcome</div><div class="v ${runEnd === 'SMASHED' ? 'ok' : 'bad'}">${esc(runEnd)}</div></div>`
     : '';
-  return `<div class="recap-stage">
-    <div class="recap-head">${countdownHtml({ clock, label: 'RECAP' })}</div>
-    <div class="recap">
+  return `<div class="recap talk-facts">
       ${outcome}
       <div class="fact"><div class="k">Camera</div><div class="v ${recap.cameraLit ? 'ok' : 'bad'}">${recap.cameraLit ? 'LIT' : 'STAYED DARK'}</div></div>
       <div class="fact"><div class="k">Runner</div><div class="v ${recap.taken?.length ? 'bad' : 'ok'}">${esc(taken)}</div></div>
       <div class="fact"><div class="k">Alarms</div><div class="v">${esc(String(recap.alarmCount ?? 0))}</div></div>
-    </div>
+    </div>`;
+}
+
+/* =============================================================================================
+ * 📊 THE BALLOT BOX, FILLING UP — the Vote's own end condition, on the shared screen.
+ *
+ * Every other beat that ends on a count already shows it: Casting arms a visible 3·2·1 when the
+ * last ballot lands, Debrief and Reckoning print "0 of 5 ready". The lynch ballot showed neither
+ * the count nor the threshold, so a play critic sat through twenty-two seconds of a Vote in which
+ * every ballot was already in and nothing on the television said so. That is the deadest stretch
+ * in the night, in the beat that should be the tensest.
+ *
+ * ⚠️ **IT NAMES NOBODY AND TALLIES NOTHING.** `FANOUT_KEYS.tally` is `in`, `living` and `need` —
+ * see `lynchProgress` in `src/party/room.js`. Who has voted, and what for, is aired at the
+ * Execution twenty-five seconds later; putting either here would hand the room the result early.
+ * ============================================================================================= */
+function tallyBoard(tally) {
+  const t = tally || null;
+  if (!t || !t.living) return '';
+  const inCount = Math.min(t.in | 0, t.living | 0);
+  const all = inCount >= t.living;
+  const pct = Math.round((inCount / Math.max(1, t.living)) * 100);
+  const note = all ? 'every ballot in — closing' : `needs ${t.need} to carry`;
+  return `<div class="nom-board tally-board${all ? ' full' : ''}">
+    <div class="pair-board-k">Ballots in</div>
+    <div class="tally-n"><span class="tally-in">${esc(String(inCount))}</span><span class="tally-of">of ${esc(String(t.living))}</span></div>
+    <div class="tally-bar"><div class="tally-fill" style="width:${pct}%"></div></div>
+    <p class="hint">${esc(note)}</p>
+  </div>`;
+}
+
+/* =============================================================================================
+ * 🎬 THE CASTING BOARD — the twenty seconds nobody had anything to look at.
+ *
+ * Casting opens with every player head-down reading a role card, and the television showed an
+ * empty ballroom and one grey line. It is the one moment in the night when the room is reliably
+ * silent and looking at their hands, and it was the emptiest screen in the show.
+ *
+ * ⚠️ **IT COUNTS BALLOTS, IT DOES NOT READ CARDS.** "Who has finished reading" is not a fact any
+ * machine in this room has. What IS on the wire is who has sent a casting ballot — already aired
+ * by `ballotBoard`, so nothing new is exposed. A lamp goes on when that player's ballot lands.
+ *
+ * ⚠️ **AND WHILE THE HOUSE IS STILL BAKING, THE BAR IS THE BAKE — NOT THE BALLOTS.** The blank
+ * window this board exists to fill is mostly the mansion compiling: intros cannot fire until
+ * `ui.warm === 'ready'` and the first ballot cannot land until after the intros, so a ballot
+ * counter during that window is pinned at zero by construction. An eight-phone probe caught the
+ * first cut doing exactly that — a progress line that could never progress. John's own note on
+ * the load was that it had "no loading indicator"; this is that window, so this is where it goes.
+ * ============================================================================================= */
+function castBoard(lobby, votes, warm) {
+  const seats = (lobby?.seats || []).filter((s) => !s.isTV);
+  if (!seats.length) return '';
+  const baking = !!warm && warm.stage !== 'ready';
+  const sent = new Set((votes || []).map((v) => v.voter));
+  const done = seats.filter((s) => sent.has(s.playerId)).length;
+  const all = done >= seats.length && seats.length > 0;
+  const lamps = seats.map((s) => {
+    const look = cleanLook(s) || DEFAULT_LOOK;
+    const on = sent.has(s.playerId);
+    return `<div class="cast-lamp${on ? ' on' : ''}">
+      <span class="seat-chip" style="background:${esc(look.accent)}">${esc(String((s.seat ?? 0) + 1))}</span>
+      <div class="who">${esc(s.name)}</div>
+      <div class="meta">${on ? 'ballot in' : 'reading'}</div>
+    </div>`;
+  }).join('');
+  const foot = baking
+    ? `<div class="cast-warm">${warm.bar}</div>`
+    : `<div class="cast-count"><span class="tally-in${all ? ' ok' : ''}">${esc(String(done))}</span>
+      <span class="tally-of">of ${esc(String(seats.length))} have sent a ballot</span></div>`;
+  return `<div class="cast-board">
+    <div class="cast-k">Read your card</div>
+    <div class="cast-lead">${all ? 'Every ballot is in.' : 'Nobody says a word yet.'}</div>
+    <div class="cast-lamps">${lamps}</div>
+    ${foot}
   </div>`;
 }
 

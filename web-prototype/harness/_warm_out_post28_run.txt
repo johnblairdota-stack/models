@@ -1,0 +1,15 @@
+﻿browser chrome GPU
+CODE kq5k
+HEAD 027a078 post-#28 verify + go-live hunt
+JOIN Ada
+JOIN Ben
+START ok
+CARD_DOWN Ada
+CARD_DOWN Ben
+CAST Ada
+CAST Ben
+LOCK sent
+PRE_LIVE_FRAME {"frameLive":false,"slotText":"camera warming","slotEmpty":false,"slateVisible":true,"runTag":"Ada is running","pairHero":"Ada walks. Ben talks.","hasWarmingCopy":true,"bodyWarmingLine":["CAMERA WARMING"],"iframeCount":1,"camLayer":true}
+LIVE_READY {"i":16,"beat":"expedition","warm":"ready","followLive":true,"followMode":"run","frameLive":true,"slotText":"","ms":1787502580253}
+POST_LIVE_FRAME {"frameLive":true,"slotText":"","slotEmpty":true,"slotRect":{"x":640,"y":545.578125,"width":0,"height":0,"top":545.578125,"right":640,"bottom":545.578125,"left":640},"slate":{"opacity":"1","visibility":"visible","display":"flex","z":"auto","h":644,"w":1148},"follow":{"opacity":"1","visibility":"visible","display":"flex","z":"auto","h":379,"w":474},"tag":"Ada is running","pairHero":"Ada walks. Ben talks.","hasCameraWarmingCopy":false,"hasWarmingMansion":false,"warmingLines":[],"camLayer":{"opacity":"0","visibility":"visible","display":"block","z":"5","h":648,"w":1152},"bed":{"mode":"run","readout":{"shot":"chase","throttle":"WALK","speed":2.27},"ready":true},"underlayEmptyHole":false,"bodySlice":"PRIME TIME | EXPEDITION ┬╖ EPISODE 1 | Ada is running | Ada walks. Ben talks. | CAMERAS 1 / 1 ┬╖ ALARMS 0"}
+ROLES_HERE [{"name":"Ada","iAmRunner":true,"iAmGuide":false,"beat":"expedition","hasStick":true,"hasHereEl":true,"hereText":"Ballroom","hereLine":"You are in Ballroom","youHere":"r0.ballroom","h1":"You walk.","top":"KQ5K | EXPEDITION ┬╖ ADA | You walk. |  | Eyes on the TV. Drag to move, hold RUN, tap SWING. Running is loud. |  | Listen to your guide ΓÇö they have the map, you have the hammer. |  | Find the gallery. Break the painting. |  | You are in Ballroom |  | RUN | SWING | Your card | HOLD TO READ"},{"name":"Ben","iAmRunner":false,"iAmGuide":true,"beat":"expedition","hasStick":false,"hasHereEl":false,"hereText":null,"hereLine":null,"youHere":null,"h1":"You talk.","top":"KQ5K | EXPEDITION ┬╖ BEN | You talk. |  | The map is yours. The TV does not get it ΓÇö call the rooms out loud. |  | BALLROOM | GALLERY | SOUTHSTUDY | NORTHSTUDY | CHAPEL | 0>|#$0>|# | \\*%@<\\*%@ | =&1/+=&1/ | 0>|#$0>|# | \\*%@<\\*%@ | =&1/+=&1/ | 0>|#$0>|# | \\*%@<\\*%@ | =&1/+=&1/ | 0>|#$0>|# | \\*%@<\\*%@ | =&1/+=&1/ | 0>|#$0>|# | \\*%@<\\*%@ |  | No camera has the hunter. You are calling this one blind. |  | Find the gallery. Break the painting. |  | Cam"}]

@@ -1,0 +1,91 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; }
+    a { color: #f5a14a; } a:hover { color: #ffbe7d; }
+  </style>
+</helmet>
+
+<div style="width: 1600px; height: 900px; position: relative; background: #0c0a08; color: #f3ece3; overflow: hidden;">
+  <div style="position: absolute; inset: 0; background:
+      radial-gradient(1000px 560px at 50% 26%, rgba(245,161,74,.09), transparent 62%),
+      linear-gradient(180deg, #171310 0%, #0e0b09 62%, #0a0806 100%);"></div>
+  <div style="position: absolute; left: 50%; top: 70%; transform: translate(-50%,-50%); width: 1040px; height: 320px; border-radius: 50%; background: radial-gradient(ellipse at center, rgba(94,44,38,.45), rgba(20,14,11,0) 70%);"></div>
+
+  <div style="position: absolute; left: 28px; top: 18px; display: flex; align-items: center; gap: 10px; font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: #f5a14a; font-weight: 700;">
+    <span style="width: 9px; height: 9px; border-radius: 50%; background: #ff8a7a;"></span> Prime Time · on air
+  </div>
+
+  <!-- ═══════ ONE CLOCK, NOT TWO ═══════
+       Today the mast prints "EPISODE 1 · RECAP 12S" jammed against the chrome AND the plate
+       below prints "RECAP / 12s". Both are [data-show-clock]. The mast keeps the beat label
+       only; the plate keeps the number, because the number is the thing the room reads. -->
+  <div style="position: absolute; right: 28px; top: 16px; font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: #8a7d70;">Episode 1 · Recap</div>
+
+  <!-- ═══════ THE RECAP SAYS SOMETHING ═══════
+       `recapBoard()` already exists in party-host.js and draws exactly these four facts. It is
+       never called — `show === 'recap'` renders talkStage instead, so ten seconds of designed
+       airtime carry two 13px chips. This is that function, at broadcast scale, over the circle. -->
+  <div style="position: absolute; left: 0; right: 0; top: 132px; display: flex; flex-direction: column; align-items: center; gap: 26px;">
+    <div style="display: flex; flex-direction: column; align-items: center;">
+      <div style="font-size: 12px; letter-spacing: .26em; text-transform: uppercase; font-weight: 700; color: #f5a14a;">Recap</div>
+      <div style="font-size: 92px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums;">{{clock}}</div>
+    </div>
+
+    <div style="display: flex; gap: 18px; align-items: stretch;">
+      <sc-for list="{{facts}}" as="f" hint-placeholder-count="4">
+        <div style="min-width: 300px; padding: 22px 28px 20px; border-radius: 14px; background: rgba(0,0,0,.62); border-left: 8px solid {{f.tint}};">
+          <div style="font-size: 12px; letter-spacing: .26em; text-transform: uppercase; font-weight: 700; color: #8a7d70;">{{f.k}}</div>
+          <div style="margin-top: 8px; font-size: 58px; font-weight: 800; line-height: 1; color: {{f.tint}}; letter-spacing: .01em;">{{f.v}}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <p style="margin: 6px 0 0; font-size: 22px; letter-spacing: .04em; color: #a89884;">This is what the argument is about.</p>
+  </div>
+
+  <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 96px; display: flex; align-items: center;">
+    <div style="padding: 12px 26px 10px 20px; background: rgba(0,0,0,.62); border-radius: 0 12px 12px 0;">
+      <div style="font-size: 30px; font-weight: 800; line-height: 1;">Alexandria</div>
+      <div style="margin-top: 5px; font-size: 12px; letter-spacing: .26em; text-transform: uppercase; color: #f5a14a;">live · recap</div>
+    </div>
+    <p style="margin: 0 0 0 22px; font-size: 20px; color: #a89884;">Phones down. Debrief is next.</p>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{
+  "smashed": {"editor": "boolean", "default": true, "section": "Outcome"},
+  "cameraLit": {"editor": "boolean", "default": false, "section": "Outcome"},
+  "taken": {"editor": "boolean", "default": false, "section": "Outcome"},
+  "clock": {"editor": "text", "default": "8s", "section": "Outcome"}
+}'>
+class Component extends DCLogic {
+  renderVals() {
+    const OK = '#9ff2c8';
+    const BAD = '#ff8a7a';
+    const NEUTRAL = '#f3ece3';
+    const smashed = this.props.smashed ?? true;
+    const lit = this.props.cameraLit ?? false;
+    const taken = this.props.taken ?? false;
+    return {
+      clock: this.props.clock ?? '8s',
+      facts: [
+        { k: 'Outcome', v: smashed ? 'SMASHED' : 'TIME', tint: smashed ? OK : BAD },
+        { k: 'Camera', v: lit ? 'LIT' : 'STAYED DARK', tint: lit ? OK : BAD },
+        { k: 'Runner', v: taken ? 'TAKEN' : 'CAME BACK', tint: taken ? BAD : OK },
+        { k: 'Alarms', v: '2', tint: NEUTRAL },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

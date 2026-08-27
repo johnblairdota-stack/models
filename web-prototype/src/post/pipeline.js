@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { FullScreenPass, rt } from './fsquad.js';
 import { AO_FRAG, AO_BLUR_FRAG, BLOOM_DOWN_FRAG, BLOOM_UP_FRAG, COMPOSITE_FRAG, AA_CAS_FRAG } from './shaders.js';
+import { CAPTION_LAYER, captionCount } from '../core/caption-layer.js';
 
 /**
  * Render graph
@@ -188,6 +189,36 @@ export class Pipeline {
     // 'temporal' (default) = previous frame's main-pass depth, no prepass.
     // 'prepass'            = the old duplicate scene traversal, kept for the ablation.
     this.aoDepth = opts.aoDepth === 'prepass' ? 'prepass' : 'temporal';
+
+    /**
+     * 🏷️ THE CAPTION LAYER — drawn AFTER the grade, so the grade cannot touch it.
+     *
+     * Measured 2026-08-25, `harness/nametag-legibility.mjs`, six seated robots in one frame:
+     * the distance haze ate 20-23% of every name tag's white glyphs, and 38% of the one
+     * sitting in front of the open dark archway. Its neighbour at the same distance lost 23%.
+     * Distance did not explain it — what was BEHIND the tag did.
+     *
+     * The mechanism: a tag is a `depthWrite:false` sprite, so it writes nothing into the
+     * depth buffer. The composite's haze block samples `tDepth` per pixel and therefore fades
+     * each tag by the depth of whatever is standing behind it. A robot in front of a far wall
+     * got a tag faded as if the TAG were at that far wall. John, playing: *"the lack of
+     * lighting in the other room is occluding the name tag."*
+     *
+     * A caption is not scenery. It must read the same wherever the robot is standing — that
+     * is the locked rule (*"must stay legible at low quality and distance"*). So the tags come
+     * out of the graded image entirely and are drawn over it, at full strength, here.
+     *
+     * ⚠️ WHY A LAYER AND NOT A SECOND SCENE. The tag is parented to the robot's root so it
+     * rides the body for free. Re-parenting it into an overlay scene would mean copying a
+     * world matrix every frame and re-implementing that for nothing. `camera.layers` keeps
+     * one scene graph and lets each pass pick what it draws.
+     *
+     * ⚠️ COST. This is a second `projectObject` walk of the scene — the thing the header
+     * warns about for `aoDepth:'prepass'`. It is not a second DRAW of the scene: every
+     * object not on OVERLAY_LAYER is rejected during traversal, so the pass issues only the
+     * caption draw calls. Skipped entirely when nothing is on the layer (`captionCount()`).
+     */
+    this.overlayLayer = opts.overlayLayer ?? CAPTION_LAYER;
 
     /**
      * DETERMINISM (capture mode). Two passes in this stack are deliberately frame-VARIANT:
@@ -554,6 +585,34 @@ export class Pipeline {
     this.aaPass.uniforms.uTexel.value.set(1 / w, 1 / h);
     r.setRenderTarget(null);
     this.aaPass.render(r, null);
+
+    // ---- 8. captions, OVER the graded picture -----------------------------
+    // See `overlayLayer` in the constructor for the measurement that put this here. The
+    // camera is switched to the caption layer alone, so the traversal rejects the world and
+    // only the tags draw. `clearDepth` because the canvas depth belongs to the fullscreen
+    // AA quad, not to the scene — without it the captions z-fight a screen-space triangle.
+    if (captionCount() > 0) {
+      const cam = this.camera;
+      const mask = cam.layers.mask;
+      /*
+       * ⚠️ `scene.background` MUST BE NULLED, and `autoClear = false` is NOT enough.
+       * three's WebGLBackground sets `forceClear = true` whenever the background is a Color or
+       * a Texture, and then clears the colour buffer *regardless* of `autoClear`. The first
+       * version of this pass kept the background and produced a perfect set of captions on a
+       * COMPLETELY BLACK SCREEN — the whole graded ballroom wiped one line before the tags
+       * landed. The measured glyph numbers were flawless while that was happening, which is
+       * exactly why `N5` in `harness/nametag-legibility.mjs` now asserts the room is still
+       * there. Restore it after: the main pass needs it next frame.
+       */
+      const bg = this.scene.background;
+      this.scene.background = null;
+      cam.layers.set(this.overlayLayer);
+      r.autoClear = false;
+      r.clearDepth();
+      r.render(this.scene, cam);
+      this.scene.background = bg;
+      cam.layers.mask = mask;
+    }
 
     r.autoClear = prevAutoClear;
 

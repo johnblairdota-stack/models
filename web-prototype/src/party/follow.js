@@ -61,14 +61,128 @@ export const WARM_KEYS = ['view', 'room', 'seed', 'warm'];
  * asserts that **every key a host-built slot emits** is a `FOLLOW_KEYS` name — put `still` on that
  * list and a TV that started shipping `still=1` to the whole room would pass its own gate. So:
  * accepted at the door, never emitted by `followParams`, and F9 holds both halves.
+ *
+ * 🌙 `ballnight` is `game/room.js`'s ablation for what is outside the ballroom's windows
+ * (`?ballnight=0` = the opaque daylight pane and no backdrop). It is an INSTRUMENT for exactly
+ * the reason the list exists: the A/B has to be photographable from one camera in one boot, and
+ * a cross-session before/after proves nothing in this project. The TV never emits it.
  */
-export const FOLLOW_INSTRUMENTS = ['still', 'shot'];
+export const FOLLOW_INSTRUMENTS = ['still', 'shot', 'campose', 'ballnight'];
+
+/* =============================================================================================
+ * 📐 **`?campose=x,y,z,tx,ty,tz[,fov]` — STAND THE SHOW CAMERA IN AN EXACT SPOT.**
+ *
+ * John, after three sessions of the ballroom asset not arriving: *"Why are there so many things
+ * that didn't get ported over from the asset and how can we verify that we actually have
+ * everything? We need to compare the exact files visibly open and compare each until it is
+ * perfect."*
+ *
+ * `harness/shoot.mjs --cam` can already photograph the ASSET from any pose — it puts exactly this
+ * parameter on the URL. The show camera could not be posed at all: the operator re-aims it every
+ * frame, so there was no way to stand in the same place in both rooms and no way to compare them
+ * except by eye and memory. That is why "is it ported yet" kept being answered wrongly, including
+ * by me.
+ *
+ * ⚠️ **AN INSTRUMENT, NOT A SLOT KEY.** It is accepted at the door and NEVER emitted by
+ * `followParams`, the same rule `still` and `shot` live under — put it on `FOLLOW_KEYS` and a TV
+ * that started shipping a pinned camera to the whole room would pass its own gate. F9 holds both
+ * halves.
+ *
+ * ⚠️ **AND IT CANNOT SMUGGLE A VIEW.** Six or seven finite numbers, nothing else: a pose is a
+ * place to stand, and there is no field here that could name a room, a role or a player.
+ * ============================================================================================= */
+export function cleanCampose(raw) {
+  if (raw == null) return null;
+  const n = String(raw).split(',').map((v) => Number(v.trim()));
+  if (n.length < 6 || n.length > 7) return null;
+  if (!n.every((v) => Number.isFinite(v))) return null;
+  const [x, y, z, tx, ty, tz, fov] = n;
+  if (Math.hypot(x - tx, y - ty, z - tz) < 1e-3) return null;   // a camera cannot look at itself
+  return {
+    eye: [x, y, z],
+    at: [tx, ty, tz],
+    fov: Number.isFinite(fov) && fov >= 10 && fov <= 120 ? fov : null,
+  };
+}
 
 /**
  * The operator's shots, named here rather than in `follow-bed.js`, because `?shot=` has to be
  * checkable without loading THREE. The bed reads this list; so does the gate.
  */
-export const SHOT_NAMES = ['chase', 'shoulder', 'lead', 'doorway'];
+/* =============================================================================================
+ * 🎥 **THE FOUR PERSPECTIVES — and why they are not four more shots.**
+ *
+ * John: *"Maybe the runner should start having just left the ballroom and play with a different
+ * perspective (3rd person but further back or top down or isometric and the rooms scaled
+ * differently)… ultimately the roles would change if tasks change and I'm not sure where it will
+ * go yet."* He cannot judge that from a description — so all four ship as live keys and he picks
+ * by feel.
+ *
+ * ⚠️ **A PERSPECTIVE IS HELD; A SHOT IS CUT TO.** `shoulder` / `lead` / `doorway` are the
+ * director's shots — it cuts between them on a timer during warm and intros. A perspective is
+ * how the game is PLAYED, so it must never be cut away from: a director that decided to try
+ * `top` for five seconds mid-corridor would be taking the controls off the player. `CUT_SHOTS`
+ * is the director's pool and it deliberately does not contain the new three.
+ *
+ * ⚠️ **`top` AND `iso` LOOK IN THROUGH THE ROOF.** Their eyes are ABOVE the storey by design,
+ * which is exactly what `_valid` refuses for every other shot, and they need `room.setLid(false)`
+ * — the flyover's existing roof-off switch — or they photograph a ceiling. Both are handled in
+ * `follow-bed.js`; see `isOverhead`.
+ * ============================================================================================= */
+export const PERSPECTIVES = ['chase', 'wide', 'iso', 'top'];
+/** The ones whose eye sits above the roof, so the lid has to come off and the ceiling test skipped. */
+export const OVERHEAD = ['iso', 'top'];
+export const isOverhead = (name) => OVERHEAD.includes(String(name || ''));
+
+/**
+ * Where each perspective puts the eye, as an offset from the runner, and how it frames them.
+ *
+ * `dist` is horizontal metres behind; `height` is metres above the floor; `lateral` is the
+ * over-the-shoulder offset. `fov` widens for the pulled-back views so a room still fits.
+ * `orbit` says whether the look stick may swing it — an overhead view that swung under the thumb
+ * would be the D-pad-on-a-rotating-map problem, and the whole point of `top` is a stable map.
+ */
+export const PERSPECTIVE_RIG = {
+  chase: { dist: 2.90, height: 1.62, lateral: 0.35, fov: 58, orbit: true },
+  wide: { dist: 5.40, height: 2.85, lateral: 0.30, fov: 62, orbit: true },
+  iso: { dist: 5.60, height: 5.60, lateral: 0, fov: 46, orbit: false },
+  top: { dist: 1.20, height: 9.0, lateral: 0, fov: 52, orbit: false },
+};
+
+/** The director's own pool. NOT the perspectives — see the block above. */
+export const CUT_SHOTS = ['chase', 'shoulder', 'lead', 'doorway'];
+export const SHOT_NAMES = ['chase', 'shoulder', 'lead', 'doorway', 'wide', 'iso', 'top'];
+
+/** Next perspective in the cycle. The dev key walks this. */
+export function nextPerspective(name) {
+  const i = PERSPECTIVES.indexOf(String(name || 'chase'));
+  return PERSPECTIVES[(i < 0 ? 0 : i + 1) % PERSPECTIVES.length];
+}
+
+/**
+ * The eye offset for a perspective, in world space, given the frame the player is steering.
+ *
+ * Pure, and deliberately separate from `chaseOrbitOffset` rather than a special case of it: the
+ * overhead rigs do not take a pitch at all, because a top-down view that could be pitched is just
+ * a chase camera with extra steps and the player would lose the map.
+ */
+export function perspectiveEye(name, yaw, pitch = 0) {
+  const rig = PERSPECTIVE_RIG[String(name || '')] || PERSPECTIVE_RIG.chase;
+  const f = Number(yaw) || 0;
+  const fx = Math.sin(f), fz = Math.cos(f);
+  const rx = -Math.cos(f), rz = Math.sin(f);
+  if (!rig.orbit) {
+    return { x: -fx * rig.dist + rx * rig.lateral, y: rig.height, z: -fz * rig.dist + rz * rig.lateral };
+  }
+  const p = Number(pitch) || 0;
+  const horiz = rig.dist * Math.cos(p);
+  const y = rig.height + rig.dist * Math.sin(-p);
+  return {
+    x: -fx * horiz + rx * rig.lateral,
+    y: Math.max(CHASE_EYE_Y_MIN, Math.min(CHASE_EYE_Y_MAX, y)),
+    z: -fz * horiz + rz * rig.lateral,
+  };
+}
 
 /**
  * 🚨 A SUPERSET OF `local.mjs`'s `FANOUT_FORBIDDEN`, AND THAT IS ASSERTED BY THE GATE (F5).
@@ -386,7 +500,7 @@ export function warmUrl(opts = {}) {
  * wire: `id`, `seat`, `name`, `shell`, `accent` are precisely `FANOUT_KEYS.lobbySeat`'s public
  * fields, already fanned out to every socket in the room by a decision that predates this slice.
  */
-export const CUE_KINDS = ['intros', 'run', 'move', 'shot', 'idle', 'noms'];
+export const CUE_KINDS = ['intros', 'run', 'move', 'shot', 'idle', 'noms', 'pair'];
 
 /** Per-kind closed allow-lists. A key not listed for its kind is a violation, not a pass. */
 export const CUE_KEYS = {
@@ -396,12 +510,17 @@ export const CUE_KEYS = {
   shot: ['kind', 'shot'],
   idle: ['kind'],
   noms: ['kind', 'standing'],
+  /* 🍮 Who is one name now. PUBLIC — the room watching a pair form is the point. There is no
+     text key here and there must never be one: the words go to two sockets and are not a cue. */
+  pair: ['kind', 'pairs'],
 };
 
 /** What one seat may contribute to an `intros` cue. `FANOUT_KEYS.lobbySeat`'s public subset. */
 export const CUE_CAST_KEYS = ['id', 'seat', 'name', 'shell', 'accent'];
 /** Public standing noms — the same pair `FANOUT_KEYS.nomRow` already fans to every socket. */
 export const CUE_NOM_KEYS = ['nominator', 'target'];
+/** One merged pair: the two seats and what they are called now. Never what they said. */
+export const CUE_PAIR_KEYS = ['a', 'b', 'name'];
 
 function scanKeys(obj, allowed, path, bad, forbidden = FOLLOW_FORBIDDEN) {
   if (!obj || typeof obj !== 'object') { bad.push(`${path}:<not an object>`); return; }
@@ -427,6 +546,11 @@ export function cueViolations(cue) {
     const standing = cue.standing;
     if (!Array.isArray(standing)) bad.push('cue.noms.standing:<not an array>');
     else standing.forEach((s, i) => scanKeys(s, CUE_NOM_KEYS, `cue.noms.standing[${i}]`, bad));
+  }
+  if (kind === 'pair') {
+    const pairs = cue.pairs;
+    if (!Array.isArray(pairs)) bad.push('cue.pair.pairs:<not an array>');
+    else pairs.forEach((p, i) => scanKeys(p, CUE_PAIR_KEYS, `cue.pair.pairs[${i}]`, bad));
   }
   if (kind === 'shot' && cue.shot != null && !SHOT_NAMES.includes(cue.shot)) {
     bad.push(`cue.shot.shot=${cue.shot}`);
@@ -641,6 +765,19 @@ export function liveRunShot(mode, pinShot = null) {
 }
 
 /**
+ * What the lens is locked to on a live run, once the room has chosen a perspective.
+ *
+ * `liveRunShot` answers "may the director cut right now" and the answer on a run is still no.
+ * This answers the question after it: WHICH held perspective. A `?shot=` instrument still wins,
+ * because a developer who typed one is asking for exactly that and nothing else.
+ */
+export function runPerspective(mode, pinShot = null, chosen = null) {
+  if (pinShot && SHOT_NAMES.includes(pinShot)) return pinShot;
+  if (mode !== 'run') return null;
+  return PERSPECTIVES.includes(chosen) ? chosen : 'chase';
+}
+
+/**
  * 🎥 **RIGHT-STICK ORBIT — yaw/pitch of the TV chase, not of the body.**
  *
  * #29 welded chase yaw to a one-stick Genshin reading (hold while strafing, recenter when
@@ -661,6 +798,33 @@ export const CHASE_LATERAL = 0.35;
 export const CHASE_LOOK_Y = 1.30;
 export const CHASE_EYE_Y_MIN = 0.78;
 export const CHASE_EYE_Y_MAX = 2.85;
+
+/* =============================================================================================
+ * 🎥 **HOW CLOSE THE LENS MAY EVER GET, AND WHY THERE HAS TO BE A FLOOR.**
+ *
+ * John, playing it: *"if the camera clips the wall it pushes into the players robot and the
+ * direction of the movement is affected."* Both halves of that sentence are the same defect.
+ *
+ * When a wall blocked the shot, `_reel` pulled the eye along the eye→runner ray at 0.75, 0.60,
+ * 0.45, 0.30 and finally **0.20** of its distance. At 0.20 of `CHASE_DIST` the lens is 0.58 m
+ * from the runner's chest — inside a robot that is about half a metre across. So the picture
+ * became the inside of your own player.
+ *
+ * `CAM_MIN_DIST` is the floor that stops it. It is deliberately larger than the worst case the
+ * old ladder could reach, so the defect is excluded by arithmetic rather than by taste; the gate
+ * asserts exactly that.
+ *
+ * ⚠️ **A FLOOR ALONE WOULD ONLY TRADE ONE BAD PICTURE FOR ANOTHER** — a lens pinned at 1.15 m
+ * staring at a wall. So the operator is allowed to LIFT over a low obstruction and to SWING
+ * around a corner at full distance first, and only pulls in when neither clears. That is safe
+ * to do now, and was not before, because the stick's frame no longer comes from where the camera
+ * ended up — see `FollowOperator.basisYaw`.
+ * ============================================================================================= */
+export const CAM_MIN_DIST = 1.15;
+/** How far the eye may rise to clear something low, in metres. */
+export const CAM_LIFT = 0.45;
+/** How far the eye may swing around a corner, in radians, at full distance. */
+export const CAM_SWING = 0.72;
 
 export function stepLookOrbit(yaw, pitch, lookX, lookY, dt) {
   const stick = stickCamMove(lookX, lookY);

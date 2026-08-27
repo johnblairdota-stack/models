@@ -6,8 +6,9 @@ import { Player } from './player.js';
 import { MOVE, WEAPON_RANGE } from './rules.js';
 import { CONTACT_PHASE, SWING_DUR } from './sledge.js';
 import {
-  CHASE_LOOK_Y, SHOT_NAMES, chaseOrbitOffset, liveRunShot, lookYaw, stepLookOrbit,
-  stickCamMove, stickMag,
+  CAM_LIFT, CAM_MIN_DIST, CAM_SWING, CHASE_EYE_Y_MAX, CHASE_HEIGHT, CHASE_LOOK_Y,
+  CUT_SHOTS, PERSPECTIVES, PERSPECTIVE_RIG, SHOT_NAMES, chaseOrbitOffset, isOverhead, liveRunShot, lookYaw,
+  perspectiveEye, runPerspective, stepLookOrbit, stickCamMove, stickMag,
 } from '../party/follow.js';
 import { bleedCoolPos, bleedKeyAngle, facingPortal } from '../lighting/door-bleed.js';
 import { HOME_ROOM, MISSION_ROOM, PLAN_OPTS } from '../party/mansion.js';
@@ -252,6 +253,48 @@ class RunnerRoute {
 // Named in `src/party/follow.js` so `?shot=` can be validated at the door without loading THREE.
 // One list, so a shot the bed does not have cannot be advertised on the URL.
 const SHOTS = SHOT_NAMES;
+/** What the DIRECTOR may cut to. A perspective is held, never cut to — see follow.js. */
+const DIRECTOR_SHOTS = CUT_SHOTS;
+
+/**
+ * The corrections `_reel` may try, in order of least damage to the picture. `k` scales the
+ * distance (clamped at `CAM_MIN_DIST`), `swing` and `lift` are fractions of `CAM_SWING` and
+ * `CAM_LIFT`. Swings come in pairs so the lens has no standing preference for one shoulder.
+ *
+ * 🚨 **THIS LADDER IS SWING-DOMINATED BECAUSE THE FIRST ONE WAS MEASURED AND MOSTLY WASN'T.**
+ *
+ * The first cut spread its twelve tries evenly across swinging, lifting and pulling in, which
+ * looked balanced and was mostly dead weight. `harness/cam-clip-drive.mjs` counts which candidate
+ * actually wins, and over a doorway-to-doorway route: swings won 8 times, **lift and pull-in won
+ * zero**, and the last-resort fallback fired 72 times.
+ *
+ * The reason is in `_valid`: it refuses an eye that is out of a space or whose sight is blocked
+ * by a wall PANEL. Walls run floor to ceiling, so `CAM_LIFT` can never clear one — it only ever
+ * helped against something low, which this query cannot see anyway. And pulling straight back
+ * along a blocked ray stays blocked until it is close enough to be the defect we just removed.
+ *
+ * Swinging is the only correction that changes which side of the obstruction the lens is on, so
+ * the ladder is now mostly swings, out to `CAM_SWING` and beyond it in two wider steps. One lift
+ * and two pull-ins are kept at the end because they cost nothing to try and do occasionally win
+ * on a corner rather than a wall.
+ */
+const REEL_TRIES = [
+  { k: 1, swing: 0.5, lift: 0 },
+  { k: 1, swing: -0.5, lift: 0 },
+  { k: 1, swing: 1, lift: 0 },
+  { k: 1, swing: -1, lift: 0 },
+  { k: 1, swing: 1.5, lift: 0 },
+  { k: 1, swing: -1.5, lift: 0 },
+  { k: 1, swing: 2, lift: 0 },
+  { k: 1, swing: -2, lift: 0 },
+  { k: 0.8, swing: 1.5, lift: 0 },
+  { k: 0.8, swing: -1.5, lift: 0 },
+  { k: 0.8, swing: 2.4, lift: 0 },
+  { k: 0.8, swing: -2.4, lift: 0 },
+  { k: 1, swing: 0, lift: 1 },
+  { k: 0.75, swing: 0, lift: 0 },
+  { k: 0.55, swing: 0, lift: 0 },
+];
 
 class FollowOperator {
   constructor(room, rng) {
@@ -272,11 +315,15 @@ class FollowOperator {
      */
     this._lockYaw = null;
     this._lockPitch = 0;
+    /** How many times the shot has had to be corrected. Read by harness/cam-clip-drive. */
+    this.reels = 0;
+    /** Which correction won, per REEL_TRIES index; last slot is the fallback. Harness only. */
+    this.reelWins = new Array(REEL_TRIES.length + 1).fill(0);
   }
 
   /** Seeded, and never the same shot twice running. */
   _pick() {
-    const pool = SHOTS.filter((s) => s !== this.shot);
+    const pool = DIRECTOR_SHOTS.filter((s) => s !== this.shot);
     return pool[Math.floor(this.rng() * pool.length) % pool.length];
   }
 
@@ -293,6 +340,17 @@ class FollowOperator {
         return out.set(p.x + fx * 2.40, 1.55, p.z + fz * 2.40);
       case 'doorway':
         return out.copy(this.park);
+      case 'wide':
+      case 'iso':
+      case 'top': {
+        /*
+         * 🎥 A HELD PERSPECTIVE. The overhead rigs take no pitch — `perspectiveEye` refuses it —
+         * because a top-down view you can tilt is a chase camera with extra steps, and tilting
+         * it is how a player loses the map they came to the view for.
+         */
+        const off = perspectiveEye(shot, f, this._lockYaw != null ? this._lockPitch : 0);
+        return out.set(p.x + off.x, off.y, p.z + off.z);
+      }
       case 'chase':
       default: {
         const off = chaseOrbitOffset(f, this._lockYaw != null ? this._lockPitch : 0);
@@ -301,11 +359,37 @@ class FollowOperator {
     }
   }
 
-  /** Horizontal yaw of the chase lens (eye → look, Y flattened). The stick's frame. */
+  /* ===========================================================================================
+   * 🕹️ **THE STICK'S FRAME IS WHERE YOU ARE STEERING, NOT WHERE THE CAMERA ENDED UP.**
+   *
+   * This measured the yaw of the actual lens — `eye → look` — and that is the second half of
+   * John's note: *"if the camera clips the wall it pushes into the players robot and the
+   * direction of the movement is affected."*
+   *
+   * Those are not two bugs. Every time the operator corrected the shot around a wall, the eye
+   * moved, so this number changed, so FORWARD ROTATED UNDER THE PLAYER'S THUMB — while they were
+   * pushing the stick. Worse, `_reel`'s last resort dropped the eye behind `runner.facing`, a
+   * different yaw entirely, so a bad corner could swing the controls in one frame. The player is
+   * fighting geometry they cannot see and it reads as the controls being broken, which is the one
+   * read a controller must never produce.
+   *
+   * `_lockYaw` is the yaw the player is actually steering: seeded from the body and integrated
+   * from the look stick by `stepLookOrbit`, and NOTHING else writes it. So on a live run — which
+   * is chase-locked by `liveRunShot` — the frame is now immune to any camera correction, and the
+   * operator is free to lift, swing and pull in to find a clear shot without touching the
+   * controls. Measuring the lens is kept only for the undriven cameras (warm, intros), where
+   * there is no stick and no lock.
+   * =========================================================================================== */
   basisYaw() {
+    if (this._lockYaw != null) return this._lockYaw;
+    return this.lensYaw();
+  }
+
+  /** Where the lens actually points. The old `basisYaw`, kept for the undriven cameras and the drive. */
+  lensYaw() {
     const dx = this.look.x - this.eye.x;
     const dz = this.look.z - this.eye.z;
-    if (dx * dx + dz * dz < 1e-8) return this._lockYaw ?? 0;
+    if (dx * dx + dz * dz < 1e-8) return 0;
     return lookYaw(dx, dz);
   }
 
@@ -314,6 +398,14 @@ class FollowOperator {
    * would read as a bug: an eye in the void, an eye in the ceiling, an eye behind a wall.
    */
   _valid(eye, runner) {
+    /*
+     * ⚠️ **AN OVERHEAD PERSPECTIVE IS SUPPOSED TO BE OUTSIDE THE ROOM.** Every refusal below is
+     * about a lens that has ended up somewhere a viewer would read as a bug — in the void, in the
+     * ceiling, behind a wall. For `iso` and `top` the eye is ABOVE the storey on purpose, looking
+     * in through a roof the bed has taken off (`room.setLid(false)`), so all three tests would
+     * refuse the shot on every frame and the reel would spend the whole run fighting it.
+     */
+    if (isOverhead(this.shot)) return true;
     const space = this.room.spaceAt(eye);
     if (!space) return false;
     if (eye.y > (space.storey ?? 4.8) - EYE_CEIL_MARGIN) return false;
@@ -322,16 +414,54 @@ class FollowOperator {
     return true;
   }
 
-  /** Pull the eye in along the eye->runner ray until it clears. The last resort before a bad cut. */
+  /* ===========================================================================================
+   * 🎥 **FIND A CLEAR SHOT WITHOUT CLIMBING INSIDE THE PLAYER.**
+   *
+   * The old version had one move — pull straight in along the eye→runner ray — and it went as far
+   * as 0.20 of the distance, which is 0.58 m from the chest of a robot half a metre wide. John
+   * hit it immediately: *"if the camera clips the wall it pushes into the players robot."*
+   *
+   * Pulling in is now the LAST thing tried rather than the only thing, because it is the most
+   * destructive: it changes how big the player is on screen, which is the one framing cue the
+   * runner is steering by. In order of least damage:
+   *
+   *   1. **Swing** around the corner at full distance. Cheapest — the player stays the same size
+   *      and the shot just comes from a little further round. Only safe to do since `basisYaw`
+   *      stopped taking the controls' frame from where the lens ended up.
+   *   2. **Lift** over something low. Furniture, a stair rail, a crate.
+   *   3. **Pull in**, and never past `CAM_MIN_DIST`.
+   *
+   * The last resort places the eye at that floor distance behind the STEERED yaw. It used to use
+   * `runner.facing` — a different angle — so the worst corner in the house also snapped the
+   * camera to a new frame, on the frame the player most needed it to hold still.
+   * =========================================================================================== */
   _reel(eye, runner) {
-    this._aim.set(runner.pos.x, 1.35, runner.pos.z);
-    for (let k = 0.75; k >= 0.2; k -= 0.15) {
-      this._want.copy(this._aim).lerp(eye, k);
-      this._want.y = eye.y;
-      if (this._valid(this._want, runner)) { eye.copy(this._want); return true; }
+    this.reels++;
+    this._aim.set(runner.pos.x, CHASE_LOOK_Y, runner.pos.z);
+    const dx = eye.x - this._aim.x;
+    const dz = eye.z - this._aim.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 1e-4) return false;
+    const yaw0 = Math.atan2(dx, dz);
+
+    for (const c of REEL_TRIES) {
+      const d = Math.max(CAM_MIN_DIST, dist * c.k);
+      const yaw = yaw0 + c.swing * CAM_SWING;
+      this._want.set(
+        this._aim.x + Math.sin(yaw) * d,
+        Math.min(CHASE_EYE_Y_MAX, eye.y + c.lift * CAM_LIFT),
+        this._aim.z + Math.cos(yaw) * d,
+      );
+      if (this._valid(this._want, runner)) { eye.copy(this._want); this.reelWins[REEL_TRIES.indexOf(c)]++; return true; }
     }
-    eye.set(runner.pos.x, 1.55, runner.pos.z).addScaledVector(
-      new THREE.Vector3(Math.sin(runner.facing), 0, Math.cos(runner.facing)), -1.2);
+    this.reelWins[REEL_TRIES.length]++;
+
+    const f = this.basisYaw();
+    eye.set(
+      this._aim.x - Math.sin(f) * CAM_MIN_DIST,
+      CHASE_HEIGHT,
+      this._aim.z - Math.cos(f) * CAM_MIN_DIST,
+    );
     return false;
   }
 
@@ -412,6 +542,31 @@ class FollowOperator {
     // beat late reads as a person carrying it.
     const k = this.shot === 'doorway' ? 1 : 1 - Math.exp(-6.5 * dt);
     this.eye.lerp(this._want, k);
+
+    /* =========================================================================================
+     * 🚨 **THE FLOOR IS ENFORCED HERE, ON THE FINAL EYE — NOT ONLY ON THE TARGET.**
+     *
+     * `_reel` clamps every candidate to `CAM_MIN_DIST`, and that is not enough, which the drive
+     * caught: with a swing-dominated ladder the measured minimum got WORSE than the defect it
+     * replaced — 0.42 m against the old 0.58 m — while every single target was a legal 1.15 m or
+     * more. The lerp is the culprit. It moves the eye in a STRAIGHT LINE toward the next target,
+     * so when a correction swings the lens most of the way around the runner, the chord between
+     * the old and new positions passes straight through them. Nothing that only checks targets
+     * can see this; it is a property of the path, not of the destination.
+     *
+     * So the invariant is applied last, to the thing the player actually looks through: push the
+     * eye back out along its own bearing whenever smoothing has brought it inside the floor.
+     * ========================================================================================= */
+    const ex = this.eye.x - runner.pos.x;
+    const ez = this.eye.z - runner.pos.z;
+    const eDist = Math.hypot(ex, ez);
+    // From twelve metres up you cannot be inside the robot, and `top` sits deliberately close in
+    // plan. The floor is about the chase lens; applying it overhead would only shove the map.
+    if (!isOverhead(this.shot) && eDist > 1e-4 && eDist < CAM_MIN_DIST) {
+      const s = CAM_MIN_DIST / eDist;
+      this.eye.x = runner.pos.x + ex * s;
+      this.eye.z = runner.pos.z + ez * s;
+    }
 
     // Handheld. Two low-frequency sines per axis so it never repeats on a visible period.
     const g = 0.35 + speed01 * 0.65;
@@ -651,7 +806,16 @@ export async function buildFollowBed(engine, opts = {}) {
     ? generatedTablesFor(opts.planSeed, PLAN_OPTS)
     : null;
   const wallField = new WallField({ authority: true });
-  const room = await engine.work(buildTestRoom(engine, { wallField, tables }));
+  /*
+   * 🌙 `nightOutside` — WHAT IS OUTSIDE THE BALLROOM'S WINDOWS. John, playing this view: *"there
+   * is depth outside the windows in the asset but nothing going on outside in the primetime.bat."*
+   *
+   * ⚠️ **THE PARTY BED ASKS FOR IT AND `views/game.js` DOES NOT, BECAUSE THEY ARE TWO DIFFERENT
+   * TIMES OF DAY.** That view mounts `game/exterior.js`, whose sun is *"a low late sun, warm"*;
+   * this one is a night show. `room.js` therefore defaults the night exterior OFF and takes it
+   * from here. `?ballnight=0` ablates it in one boot — see the flag's note in `game/room.js`.
+   */
+  const room = await engine.work(buildTestRoom(engine, { wallField, tables, nightOutside: true }));
   scene.add(room.root);
   stage('house');
 
@@ -710,6 +874,73 @@ export async function buildFollowBed(engine, opts = {}) {
     engine.__furnLayout = engine.__furnDress?.catalog ?? { placed: 0, missing: [], props: [] };
   } catch (e) {
     console.warn('[follow-bed] furniture dress skipped —', e?.message ?? e);
+  }
+
+  /* =============================================================================================
+   * 🕯️ **THE BALLROOM'S PRACTICALS — three chandeliers, nine sconces, two candelabra.**
+   *
+   * John: *"I have asked it a few times to put the assets as we worked on it with much more
+   * details and furniture into the Prime Time … it seems it still hasn't done it. The ballroom
+   * asset has many more objects… This will be the important room for most of the game so it
+   * affords the amazing asset that we worked on."*
+   *
+   * He was right, and the reason it kept not happening is that there was nothing to find in the
+   * ballroom files: **`ballroomFixtures` was already written, already shipping, and mounted in
+   * exactly one place — `src/views/game.js`, the SURVIVAL view, behind an `?estate=port` flag.**
+   * The party night builds the same house through the same `buildTestRoom` and simply never
+   * called it. A census of both scenes put numbers on it: the asset had 23 lights and 873 pieces
+   * of chandelier crystal; the ballroom the whole show is set in had six lights and none of it.
+   *
+   * ⚠️ **THIS IS THE WIRE, NOT A SECOND RECIPE.** Every argument below is the one `game.js`
+   * passes, off the same `orderPlan` and the same baked `estate` materials, so the room the party
+   * plays in is the room the asset view photographs rather than a near-miss of it. If the
+   * fixtures are retuned, they are retuned once.
+   *
+   * ⚠️ **AND IT IS NON-FATAL.** A night that cannot build a chandelier is still a night; the show
+   * must not fail to open because a practical threw.
+   * ============================================================================================= */
+  try {
+    const sp = room.spaces.find((s) => s.order === 'ballroom' && s.orderPlan);
+    if (sp) {
+      const { ballroomFixtures } = await import('../lighting/ballroom-rig.js');
+      /* =======================================================================================
+       * 💡 **`points: 3` — AND THIS IS THE ONE ARGUMENT THAT DIFFERS FROM `views/game.js`.**
+       *
+       * The rig defaults to ZERO point lights and its header defends that at length: the survival
+       * game's ballroom already owns direction from a shadow-casting KEY that `spaces.js` aims
+       * across the colonnade, so the fixtures there are geometry plus glow decals and the house's
+       * light budget never moves.
+       *
+       * Prime Time's ballroom is a different room with the same walls. It is the HERO SET — the
+       * lobby, the intros, the recap, the debrief, the reckoning and the vote all happen in it,
+       * which is most of the night — and a census put it at six lights against the asset's
+       * twenty-three. It photographed as a brown box.
+       *
+       * John chose the night reading of the asset: *"Same geometry, same textures, same layout,
+       * same fixtures — but the chandeliers and sconces are the light source instead of the sun,
+       * and the room reads as a lit venue rather than an abandoned one."* So the fixtures have to
+       * actually emit, and `SPEC` is this project's own ordered answer to that — the centre
+       * chandelier's core at candle height, the musicians' gallery under its deck, and the window
+       * wall's cold half. Three, ordered by how defensible each one is, rather than the asset's
+       * seventeen. The daylight spot the asset drives through the windows is deliberately NOT
+       * ported: that is option A, and it is a different show.
+       * ======================================================================================= */
+      const fx = ballroomFixtures({
+        plan: sp.orderPlan,
+        mats: {
+          brass: room.materials?.estate?.brass,
+          crystal: room.materials?.estate?.crystal,
+        },
+        points: 3,
+        rng,
+      });
+      for (const m of fx.meshes) sp.root.add(m);
+      for (const l of fx.lights) scene.add(l);
+      if (fx.flicker) engine.onUpdate((_dt, t) => fx.flicker(t));
+      engine.__ballroomRig = fx.stats;
+    }
+  } catch (e) {
+    console.warn('[follow-bed] ballroom fixtures skipped —', e?.message ?? e);
   }
   stage('dress');
 
@@ -823,6 +1054,11 @@ export async function buildFollowBed(engine, opts = {}) {
      * Once a phone drives, the schedule never runs again that night.
      */
     driven: false,
+    /** The held perspective: chase / wide / iso / top. A `shot` cue picks it; nothing else does. */
+    perspective: 'chase',
+    /** What the rig was last applied for, so the lid and the lens are touched on CHANGE only. */
+    appliedRig: null,
+    lidOff: false,
     stick: { x: 0, y: 0 },
     look: { x: 0, y: 0 },
     run: false,
@@ -865,14 +1101,28 @@ export async function buildFollowBed(engine, opts = {}) {
    */
   function reelToSight(eye, at) {
     if (!room.blocksSight(eye, at)) return eye;
+    /*
+     * ⚠️ **THE SAME FLOOR THE RUN CAMERA GOT, FOR THE SAME REASON.** This ladder ran to 0.16 of
+     * the distance and then, when nothing on the ray was clear, put the eye ON the target and
+     * lifted it 30 cm — which during intros is a lens inside the head of the robot walking in.
+     * A gate control written for `FollowOperator._reel` found this second copy; it was the same
+     * defect in the camera the room actually stares at for half a minute.
+     *
+     * Unlike the run camera this one deliberately does NOT swing. These cameras are composed
+     * shots with nobody steering them, and the note above is a standing decision: the shot gets
+     * tighter, never crooked. So it reels — it just stops at `CAM_MIN_DIST`.
+     */
+    const dx = eye.x - at.x, dz = eye.z - at.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 1e-4) return eye;
     for (let k = 0.72; k >= 0.16; k -= 0.14) {
-      _reel.copy(at).lerp(eye, k);
-      _reel.y = eye.y;
+      const d = Math.max(CAM_MIN_DIST, dist * k);
+      _reel.set(at.x + (dx / dist) * d, eye.y, at.z + (dz / dist) * d);
       if (!room.blocksSight(_reel, at)) { eye.copy(_reel); return eye; }
+      if (d <= CAM_MIN_DIST) break;                 // the floor is reached; no point stepping on
     }
-    // Nothing on the ray is clear — sit just off the target rather than inside a wall.
-    eye.copy(at);
-    eye.y += 0.30;
+    // Nothing on the ray is clear. Hold the floor distance and lift, rather than climb inside it.
+    eye.set(at.x + (dx / dist) * CAM_MIN_DIST, eye.y + 0.30, at.z + (dz / dist) * CAM_MIN_DIST);
     return eye;
   }
 
@@ -1148,6 +1398,37 @@ export async function buildFollowBed(engine, opts = {}) {
     afterBody(dt, t);
   }
 
+  /* =============================================================================================
+   * 🕯️ **TAKING THE ROOF OFF IS NOT ENOUGH — THINGS HANG FROM IT.**
+   *
+   * `room.setLid(false)` hides ceiling PANELS, which is all the flyover ever needed. The first
+   * overhead shots came back with a chandelier swinging through the middle of the frame in `iso`
+   * and a lit blob covering a third of the floor in `top`: a chandelier is a prop hung under the
+   * ceiling, not part of it, so the lid rule never touched it. John predicted the shape of this
+   * before a line was written — *"the roof will probably need to be see through so they work."*
+   *
+   * ⚠️ **RESTORE ONLY WHAT WE TOOK**, the same conservatism `setLid` uses: `took` is checked
+   * rather than assumed, so this can never turn something back on that another system had
+   * deliberately hidden.
+   */
+  const _hangers = [];
+  let _hangersFound = false;
+  function setHangers(hide) {
+    if (!_hangersFound) {
+      _hangersFound = true;
+      scene.traverse((o) => {
+        if (/chandelier|pendant|sconce-hang/i.test(String(o.name || ''))) {
+          _hangers.push({ o, took: false });
+        }
+      });
+    }
+    for (const e of _hangers) {
+      if (hide) { if (e.o.visible) { e.o.visible = false; e.took = true; } }
+      else if (e.took) { e.o.visible = true; e.took = false; }
+    }
+    return _hangers.filter((e) => e.took).length;
+  }
+
   /** Everything the camera and the house do after the body has moved, on either drive. */
   function afterBody(dt, t) {
     // The last doorway the runner came through is where the `doorway` shot parks.
@@ -1159,18 +1440,99 @@ export async function buildFollowBed(engine, opts = {}) {
     hunter.step(dt);
 
     const speed01 = Math.min(1, runner.speed / MOVE.run);
+
+    /* =========================================================================================
+     * 🎥 **THE HELD PERSPECTIVE, AND THE TWO THINGS IT HAS TO CHANGE BESIDES THE CAMERA.**
+     *
+     * John, asking for the toggles: *"The roof will probably need to be see through so they work.
+     * The control and camera may also need to adapt the method for the different perspective
+     * positions."* Both correct, and both are handled here rather than in the operator:
+     *
+     *  · **The roof.** `iso` and `top` look in from above, so the lid comes off — the flyover's
+     *    own `room.setLid(false)`, which hides ceiling meshes and touches nothing a body, a ray
+     *    or the hunter can feel. Toggled on CHANGE, never per frame.
+     *  · **The lens.** Each rig carries its own field of view, because "the rooms scaled
+     *    differently" is mostly how much of one you can see at once.
+     *
+     * The CONTROLS need no special case, and that is a result rather than an omission: the fix
+     * that stopped a wall rotating the stick made the frame `_lockYaw`, which is a real yaw at
+     * every perspective — including straight down, where a camera-derived frame is degenerate.
+     * ========================================================================================= */
+    /* =========================================================================================
+     * 📐 **A PINNED POSE OWNS THE CAMERA OUTRIGHT.**
+     *
+     * `?campose=` exists so the show camera can be stood in the SAME SPOT as
+     * `harness/shoot.mjs --cam` puts the asset's, which is the only way to compare the two rooms
+     * honestly — see `cleanCampose` in `src/party/follow.js` for why that comparison was missing
+     * and what it cost. So it returns BEFORE the operator runs rather than fighting it for the
+     * transform: an operator that still lagged, swayed and handheld-jittered a "fixed" pose would
+     * give a contact sheet where every pair is a few centimetres and a few degrees apart, and
+     * every real difference would be buried in that noise.
+     *
+     * Developer instrument only. It is never on a host-built slot (`followParams` cannot emit it)
+     * and a night nobody typed a URL for never reaches this branch.
+     * ========================================================================================= */
+    if (opts.campose) {
+      const c = opts.campose;
+      engine.camera.position.set(c.eye[0], c.eye[1], c.eye[2]);
+      engine.camera.up.set(0, 1, 0);
+      engine.camera.lookAt(c.at[0], c.at[1], c.at[2]);
+      if (c.fov && engine.camera.fov !== c.fov) {
+        engine.camera.fov = c.fov;
+        engine.camera.updateProjectionMatrix();
+      }
+      camLight.position.copy(engine.camera.position);
+      // `_views` holds a live reference to the camera position but a COPY of the heading — the
+      // door bleed reads it, and a stale heading lights the wrong side of every opening.
+      engine.camera.getWorldDirection(_dir);
+      room.setViewpoints(_views, dt);
+      room.update?.(dt);
+      return;
+    }
+
+    const want = runPerspective(mode, opts.pinShot, perf.perspective);
+    if (want && want !== perf.appliedRig) {
+      perf.appliedRig = want;
+      const overhead = isOverhead(want);
+      if (overhead !== perf.lidOff) {
+        room.setLid?.(!overhead);
+        setHangers(overhead);
+        perf.lidOff = overhead;
+      }
+      const rig = PERSPECTIVE_RIG[want];
+      if (rig?.fov) { engine.camera.fov = rig.fov; engine.camera.updateProjectionMatrix(); }
+    }
+
     operator.update(dt, t, runner, engine.camera, perf.lastPortal, speed01, {
-      lockShot: liveRunShot(mode, opts.pinShot),
+      lockShot: want,
       lookX: perf.look.x,
       lookY: perf.look.y,
       followFacing: !perf.driven,
     });
     intro?.holdStep?.(dt, t);
 
-    // The cam light rides just under and ahead of the lens, so it throws onto the runner rather
-    // than flaring the lens it is attached to.
-    camLight.position.copy(engine.camera.position);
-    camLight.position.y -= 0.18;
+    /*
+     * 💡 **THE KEY LIGHT FOLLOWS THE LENS ON THE GROUND AND THE RUNNER FROM ABOVE.**
+     *
+     * On the chase rigs it rides just under and ahead of the lens, so it throws onto the runner
+     * rather than flaring the lens it is attached to. Overhead that recipe fails outright: the
+     * lamp is a point light with a 3.5 m reach and `top` puts it TWELVE METRES up, so its light
+     * never arrives and the first top-down shot came back almost black. From above it hangs over
+     * the runner instead — which is the standard top-down key, and the only way the view is
+     * readable enough for John to judge it at all.
+     */
+    if (isOverhead(want)) {
+      // Scaled to the rig, so iso and top are lit the same amount rather than the same number.
+      const up = (PERSPECTIVE_RIG[want]?.height ?? 6);
+      camLight.position.set(runner.pos.x, (runner.pos.y ?? 0) + Math.min(4.2, up * 0.55), runner.pos.z);
+      camLight.distance = up * 1.5;
+      camLight.intensity = 6.0 + up * 0.9;
+    } else {
+      camLight.position.copy(engine.camera.position);
+      camLight.position.y -= 0.18;
+      camLight.distance = 3.5;
+      camLight.intensity = 1.4;
+    }
 
     engine.camera.getWorldDirection(_dir);
     const space = room.spaceAt(runner.pos) ?? room.spaceAt(engine.camera.position);
@@ -1216,6 +1578,30 @@ export async function buildFollowBed(engine, opts = {}) {
      * refused anything with a role, an alignment or the guide's map in it — by the time a cue
      * reaches this switch it is one of six known shapes carrying only public fields.
      */
+    /** 🟢 Link streams in flight — the intro bed owns them; this is the seam to the drive. */
+    streamReport: () => intro?.streamReport?.() ?? [],
+
+    /** 🎥 The lens: distance to the runner, the stick's frame, and how often it has corrected. */
+    camReport: () => ({
+      dist: +Math.hypot(
+        engine.camera.position.x - runner.pos.x,
+        engine.camera.position.z - runner.pos.z,
+      ).toFixed(3),
+      eyeY: +engine.camera.position.y.toFixed(3),
+      basisYaw: +operator.basisYaw().toFixed(4),
+      /*
+       * Where the LENS actually points. This is what `basisYaw` used to return, and the whole
+       * fix is that the two are now allowed to disagree: the camera may swing round a corner
+       * while the stick's frame holds still. A probe that sees them drift apart is watching the
+       * fix work; a probe that sees them locked together is looking at the old build.
+       */
+      lensYaw: +operator.lensYaw().toFixed(4),
+      shot: operator.shot,
+      reels: operator.reels,
+      reelWins: operator.reelWins.slice(),
+      mode,
+    }),
+
     cue(c) {
       if (!c || typeof c !== 'object') return;
       if (c.kind === 'idle') {
@@ -1227,6 +1613,10 @@ export async function buildFollowBed(engine, opts = {}) {
       }
       if (c.kind === 'noms') {
         intro?.setNominees?.(c.standing || []);
+        return;
+      }
+      if (c.kind === 'pair') {
+        intro?.setPairs?.(c.pairs || []);
         return;
       }
       if (c.kind === 'intros') {
@@ -1273,8 +1663,16 @@ export async function buildFollowBed(engine, opts = {}) {
         return;
       }
       if (c.kind === 'shot' && SHOTS.includes(c.shot)) {
-        // A live run is chase-only. A typed `?shot=` instrument still pins; a mid-run
-        // production cue does not cut to shoulder / lead / doorway.
+        /*
+         * 🎥 **A PERSPECTIVE IS HELD; A SHOT IS CUT TO — AND ONLY ONE OF THOSE IS ALLOWED MID-RUN.**
+         *
+         * The rule that a live run is chase-only exists because an auto-cut to `shoulder` or
+         * `lead` inverts a camera-relative stick and takes the runner's eyes off the frame their
+         * thumb is steering. Choosing to PLAY top-down is the opposite of that: it is the player
+         * (or John, on the dev key) deciding how the game is viewed, and it holds until they
+         * change it again. So a perspective is accepted during a run and a director's shot is not.
+         */
+        if (PERSPECTIVES.includes(c.shot)) { perf.perspective = c.shot; return; }
         if (liveRunShot(mode, opts.pinShot) === 'chase') return;
         operator.shot = c.shot;
         operator.until = 5.5;

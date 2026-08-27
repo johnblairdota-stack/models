@@ -1,0 +1,99 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; }
+    a { color: #f5a14a; } a:hover { color: #ffbe7d; }
+  </style>
+</helmet>
+
+<div style="width: 1600px; height: 900px; position: relative; background: #0c0a08; color: #f3ece3; overflow: hidden;">
+  <div style="position: absolute; inset: 0; background:
+      radial-gradient(1000px 560px at 50% 26%, rgba(245,161,74,.09), transparent 62%),
+      linear-gradient(180deg, #171310 0%, #0e0b09 62%, #0a0806 100%);"></div>
+  <div style="position: absolute; left: 50%; top: 66%; transform: translate(-50%,-50%); width: 1040px; height: 340px; border-radius: 50%; background: radial-gradient(ellipse at center, rgba(94,44,38,.5), rgba(20,14,11,0) 70%);"></div>
+
+  <div style="position: absolute; left: 28px; top: 20px; font-size: 12px; letter-spacing: .2em; text-transform: uppercase; color: #8a7d70;">The circle · six seated</div>
+
+  <!-- ═══════════ THE PROBLEM AND THE FIX ═══════════
+       Today a pair is two IDENTICAL green plates on opposite sides of the ring, with
+       unrelated blue plates physically between them. Nothing says they belong together.
+       Three additions, all cheap on a plate that already re-renders on state change:
+         1 · a per-pair HUE, so two pairs are never the same colour
+         2 · a TETHER — a thin arc between the two plates in that hue
+         3 · a small LINK GLYPH on each plate, so the pairing survives a still frame -->
+
+  <!-- the tether, drawn behind the plates -->
+  <svg viewBox="0 0 1600 900" style="position: absolute; inset: 0; width: 100%; height: 100%;" aria-hidden="true">
+    <path d="M 372 322 C 560 232, 900 232, 1114 322" fill="none" stroke="{{hueA}}" stroke-width="3" stroke-linecap="round" opacity="0.55" stroke-dasharray="10 9"></path>
+    <path d="M 636 470 C 760 528, 900 528, 1010 470" fill="none" stroke="{{hueB}}" stroke-width="3" stroke-linecap="round" opacity="0.5" stroke-dasharray="10 9"></path>
+  </svg>
+
+  <sc-for list="{{tags}}" as="t" hint-placeholder-count="6">
+    <div style="position: absolute; left: {{t.x}}px; top: {{t.y}}px; transform: translate(-50%, -50%);">
+      <div style="display: flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 9px; background: {{t.ink}}; border: 3px solid {{t.chrome}}; box-shadow: 0 10px 26px rgba(0,0,0,.75);">
+        <sc-if value="{{t.linked}}" hint-placeholder-val="{{ true }}">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="{{t.chrome}}" stroke-width="2.4" stroke-linecap="round" aria-hidden="true">
+            <path d="M9.5 14.5 14.5 9.5"></path>
+            <path d="M12.4 6.6 14 5a4.2 4.2 0 0 1 6 6l-1.6 1.6"></path>
+            <path d="M11.6 17.4 10 19a4.2 4.2 0 0 1-6-6l1.6-1.6"></path>
+          </svg>
+        </sc-if>
+        <span style="font-size: 26px; font-weight: 900; letter-spacing: .05em; color: #EDEFF0; -webkit-text-stroke: 3px #000000; paint-order: stroke fill;">{{t.label}}</span>
+      </div>
+    </div>
+  </sc-for>
+
+  <!-- the same rail as Main, so the two artboards read as one screen -->
+  <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 130px; display: flex; align-items: center; gap: 12px;">
+    <div style="display: flex; align-items: stretch; background: rgba(0,0,0,.62); border-radius: 0 12px 12px 0; overflow: hidden;">
+      <div style="width: 10px; background: {{hueA}};"></div>
+      <div style="padding: 12px 22px 10px 16px;">
+        <div style="font-size: 11px; letter-spacing: .26em; text-transform: uppercase; font-weight: 700; color: {{hueA}};">Connected</div>
+        <div style="font-size: 44px; font-weight: 800; line-height: 1; color: #f3ece3;">JELLIE</div>
+      </div>
+    </div>
+    <div style="display: flex; align-items: stretch; background: rgba(0,0,0,.62); border-radius: 12px; overflow: hidden;">
+      <div style="width: 10px; background: {{hueB}};"></div>
+      <div style="padding: 12px 22px 10px 16px;">
+        <div style="font-size: 11px; letter-spacing: .26em; text-transform: uppercase; font-weight: 700; color: {{hueB}};">Connected</div>
+        <div style="font-size: 44px; font-weight: 800; line-height: 1; color: #f3ece3;">MOZZ</div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{
+  "hueA": {"editor": "color", "default": "#8FD9A8", "section": "Pair hues"},
+  "hueB": {"editor": "color", "default": "#8FB6F0", "section": "Pair hues"},
+  "showTether": {"editor": "boolean", "default": true, "section": "State"}
+}'>
+class Component extends DCLogic {
+  renderVals() {
+    const hueA = this.props.hueA ?? '#8FD9A8';
+    const hueB = this.props.hueB ?? '#8FB6F0';
+    // Unpaired plates keep the shipped nameplate colours exactly: INK / CHROME.
+    const INK = '#054E84';
+    const CHROME = '#B9BEC2';
+    const inkFor = (hue) => (hue === hueA ? '#1F7A3D' : '#1B3E7A');
+    const tags = [
+      { label: 'JELLIE', x: 372, y: 322, ink: inkFor(hueA), chrome: hueA, linked: true },
+      { label: 'JELLIE', x: 1114, y: 322, ink: inkFor(hueA), chrome: hueA, linked: true },
+      { label: 'MOZZ', x: 636, y: 470, ink: inkFor(hueB), chrome: hueB, linked: true },
+      { label: 'MOZZ', x: 1010, y: 470, ink: inkFor(hueB), chrome: hueB, linked: true },
+      { label: 'BEX', x: 744, y: 366, ink: INK, chrome: CHROME, linked: false },
+      { label: 'IVY', x: 900, y: 352, ink: INK, chrome: CHROME, linked: false },
+    ];
+    return { tags, hueA, hueB };
+  }
+}
+</script>
+</body>
+</html>

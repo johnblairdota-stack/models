@@ -1,0 +1,51 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1000,
+      "h": 470
+    },
+    {
+      "file": "Treatments.dc.html",
+      "x": 0,
+      "y": 570,
+      "w": 1100,
+      "h": 620
+    },
+    {
+      "file": "Reactions.dc.html",
+      "x": 1200,
+      "y": 570,
+      "w": 1180,
+      "h": 860
+    },
+    {
+      "file": "Colours.dc.html",
+      "x": 0,
+      "y": 1290,
+      "w": 1100,
+      "h": 560
+    }
+  ],
+  "annotations": [
+    {
+      "id": "pick-treatment",
+      "x": 1060,
+      "y": 40,
+      "w": 290,
+      "text": "Start here, then Treatments.\n\nPortrait is what shipped: the lobby picker and the intro at full detail, Chip for every mount at 64px and under, and Portrait again on the reaction pad."
+    },
+    {
+      "id": "shipped",
+      "x": 2440,
+      "y": 600,
+      "w": 290,
+      "text": "Built and gated — harness/react-pad.mjs, 22 assertions.\n\nThe reactions are moods on the shipped drawing, so the lobby face and the pad cannot drift apart."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}

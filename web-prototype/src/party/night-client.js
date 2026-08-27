@@ -59,7 +59,17 @@ export class PartyNightClient {
     this.showUntil = null;
     /** Standing nominations, public. */
     this.noms = [];
+    /** How many of the room have tapped READY, and how many it takes. Counts only, never names. */
+    this.ready = null;
+    /** How full the lynch ballot box is. A count and a threshold, never a name. */
+    this.tally = null;
+    /** Public pairing: who reached out to whom, and who is now one name. Never the words. */
+    this.links = { pending: [], pairs: [], used: [] };
+    /** Reaction taps, newest last. `onAir()` in react.js decides what is still on screen. */
+    this.reacts = [];
     /** Aired lynch ballots — empty until tallied. */
+    /** What the server says I voted. Null until it answers. */
+    this.myBallot = null;
     this.lynchVotes = [];
     this.lynchResult = null;
     this.connected = false;
@@ -108,11 +118,49 @@ export class PartyNightClient {
         if (m.t === 'lobby') this.lobby = m;
         if (m.t === 'ballots') this.ballots = m.votes || [];
         if (m.t === 'show') {
+          /*
+           * ✋ **CLEAR THE READY TALLY ON A BEAT *CHANGE*, NOT ON EVERY `show` MESSAGE.** The
+           * server sends `show` more than once per beat — `setShow` fans the beat, then
+           * `scheduleShowProgress` fans it again carrying `until`. The first version of this
+           * nulled `ready` on both, so the tally the server had just sent was wiped a few
+           * milliseconds later by the deadline broadcast, the phone never learned the threshold,
+           * and `readyHtml` drew NOTHING. A Debrief with no READY button on it can only run its
+           * full five minutes. Found by driving a real phone; no gate saw it.
+           */
+          if (m.beat !== this.beat) {
+            this.ready = null; this.tally = null;
+            this.links = { pending: [], pairs: [], used: [] };
+            // Reactions belong to the run they were fired during — they do not follow it out.
+            this.reacts = [];
+          }
           this.beat = m.beat;
           this.runEnd = m.end || null;
           this.showUntil = Number.isFinite(m.until) ? m.until : null;
         }
         if (m.t === 'noms') this.noms = m.standing || [];
+        /* The voter's own receipt — what the server actually recorded, which is not always what
+           was tapped (a self-pick is coerced to NO ONE). One socket only. */
+        if (m.t === 'ballotOk') this.myBallot = { ok: m.ok !== false, choice: m.choice, why: m.why || '' };
+        if (m.t === 'show') this.myBallot = null;
+        if (m.t === 'ready') this.ready = { count: m.count | 0, need: m.need | 0 };
+        if (m.t === 'tally') this.tally = { in: m['in'] | 0, living: m.living | 0, need: m.need | 0 };
+        /*
+         * 👏 A reaction is an EVENT, not a stored fact — so it is appended, and `onAir()` decides
+         * what is still on screen by wall clock. The list is TRIMMED here rather than left to
+         * grow: a sixty-second run at a full table is a few hundred taps, and a TV tab that
+         * stays open across an eight-episode night would otherwise hold every one of them.
+         */
+        if (m.t === 'react' && typeof m.from === 'string') {
+          this.reacts.push({ from: m.from, r: m.r, at: Number(m.at) || Date.now() });
+          if (this.reacts.length > 64) this.reacts.splice(0, this.reacts.length - 64);
+        }
+        /*
+         * 🍮 Who is paired, and what they are called now. PUBLIC — every socket gets this, the
+         * TV included, because the room watching a pair form is the point. The WORDS arrive as
+         * `t:'whisper'` on two sockets only and are never stored here; the phone keeps them in
+         * its own closure so nothing on the shared client object can leak them to another view.
+         */
+        if (m.t === 'links') this.links = { pending: m.pending || [], pairs: m.pairs || [], used: m.used || [] };
         if (m.t === 'lynch') {
           this.lynchVotes = m.votes || [];
           this.lynchResult = m.result || null;

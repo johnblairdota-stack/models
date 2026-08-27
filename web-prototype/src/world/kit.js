@@ -727,7 +727,41 @@ export function pilaster(bin, o = {}) {
     uvr.unshift([-w * 0.1, plinthH + t * shaftH]);
     rings.push(ring); uvs.push(uvr);
   }
-  put(K.shaft, stripFromRings(rings, false, uvs), 0, 0, 0);
+  /* ===========================================================================================
+   * 🚨 **THE RINGS ARE REVERSED HERE BECAUSE THE SHAFT WAS WOUND INSIDE-OUT, AND IT HAS BEEN
+   * INVISIBLE IN EVERY VIEW THAT DRAWS IT — INCLUDING THE SHOWCASE.**
+   *
+   * John, from live play: *"there are pillars all through out the room that have a black rectangle
+   * box at the bottom and two side surfaces but no face surface… they are everywhere."*
+   *
+   * The ring above runs `[-hw … +hw]` in local **+x** at constant y, and `stripFromRings` emits
+   * `(a, c, b, b, c, d)`. For a front-face quad that is `(c-a) × (b-a) = (0,+Δy,0) × (+Δx,0,0)`,
+   * i.e. local **−z** — every triangle of the fluted face pointing INTO the wall. Under a
+   * `side: FrontSide` material the whole shaft is back-face culled, and what is left is the plinth
+   * box (correctly wound) plus the two side-wrap quads seen edge on. That is the exact picture
+   * John described. `computeVertexNormals()` then bakes the inverted normals, so no amount of
+   * light was ever going to recover it.
+   *
+   * Measured on the shipped build before the fix: of the 1176 triangles in the pilaster's slice of
+   * the `wall` bucket, **1104 faced −x and ZERO faced the room**. Setting the material to
+   * DoubleSide at runtime brought every pilaster back; setting it to FrontSide again made them
+   * vanish identically, which is the control that proves it was winding and not lighting.
+   *
+   * ⚠️ **THE SHOWCASE HAS THE SAME DEFECT.** `?view=room.ballroom` is missing its pilaster faces
+   * too — it just shoots them from a high oblique with crates in front of the plinths. This was
+   * never a game-versus-showcase divergence; it is one bug in the kit, and fixing it here fixes
+   * both rooms plus `gallery-order.js` and `estate-spike.js`, which are inside-out for the same
+   * reason.
+   *
+   * ⚠️ **DO NOT "FIX" THIS BY FLIPPING `stripFromRings`' INDEX ORDER.** `column()`,
+   * `extrudeProfile()` and `archedOpening()`'s soffit all build their rings the other way round
+   * and are correct as they stand; changing the shared helper would invert all of them. The uv
+   * rows are reversed in lockstep so every vertex keeps its own uv and the flute mapping is
+   * untouched.
+   * =========================================================================================== */
+  put(K.shaft, stripFromRings(
+    rings.map((r) => r.slice().reverse()), false, uvs.map((u) => u.slice().reverse()),
+  ), 0, 0, 0);
 
   // capital: abacus + echinus + necking
   const cy = plinthH + shaftH;

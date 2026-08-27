@@ -1,0 +1,104 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; }
+    a { color: #f5a14a; } a:hover { color: #ffbe7d; }
+  </style>
+</helmet>
+
+<!-- ═══════ D12 · READY IS OFF THE BOTTOM OF THE SHEET ═══════
+     With eight players the Reckoning sheet lays out 1052px of content in an 844px window.
+     The READY button sits at 872px — below the fold, on the beat where a majority of READY
+     is the ONLY way to end the beat early. It is reachable by scrolling, which nobody does
+     while eight people are shouting.
+     Fix: the page stops scrolling. Header and action bar are pinned; only the list of people
+     scrolls, inside its own box. That also answers S8 — every control a thumb needs is in the
+     bottom third of the phone, where the thumb already is. -->
+
+<div style="width: 390px; height: 844px; position: relative; background: #0c0a08; color: #f3ece3; overflow: hidden; display: flex; flex-direction: column; font-size: 16px;">
+
+  <div style="flex: 0 0 auto; padding: 14px 16px 10px; background: #12100c; border-bottom: 1px solid rgba(245,161,74,.14);">
+    <div style="display: flex; justify-content: space-between; align-items: baseline;">
+      <div style="font-size: 11px; letter-spacing: .24em; text-transform: uppercase; font-weight: 800; color: #f5a14a;">Reckoning</div>
+      <div style="font-size: 26px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums;">{{clock}}</div>
+    </div>
+    <div style="margin-top: 6px; font-size: 15px; color: #a89884;">Name someone. Or ready up.</div>
+  </div>
+
+  <!-- ONLY this scrolls -->
+  <div style="flex: 1 1 auto; min-height: 0; overflow: hidden; padding: 10px 12px 6px;">
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+      <sc-for list="{{rows}}" as="p" hint-placeholder-count="7">
+        <div style="display: flex; align-items: center; gap: 11px; padding: 11px 12px; border-radius: 10px; background: {{p.bg}}; border: 1px solid {{p.edge}};">
+          <div style="flex: 0 0 auto; width: 28px; height: 28px; border-radius: 50%; background: {{p.accent}}; color: #141210; font-weight: 900; font-size: 14px; display: flex; align-items: center; justify-content: center;">{{p.seat}}</div>
+          <div style="flex: 1 1 auto; min-width: 0; font-size: 19px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{p.name}}</div>
+          <div style="flex: 0 0 auto; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; font-weight: 800; color: {{p.tint}};">{{p.tag}}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- pinned action bar — thumb country -->
+  <div style="flex: 0 0 auto; padding: 12px 14px 22px; background: #12100c; border-top: 1px solid rgba(245,161,74,.14);">
+    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px;">
+      <span style="font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: #8a7d70;">Ready</span>
+      <span style="font-size: 15px; font-weight: 800; color: {{readyTint}};">{{readyCount}} of {{living}} · needs {{need}}</span>
+    </div>
+    <div style="height: 8px; border-radius: 4px; background: #241f1a; overflow: hidden; margin-bottom: 14px;">
+      <div style="height: 100%; width: {{readyPct}}%; background: {{readyTint}};"></div>
+    </div>
+    <div style="display: flex; align-items: center; justify-content: center; height: 58px; border-radius: 12px; background: {{btnBg}}; color: {{btnInk}}; font-size: 20px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; border: 2px solid {{btnEdge}};">{{btnLabel}}</div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{
+  "readyCount": {"editor": "int", "default": 3, "min": 0, "max": 8, "section": "Sheet"},
+  "iAmReady": {"editor": "boolean", "default": false, "section": "Sheet"},
+  "clock": {"editor": "text", "default": "1:14", "section": "Sheet"}
+}'>
+class Component extends DCLogic {
+  renderVals() {
+    const ACCENTS = ['#e8d5a3','#ff7a59','#f0ebe3','#c47a4a','#9ad7c2','#7fb3e8','#e5c04a'];
+    const NAMES = ['Ellie','Sam','Sam','Bo','Mary-Kate 3','Alexandria','Jo'];
+    const NAMED = [1, 5];
+    const living = 8;
+    const ready = Math.max(0, Math.min(this.props.readyCount ?? 3, living));
+    const mine = this.props.iAmReady ?? false;
+    const need = Math.floor(living / 2) + 1;
+    const met = ready >= need;
+    return {
+      clock: this.props.clock ?? '1:14',
+      living, need,
+      readyCount: ready,
+      readyPct: Math.min(100, Math.round((ready / need) * 100)),
+      readyTint: met ? '#9ff2c8' : '#f5a14a',
+      btnLabel: mine ? 'You are ready' : 'Ready',
+      btnBg: mine ? '#9ff2c8' : 'transparent',
+      btnInk: mine ? '#0c0a08' : '#f3ece3',
+      btnEdge: mine ? '#9ff2c8' : 'rgba(245,161,74,.55)',
+      rows: NAMES.map((name, i) => {
+        const named = NAMED.includes(i);
+        return {
+          seat: String(i + 2),
+          name,
+          accent: ACCENTS[i],
+          tag: named ? 'named' : 'name',
+          tint: named ? '#ff8a7a' : '#8a7d70',
+          bg: named ? 'rgba(255,138,122,.10)' : '#161310',
+          edge: named ? 'rgba(255,138,122,.45)' : 'rgba(245,161,74,.10)',
+        };
+      }),
+    };
+  }
+}
+</script>
+</body>
+</html>

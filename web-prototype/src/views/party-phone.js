@@ -11,9 +11,11 @@
 import { PartyNightClient, defaultWsUrl, tokenKey, normalizeCodeDisplay, normalizeCodeWire } from '../party/night-client.js';
 import { recapFromEvents } from '../party/recap.js';
 import { injectNightSkin, markPartyReady, playerName } from '../party/night-skin.js';
-import { ACCENTS, DEFAULT_LOOK, SHELLS, cleanLook, robotFaceSvg } from '../party/look.js';
+import { ACCENTS, DEFAULT_LOOK, SHELLS, cleanLook, paintLook, robotFaceSvg } from '../party/look.js';
+import { REACTIONS, REACT_COOLDOWN_MS, REACT_MOOD, cleanReaction } from '../party/react.js';
 import { applyCastLock, applyCastTap, ballotFromCast, CAST_BLOCK_WHY, castPrompt, castRowBlock, castRowMark, freshCast, mergePublicNames, nominationPlayers, padlockSvg } from '../party/cast-ui.js';
 import { historyFromCastEvents } from '../party/ballot.js';
+import { linkBlock, mergeName, WHISPER_MAX, MAX_PAIRS, pairRemaining, isDone } from '../party/link.js';
 import { cardFor, faceDownHtml, mountRoleCard, premiereHtml } from '../party/rolecard.js';
 import { EVIL } from '../party/cast.js';
 import { guideMapSvg } from '../party/guidemap.js';
@@ -60,6 +62,8 @@ export default async function partyPhone({ params }) {
      * `kind` is the CSS modifier, `timer` wipes it. See `padFx`.
      */
     padFx: { label: '', kind: '', timer: 0 },
+    /** When this phone last fired a reaction. Feel only — the server keeps the real clock. */
+    reactAt: 0,
     /** The last `mission.*` this phone painted, so the BREAK can be told from the steady state. */
     missionSeen: null,
     /** How far along the TV's mansion bake is — fanned to every phone, not just the host. */
@@ -71,6 +75,20 @@ export default async function partyPhone({ params }) {
     dealPending: false,
     lastBeat: null,
     nominated: false,
+    /** My own READY thumb this beat. The room total arrives on the wire. */
+    ready: false,
+    /** Whispers this pairing. Never leaves the phone; cleared with the pair. */
+    whispers: [],
+    /** Half-typed line, kept across the repaint every socket message causes. */
+    draft: '',
+    focusWhisper: false,
+    /** Was I paired on the last links message? Lets a partner walking out be named. */
+    wasPaired: false,
+    /** Was somebody asking me on the last links message? Fires the invitee buzz exactly once. */
+    wasAsked: false,
+    /** Did I tap DONE? Separates a mutual finish from being walked out on. */
+    wasDone: false,
+    linkNote: '',
     voted: false,
     clockTimer: 0,
     /** Late-debrief pick-list has been painted / buzzed this hold. */
@@ -124,6 +142,78 @@ export default async function partyPhone({ params }) {
           if (el) { el.textContent = warmSummary(); return; }
         }
         if (m.t === 'event' && m.ev?.type === 'role.card') dealt(!!m.replay);
+        /*
+         * 🔒 A WHISPER LANDS HERE AND GOES NO FURTHER. It is kept in this closure, never on the
+         * shared client object — nothing another view could reach should be able to hold the one
+         * piece of player-authored content in the game that is private.
+         *
+         * ⚠️ Returns WITHOUT `routePaint()`. Rebuilding `root.innerHTML` on an incoming message
+         * would wipe a half-typed reply, drop the keyboard on a phone, and reset the scroll of
+         * the log — three times in a row during a fast exchange. `paintWhispers` writes the one
+         * element in place, which is the same lesson `padFx` and the role card already carry.
+         */
+        if (m.t === 'whisper') {
+          state.whispers.push({ from: m.from, text: m.text, at: m.at });
+          if (state.whispers.length > 60) state.whispers.splice(0, state.whispers.length - 60);
+          if (m.from !== client.welcome?.playerId) padFx('•', '', [0, 20]);
+          paintWhispers();
+          return;
+        }
+        // A pair forming or breaking DOES change the sheet, so it repaints — but the words that
+        // were already said belong to the pairing that said them.
+        if (m.t === 'links') {
+          const me = client.welcome?.playerId;
+          const stillPaired = (m.pairs || []).some((p) => p.a === me || p.b === me);
+          /*
+           * ⚠️ **TELL THEM WHAT HAPPENED.** Both of these were silent, and a play critic caught
+           * both: a refused player's sheet simply reverted with the name they had just tapped
+           * sitting there tappable again, and a player whose partner hit Disconnect mid-sentence
+           * was dropped back to the pick list with no idea why their conversation ended. Being
+           * turned down and being walked out on are the two most socially loaded moments this
+           * mechanic produces; saying nothing reads as a bug both times.
+           */
+          if (m.refused?.from === me) state.linkNote = 'They said no.';
+          /*
+           * 🚨 **FOUR WAYS OUT, AND THIS SAID "THEY WALKED OUT ON YOU" FOR ALL OF THEM.**
+           *
+           * A play critic tapped DONE, watched their partner tap DONE, and was then told
+           * *"They disconnected."* The same line fired when the 90-second clock ran out — which
+           * `PAIR_MS`'s own header calls "nobody's fault and nobody's choice". DONE exists
+           * precisely so that ending early costs nothing socially; the copy then charged it.
+           *
+           * `wasDone` is what separates them: if I had tapped DONE, the pair ending is the thing
+           * I asked for, not something done to me.
+           */
+          if (state.wasPaired && !stillPaired && !m.refused) {
+            state.linkNote = state.wasDone ? 'Finished. Slot back to the room.' : 'They disconnected.';
+          }
+          state.wasDone = (m.pairs || []).some((p) => (p.done || []).includes(me));
+          if (stillPaired) state.linkNote = '';
+          /*
+           * 🚨 **THE BUZZ WAS ON THE WRONG PHONE.** Tapping a name buzzed the SENDER — who is
+           * already looking at their screen, because they just tapped it — and the person being
+           * asked got nothing at all. A play critic instrumented the invitee's handset through a
+           * whole invite: `navigator.vibrate` 0 calls, audio 0, `document.title` 0 changes. In a
+           * real room that phone is face-down on a knee while its owner watches the television.
+           *
+           * `haptic()` is a no-op on iOS Safari, which has no Vibration API at all — so the title
+           * change carries it on half the handsets in any room and the buzz is a garnish. See
+           * `padFx`; the pattern is longer and double so it reads as "someone wants you", not as
+           * the short confirmation tick every other tap makes.
+           */
+          const asked = (m.pending || []).some((r) => r.to === me);
+          if (asked && !state.wasAsked) {
+            const from = (m.pending || []).find((r) => r.to === me)?.from;
+            const who = playerName(mergePublicNames(client.frame?.players, client.lobby), from);
+            padFx(`${who} wants a word`, 'smash', [0, 90, 90, 90]);
+            try { document.title = `${who} → you`; } catch { /* not fatal */ }
+          }
+          if (!asked && state.wasAsked) { try { document.title = 'PRIME TIME — phone'; } catch { /* fine */ } }
+          state.wasAsked = asked;
+          state.wasPaired = stillPaired;
+          if (!stillPaired) { state.whispers = []; state.draft = ''; state.focusWhisper = false; }
+          else state.focusWhisper = true;
+        }
         if (m.t === 'lobby' && !state.lookLocked) {
           const me = (m.seats || []).find((s) => s.id === client.welcome?.id);
           if (me?.shell && me?.accent && cleanLook(me)) {
@@ -145,6 +235,34 @@ export default async function partyPhone({ params }) {
       },
     });
     state.client = client;
+    /*
+     * 🔍 `?dev=1` ONLY — a read-only window into the pad, for probes.
+     *
+     * The phone keeps everything in a closure, which is right: nothing on this screen should be
+     * reachable from the page. But it also means a probe watching a real Debrief can see the
+     * sheet and not the state behind it, and three separate READY plumbing bugs cost a full
+     * round of blind guessing each because of that. Same opt-in as the TV's skip key: a guest's
+     * phone never has `?dev=1`.
+     */
+    if (params.get('dev') === '1') {
+      window.__phone = () => ({
+        step: state.step,
+        lookLocked: state.lookLocked,
+        id: client.welcome?.playerId ?? null,
+        beat: client.beat,
+        ready: client.ready,
+        myReady: state.ready,
+        links: client.links,
+      });
+      /*
+       * A probe's way of pressing a button this phone owns. It is NOT a bypass of the rules —
+       * everything still goes through the server, which re-checks `linkBlock`. It exists because
+       * the role-card modal correctly intercepts pointer events on a fresh night, and a probe
+       * that wants to check what a SHEET looks like three moves later should not have to defeat
+       * an unrelated overlay to get there. `?dev=1` only.
+       */
+      window.__phoneSend = (msg) => client.send(msg);
+    }
     try {
       await client.connect();
       if (state.name) client.send({ t: 'name', name: state.name });
@@ -235,10 +353,11 @@ export default async function partyPhone({ params }) {
     if (part === 'shell' && !SHELLS.includes(hex)) return;
     if (part === 'accent' && !ACCENTS.includes(hex)) return;
     state.look[part] = hex;
+    // One painter for all nine coloured parts — four of them derived from the shell, so
+    // patching only the part the thumb touched would leave the crown and the rim behind.
     const face = root.querySelector('.bot-face');
-    if (face) {
-      const node = face.querySelector(part === 'shell' ? '.bot-shell' : '.bot-wedge');
-      if (node) node.setAttribute('fill', hex);
+    if (face && !paintLook(face, state.look)) {
+      face.outerHTML = robotFaceSvg(state.look.shell, state.look.accent, { size: 168 });
     }
     const row = root.querySelector(part === 'shell' ? '#shells' : '#accents');
     if (row) {
@@ -450,17 +569,54 @@ export default async function partyPhone({ params }) {
         if (debriefNominateOpen(c)) {
           body += paintNominate(nominees, me, c, { late: true });
         } else {
-          body += `<p class="hint">Phones down. Talk. Nominate when the clock says Reckoning.</p>`;
+          /*
+           * ⚠️ "Phones down" IS GONE FROM THIS BEAT, deliberately, on John's say-so. Debrief is a
+           * five-minute CAP now, and the phone is how the room ends it early — an instruction to
+           * put the phone down beside the control that shortens the beat is a contradiction that
+           * costs every table four minutes of silence.
+           */
+          body += `<p class="hint">Talk. Tap READY when you have said your piece — a majority ends the Debrief.</p>`;
         }
+        /*
+         * 🚨 **THE PAIR SHEET ONLY EXISTS WHERE THE NOMINATE LIST DOES NOT.** Both are lists of
+         * the SAME names, and one of them accuses someone of murder.
+         *
+         * Cutting `'reckoning'` out of `LINK_BEATS` killed the RULES and left these two call
+         * sites rendering, which was worse than before it was cut: a play critic photographed the
+         * Reckoning sheet with three accusation buttons and, 260px below, the same three names in
+         * a green box that did nothing at all. A player taps the lower ELLIE, gets no response,
+         * concludes the phone is stuck, and taps the upper one.
+         *
+         * `debriefNominateOpen` is the late-Debrief wake-up window — the nominate list appears
+         * there too, so the pair sheet has to stand down there as well. `isLinkBeat` is the rule;
+         * these two conditions are the rule reaching the screen.
+         */
+        if (!debriefNominateOpen(c)) body += linkHtml(c, players);
+        // ⚠️ THE READY DOCK GOES LAST. It is `position:sticky` and would sit on top of anything
+        // appended after it — see `readyHtml`.
         body += padFxHtml();
+        body += readyHtml(c);
       } else if (beat === 'reckoning') {
         body += paintNominate(nominees, me, c);
         body += padFxHtml();
+        body += readyHtml(c);
       } else if (beat === 'vote') {
         body += paintLynchVote(nominees, me, c);
         body += padFxHtml();
       } else if (beat === 'execution') {
-        body += paintExecution(nominees, c);
+        /*
+         * 🚨 **`players`, NOT `nominees` — THE EXECUTED PLAYER IS DEAD BY THE TIME THIS DRAWS.**
+         *
+         * `nominees` comes from `nominationPlayers()`, which correctly drops anyone with
+         * `alive === false` — so at the exact moment of the execution the person being executed
+         * is already gone from that list, `playerName` falls through to the raw socket id, and
+         * every phone in the room reads **"p7 is out."** while the television correctly says
+         * "MARY-KATE 3 IS OUT. JOHN SWINGS." A play critic photographed both screens side by
+         * side. The TV was right because it uses `mergePublicNames`, which does not filter.
+         *
+         * The list you name the dead from must be the one that still contains them.
+         */
+        body += paintExecution(players, c);
       }
     } else if (beat === 'lobby' || phase === 'LOBBY') {
       body += `<h1>${esc(myName)}</h1>
@@ -561,13 +717,19 @@ export default async function partyPhone({ params }) {
           <p class="hint">Cameras live ${frame?.cameras?.unlocked ?? '—'}.</p>
           ${intelBlock(frame, { productionOnly: true })}`;
       } else {
+        /*
+         * 👏 THE PAD SENDS. Until now these four buttons printed a word on this phone and
+         * reached no other machine — six of eight players holding a dead remote for the whole
+         * run. The face on each button is the player's OWN face wearing that reaction, because
+         * what the room is about to see on the television is that exact picture.
+         */
         body += `<h1>Watch.</h1>
-          <p class="hint">Reaction only. Dead air is the metric.</p>
-          <div class="pad" id="react">
-            <button data-r="CLAP">👏 Clap</button>
-            <button data-r="BOO">👎 Boo</button>
-            <button data-r="SUS">❓ Sus</button>
-            <button data-r="SHOCK">‼ Shock</button>
+          <p class="hint">Your face, on the TV. The room sees who reacted.</p>
+          <div class="pad react-pad" id="react">
+            ${REACTIONS.map((r) => `<button data-r="${r}" class="react-btn">
+              ${robotFaceSvg(state.look.shell, state.look.accent, { size: 54, mood: REACT_MOOD[r] })}
+              <span>${r}</span>
+            </button>`).join('')}
           </div>
           ${intelBlock(frame)}
           ${state.flash ? `<p class="hint">${esc(state.flash)}</p>` : ''}`;
@@ -600,8 +762,18 @@ export default async function partyPhone({ params }) {
     body += cardTab();
 
     delete root.dataset.castUi;
+    /* =========================================================================================
+     * ⏱️ ONE CLOCK ON THE PHONE TOO — the same D8 defect, one screen over.
+     *
+     * The status strip printed `RECKONING · 34S · JOHN` and the sheet under it printed `34s` at
+     * 64px, from the same tick loop. It is the television's double clock in miniature and it
+     * reads as a glitch for exactly the same reason. Measured off the built body rather than a
+     * list of beats, so a beat added later cannot bring the pair back — same rule as
+     * `stageHasClock` in `views/party-host.js`.
+     * ========================================================================================= */
+    const sheetHasClock = body.includes('data-show-clock');
     root.innerHTML = `
-      <div class="phone-top"><span>${esc(state.code.toUpperCase())}</span><span>${esc(beat)}${phoneClockInline(c)} · ${esc(myName)}</span></div>
+      <div class="phone-top"><span>${esc(state.code.toUpperCase())}</span><span>${esc(beat)}${sheetHasClock ? '' : phoneClockInline(c)} · ${esc(myName)}</span></div>
       ${body}`;
     if (liveStamp) root.dataset.liveUi = liveStamp; else delete root.dataset.liveUi;
 
@@ -615,9 +787,15 @@ export default async function partyPhone({ params }) {
 
     if (beat !== 'reckoning' && beat !== 'debrief') state.nominated = false;
     if (beat !== 'vote') state.voted = false;
+    // My thumb belongs to ONE beat. Carrying it into the next would silently hand the next
+    // talk beat a majority nobody voted for.
+    if (beat !== state.readyBeat) { state.ready = false; state.readyBeat = beat; }
     startPhoneClock();
     bindNominate(c);
     bindLynchVote(c);
+    bindReady(c);
+    bindLink(c, players);
+    paintWhispers();
 
     root.querySelector('#save-name')?.addEventListener('click', () => {
       const v = root.querySelector('#name')?.value || '';
@@ -626,11 +804,28 @@ export default async function partyPhone({ params }) {
       c.send({ t: 'name', name: v });
     });
     bindPad();
+    /*
+     * ⚠️ `e.target` IS THE SVG, NOT THE BUTTON. The old handler read `dataset.r` straight off the
+     * target and worked only because the buttons were plain text — with a face and a label inside
+     * each one, every tap lands on a child and reads undefined. `closest` is the fix.
+     *
+     * The local cooldown is for FEEL, not for enforcement: the server runs the same clock and
+     * refuses silently (see `applyReact`), so the worst a tampered phone achieves is its own
+     * taps being dropped. Repainting the whole sheet on every tap would tear the run frame, so
+     * the disabled state is toggled on the buttons in place.
+     */
     root.querySelector('#react')?.addEventListener('click', (e) => {
-      const r = e.target?.dataset?.r;
+      const btn = e.target?.closest?.('[data-r]');
+      const r = cleanReaction(btn?.dataset?.r);
       if (!r) return;
-      state.flash = r;
-      paint();
+      const now = Date.now();
+      if (now - state.reactAt < REACT_COOLDOWN_MS) return;
+      state.reactAt = now;
+      state.client?.send({ t: 'react', r });
+      padFx(r, 'smash', [0, 30]);
+      const pad = btn.parentElement;
+      pad.classList.add('cooling');
+      setTimeout(() => pad.classList.remove('cooling'), REACT_COOLDOWN_MS);
     });
     bindCardTab();
   }
@@ -1210,6 +1405,20 @@ export default async function partyPhone({ params }) {
       const left = remainingMs(c?.showUntil);
       const label = formatRemain(left);
       for (const el of root.querySelectorAll('[data-show-clock]')) el.textContent = label;
+      /*
+       * ⏱️ The pair countdown rides the tick that already exists, and is written IN PLACE —
+       * a repaint here would drop the keyboard and wipe a half-typed reply once a second.
+       */
+      const clockEl = root.querySelector('[data-pair-clock]');
+      if (clockEl) {
+        const mine = linkPairMine(c);
+        const ms = pairRemaining(mine, Date.now());
+        if (ms != null) {
+          const s = Math.ceil(ms / 1000);
+          clockEl.textContent = `${s}s`;
+          clockEl.classList.toggle('low', s <= 15);
+        }
+      }
       if (c?.beat === 'debrief' && debriefNominateOpen(c) && !state.lateNomShown) {
         state.lateNomShown = true;
         padFx('Name someone', 'smash', [0, 45, 55, 120]);
@@ -1235,6 +1444,23 @@ export default async function partyPhone({ params }) {
 
   function iCanAct(players, me) {
     return (players || []).some((p) => p.id === me.playerId && p.alive !== false);
+  }
+
+  /* ==========================================================================================
+   * 🔢 WHICH SAM — the seat number and the player's own accent, on every row you can tap.
+   *
+   * Duplicate names are legal and John wants them to stay legal. But a pick list with two
+   * identical buttons is not a deduction problem, it is a coin flip: a play critic ran a night
+   * with two Sams and could not tell which one she had named, which one was on trial, or which
+   * one the room had executed. The seat and the accent are already on the lobby snapshot and
+   * already on the robot in the ballroom — this is the identity the room can SEE, next to the
+   * name it cannot.
+   * ========================================================================================== */
+  function seatChip(c, id) {
+    const seat = (c?.lobby?.seats || []).find((s) => s.playerId === id);
+    if (!seat || seat.seat == null) return '';
+    const look = cleanLook(seat) || DEFAULT_LOOK;
+    return `<span class="seat-chip" style="background:${esc(look.accent)}">${esc(String(seat.seat + 1))}</span>`;
   }
 
   function paintNominate(players, me, c, opts = {}) {
@@ -1263,7 +1489,7 @@ export default async function partyPhone({ params }) {
     }
     html += `<p class="hint">First tap stands. No self-nom.</p>
       <div class="pick-list jackbox buzz">${targets.map((p) =>
-        `<button type="button" data-nom="${esc(p.id)}">${esc(p.name)}</button>`).join('')}</div>`;
+        `<button type="button" data-nom="${esc(p.id)}">${seatChip(c, p.id)}<span>${esc(p.name)}</span></button>`).join('')}</div>`;
     return html;
   }
 
@@ -1280,7 +1506,27 @@ export default async function partyPhone({ params }) {
       return html;
     }
     if (state.voted) {
-      html += `<p class="hint">Ballot in. Non-voters count as NO ONE.</p>`;
+      /*
+       * ⚠️ **SAY WHAT THE SERVER RECORDED, NOT WHAT WAS TAPPED.** "Ballot in" was optimistic
+       * local state — a dropped message showed a confirmed ballot while the server held nothing
+       * — and it never named the choice, so nobody could see what they had voted for. It also
+       * hid the self-vote coercion completely: a play critic's phone was byte-identical before
+       * and after the server quietly turned her self-pick into NO ONE.
+       */
+      const b = c.myBallot;
+      if (!b) {
+        html += `<p class="hint">Sending your ballot…</p>`;
+      } else {
+        const name = b.choice === NO_ONE ? 'NO ONE' : playerName(players, b.choice);
+        const tapped = standingNames(players, c).find((n) => n.target === b.choice);
+        const chip = b.choice === NO_ONE ? '' : seatChip(c, b.choice);
+        html += `<div class="receipt${b.why ? ' coerced' : ''}">
+          <div class="receipt-k">The room recorded</div>
+          <div class="receipt-v">${chip}<span>${esc(tapped?.name || name)}</span></div>
+          ${b.why ? `<p class="hint">${esc(b.why)}</p>` : ''}
+        </div>
+        <p class="hint">Non-voters count as NO ONE.</p>`;
+      }
       return html;
     }
     const myNom = standingNames(players, c).find((n) => n.nominator === me.playerId);
@@ -1288,10 +1534,26 @@ export default async function partyPhone({ params }) {
       html += `<p class="hint">Your nomination of ${esc(myNom.name)} is your vote — locked. You do not vote again.</p>`;
       return html;
     }
-    html += `<p class="hint">Pick one standing nominee, or NO ONE. You are not on this ballot.</p>
+    /*
+     * ⚠️ **THE COPY HAS TO MATCH THE BUTTONS THAT ARE ACTUALLY THERE.**
+     *
+     * "Pick one standing nominee, or NO ONE" was printed to everybody — including the person
+     * ON TRIAL, whose only button is NO ONE because you cannot vote for yourself, and including
+     * a table where nobody was nominated at all, where the only button is also NO ONE. A play
+     * critic photographed both: the one player who most needs to understand her ballot was told
+     * to pick from a list she does not have.
+     */
+    const others = standing.filter((n) => n.target !== me.playerId);
+    const onTrial = standing.some((n) => n.target === me.playerId);
+    const lead = !others.length
+      ? (onTrial
+        ? 'You are the one on trial. You cannot vote for yourself, so NO ONE is your only ballot.'
+        : 'Nobody was named. NO ONE is the only ballot.')
+      : `Pick one standing nominee, or NO ONE.${onTrial ? ' You are on trial — you cannot vote for yourself.' : ''}`;
+    html += `<p class="hint">${lead}</p>
       <div class="pick-list jackbox">
-        ${standing.map((n) => `<button type="button" data-lynch="${esc(n.target)}">${esc(n.name)}</button>`).join('')}
-        <button type="button" data-lynch="${NO_ONE}">NO ONE</button>
+        ${others.map((n) => `<button type="button" data-lynch="${esc(n.target)}">${seatChip(c, n.target)}<span>${esc(n.name)}</span></button>`).join('')}
+        <button type="button" data-lynch="${NO_ONE}"><span>NO ONE</span></button>
       </div>`;
     return html;
   }
@@ -1306,6 +1568,286 @@ export default async function partyPhone({ params }) {
     const who = playerName(players, r.executed);
     html += `<p class="hint">${esc(who)} is out. The nameplate is face-down. Nothing about alignment.</p>`;
     return html;
+  }
+
+  /**
+   * ✋ READY — "I have said my piece." A majority of the living ends the talk beat.
+   *
+   * The count is shown, the NAMES are not, and the server does not send them (`FANOUT_KEYS.ready`
+   * is `count` and `need`). Who wants the conversation over is a live read on the room in the one
+   * beat where reading the room is the whole game.
+   *
+   * It is a TOGGLE. Someone who taps and then thinks of one more thing can take it back, and
+   * dropping below the majority disarms the countdown on the server.
+   */
+  /*
+   * 🚨 **READY IS DOCKED TO THE BOTTOM OF THE SCREEN, NOT TO THE BOTTOM OF THE CONTENT.**
+   *
+   * With eight players the Reckoning sheet lays out about 1052px of content in an 844px window,
+   * which put the READY button at roughly y=872 — below the fold, on the beat where a majority
+   * of READY is the ONLY way to end the beat early. A play critic measured it: reachable by
+   * scrolling, and nobody scrolls while eight people are shouting at each other. The bigger the
+   * table, the further off-screen the control that shortens the beat, which is exactly backwards.
+   *
+   * `position:sticky` rather than a layout rewrite: the sheet keeps scrolling as it always has,
+   * the dock rides the bottom edge of the viewport, and it lands in the bottom third of the phone
+   * where the thumb already is. It has to be the LAST thing `paint()` appends to the body or it
+   * will sit over whatever follows it — see the call sites in the talk beats.
+   */
+  function readyHtml(c) {
+    const n = c?.ready || { count: 0, need: 0 };
+    if (!n.need) return '';
+    const mine = !!state.ready;
+    const left = Math.max(0, n.need - n.count);
+    const pct = Math.min(100, Math.round((Math.min(n.count, n.need) / Math.max(1, n.need)) * 100));
+    return `<div class="ready-dock">
+      <div class="ready-meter"><div class="ready-fill${left ? '' : ' met'}" style="width:${pct}%"></div></div>
+      <button class="btn wide ready${mine ? ' on' : ''}" id="ready" type="button">
+        ${mine ? 'READY ✓' : 'READY'}
+      </button>
+      <p class="hint" data-ready-line>${Math.min(n.count, n.need)} of ${n.need} ready${left ? ` · ${left} more ends it` : ' · ending…'}</p>
+    </div>`;
+  }
+
+  /* ==========================================================================================
+   * 🍮 THE PAIR SHEET — reach out, become JELLIE, and type where only one other person can read.
+   *
+   * The whole design in one line: **the room sees that it happened, and never what was said.**
+   * The request and the merged name go on the television; the words come to this sheet and stop
+   * here. That is what makes it a social deception mechanic instead of a chat window — crossing
+   * the room to whisper is a move everybody watches you make.
+   *
+   * ⚠️ **THE WHISPER LOG IS NEVER REBUILT BY `paint()`.** `root.innerHTML` is rewritten on every
+   * socket message, and a message list inside it would lose scroll position and blow away a
+   * half-typed line several times a second — the same reason the role card is mounted outside
+   * `root`. `state.whispers` holds the history and `paintWhispers` writes the ONE element in
+   * place; `paint()` re-emits the shell around it and the text field's value is restored from
+   * `state.draft` on every rebuild.
+   * ========================================================================================== */
+
+  function linkPairMine(c) {
+    const me = meId();
+    return (c?.links?.pairs || []).find((p) => p.a === me || p.b === me) || null;
+  }
+  function linkIncoming(c) {
+    const me = meId();
+    return (c?.links?.pending || []).filter((r) => r.to === me);
+  }
+  function linkOutgoing(c) {
+    const me = meId();
+    return (c?.links?.pending || []).find((r) => r.from === me) || null;
+  }
+
+  function linkHtml(c, players) {
+    const me = meId();
+    const myName = playerName(players, me);
+    const mine = linkPairMine(c);
+    if (mine) {
+      const other = mine.a === me ? mine.b : mine.a;
+      /*
+       * ⏱️ The countdown is not decoration. A pair now expires on `PAIR_MS` so the room's two
+       * slots rotate instead of being held for the whole Debrief — and a conversation that
+       * vanished mid-sentence with no warning would read as a crash rather than as a rule.
+       */
+      const iAmDone = isDone(mine, me);
+      const theyAreDone = isDone(mine, other);
+      const left = pairRemaining(mine, Date.now());
+      const secs = left == null ? null : Math.ceil(left / 1000);
+      return `<div class="pairbox on">
+          <div class="pair-head">
+            <div class="pair-name">${esc(mine.name)}</div>
+            ${secs == null ? '' : `<div class="pair-clock${secs <= 15 ? ' low' : ''}" data-pair-clock>${secs}s</div>`}
+          </div>
+          <p class="hint">You and ${esc(playerName(players, other))}. The room can see you paired.
+            It cannot read this.</p>
+          <div class="whispers" data-whispers>${whisperListHtml()}</div>
+          <input class="field" id="whisper" maxlength="${WHISPER_MAX}" placeholder="Say it quietly…"
+            autocomplete="off" value="${esc(state.draft || '')}">
+          <p class="hint charcount" data-charcount>${Math.max(0, WHISPER_MAX - (state.draft || '').length)} left</p>
+          <button class="btn wide" id="whisper-send" type="button">Send</button>
+          <!--
+            DONE is the way out that costs nobody anything. Disconnect is "I am walking out on
+            you" and spends the leaver's turn, so it was never used, so a pair that finished in
+            twenty seconds sat on one of the room's two slots for the other seventy.
+            It takes BOTH thumbs: one tap alone would be a politer Disconnect with none of its
+            cost, and a partner mid-sentence would be cut off by someone who got bored.
+            NO BACKTICKS IN HERE — this comment is inside a template literal and one ends it.
+          -->
+          <button class="btn wide done${iAmDone ? ' on' : ''}" id="finish" type="button">
+            ${iAmDone ? 'Waiting for them…' : (theyAreDone ? 'They are done · finish' : 'Done')}
+          </button>
+          <!--
+            ⚠️ DISCONNECT IS A ONE-WAY DOOR AND IT USED TO BE UNLABELLED, DIRECTLY UNDER THE BIG
+            ORANGE SEND. A play critic hit it and only then discovered every name had gone grey:
+            leaving spends your conversation for the whole beat. One fat thumb away from SEND,
+            with no warning, on an action that cannot be undone. So it says what it costs, and it
+            is pushed down and away from the send button.
+          -->
+          <button class="btn ghost wide danger" id="unlink" type="button">Disconnect · ends your turn</button>
+        </div>`;
+    }
+
+    const incoming = linkIncoming(c);
+    if (incoming.length) {
+      /*
+       * ⚠️ **SHOW THE MERGED NAME BEFORE THEY AGREE TO WEAR IT.** The seam is the requester's
+       * onset plus the target's tail, and the requester controls their own name and picks the
+       * target — so a merge can be STEERED at somebody. An adversarial playtester demonstrated
+       * `merge('Da','Ike')`. `MERGE_BLOCK` catches the obvious ones and cannot catch a clever
+       * one. The prompt used to show only who was asking; the plate then landed over BOTH heads
+       * on the television, and leaving now costs the victim their turn for the beat.
+       *
+       * Consent to the NAME, not just the person. `mergeName` is pure and deterministic, so the
+       * phone can show exactly what the server will produce.
+       */
+      return `<div class="pairbox ask">${incoming.map((r) => `
+        <p class="hint"><strong>${esc(playerName(players, r.from))}</strong> reached out to you.</p>
+        <p class="hint">You would become <strong>${esc(mergeName(playerName(players, r.from), myName))}</strong> on the TV.</p>
+        <div class="pair-actions">
+          <button class="btn" data-accept="${esc(r.from)}" type="button">Connect</button>
+          <button class="btn ghost" data-decline="${esc(r.from)}" type="button">No</button>
+        </div>`).join('')}</div>`;
+    }
+
+    const out = linkOutgoing(c);
+    if (out) {
+      return `<div class="pairbox wait">
+        <p class="hint">Waiting on ${esc(playerName(players, out.to))}…</p>
+        <button class="btn ghost wide" id="unlink" type="button">Never mind</button>
+      </div>`;
+    }
+
+    /*
+     * ⚠️ **JOINED HUMANS, NOT EIGHT CHAIRS.** The first version listed `players`, which is the
+     * merged state frame — so a three-player table was offered ROBOT 4 through ROBOT 8, five
+     * empty seats nobody is sitting in. `nominationPlayers` is the existing answer to exactly
+     * this question and `party-night` N1a7 already guards it for the nominate sheet; reusing it
+     * means there is ONE definition of "people you can actually pick", not two that drift.
+     */
+    const seated = nominationPlayers(c?.frame?.players, c?.lobby);
+    const others = seated.filter((p) => p.id !== me && p.alive !== false);
+    if (!others.length) return '';
+
+    /*
+     * ⚠️ **ASK `linkBlock`, DO NOT RE-DERIVE THE RULES HERE.** The first version greyed out only
+     * people currently in a pair, so once Disconnect-ends-your-turn shipped the sheet still
+     * offered live buttons to a player who had spent their conversation — a tap the server
+     * silently refused. Found by playing it, not by any gate. `castRowBlock` learned this exact
+     * lesson for the casting padlock: a tap that does nothing reads as a broken phone, and the
+     * fix is to NAME the state rather than hide it. One definition of the rules, in `link.js`,
+     * consulted by both ends.
+     */
+    const L = c?.links || { pending: [], pairs: [], used: [] };
+    const living = seated.map((p) => p.id);
+    const MARK = { busy: ' · busy', spent: ' · your turn is done', theirs: ' · they have talked',
+      already: ' · asked', outgoing: ' · waiting', crowded: ' · room is full' };
+    const spentMe = why(L, me, others[0]?.id, living, c?.beat) === 'spent';
+    const crowdedNow = (L.pairs || []).length >= MAX_PAIRS;
+
+    return `<div class="pairbox">
+      <p class="hint">${esc(state.linkNote
+        || (spentMe
+          ? 'You have had your conversation this round. Talk out loud like everyone else.'
+          : crowdedNow
+            ? 'Two conversations are already going. Wait for one to end.'
+            : 'Reach out to one person. The room sees who — not what.'))}</p>
+      <div class="picks">${others.map((p) => {
+    const block = why(L, me, p.id, living, c?.beat);
+    return `<button type="button" data-link="${esc(p.id)}" ${block ? 'disabled aria-disabled="true"' : ''}>
+          ${esc(p.name || p.id)}${MARK[block] || ''}
+        </button>`;
+  }).join('')}</div>
+    </div>`;
+  }
+
+  /** One question — "may I reach out to them?" — answered by `link.js` and nowhere else. */
+  function why(L, from, to, living, beat) {
+    if (!to) return null;
+    return linkBlock(L, from, to, { living, beat });
+  }
+
+  function whisperListHtml() {
+    const me = meId();
+    return (state.whispers || []).slice(-30).map((w) =>
+      `<p class="whisper${w.from === me ? ' me' : ''}">${esc(w.text)}</p>`).join('');
+  }
+
+  /** In place, never through `paint()`. See the block header. */
+  function paintWhispers() {
+    const el = root.querySelector('[data-whispers]');
+    if (!el) return;
+    el.innerHTML = whisperListHtml();
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function bindLink(c, players) {
+    for (const b of root.querySelectorAll('[data-link]')) {
+      b.addEventListener('click', () => {
+        if (b.disabled) return;
+        state.linkNote = '';
+        c.send({ t: 'link', to: b.dataset.link });
+        padFx('Reaching out…', '', [0, 25]);
+      });
+    }
+    for (const b of root.querySelectorAll('[data-accept]')) {
+      b.addEventListener('click', () => {
+        c.send({ t: 'link', accept: b.dataset.accept });
+        padFx('Connected.', 'smash', [0, 40, 60, 40]);
+      });
+    }
+    for (const b of root.querySelectorAll('[data-decline]')) {
+      b.addEventListener('click', () => c.send({ t: 'link', decline: b.dataset.decline }));
+    }
+    root.querySelector('#finish')?.addEventListener('click', () => {
+      const mine = linkPairMine(c);
+      const now = !isDone(mine, meId());
+      c.send({ t: 'finish', on: now });
+      padFx(now ? 'Done.' : 'Still talking.', '', now ? [0, 30] : 0);
+    });
+    root.querySelector('#unlink')?.addEventListener('click', () => {
+      state.whispers = [];
+      state.draft = '';
+      c.send({ t: 'unlink' });
+    });
+
+    const field = root.querySelector('#whisper');
+    const send = () => {
+      const v = (field?.value || '').trim();
+      if (!v) return;
+      c.send({ t: 'whisper', text: v });
+      field.value = '';
+      state.draft = '';
+      // ⚠️ RESET THE COUNTER TOO. It read '124 left' over an empty field after every send,
+      // because send() cleared the value and left the label alone.
+      const cc = root.querySelector('[data-charcount]');
+      if (cc) cc.textContent = WHISPER_MAX + ' left';
+    };
+    // Keep the half-typed line across the repaints that every socket message causes.
+    field?.addEventListener('input', () => {
+      state.draft = field.value;
+      /*
+       * ⚠️ A SILENT TRUNCATION ON THE ONE CHANNEL BUILT FOR A CAREFUL ACCUSATION. A play critic
+       * sent 410 characters; the partner received 139, cut mid-word, with no ellipsis and no
+       * warning to either side.  now stops it at the wire limit and this says how
+       * much room is left. Written IN PLACE — a repaint here would drop the keyboard.
+       */
+      const el = root.querySelector('[data-charcount]');
+      // Clamped:  stops a THUMB at the limit but not a scripted value, and a
+      // counter reading "-60 left" is worse than no counter.
+      if (el) el.textContent = Math.max(0, WHISPER_MAX - field.value.length) + ' left';
+    });
+    field?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); send(); } });
+    root.querySelector('#whisper-send')?.addEventListener('click', send);
+    if (field && state.focusWhisper) { field.focus(); field.setSelectionRange(field.value.length, field.value.length); }
+  }
+
+  function bindReady(c) {
+    root.querySelector('#ready')?.addEventListener('click', () => {
+      state.ready = !state.ready;
+      padFx(state.ready ? 'Ready.' : 'Still talking.', '', state.ready ? [0, 30] : 0);
+      c.send({ t: 'ready', on: state.ready });
+      paint();
+    });
   }
 
   function bindNominate(c) {

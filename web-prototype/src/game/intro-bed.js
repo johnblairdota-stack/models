@@ -4,7 +4,10 @@ import { chairCircle } from '../world/props.js';
 import { unit4hMaterials } from '../materials/surfaces/robot.js';
 import { cloneMeshAvatar } from '../characters/mesh-avatar.js';
 import { INTRO_FOV, RING_OUT, TALK_FOV } from '../party/follow.js';
-import { attachHeadNameTag, attachNomineeBang, setNomineeBang } from '../characters/chest-nameplate.js';
+import { attachHeadNameTag, attachNomineeBang, setNomineeBang, setNameTagLabel } from '../characters/chest-nameplate.js';
+import { LINK_INK, LINK_CHROME } from '../party/link.js';
+import { buildLinkStream } from '../characters/link-stream.js';
+import { captionRemoved } from '../core/caption-layer.js';
 import {
   sitIdleClip, sitPhase, sitRootXZ, expectedPelvis, rugScaleForSeats, RUG_CATALOG_SPAN,
 } from './chair-seats.js';
@@ -584,6 +587,13 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     clampInSpace(_eye, space);
   }
 
+  /*
+   * 🟢 The link stream hangs off the SCENE, not off either robot, because it is strung between
+   * two of them and belongs to neither. It reads both plates' world positions every frame, so it
+   * follows the tags through the sit-down, the camera sweep and any wandering, for free.
+   */
+  const stream = buildLinkStream(group);
+
   return {
     /** Which robot the camera is on, and what it is doing — for the lower-third and the drive. */
     focus() {
@@ -653,6 +663,43 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       for (const r of robots) setNomineeBang(r.bang, ids.has(String(r.seat.id)));
     },
 
+    /**
+     * 🍮 TWO ROBOTS, ONE NAME. John's design: *"their names are merged together... and the tag
+     * changes colour."* Both halves of a pair wear the SAME plate — JELLIE over both heads, in
+     * the pair green instead of the show blue.
+     *
+     * ⚠️ **IDEMPOTENT, BECAUSE THIS IS CALLED ON EVERY CUE.** `setNameTagLabel` returns early
+     * when the label and skin already match, so a cue that repeats — and it repeats on every
+     * links fanout, which is every tap — repaints no canvases and allocates no textures.
+     *
+     * ⚠️ **AND IT MUST RESTORE.** A robot that leaves a pair goes back to its own name; the
+     * seat's name is the source of truth and is re-read here rather than remembered, so a name
+     * changed mid-night does not come back stale.
+     */
+    setPairs(pairs) {
+      const byId = new Map();
+      for (const p of pairs || []) {
+        if (!p?.name) continue;
+        byId.set(String(p.a), p.name);
+        byId.set(String(p.b), p.name);
+      }
+      for (const r of robots) {
+        const merged = byId.get(String(r.seat.id));
+        if (merged) setNameTagLabel(r.tag, merged, { ink: LINK_INK, chrome: LINK_CHROME });
+        else setNameTagLabel(r.tag, r.seat.name, null);
+      }
+      /*
+       * 🟢 …and the data crossing the room between them. The merged plate is a change to
+       * something the room has already read and stopped looking at; the stream is a new thing
+       * moving in the middle of the picture, which is what actually gets noticed.
+       */
+      const tagOf = (id) => robots.find((r) => String(r.seat.id) === id)?.tag || null;
+      stream.sync(pairs || [], tagOf);
+    },
+
+    /** Harness hook: how many streams are flying, and how lit they are. */
+    streamReport: () => stream.report(),
+
     /** Harness snapshot — logical sit flags, pelvis, clip names. */
     sitReport() {
       return robots.map((r) => {
@@ -690,11 +737,13 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     holdStep(dt, t) {
       clock += dt;
       for (const r of robots) driveOne(r, dt, t);
+      stream.step(dt, engine.camera);
     },
 
     step(dt, t) {
       clock += dt;
       for (const r of robots) driveOne(r, dt, t);
+      stream.step(dt, engine.camera);
 
       /*
        * 🎥 THE CAMERA STANDS OUTSIDE THE RING looking in. #39 sat inside (faces, not chair
@@ -759,6 +808,9 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
      * what was wrong was letting a borrower run the destructor.
      */
     dispose() {
+      // Before the traversal below: the stream owns its own sprites and its own caption count,
+      // and a group walk that disposed them would leave that counter high forever.
+      stream.dispose();
       engine.camera.fov = fov0;
       engine.camera.updateProjectionMatrix();
       if (space?.colliders) {
@@ -774,7 +826,13 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
         if (o.isMesh || o.isSkinnedMesh || o.isInstancedMesh || o.isLine || o.isPoints) {
           o.geometry?.dispose?.();
         }
-        if (o.name === 'headName' || o.name === 'chestName' || o.name === 'nomBang') o.userData?.ownedTex?.dispose?.();
+        if (o.name === 'headName' || o.name === 'chestName' || o.name === 'nomBang') {
+          o.userData?.ownedTex?.dispose?.();
+          // Balance `captionAdded()` — the pipeline skips its overlay pass at zero, and a
+          // count that only ever goes up would make every later scene pay for a pass that
+          // draws nothing. `chestName` is the deprecated lockup and never joined the layer.
+          if (o.name !== 'chestName') captionRemoved();
+        }
       });
       for (const r of robots) r.body.avatar?.dispose?.();
       for (const m of ownedMaterials) m.dispose?.();

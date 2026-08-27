@@ -1,0 +1,84 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; }
+    a { color: #f5a14a; } a:hover { color: #ffbe7d; }
+  </style>
+</helmet>
+
+<div style="width: 390px; height: 844px; background: #0c0a08; color: #f3ece3; display: flex; flex-direction: column; padding: 16px 16px 20px;">
+
+  <div style="display: flex; justify-content: space-between; color: #8a7d70; font-size: 12px; letter-spacing: .16em; text-transform: uppercase; margin-bottom: 12px;">
+    <span>Jazz</span><span>Debrief · John</span>
+  </div>
+
+  <div style="padding: 14px 14px 12px; border-radius: 8px; border: 1px solid #8FD9A8; background: rgba(31,122,61,.20); display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto;">
+
+    <!-- the merged identity, with the two people it is made of. The critic could not
+         decode OARA or BAM; the sub-line makes every name legible without touching the
+         3D plate, which John chose to keep as the merged word alone. -->
+    <div style="display: flex; align-items: baseline; gap: 10px;">
+      <div style="font-size: 34px; font-weight: 900; letter-spacing: .06em; color: #8FD9A8; line-height: 1;">JELLIE</div>
+      <div style="font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: #a89884;">John + Ellie</div>
+    </div>
+    <p style="margin: 8px 0 0; color: #a89884; font-size: 13px; line-height: 1.45;">The room can see you paired. It cannot read this.</p>
+
+    <!-- ═══════════ THE CLOSING WARNING ═══════════
+         A critic lost a conversation mid-sentence: the beat flipped on a READY majority
+         and the transcript was deleted instantly. The two people most invested in the
+         beat continuing got the least warning. -->
+    <div style="margin-top: 10px; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; background: rgba(245,161,74,.14); border: 1px solid rgba(245,161,74,.35);">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f5a14a" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path>
+      </svg>
+      <span style="font-size: 12px; letter-spacing: .04em; color: #f5a14a; font-weight: 700;">One more READY ends the Debrief</span>
+    </div>
+
+    <div style="flex: 1 1 auto; min-height: 0; overflow-y: auto; margin: 10px 0; display: flex; flex-direction: column; gap: 6px;">
+      <sc-for list="{{lines}}" as="w" hint-placeholder-count="4">
+        <p style="margin: 0; padding: 8px 10px; border-radius: 8px; max-width: 86%; font-size: 15px; line-height: 1.35; align-self: {{w.side}}; background: {{w.bg}}; color: {{w.ink}};">{{w.text}}</p>
+      </sc-for>
+    </div>
+
+    <input class="field" value="" placeholder="Say it quietly…" style="width: 100%; padding: 14px 12px; border-radius: 6px; border: 1px solid rgba(245,161,74,.25); background: #161310; color: #fff; font: inherit; font-size: 17px; letter-spacing: .04em; box-sizing: border-box;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin: 6px 2px 10px;">
+      <span style="font-size: 12px; color: #8a7d70;">140 left</span>
+      <span style="font-size: 12px; color: #8a7d70;">3 sent</span>
+    </div>
+
+    <button type="button" style="width: 100%; min-height: 56px; appearance: none; border: 0; cursor: pointer; font: inherit; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; padding: 16px 22px; border-radius: 6px; background: #f5a14a; color: #1a1208;">Send</button>
+
+    <!-- pushed well clear of SEND, and it says what it costs -->
+    <div style="height: 14px;"></div>
+    <button type="button" style="width: 100%; min-height: 44px; appearance: none; cursor: pointer; font: inherit; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; padding: 12px 10px; border-radius: 6px; background: transparent; color: #e8b6c6; border: 1px solid rgba(217,90,138,.5); font-size: 12px;">Disconnect · ends your turn</button>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{
+  "closing": {"editor": "boolean", "default": true, "section": "State"}
+}'>
+class Component extends DCLogic {
+  renderVals() {
+    const mine = { side: 'flex-end', bg: '#1F7A3D', ink: '#f2fff5' };
+    const them = { side: 'flex-start', bg: '#241f1a', ink: '#e8dcc8' };
+    return {
+      lines: [
+        { text: 'ozz is lying about the cellar', ...mine },
+        { text: 'i know. he was nowhere near it', ...them },
+        { text: 'vote with me?', ...them },
+        { text: 'yes. say nothing until the reckoning', ...mine },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

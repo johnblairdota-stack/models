@@ -1,0 +1,12 @@
+import { readFileSync, writeFileSync } from 'fs';
+const p = 'harness/_overnight_post20.mjs';
+let s = readFileSync(p, 'utf8');
+s = s.replace("const recapTv = log.find((x) => x.k === 'RECAP_TV')?.v;", "const recapTvV = log.find((x) => x.k === 'RECAP_TV')?.v;");
+s = s.replace("const recapPhone = log.find((x) => x.k === 'RECAP_PHONE')?.v;", "const recapPhoneV = log.find((x) => x.k === 'RECAP_PHONE')?.v;");
+s = s.replace('recapTv,', 'recapTv: recapTvV,');
+s = s.replace('recapPhone,', 'recapPhone: recapPhoneV,');
+s = s.replace('recapPhone && (recapPhone.smashed', 'recapPhoneV && (recapPhoneV.smashed');
+s = s.replace("recapPhone.h1 === 'SMASHED' || recapPhone.h1 === 'TIME'", "recapPhoneV.h1 === 'SMASHED' || recapPhoneV.h1 === 'TIME'");
+s = s.replace('recapTv?.caught || recapPhone?.caught', 'recapTvV?.caught || recapPhoneV?.caught');
+writeFileSync(p, s);
+console.log('ok');

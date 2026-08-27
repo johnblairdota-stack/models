@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { CAPTION_LAYER, captionAdded } from '../core/caption-layer.js';
 
 /**
  * 🏷️ **HEAD BILLBOARD NAME — above the visor, always facing the TV camera.**
@@ -39,6 +40,22 @@ export const BANG_SIZE = 0.62;
 /** Distance (m) at which the plate is 1×. Further than this, scale up to TAG_FAR_K. */
 export const TAG_REF_DIST = 4.0;
 export const TAG_FAR_K = 2.0;
+/* =============================================================================================
+ * 🔎 THE NEAR FLOOR — why the plate is allowed to get SMALLER than 1×.
+ *
+ * The clamp used to be `clamp(d / 4, 1, 2)`. The low end pinned at 1, so anywhere inside four
+ * metres the sprite kept its full 0.92 m world size — and under `sizeAttenuation` a constant
+ * world size grows as 1/d with no ceiling at all. At arm's length (~0.6 m) the plate is about
+ * 6.7× its four-metre size: walking up to somebody in the Debrief covers the person you walked
+ * up to, and most of the room behind them. A play critic hit it inside one Debrief.
+ *
+ * 0.34 ≈ 1.35 / 4: from about 1.35 m outwards the shrink cancels the 1/d growth, so the plate
+ * holds a roughly constant SCREEN size instead of a constant world size, and closer than that it
+ * still grows, but off a much smaller base. Nothing about the far half of the curve moves —
+ * `TAG_FAR_K` and `TAG_REF_DIST` are untouched — so the legibility gate reads exactly what it
+ * read before.
+ * ============================================================================================= */
+export const TAG_NEAR_K = 0.34;
 
 /** What the sit / name-tag harness asserts — no GPU required. */
 export const NAMEPLATE_SPEC = Object.freeze({
@@ -57,18 +74,31 @@ export const NAMEPLATE_SPEC = Object.freeze({
   nameCap: NAME_CAP,
   refDist: TAG_REF_DIST,
   farK: TAG_FAR_K,
+  nearK: TAG_NEAR_K,
 });
 
 const _world = new THREE.Vector3();
 
-function distK(sprite, camera) {
-  sprite.getWorldPosition(_world);
-  const d = _world.distanceTo(camera.position);
-  return THREE.MathUtils.clamp(d / TAG_REF_DIST, 1, TAG_FAR_K);
+/**
+ * The distance curve, as one function, because TWO things ride it now: the name plates and the
+ * 🟢 link stream that runs between a paired couple's plates. Two copies of this clamp would drift
+ * the first time one of the three numbers is tuned, and the stream would slowly stop matching the
+ * tags it is strung between.
+ */
+export function tagDistK(worldPos, camera) {
+  const d = worldPos.distanceTo(camera.position);
+  return THREE.MathUtils.clamp(d / TAG_REF_DIST, TAG_NEAR_K, TAG_FAR_K);
 }
 
-function paintPlate(label) {
+function distK(sprite, camera) {
+  sprite.getWorldPosition(_world);
+  return tagDistK(_world, camera);
+}
+
+function paintPlate(label, skin = null) {
   if (typeof document === 'undefined') return null;
+  const ink = skin?.ink || INK;
+  const chrome = skin?.chrome || CHROME;
   const W = NAMEPLATE_SPEC.canvasW;
   const H = NAMEPLATE_SPEC.canvasH;
   const c = document.createElement('canvas');
@@ -89,10 +119,10 @@ function paintPlate(label) {
     g.closePath();
   };
 
-  g.fillStyle = CHROME;
+  g.fillStyle = chrome;
   round(0, 0, W, H, 8);
   g.fill();
-  g.fillStyle = INK;
+  g.fillStyle = ink;
   round(4, 4, W - 8, H - 8, 6);
   g.fill();
 
@@ -201,6 +231,67 @@ function headTagY(player) {
  * @param {string} name    published lobby name
  * @returns {THREE.Sprite|null}
  */
+/**
+ * 🏷️ MOVE A CAPTION OUT OF THE GRADED PICTURE.
+ *
+ * `layers.set` REPLACES the mask, so the sprite leaves layer 0 and the main pass stops drawing
+ * it. `Pipeline` draws `CAPTION_LAYER` again after the grade, at full strength.
+ *
+ * This is the fix for the thing John caught in a live vote: *"the lack of lighting in the other
+ * room is occluding the name tag."* The tag is `depthWrite:false`, so the composite's distance
+ * haze sampled `tDepth` and faded each tag by the depth of whatever stood BEHIND it — measured
+ * at 20-23% of the white glyphs for five seated robots and 38% for the one in front of an open
+ * dark archway, with a neighbour at the same distance losing 23%. Distance never explained it.
+ *
+ * A name tag is a caption. It has to read the same wherever its robot is standing — that is the
+ * locked rule, and it cannot be satisfied while the tag is inside a depth-driven fog.
+ * Instrument + A/B: `harness/nametag-legibility.mjs`.
+ */
+function captionLayer(sprite) {
+  sprite.layers.set(CAPTION_LAYER);
+  captionAdded();
+}
+
+/**
+ * 🍮 REPAINT A LIVE TAG — the moment two robots become one name.
+ *
+ * John's design: *"their names are merged together... the tag changes colour."* Both halves of a
+ * pair get the SAME plate — JELLIE over both heads, in the pair green rather than the show blue.
+ * Two robots wearing one name reads instantly from a sofa, and it needs no repositioning, which
+ * matters because the seated circle is fixed until walking ships.
+ *
+ * ⚠️ **THE OLD TEXTURE IS DISPOSED HERE.** A tag can flip several times in one Debrief — pair,
+ * unpair, pair with someone else — and a `CanvasTexture` per flip with nothing freeing them is a
+ * GPU leak that only shows up in the fifth episode of a long night. `userData.ownedTex` is what
+ * `intro-bed`'s teardown frees, so it has to keep pointing at the CURRENT one.
+ *
+ * Returns false and changes nothing if the label is empty — a robot must never end up wearing a
+ * blank plate because a name arrived late.
+ */
+export function setNameTagLabel(sprite, label, skin = null) {
+  if (!sprite?.material) return false;
+  const text = String(label || '').trim().slice(0, NAME_CAP);
+  if (!text) return false;
+  if (sprite.userData.tagLabel === text && sprite.userData.tagSkin === (skin?.ink || '')) return true;
+  /*
+   * The pop fires on a REAL change only — the early return above means the per-tap `links`
+   * fanout, which re-sends the same pairs, cannot make the plate throb continuously. And it
+   * fires on the way BACK to your own name too: an unpairing is a moment the room should also
+   * get to see, and it costs nothing to give it one.
+   */
+  if (sprite.userData.tagLabel) sprite.userData.popAt = Date.now();
+  const tex = paintPlate(text, skin);
+  if (!tex) return false;
+  const old = sprite.userData.ownedTex;
+  sprite.material.map = tex;
+  sprite.material.needsUpdate = true;
+  sprite.userData.ownedTex = tex;
+  sprite.userData.tagLabel = text;
+  sprite.userData.tagSkin = skin?.ink || '';
+  if (old && old !== tex) old.dispose?.();
+  return true;
+}
+
 export function attachHeadNameTag(player, name) {
   const label = String(name || '').trim().slice(0, NAME_CAP);
   if (!label || !player) return null;
@@ -224,6 +315,7 @@ export function attachHeadNameTag(player, name) {
   });
   const sprite = new THREE.Sprite(mat);
   sprite.name = 'headName';
+  captionLayer(sprite);
   sprite.center.set(0.5, 0.0);
   sprite.scale.set(TAG_W, TAG_H, 1);
   sprite.frustumCulled = false;
@@ -235,12 +327,49 @@ export function attachHeadNameTag(player, name) {
   sprite.position.set(0, y, 0);
   sprite.userData.tagTop = y + TAG_H;
   sprite.onBeforeRender = (_r, _s, camera) => {
-    const k = distK(sprite, camera);
+    const k = distK(sprite, camera) * mergePop(sprite);
     sprite.scale.set(TAG_W * k, TAG_H * k, 1);
     sprite.userData.tagTop = sprite.position.y + TAG_H * k;
   };
   parent.add(sprite);
   return sprite;
+}
+
+/* =============================================================================================
+ * 🍮 THE MERGE POP — one second of stage time for the moment the mechanic is built around.
+ *
+ * A play critic photographed the television 93ms after the accept: both plates were ALREADY
+ * green, already settled. Nothing tweened, scaled, flashed or sounded. Their verdict was the
+ * sharpest note anyone gave this feature:
+ *
+ *   *"Nothing happens. The act of connecting — which the designer describes as the entire point
+ *   — is a silent, instantaneous text substitution that neither participant nor the room can
+ *   perceive. Strip that away and what remains is a DM, and everyone in that room already has a
+ *   phone that does DMs better."*
+ *
+ * John asked for *"an animation of them becoming connected and sharing data while their names
+ * are merged together."* Zero of it shipped.
+ *
+ * ⚠️ **IT RIDES `onBeforeRender`, WHICH ALREADY RUNS PER FRAME FOR THE DISTANCE SCALE.** No new
+ * clock, no rAF, no timer to leak, and nothing to tick when the tag is off screen. `MERGE_POP_MS`
+ * is deliberately long enough to be caught by someone looking at each other rather than at the
+ * screen — the room is the audience, and it is not staring at the TV waiting for this.
+ * ============================================================================================= */
+
+export const MERGE_POP_MS = 900;
+/** Peak scale at the top of the pop. Big enough to catch the eye across a room, short enough
+ *  that two adjacent plates do not collide while it happens. */
+export const MERGE_POP_K = 1.28;
+
+function mergePop(sprite) {
+  const t0 = sprite.userData.popAt || 0;
+  if (!t0) return 1;
+  const u = (Date.now() - t0) / MERGE_POP_MS;
+  if (u >= 1) { sprite.userData.popAt = 0; return 1; }
+  if (u < 0) return 1;
+  // Up fast, down slow — an arrival, not a wobble.
+  const shape = u < 0.35 ? (u / 0.35) : (1 - (u - 0.35) / 0.65);
+  return 1 + (MERGE_POP_K - 1) * Math.sin(shape * Math.PI * 0.5);
 }
 
 /**
@@ -261,6 +390,7 @@ export function attachNomineeBang(player, nameTag) {
   });
   const sprite = new THREE.Sprite(mat);
   sprite.name = 'nomBang';
+  captionLayer(sprite);
   sprite.center.set(0.5, 0.0);
   sprite.scale.set(BANG_SIZE, BANG_SIZE, 1);
   sprite.frustumCulled = false;

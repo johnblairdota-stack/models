@@ -53,6 +53,57 @@ export const EXECUTION_HOLD_MS = SECONDS[PHASE.EXECUTION] * 1000;
  */
 export const LATE_DEBRIEF_MS = 20000;
 
+/* =============================================================================================
+ * ✋ READY — the table ends a talk beat when a MAJORITY says it is done.
+ *
+ * Debrief is now a five-minute CAP, not a five-minute wait. John wanted Blood on the Clocktower's
+ * long day; five minutes of dead air when everyone has finished talking is the version of that
+ * nobody wants. So the clock is the ceiling and the room is the clock.
+ *
+ * 🚨 **MAJORITY, NOT UNANIMITY. John's call.** Unanimity hands one quiet or distracted player a
+ * veto over everybody's evening, and at eight players that is a near certainty rather than an
+ * edge case.
+ *
+ * ⚠️ **THIS IS NOT THE CASTING RULE AND MUST NOT BE MERGED WITH IT.** The locked casting rule is
+ * *"the 3·2·1 arms on ALL living ballots in, or a ~20s backstop — never on the first ballot"*
+ * (`CAST_BACKSTOP_MS`, gate `cast-ballot` B12b-e). That one is unanimity-or-timeout because an
+ * early cast lock silently robs a big table of its vote. Ending a conversation early costs a
+ * table nothing it cannot get back by not tapping. Same shape, different answer, on purpose.
+ *
+ * Majority cannot fire on a first tap at any table of two or more, which is what the casting rule
+ * was protecting — at 2 living it needs 2, at 8 it needs 5. No separate first-tap guard is
+ * required, and `readyNeeded` is asserted against that in `party-night`.
+ *
+ * A majority that then breaks — someone un-taps because they thought of something — cancels the
+ * countdown. Ready is a toggle, not a commitment.
+ * ============================================================================================= */
+
+/** The talk beats a table may end early. Not casting, not the expedition, not the vote. */
+export const READY_BEATS = ['debrief', 'reckoning'];
+
+export function isReadyBeat(beat) {
+  return READY_BEATS.includes(String(beat || ''));
+}
+
+/** Strict majority of the LIVING seated players. 2->2, 3->2, 5->3, 8->5. */
+export function readyNeeded(living) {
+  const n = Math.max(0, Math.floor(living) || 0);
+  if (n <= 1) return n;
+  return Math.floor(n / 2) + 1;
+}
+
+export function readyMet(readyCount, living) {
+  const need = readyNeeded(living);
+  return need > 0 && readyCount >= need;
+}
+
+/**
+ * The pause between "the room agreed" and the beat actually ending. Short, but not zero: cutting
+ * a talk beat the instant the fifth thumb lands chops whoever is mid-sentence, and the TV has an
+ * established 3·2·1 language for exactly this moment.
+ */
+export const READY_COUNTDOWN_MS = 3000;
+
 /**
  * Empty Reckoning may re-arm this many times. Then the clock walks (nobody nominated)
  * so a broken table cannot softlock forever.

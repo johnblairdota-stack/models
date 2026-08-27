@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {
   wallRun, windowBay, archedOpening, cofferedCeiling, cove, ceilingRose,
-  pilaster, balustrade, extrudeProfile, corniceProfile,
+  pilaster, balustrade, extrudeProfile, corniceProfile, worldUV,
 } from './kit.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { pierGlass, urnOnPedestal, consoleTable } from './props.js';
@@ -355,6 +355,24 @@ export function ballroomOrder(bin, o = {}) {
   // which is why this room's joinery reads as gilding rather than as paint.
   const K = o.keys ?? { wall: 'wall', mould: 'gilt', cornice: 'gilt', skirt: 'gilt', trim: 'gilt', leaf: 'wall' };
   const SOLID = o.solid ?? true;
+  /* ===========================================================================================
+   * 🪵 **RAISED PANELS — OPT-IN, BECAUSE THE SUNK ONES HAVE NEVER RENDERED ANYWHERE.**
+   *
+   * John, comparing the two rooms: *"there are textures on all the walls that look slightly
+   * indented with a big square that isn't in the game."* Measured, the panelling in THIS room
+   * sits between z -0.12 and -0.048 — entirely inside a 0.30 m wall slab. It is buried in the
+   * showcase exactly as it is buried in the game; the showcase's own header describes an
+   * ambition rather than a picture, and a 3x crop of its render shows no panel fields at all.
+   *
+   * `wallRun` already ships the cure and says so at its own `raised` flag: the field goes PROUD
+   * (+0.048) instead of sunk. It is also **204 vertices a bay against the sunk path's 300** and
+   * lands in the same two buckets, so it is fewer vertices and zero new draw calls.
+   *
+   * ⚠️ **DEFAULT OFF, AND THAT IS LOAD-BEARING.** `views/room-ballroom.js` is pinned by a
+   * pixel-diff and by a grade gate with 0.3 of headroom. Turning this on for the showcase is a
+   * defensible change but it is a DIFFERENT one, needing a re-shoot and a new gate figure.
+   * =========================================================================================== */
+  const raisedPanels = o.raisedPanels === true;
   const uvWall = o.uvWall ?? 2.4;
   /**
    * ⚠️ **THE LOWER RUN'S SKIRTING IS THE CALLER'S AND THE UPPER RUN'S IS NOT.** Two skirtings in
@@ -385,6 +403,49 @@ export function ballroomOrder(bin, o = {}) {
    */
   const ops = (list, key) => [...list, ...(extra[key] ?? [])];
 
+  /* =============================================================================================
+   * PHASE A0 · 🏛️ THE MARBLE BORDER — a ring, not the showcase's two-plane sandwich.
+   *
+   * John: *"the edges of the floor of the room have large marble tiles in the asset but in the
+   * game the flooring is the same diamond pattern everywhere."*
+   *
+   * The showcase lays a full-extent chequer plane and drops a parquet field on top of it, inset
+   * 2.2 m — so the marble you see is simply the part not covered. That shape does not transfer:
+   * the game's floor is already a full-extent box emitted by `room.js`'s generic per-space
+   * builder, so a second full plane underneath would be paying for a surface nothing can see.
+   * A RING over the existing floor's rim is the same picture for four slabs and one draw call.
+   *
+   * ⚠️ **THE UVs ARE AUTHORED IN ROOM-LOCAL SPACE, NOT WORLD-PROJECTED.** `GeoBin.add` applies
+   * the matrix and THEN projects, so a generated ballroom sitting at an arbitrary world position
+   * would get an arbitrary chequer phase and half-squares against the wall. `worldUV` is called
+   * here on the untranslated geometry and `uv: null` tells the bin to keep it, which pins the
+   * chequer to the room's own corner at every seed.
+   *
+   * ⚠️ **NOT IN THE `parts` DEFAULTS, DELIBERATELY.** Every entry there defaults ON and
+   * `views/room-ballroom.js` makes four `ballroomOrder` calls that whitelist by turning phases
+   * OFF — a new default-on phase would fire in all four and build four floors. Requiring the
+   * `o.floor` payload, which the showcase never passes, is what keeps the showcase untouched.
+   * ============================================================================================= */
+  if (o.floor) {
+    const f = o.floor;
+    const bd = f.border;
+    const y = f.y ?? 0.004;
+    const strip = (sx, sz, w, d) => {
+      const g = new THREE.PlaneGeometry(w, d);
+      g.rotateX(-Math.PI / 2);
+      // Room-local UVs first, so the chequer phase is the room's corner rather than the world's.
+      g.translate(sx - f.x0, 0, sz - f.z0);
+      worldUV(g, f.tile);
+      g.translate(f.x0, y, f.z0);
+      B.add('marbleFloor', g, new THREE.Matrix4(), null);
+    };
+    const W = f.x1 - f.x0, D = f.z1 - f.z0;
+    strip(f.x0 + W / 2, f.z0 + bd / 2, W, bd);                       // z-min edge
+    strip(f.x0 + W / 2, f.z1 - bd / 2, W, bd);                       // z-max edge
+    strip(f.x0 + bd / 2, f.z0 + D / 2, bd, D - bd * 2);              // x-min edge
+    strip(f.x1 - bd / 2, f.z0 + D / 2, bd, D - bd * 2);              // x-max edge
+  }
+
   // ---- PHASE A: the window wall, two storeys, with the window order in it --
   /**
    * ⚠️ **THE WINDOW ORDER IS THE PIECE'S WHOLE REASON FOR EXISTING AND IT IS TWO STOREYS.**
@@ -396,13 +457,13 @@ export function ballroomOrder(bin, o = {}) {
   if (parts.windowWall) {
     wallRun(B, {
       x: x0, z: z1, length: wallLen, height: split, bays: bays.window, rotY: HALF_PI,
-      keys: K, uvWall, giltPanel: true, reveal: 0.11,
+      keys: K, uvWall, raised: raisedPanels, giltPanel: true, reveal: 0.11,
       cornice: false, solid: SOLID, skirt: skirtLo, dado: dadoOn.window,
       openings: ops(winLocal.map((zl) => ({ x0: zl - win.w / 2, x1: zl + win.w / 2, y0: win.sill, y1: split })), 'window'),
     });
     wallRun(B, {
       x: x0, z: z1, length: wallLen, height: h - split, y0: split, bays: bays.window, rotY: HALF_PI,
-      keys: K, uvWall, dado: false, giltPanel: true, reveal: 0.11,
+      keys: K, uvWall, raised: raisedPanels, dado: false, giltPanel: true, reveal: 0.11,
       corniceH: upper.corniceH, corniceProj: upper.corniceProj,
       fieldLo: upper.fieldLo, fieldHi: upper.fieldHi, solid: SOLID, skirt: skirtHi,
       openings: winLocal.map((zl) => ({ x0: zl - win.w / 2, x1: zl + win.w / 2, y0: 0, y1: winHead - split })),
@@ -442,12 +503,12 @@ export function ballroomOrder(bin, o = {}) {
   if (parts.mirrorWall) {
     wallRun(B, {
       x: x1, z: z0, length: wallLen, height: split, bays: bays.mirror, rotY: -HALF_PI,
-      keys: K, uvWall, giltPanel: true, cornice: false, reveal: 0.11,
+      keys: K, uvWall, raised: raisedPanels, giltPanel: true, cornice: false, reveal: 0.11,
       solid: SOLID, skirt: skirtLo, dado: dadoOn.mirror, openings: ops([], 'mirror'),
     });
     wallRun(B, {
       x: x1, z: z0, length: wallLen, height: h - split, y0: split, bays: bays.mirror, rotY: -HALF_PI,
-      keys: K, uvWall, dado: false, giltPanel: true, reveal: 0.11,
+      keys: K, uvWall, raised: raisedPanels, dado: false, giltPanel: true, reveal: 0.11,
       corniceH: upper.corniceH, corniceProj: upper.corniceProj,
       fieldLo: upper.fieldLo, fieldHi: upper.fieldHi, solid: SOLID, skirt: skirtHi,
     });
@@ -501,7 +562,7 @@ export function ballroomOrder(bin, o = {}) {
   if (parts.endWall) {
     wallRun(B, {
       x: x0, z: z0, length: endLen, height: split, bays: bays.end,
-      keys: K, uvWall, giltPanel: true, cornice: false, solid: SOLID, skirt: skirtLo,
+      keys: K, uvWall, raised: raisedPanels, giltPanel: true, cornice: false, solid: SOLID, skirt: skirtLo,
       dado: dadoOn.end,
       openings: ops(P.arches.map((a) => ({
         x0: a.x - x0 - a.w / 2, x1: a.x - x0 + a.w / 2, y0: 0, y1: a.h,
@@ -509,7 +570,7 @@ export function ballroomOrder(bin, o = {}) {
     });
     wallRun(B, {
       x: x0, z: z0, length: endLen, height: h - split, y0: split, bays: bays.end,
-      keys: K, uvWall, dado: false, giltPanel: true, solid: SOLID, skirt: skirtHi,
+      keys: K, uvWall, raised: raisedPanels, dado: false, giltPanel: true, solid: SOLID, skirt: skirtHi,
       corniceH: upper.corniceH, corniceProj: upper.corniceProj,
       fieldLo: upper.fieldLo, fieldHi: upper.fieldHi,
       openings: P.arches.map((a) => ({
@@ -520,7 +581,18 @@ export function ballroomOrder(bin, o = {}) {
       const t = a.t ?? 0.30;
       archedOpening(B, {
         x: a.x, y: 0, z: z0 + (a.inset ?? 0.005), w: a.w, h: a.h, spring: a.spring, t,
-        keys: { wall: 'wall', trim: 'gilt' },
+        // Per-arch trim, defaulting to the gilt every existing caller gets. A wide BLIND arch
+        // wants stone instead: gilt is a metal with no diffuse term, so on a dim wall a gilt
+        // moulding with nothing to reflect renders dark and the arch does not read at all.
+        keys: { wall: 'wall', trim: a.trim ?? 'gilt' },
+        /*
+         * ⚠️ **FORWARDED, DEFAULTING TO UNDEFINED — `archedOpening` picks its own 0.15/0.055 when
+         * nothing is passed, so every existing caller is untouched.** It matters for a wide arch:
+         * a 150 mm moulding is 16% of a 1.90 m doorway and reads as a door case, but only 3% of a
+         * 5.20 m one, where it reads as a pencil line round a hole. The moulding has to grow with
+         * the arch or the arch does not read as architecture.
+         */
+        archivolt: a.archivolt,
       });
       spandrel(B, a, t, z0);
     }
@@ -534,12 +606,12 @@ export function ballroomOrder(bin, o = {}) {
   if (parts.nearWall) {
     wallRun(B, {
       x: x1, z: z1, length: endLen, height: split, bays: bays.near, rotY: Math.PI,
-      keys: K, uvWall, giltPanel: true, cornice: false, solid: SOLID, skirt: skirtLo,
+      keys: K, uvWall, raised: raisedPanels, giltPanel: true, cornice: false, solid: SOLID, skirt: skirtLo,
       dado: dadoOn.near, openings: ops([], 'near'),
     });
     wallRun(B, {
       x: x1, z: z1, length: endLen, height: h - split, y0: split, bays: bays.near, rotY: Math.PI,
-      keys: K, uvWall, dado: false, giltPanel: true, solid: SOLID, skirt: skirtHi,
+      keys: K, uvWall, raised: raisedPanels, dado: false, giltPanel: true, solid: SOLID, skirt: skirtHi,
       corniceH: upper.corniceH, corniceProj: upper.corniceProj,
       fieldLo: upper.fieldLo, fieldHi: upper.fieldHi,
     });

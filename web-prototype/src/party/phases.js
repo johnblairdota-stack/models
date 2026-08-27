@@ -33,7 +33,26 @@ export const SECONDS = {
   [PHASE.CASTING]: 45,
   [PHASE.EXPEDITION]: 90,
   [PHASE.RECAP]: 10,
-  [PHASE.DEBRIEF]: 75,
+  /**
+   * 🚨 **A CEILING, NOT A WAIT.** 75 -> 300 on 2026-08-25, John's call: he wanted Blood on the
+   * Clocktower's long day, where five minutes of argument is normal. The beat is ended by the
+   * ROOM — a majority tapping READY (`show.js` `readyNeeded`) — and this number is only what
+   * happens if nobody does.
+   *
+   * ⚠️ **IT COST THE FORTY-MINUTE PROMISE, AND THAT WAS THE DECISION.** `round-loop` R2c used to
+   * assert the worst case stayed under forty minutes. At five episodes a 300s Debrief makes the
+   * worst case 56.1 min, and it cannot be bought back by shortening the night: 600 simulated
+   * matches showed only **7.3%** finish by episode 3 and an eight-player table averages **4.98**
+   * episodes, so cutting `EPISODE_CAP` would force-end ~93% of games on a technicality.
+   *
+   * What replaced it: R2c now asserts the TYPICAL night — every Debrief ended at ~90s, which is
+   * 38.6 min — and R2e asserts a hard sixty-minute ceiling so drift is still caught. The promise
+   * is weaker on purpose. A table that never taps READY gets an hour.
+   *
+   * If long Debriefs turn out to drag at a real table, THIS is the line to change back, and
+   * `round-loop` R2/R2c/R2e are the assertions that will tell you what moves with it.
+   */
+  [PHASE.DEBRIEF]: 300,
   [PHASE.RECKONING]: 45,
   [PHASE.VOTE]: 25,
   [PHASE.EXECUTION]: 20,

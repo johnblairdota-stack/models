@@ -26,11 +26,13 @@
 
 import { readFile } from 'node:fs/promises';
 import {
-  CUE_CAST_KEYS, CUE_KEYS, CUE_KINDS, CUE_NOM_KEYS, FOLLOW_FORBIDDEN, FOLLOW_KEYS, FOLLOW_VIEW,
+  CUE_CAST_KEYS, CUE_KEYS, CUE_KINDS, CUE_NOM_KEYS, FOLLOW_FORBIDDEN, FOLLOW_INSTRUMENTS,
+  FOLLOW_KEYS, FOLLOW_VIEW,
   IDENTITY_SECRETS, INTRO_FOV, INTRO_FRAME_PCT, MISSION_PHASES, MOVE_KEYS, RING_OUT, SPATIAL_WORDS,
   STICK_DEADZONE, STICK_RELEASE, STICK_TURN, TALK_FOV, TV_FRAME_PCT,
   WARM_KEYS, WARM_STAGES, WORLD_KEYS, chaseOrbitOffset, cueViolations, followParams, followUrl,
-  liveRunShot, LOOK_PITCH_MAX, LOOK_PITCH_MIN, lookYaw, moveViolations, stepLookOrbit,
+  followViolations,
+  liveRunShot, runPerspective, LOOK_PITCH_MAX, LOOK_PITCH_MIN, lookYaw, moveViolations, stepLookOrbit,
   stickCamMove, stickHeading, stickMag, stickRef, warmLabel, warmPct,
   warmUrl, warmViolations, worldViolations,
 } from '../src/party/follow.js';
@@ -69,11 +71,12 @@ import { DROP_RATE, GRADES, STALE_MAX, gradeFor, intelFor, intelLine } from '../
 import { GUIDE_MAP_CSS, guideMapSvg } from '../src/party/guidemap.js';
 import {
   ACCENTS, SHELLS, SHOW_CAM, SHOW_CHROME_CSS, SHOW_LINE, SHOW_TITLE,
-  cleanLook, codeBugHtml, nameplateHtml, recBugHtml, rundownRailHtml, showCam,
-  titlePlateHtml, verdictPlateHtml,
+  cleanLook, codeBugHtml, nameplateHtml, recBugHtml, robotFaceSvg, rundownRailHtml,
+  shellTones, showCam, titlePlateHtml, verdictPlateHtml,
 } from '../src/party/look.js';
 import { COMPOSITION, dealCast } from '../src/party/cast.js';
 import { isNightToken } from '../src/party/palette.js';
+import { BALLROOM_POINTS } from '../src/lighting/ballroom-rig.js';
 import { leftoverRuns, barrierFillForEdge } from '../src/game/dig-policy.js';
 import { MATRIX } from '../net/party/entitle.js';
 import { FANOUT_KEYS, fanoutViolations } from '../net/party/local.mjs';
@@ -154,6 +157,8 @@ console.log('\nparty-warm — the lobby-warm night');
     { kind: 'shot', shot: 'lead' },
     { kind: 'idle' },
     { kind: 'noms', standing: [{ nominator: 'p1', target: 'p2' }] },
+    // 🍮 The merged pair. Name only — the words are pushed to two sockets and are not a cue.
+    { kind: 'pair', pairs: [{ a: 'p1', b: 'p2', name: 'JELLIE' }] },
   ];
   let clean = 0;
   for (const cue of GOOD) {
@@ -1142,10 +1147,28 @@ console.log('\nparty-warm — the lobby-warm night');
     TV_FRAME_PCT >= 85 && TV_FRAME_PCT <= 95, `${TV_FRAME_PCT}%`);
 
   const skin = await readFile(new URL('../src/party/night-skin.js', import.meta.url), 'utf8');
-  // ⚠️ `\}\n`, NOT `\}`. The rule's own text contains `${TV_FRAME_PCT}`, so a lazy match to the
+  // ⚠️ `\}\r?\n`, NOT `\}`. The rule's own text contains `${TV_FRAME_PCT}`, so a lazy match to the
   // first brace stops four characters in and the check quietly passes on nothing. The declaration
-  // block's real close is the only `}` on this rule followed by a newline.
-  const rule = skin.match(/\.run-frame \{[\s\S]*?\}\n/)?.[0] ?? '';
+  // block's real close is the only `}` on this rule followed by a line end.
+  //
+  // ⚠️ AND THE `\r?` IS LOAD-BEARING. It was `\}\n`, which is every line ending CI has and NOT the
+  // one on a Windows checkout: `core.autocrlf=true` writes `}\r\n`, the anchor never matched, and
+  // `?? ''` handed the assertion an empty string. W17a then failed on John's PC and passed on
+  // Linux — the CSS was correct the whole time. A gate that reads a file this way must tolerate
+  // both line endings or it is only a gate on one operating system.
+  //
+  // ⚠️ AND THE FOUR-SPACE INDENT IS LOAD-BEARING TOO, for a third time on the same line. The run
+  // beat gained a `.night.on-run .run-frame { flex:0 1 auto; min-height:0; }` override (see W44),
+  // and `.run-frame \{` matches INSIDE that longer selector — which appears earlier in the file.
+  // The lazy match then returned that 45-character override instead of the base rule, and W17a
+  // failed reporting CSS that was perfectly correct. Anchoring on the indent picks the rule whose
+  // selector STARTS there. `position:relative` in W17a-pre is the second belt on the same trousers.
+  const rule = skin.match(/\n {4}\.run-frame \{[\s\S]*?\}\r?\n/)?.[0] ?? '';
+  // W17a-pre exists because the failure above was UNREADABLE: an empty `rule` fails W17a with a
+  // blank detail, which reads as "the CSS lost its height rule" when the truth is "the regex found
+  // nothing". Extraction now fails under its own name, so the two causes can never be confused.
+  t('W17a-pre · the .run-frame rule was actually extracted — an empty match fails HERE, not as CSS',
+    rule.length > 0 && rule.includes('position:relative'), `${rule.length} chars`);
   t('W17a · and the run frame\'s height INTERPOLATES it rather than restating a number',
     rule.includes('${TV_FRAME_PCT}vh') && rule.includes('aspect-ratio:16/9'),
     rule.replace(/\s+/g, ' ').slice(0, 96));
@@ -1353,7 +1376,11 @@ console.log('\nparty-warm — the lobby-warm night');
 {
   const phone = await readFile(new URL('../src/views/party-phone.js', import.meta.url), 'utf8');
   const guideBranch = phone.match(/\} else if \(iAmGuide\) \{[\s\S]*?\n {6}\} else \{/)?.[0] ?? '';
-  const seatedBranch = phone.match(/\n {6}\} else \{[\s\S]*?data-r="SHOCK"[\s\S]*?\n {6}\}/)?.[0] ?? '';
+  /* Anchored on the pad's CLASS, not on a literal `data-r="SHOCK"` button. The four buttons are
+     built from `REACTIONS` now that each one carries a face, so the last one is no longer
+     spelled out in the source and this slice quietly returned '' — which fails W20 arm rather
+     than passing W20c vacuously, which is the correct direction for an anchor to break in. */
+  const seatedBranch = phone.match(/\n {6}\} else \{[\s\S]*?react-pad[\s\S]*?\n {6}\}/)?.[0] ?? '';
   const runnerBranch = phone.match(/if \(iAmRunner\) \{[\s\S]*?\} else if \(iAmGuide\)/)?.[0] ?? '';
 
   t('W20 arm · the three expedition sheets were all found in the source',
@@ -1575,8 +1602,10 @@ console.log('\nparty-warm — the lobby-warm night');
       && AFTER_RUN_BEATS.join(',') === 'recap,debrief,reckoning,vote,execution,casting'
       && nextShowBeat('recap') === 'debrief' && nextShowBeat('debrief') === 'reckoning'
       && nextShowBeat('execution') === 'casting');
+  // Debrief 75s -> 300s on 2026-08-25: a CEILING now, ended by a majority tapping READY
+  // (`party-night` N21). What the change cost the night budget is argued in `round-loop` R2.
   t('W27a · holds are the shooting-schedule seconds, not a silent second table',
-    RECAP_HOLD_MS === 10000 && DEBRIEF_HOLD_MS === 75000);
+    RECAP_HOLD_MS === 10000 && DEBRIEF_HOLD_MS === 300000);
   const localSrc = await readFile(new URL('../net/party/local.mjs', import.meta.url), 'utf8');
   t('W27b · the server clock walks the chain; gates can call the same function',
     /export function progressShow/.test(localSrc)
@@ -1616,6 +1645,7 @@ console.log('\nparty-warm — the lobby-warm night');
   const localSrc = await readFile(new URL('../net/party/local.mjs', import.meta.url), 'utf8');
   const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
   const phoneSrc = await readFile(new URL('../src/views/party-phone.js', import.meta.url), 'utf8');
+  const showSrc = await readFile(new URL('../src/party/show.js', import.meta.url), 'utf8');   // W28d3
   t('W28 · show fanout publishes until so clients can tick without inventing a clock',
     FANOUT_KEYS.show.includes('until') && FANOUT_KEYS.show.includes('beat'));
   t('W28a · noms/lynch are closed public side-channels, not state-frame secrets',
@@ -1634,14 +1664,53 @@ console.log('\nparty-warm — the lobby-warm night');
     && /function cueSitDown/.test(hostSrc)
     && /data-show-clock/.test(hostSrc)
     && !/No eviction this episode/.test(hostSrc));
-  t('W28d · phones nominate and vote; early debrief is phones-down, late debrief opens the pick-list',
+  t('W28d · phones nominate and vote, and late debrief still opens the pick-list',
     /paintNominate/.test(phoneSrc)
     && /paintLynchVote/.test(phoneSrc)
     && /data-show-clock/.test(phoneSrc)
     && /t: 'nominate'/.test(phoneSrc)
     && /t: 'lynchVote'/.test(phoneSrc)
-    && /Talk's ending — name someone/.test(phoneSrc)
-    && /Phones down\. Talk/.test(phoneSrc));
+    && /Talk's ending — name someone/.test(phoneSrc));
+  /*
+   * 🚨 **"PHONES DOWN" IS GONE FROM THE TALK BEATS, AND THAT IS A PRODUCT DECISION.** John,
+   * 2026-08-25: Debrief is a five-minute ceiling the room ends by tapping READY on the phone, so
+   * an instruction to put the phone down sits directly beside the control that shortens the beat.
+   * It cost every table four minutes of silence.
+   *
+   * This assertion is the shape John asked for — it locks the DECISION rather than a string. The
+   * old W28d matched the literal `Phones down. Talk`, which is exactly the copy being removed, so
+   * updating it in place would have quietly made the gate agree with whatever shipped.
+   *
+   * `recap` keeps its "Phones down. Debrief is next." — that beat is a ten-second card with
+   * nothing to tap, which is the one place the instruction is still true.
+   */
+  {
+    const talkFrom = phoneSrc.search(/beat === 'debrief'/);
+    const talkTo = phoneSrc.search(/beat === 'vote'/);
+    const talkRaw = talkFrom >= 0 && talkTo > talkFrom ? phoneSrc.slice(talkFrom, talkTo) : '';
+    /*
+     * ⚠️ COMMENTS STRIPPED BEFORE THE ABSENCE CHECK, AND THAT IS NOT FUSSINESS. The note in
+     * `party-phone.js` explaining WHY "Phones down" was removed contains the phrase "Phones
+     * down", so the first version of this assertion failed on the comment that documents the
+     * fix. Any gate asserting copy is ABSENT has this trap: the removal note is the most likely
+     * place the removed words still live.
+     */
+    const talkCode = talkRaw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    t('W28d2 · the Debrief sheet points at READY and no longer says phones down',
+      talkCode.length > 0
+      && /READY/.test(talkCode)
+      && !/Phones down/i.test(talkCode)
+      && /readyHtml\(c\)/.test(talkCode)
+      && !/Phones down — talk/i.test(hostSrc),
+      `${talkCode.length} chars of debrief/reckoning sheet scanned, comments stripped`);
+    t('W28d3 · READY is a majority of the LIVING, a toggle, and one definition',
+      /export function readyNeeded/.test(showSrc)
+      && /Math\.floor\(n \/ 2\) \+ 1/.test(showSrc)
+      && /export function readyMet/.test(showSrc)
+      && /export const READY_BEATS = \['debrief', 'reckoning'\]/.test(showSrc)
+      && /applyReady/.test(localSrc)
+      && /livingSeatedIds\(room\)/.test(localSrc));
+  }
   t('W28e · CAUGHT is still reserved — hunter take is still the next slice',
     !/RUN_END\.CAUGHT/.test(localSrc));
   const talkIdx = phoneSrc.search(/isTalkBeat\(beat\)/);
@@ -1810,10 +1879,25 @@ console.log('\nparty-warm — the lobby-warm night');
     && /liveRunShot\(/.test(bedSrc)
     && !/perf\.stickRef/.test(bedSrc)
     && !/move: \{ x: 0, y: mag \}/.test(bedSrc));
+  /*
+   * ⚠️ **THE RULE IS UNCHANGED; THE FUNCTION THAT ENFORCES IT MOVED.** A live run still refuses a
+   * mid-run cut to shoulder / lead / doorway — those invert a camera-relative stick and take the
+   * runner's eyes off the frame their thumb is steering. What CAN now arrive mid-run is a
+   * PERSPECTIVE (chase / wide / iso / top), which is the player choosing how the game is viewed
+   * rather than a director cutting away from them. `runPerspective` is that distinction, and the
+   * assertion is on the behaviour rather than on the old call shape — `party-follow` F11e drives
+   * the real function with every input, which a grep cannot.
+   */
   t('W26h · a live run refuses mid-run production cuts to shoulder / lead / doorway',
     /liveRunShot\(mode, opts\.pinShot\) === 'chase'\) return/.test(bedSrc)
-    && /lockShot: liveRunShot\(mode, opts\.pinShot\)/.test(bedSrc)
+    && /lockShot: want/.test(bedSrc)
+    && /const want = runPerspective\(mode, opts\.pinShot, perf\.perspective\)/.test(bedSrc)
+    && /if \(PERSPECTIVES\.includes\(c\.shot\)\) \{ perf\.perspective = c\.shot; return; \}/.test(bedSrc)
     && /until = 1e9/.test(bedSrc));
+  t('W26h2 control · and a director shot can still never be held on a run unless it was TYPED',
+    ['shoulder', 'lead', 'doorway'].every((s) => runPerspective('run', null, s) === 'chase')
+      && runPerspective('run', 'shoulder', null) === 'shoulder',
+    'only ?shot= pins a director shot');
   t('W26i · the runner phone is a pad — two sticks, no chase embed, eyes on the TV',
     !/warmUrl\(/.test(phoneSrc)
     && !/runner-chase-layer/.test(phoneSrc)
@@ -1997,16 +2081,31 @@ console.log('\nparty-warm — the lobby-warm night');
   const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
   const skin = await readFile(new URL('../src/party/night-skin.js', import.meta.url), 'utf8');
 
+  /*
+   * ⚠️ **THIS GATE USED TO PASS ON A FUNCTION NOBODY CALLED.** It asserted `function recapBoard`
+   * existed and that its CSS was compact — both true, for four rounds, while `show === 'recap'`
+   * rendered `talkStage` and the four facts never reached a television. A play critic photographed
+   * the Recap from sofa distance and found the outcome of the expedition in two 13px chips.
+   *
+   * So the shape assertion now has a CALL SITE assertion beside it, which is the thing that was
+   * actually missing. `recapBoard` is gone: its own `countdownHtml` head was the second clock on
+   * a screen that already had one (D8), so the facts moved into the talk chrome instead.
+   */
   t('W31 · recap is a compact no-scroll lower-third, not stacked 84px cards',
-    /function recapBoard/.test(hostSrc)
-      && /recap-stage/.test(hostSrc)
+    /function recapFacts/.test(hostSrc)
+      && /recap talk-facts/.test(hostSrc)
       && /on-recap/.test(hostSrc)
       && /onRecap \? ' on-recap'/.test(hostSrc)
       && /grid-template-columns:repeat\(auto-fit, minmax\(140px, 1fr\)\)/.test(SHOW_CHROME_CSS)
-      && /clamp\(22px, 3vw, 36px\)/.test(SHOW_CHROME_CSS)
       && !/clamp\(40px, 8vw, 84px\)/.test(skin)
       && !/clamp\(56px, 12vw, 120px\)/.test(SHOW_CHROME_CSS)
       && !/clamp\(40px, 8vw, 84px\)/.test(SHOW_CHROME_CSS));
+
+  t('W31e · and the recap facts are actually CALLED on the recap beat',
+    /facts: recapFacts\(recap, names, ui\.runEnd\)/.test(hostSrc)
+      && /aside, facts,/.test(hostSrc)
+      && /\$\{facts \|\| ''\}/.test(hostSrc)
+      && !/function recapBoard/.test(hostSrc));
 
   t('W31a · recap hides the show line and locks night-main to one viewport',
     /onRun \|\| onStage \|\| onRecap \|\| show === 'lobby'/.test(hostSrc)
@@ -2047,6 +2146,9 @@ console.log('\nparty-warm — the lobby-warm night');
   const phoneSrc = await readFile(new URL('../src/views/party-phone.js', import.meta.url), 'utf8');
   const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
   const bedSrc = await readFile(new URL('../src/game/follow-bed.js', import.meta.url), 'utf8');
+  // W33k-n · the caption layer. See the block header beside those assertions.
+  const pipeSrc = await readFile(new URL('../src/post/pipeline.js', import.meta.url), 'utf8');
+  const capSrc = await readFile(new URL('../src/core/caption-layer.js', import.meta.url), 'utf8');
   const playerSrc = await readFile(new URL('../src/game/player.js', import.meta.url), 'utf8');
 
   t('W33 · sit attach parks the root in the chair and locks collision',
@@ -2066,6 +2168,52 @@ console.log('\nparty-warm — the lobby-warm night');
     && /#054E84/.test(tagSrc) && /#EDEFF0/.test(tagSrc) && /#B9BEC2/.test(tagSrc)
     && /GLYPH_OUTLINE/.test(tagSrc) && /#000000/.test(tagSrc)
     && /TAG_REF_DIST/.test(tagSrc) && /NAME_CAP = 8/.test(tagSrc));
+  /*
+   * ---------------------------------------------------------------------------------------
+   * W33k-n · A NAME TAG IS A CAPTION, NOT SCENERY.
+   * ---------------------------------------------------------------------------------------
+   * John, playing a live vote: *"the lack of lighting in the other room is occluding the name
+   * tag."* Measured by `harness/nametag-legibility.mjs` on six seated robots in ONE frame: the
+   * composite's distance haze ate 20-23% of every tag's white glyphs and 38% of the one sitting
+   * in front of the open dark archway — while its neighbour at the SAME distance lost 23%.
+   * Distance never explained it. The tag is a `depthWrite:false` sprite, so it writes nothing
+   * into the depth buffer and the haze block faded each tag by the depth of whatever stood
+   * BEHIND it. The locked rule — *"must stay legible at low quality and distance"* — cannot be
+   * satisfied while a caption lives inside a depth-driven fog.
+   *
+   * ⚠️ W33b IS NOT THIS CHECK AND NEVER WAS. It asserts how the tag ATLAS is built: no mips,
+   * nearest filter, black glyph outline, the STYLE_CONTRACT colours. Every one of those was
+   * green in the frame John photographed. A texture check cannot see the pixels that reach the
+   * television, which is why this class of bug survived to a live playtest.
+   *
+   * These four are the WIRING, cheap enough to live in `gates:party`. The pixels themselves
+   * need a browser and a warmed mansion, so they are `npm run gate:nametag` — N3 (fog cannot
+   * change a tag), N4 (every tag in one frame reads the same) and N5 (the room is still there).
+   */
+  t('W33k · head tags and nominee bangs are on the caption layer, out of the graded pass',
+    /import \{ CAPTION_LAYER, captionAdded \} from '\.\.\/core\/caption-layer\.js'/.test(tagSrc)
+    && /function captionLayer\(sprite\)/.test(tagSrc)
+    && /sprite\.layers\.set\(CAPTION_LAYER\)/.test(tagSrc)
+    && (tagSrc.match(/captionLayer\(sprite\);/g) || []).length >= 2);
+  t('W33l · the pipeline draws that layer AFTER the AA blit, not inside the grade',
+    pipeSrc.indexOf('captionCount() > 0') > pipeSrc.indexOf('this.aaPass.render(r, null)')
+    && /cam\.layers\.set\(this\.overlayLayer\)/.test(pipeSrc)
+    && /r\.clearDepth\(\)/.test(pipeSrc));
+  /*
+   * W33m is a scar. The first version of the overlay pass kept `scene.background`, and three's
+   * WebGLBackground sets `forceClear` for a Color or Texture background and clears the colour
+   * buffer REGARDLESS of `autoClear = false`. The result was six perfect captions on a
+   * completely black screen — every glyph measurement flawless, the entire graded ballroom
+   * gone. Deleting these two lines brings that back.
+   */
+  t('W33m · and nulls scene.background first — forceClear would wipe the graded frame',
+    /this\.scene\.background = null;/.test(pipeSrc)
+    && /this\.scene\.background = bg;/.test(pipeSrc));
+  t('W33n · the overlay pass is skipped when no captions exist — the survival game pays nothing',
+    /captionCount\(\) > 0/.test(pipeSrc)
+    && /export function captionCount/.test(capSrc)
+    && /export function captionRemoved/.test(capSrc)
+    && /captionRemoved\(\)/.test(introSrc));
   t('W33c · nominators are pre-cast and cannot recast',
     /function assumedLynchVotes/.test(voteSrc)
     && /nominator vote locked/.test(roomSrc)
@@ -2197,6 +2345,911 @@ console.log('\nparty-warm — the lobby-warm night');
     && /halfSpan\(spec\) \* FURN_FIT_BOOST/.test(src('src/game/furn-layout.js')));
   t('W34k · the guide map drops the same unplayable doors the house no longer cuts',
     /portalFacesPlayable\(floor/.test(src('src/party/mansion.js')));
+}
+
+/* =============================================================================================
+ * W35 · THE ROUND-5 UI PASS — six screens the loop critic could not read.
+ *
+ * Every assertion here has a CONTROL that would make it fail, because the defect class this whole
+ * round is about is "the code exists and nothing reaches a screen": `recapBoard` was written,
+ * gated and never called for four rounds.
+ * ============================================================================================= */
+{
+  const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
+  const phoneSrc = await readFile(new URL('../src/views/party-phone.js', import.meta.url), 'utf8');
+  const skin = await readFile(new URL('../src/party/night-skin.js', import.meta.url), 'utf8');
+  const tagSrc = await readFile(new URL('../src/characters/chest-nameplate.js', import.meta.url), 'utf8');
+  const roomSrc = await readFile(new URL('../src/party/room.js', import.meta.url), 'utf8');
+
+  /*
+   * ⏱️ D8 · ONE CLOCK. The mast printed the countdown at 36px and the stage printed the SAME
+   * number at 64px four inches below it, from the same tick loop, sometimes a frame apart.
+   * The rule is measured off the built HTML rather than off a hand-kept list of beats, so a beat
+   * added later cannot quietly reintroduce the pair.
+   */
+  t('W35 · the mast clock stands down whenever the stage already prints one',
+    /const stageHasClock = body\.includes\('data-show-clock'\)/.test(hostSrc)
+      && /clock && !stageHasClock \?/.test(hostSrc));
+  t('W35 control · a mast clock that ignored the body would print two on every talk beat',
+    !/\$\{clock \? `<span class="show-mast-clock"/.test(hostSrc));
+  // Same defect, one screen over: the phone status strip and the 64px sheet clock.
+  t('W35l · and the phone strip stands down when the sheet already prints the number',
+    /const sheetHasClock = body\.includes\('data-show-clock'\)/.test(phoneSrc)
+      && /sheetHasClock \? '' : phoneClockInline\(c\)/.test(phoneSrc));
+
+  /*
+   * 📊 D7/S3 · THE BALLOT BOX FILLING UP. Count and threshold only — see `lynchProgress`.
+   * The control arm is the important one: this board must never learn a name or a tally.
+   */
+  t('W35a · the Vote airs how full the ballot box is, and what it takes to carry',
+    /function tallyBoard/.test(hostSrc)
+      && /aside: client\.lynchResult \? '' : tallyBoard\(client\.tally\)/.test(hostSrc)
+      && /lynchProgress\(\)/.test(roomSrc)
+      && SHOW_CHROME_CSS.includes('.tally-board'));
+  {
+    const board = hostSrc.slice(hostSrc.indexOf('function tallyBoard'));
+    const body = board.slice(0, board.indexOf('\n}'));
+    t('W35b control · and it can reach no name, no vote and no tally to leak one',
+      !/names/.test(body) && !/counts/.test(body) && !/votes/.test(body)
+        && !/joinedName/.test(body) && !/lynchVotes/.test(body));
+  }
+
+  /*
+   * 🎬 S11 · THE BLANK CASTING TV. Lamps are lit by BALLOTS, which are already aired — "who has
+   * finished reading their card" is not a fact any machine in this room holds, and inventing it
+   * would be a fiction on the one screen the whole room is looking at.
+   */
+  t('W35c · casting draws the room while every player is head-down on a card',
+    /function castBoard/.test(hostSrc)
+      && /body \+= castBoard\(client\.lobby, votes, castWarm\(\)\)/.test(hostSrc)
+      && SHOW_CHROME_CSS.includes('.cast-lamp'));
+  /*
+   * ⚠️ **THE FOOT OF THAT BOARD MUST BE A NUMBER THAT CAN MOVE.** The first cut printed
+   * "0 of 8 have sent a ballot" through a window where no ballot can exist: intros do not fire
+   * until the bake is ready, and no ballot lands until after the intros. An eight-phone probe
+   * sampled 90 times and never saw a lamp light. The bake is what the room is actually waiting
+   * for, so while it is baking that is what the bar shows.
+   */
+  t('W35c2 control · while the mansion is baking the bar is the bake, not a counter stuck on zero',
+    /const baking = !!warm && warm\.stage !== 'ready'/.test(hostSrc)
+      && /baking\s*\r?\n?\s*\? `<div class="cast-warm">/.test(hostSrc)
+      && /function castWarm/.test(hostSrc)
+      && /bar: warmBar\(\)/.test(hostSrc));
+  {
+    const board = hostSrc.slice(hostSrc.indexOf('function castBoard'));
+    const body = board.slice(0, board.indexOf('\n}'));
+    // The board SAYS "Read your card" — that is the instruction on the television, and it is the
+    // one thing here that is allowed to contain the word. What it must never do is READ one.
+    t('W35d control · the lamp is a ballot, never a claim about a role or a card',
+      /v\.voter/.test(body)
+        && !/\.role\b/.test(body) && !/alignment/.test(body)
+        && !/\bdeal\b/.test(body) && !/cardFor|roleCard|\.card\b/.test(body));
+  }
+
+  /*
+   * 🔢 D6/S1 · WHICH SAM. Duplicate names stay legal — the seat number and the player's own
+   * accent are already public, and they are what makes the aired ballot readable again.
+   */
+  t('W35e · every list that can be tapped or aired carries the seat and the accent',
+    /function seatChip/.test(hostSrc) && /function seatChip/.test(phoneSrc)
+      && /\$\{seatChip\(lobby, n\.target\)\}/.test(hostSrc)
+      && /\$\{seatChip\(c, p\.id\)\}/.test(phoneSrc)
+      && /\$\{seatChip\(c, n\.target\)\}/.test(phoneSrc)
+      && SHOW_CHROME_CSS.includes('.seat-chip') && skin.includes('.seat-chip'));
+  t('W35f control · the chip is drawn from the public lobby seat, not from a role or a deal',
+    /\(lobby\?\.seats \|\| \[\]\)\.find/.test(hostSrc)
+      && /\(c\?\.lobby\?\.seats \|\| \[\]\)\.find/.test(phoneSrc));
+  // Including the loudest thing on the screen: the lower third names ONE person by name alone.
+  t('W35f2 · the lower third says which seat it is naming',
+    /seat \$\{seatNo \+ 1\}/.test(hostSrc));
+
+  /*
+   * 🚨 D12/S8 · READY WAS OFF THE BOTTOM OF AN EIGHT-PLAYER RECKONING. The dock is sticky AND it
+   * is the last thing appended — a sticky element with content after it covers that content, so
+   * both halves are the fix and both are asserted.
+   */
+  t('W35g · READY is docked to the viewport, so eight players cannot push it off the sheet',
+    /class="ready-dock"/.test(phoneSrc)
+      && /\.ready-dock \{ position:sticky; bottom:0;/.test(skin));
+  {
+    const paintBody = phoneSrc.slice(phoneSrc.indexOf("if (beat === 'debrief')"), phoneSrc.indexOf("} else if (beat === 'vote')"));
+    const padThenReady = /padFxHtml\(\);\s*\r?\n\s*body \+= readyHtml\(c\);/g;
+    t('W35h control · and the dock is the LAST thing on the sheet, or it sits on top of the pad',
+      (paintBody.match(padThenReady) || []).length === 2
+        && !/body \+= readyHtml\(c\);\s*\r?\n\s*body \+= padFxHtml\(\);/.test(paintBody));
+  }
+
+  /*
+   * 🔎 D2 · THE PLATE THAT ATE THE ROOM. The low end of the distance clamp was pinned at 1, so
+   * inside four metres a constant world size grew as 1/d with no ceiling — about 6.7× at arm's
+   * length. The far half of the curve is deliberately untouched, and W33b still reads it.
+   */
+  // chest-nameplate imports THREE, so the numbers are read out of the source, not imported.
+  const nearK = Number((tagSrc.match(/TAG_NEAR_K = ([\d.]+)/) || [])[1]);
+  const refDist = Number((tagSrc.match(/TAG_REF_DIST = ([\d.]+)/) || [])[1]);
+  const farK = Number((tagSrc.match(/TAG_FAR_K = ([\d.]+)/) || [])[1]);
+  const k = (d, floor) => Math.min(Math.max(d / refDist, floor), farK);
+  t('W35i · the name tag may shrink near the camera instead of growing without a ceiling',
+    /clamp\(d \/ TAG_REF_DIST, TAG_NEAR_K, TAG_FAR_K\)/.test(tagSrc)
+      && nearK > 0 && nearK < 1 && refDist === 4 && farK === 2
+      && k(4, nearK) === 1 && k(20, nearK) === farK,
+    `near ${nearK} · ref ${refDist} · far ${farK}`);
+  /*
+   * The control is the arithmetic that made this a defect. Under sizeAttenuation the on-screen
+   * size goes as k/d, so the blow-up from 4 m to any nearer d is (k(d)/d) / (k(4)/4).
+   *
+   * ⚠️ **THE FIX IS NOT "FLAT EVERYWHERE" AND MUST NOT BE READ AS ONE.** The floor only bites
+   * closer than `nearK * refDist` = 1.36 m, so the plate is genuinely constant on screen from
+   * conversation distance out to four metres, and still grows below that — off a base three times
+   * smaller. 6.7× at arm's length becomes 2.3×, which is a plate you can read past, not one that
+   * covers the person wearing it. Anyone tempted to call this flat-to-zero should lower the floor
+   * deliberately and re-shoot it, not assume.
+   */
+  const blowUp = (floor, d) => (k(d, floor) / d) / (k(4, floor) / 4);
+  t('W35j control · a near floor of 1 is the old defect — 6.7× the four-metre plate at arm\'s length',
+    blowUp(1, 0.6) > 6.5 && blowUp(nearK, 0.6) < 2.5
+      && Math.abs(blowUp(nearK, 1.4) - 1) < 0.05 && Math.abs(blowUp(nearK, 2) - 1) < 0.05,
+    `0.6 m: ${blowUp(1, 0.6).toFixed(1)}x -> ${blowUp(nearK, 0.6).toFixed(2)}x · flat from ${(nearK * refDist).toFixed(2)} m`);
+
+  /* 📱 The ballot receipt quotes what the ROOM recorded, and says WHICH Sam it recorded. */
+  t('W35k · the phone receipt names the recorded choice and its seat',
+    /class="receipt/.test(phoneSrc)
+      && /The room recorded/.test(phoneSrc)
+      && /const chip = b\.choice === NO_ONE \? '' : seatChip\(c, b\.choice\)/.test(phoneSrc)
+      && skin.includes('.receipt.coerced'));
+}
+
+/* =============================================================================================
+ * W36 · 🟢 THE LINK STREAM — Matrix glyphs on a faint string between a paired couple's plates.
+ *
+ * John: *"green matrix esc data particle affects to flow between the name tags of any two
+ * connected players"*, and then, on the first build: *"it should have a matrix green glow and a
+ * faint string. if that is in the game I can't see it in the screenshot."* Both notes are pinned
+ * below, because both were things a source grep would have called done.
+ *
+ * ⚠️ This file cannot `import` the module — `link-stream.js` imports THREE and the party gates
+ * run with no `node_modules` in CI. It is read as text, and the RUNTIME behaviour (streams in
+ * flight, glyphs lit, the age advancing) is measured by `harness/jellie-play.mjs` against a real
+ * browser instead. Neither instrument alone is enough and that is stated rather than implied.
+ * ============================================================================================= */
+{
+  const streamSrc = await readFile(new URL('../src/characters/link-stream.js', import.meta.url), 'utf8');
+  const bedSrc = await readFile(new URL('../src/game/intro-bed.js', import.meta.url), 'utf8');
+  const tagSrc = await readFile(new URL('../src/characters/chest-nameplate.js', import.meta.url), 'utf8');
+
+  t('W36 · a pair is drawn as data crossing the room, not only as a colour swap',
+    /export function buildLinkStream/.test(streamSrc)
+      && /buildLinkStream\(group\)/.test(bedSrc)
+      && /stream\.sync\(pairs \|\| \[\], tagOf\)/.test(bedSrc));
+
+  /*
+   * The bug this catches is the one that has bitten this project hardest: built, and never
+   * ticked. `recapBoard` was defined and uncalled for four rounds. BOTH loops must drive it —
+   * `step` is the talk beats and `holdStep` is the run, and a stream frozen mid-expedition would
+   * be a line of static glyphs hanging in the ballroom.
+   */
+  t('W36a · and it is STEPPED from both bed loops, not merely built',
+    (bedSrc.match(/stream\.step\(dt, engine\.camera\);/g) || []).length === 2
+      && /holdStep\(dt, t\) \{[\s\S]{0,160}?stream\.step/.test(bedSrc));
+
+  /*
+   * 🔒 THE PRIVACY CONTROL, AND IT IS THE MOST IMPORTANT ASSERTION IN THIS BLOCK.
+   *
+   * The stream draws the CHANNEL. A surge on each whisper was designed and deliberately not
+   * built: it would air WHEN a message was sent, and it would need the fact of a send to reach
+   * the television, which `fanoutViolations` currently REFUSES outright. If a later change wires
+   * a word or a send into this module, this fails before it ships.
+   */
+  /*
+   * ⚠️ **STRIP THE COMMENTS FIRST.** The first cut of this ran against the whole file and failed
+   * on the module's own header, which explains at length WHY the whisper surge was not built. A
+   * gate that cannot tell documentation from code punishes the documentation, and the thing being
+   * asserted is what this module can REACH, not what it talks about.
+   */
+  const code = streamSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  t('W36b control · the stream can reach no whisper, no message and no role',
+    !/whisper/i.test(code) && !/\brole\b/i.test(code)
+      && !/alignment/i.test(code) && !/message/i.test(code),
+    `${code.split('\n').length} lines of code, comments stripped`);
+  t('W36b2 control · and stripping did not eat the file — the code is still all there',
+    /buildLinkStream/.test(code) && /THREE\.Sprite/.test(code) && code.length > 2000);
+
+  /*
+   * 🪡 John's second note. The string was in the design canvas from the first sketch and the
+   * first build shipped without it, so the glyphs read as loose characters near two heads rather
+   * than as a line between two people.
+   */
+  t('W36c · there is a faint string, and the glyphs ride the SAME curve as it',
+    /new THREE\.Line\(/.test(streamSrc)
+      && /export const STRING_OPACITY/.test(streamSrc)
+      && /export function sagAt/.test(streamSrc)
+      // Two CALL sites — the string's vertices and the glyphs' positions — plus the definition.
+      && (streamSrc.match(/sagAt\(u\)/g) || []).length === 3);
+  t('W36c2 control · the sag is ONE function — two copies would drift the glyphs off the string',
+    (streamSrc.match(/Math\.sin\(Math\.PI/g) || []).length === 1);
+
+  /*
+   * 🔦 The glow. Captions are drawn AFTER the post grade, so no bloom pass ever sees these
+   * sprites — a glow on a caption is painted into its texture or it does not exist.
+   */
+  const blurs = [...streamSrc.matchAll(/blur:\s*(\d+)/g)].map((m) => Number(m[1]));
+  const cell = Number((streamSrc.match(/const CELL = (\d+)/) || [])[1]);
+  const fontPx = Number((streamSrc.match(/g\.font = '800 (\d+)px/) || [])[1]);
+  t('W36d · the glyph is painted with a corona, because the bloom pass cannot reach a caption',
+    blurs.length >= 2 && Math.max(...blurs) >= 20 && blurs.includes(0),
+    `blurs ${blurs.join('/')}`);
+  /*
+   * ⚠️ **A CORONA WIDER THAN ITS CELL BLEEDS INTO THE NEIGHBOURING CHARACTER.** The glyphs live
+   * side by side on one strip, so every sprite would show a ghost of the two characters next to
+   * it — subtle, permanent, and very hard to see in a screenshot. Derived, not eyeballed.
+   */
+  t('W36d2 control · the cell is wide enough to hold the widest blur without touching its neighbour',
+    cell > 0 && fontPx > 0 && (cell - fontPx) / 2 >= Math.max(...blurs),
+    `cell ${cell}px, glyph ${fontPx}px, margin ${(cell - fontPx) / 2}px vs blur ${Math.max(...blurs)}px`);
+
+  /*
+   * 🚨 The performance decision, pinned. One strip texture, cloned per sprite, and the character
+   * is picked with `offset` — a uniform. The obvious build swaps `material.map` and sets
+   * `needsUpdate`, which asks three for a program rebuild hundreds of times a second.
+   */
+  t('W36e control · picking a character is a texture OFFSET, never a material rebuild',
+    /strip\.clone\(\)/.test(streamSrc)
+      && /p\.map\?\.offset\.set/.test(streamSrc)
+      && !/mat\.needsUpdate/.test(streamSrc));
+
+  /*
+   * The overlay pass is skipped entirely while `captionCount()` is 0, so an unbalanced count is
+   * not a leak — it is the survival game paying for a pass that draws nothing, forever.
+   */
+  t('W36f · every sprite and the string are captions, and every one is given back',
+    (streamSrc.match(/captionAdded\(\)/g) || []).length === 2
+      && (streamSrc.match(/captionRemoved\(\)/g) || []).length === 2
+      && (streamSrc.match(/layers\.set\(CAPTION_LAYER\)/g) || []).length === 2
+      && /stream\.dispose\(\);/.test(bedSrc));
+
+  t('W36g · the glyphs ride the same distance curve as the plates they are strung between',
+    /export function tagDistK/.test(tagSrc) && /tagDistK\(p\.sp\.position, camera\)/.test(streamSrc));
+}
+
+/* =============================================================================================
+ * W40 · 🤖 THE LOBBY FACE IS UNIT-4H'S OWN HEAD.
+ *
+ * The face the picker paints was a diamond on a blob, authored before the character existed. It
+ * is now a 2D drawing of the real head: silhouette measured off `assets/mv/player/
+ * baseline_front.png`, features measured off `FACE_SURFACE`, which is the shader that paints the
+ * actual faceplate. Three things about that change can regress silently, so all three are here.
+ * ============================================================================================= */
+{
+  const lumOf = (hex) => {
+    const n = parseInt(hex.slice(1), 16);
+    return (0.2126 * (n >> 16) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255;
+  };
+  const TREATS = ['portrait', 'chip', 'screen'];
+  const svgs = TREATS.map((tr) => robotFaceSvg('#2a2420', '#f5a14a', { size: 100, treatment: tr }));
+
+  /*
+   * 🚨 AN UNSUBSTITUTED TOKEN IS A BLACK FACE, NOT AN ERROR. The drawing is authored against
+   * @SHELL@ / @LIT@ / … and the tokens are replaced on the way out. Miss one and the browser
+   * gets fill="@LIT@", which is not a colour, so it paints black and the eyes vanish into the
+   * glass — on a face that still renders, still passes a "does it draw" check, and is only
+   * wrong to look at. Same reason `id` is banned: the TV mounts one of these per chair.
+   */
+  t('W40a · the face draws with no leftover token and no id · the lobby mounts eight of them',
+    svgs.every((s) => !/@[A-Z]+@/.test(s) && !/\bid=/.test(s) && /viewBox="0 0 100 100"/.test(s)
+      && s.includes('#2a2420') && s.includes('#f5a14a')),
+    `${TREATS.join(' · ')}`);
+
+  /*
+   * THE RIM IS LOAD-BEARING. Eight of the twelve shells are darker than 0.25 luminance against a
+   * 0.040 background, so a flat fill sinks the whole head into the TV and leaves two floating
+   * eyes. Every shell's rim clears 0.55 — a real edge, not a hint — and the alpha steps up with
+   * it. The control is the same twelve measured WITHOUT the rim, which is the defect.
+   */
+  const rims = SHELLS.map((s) => ({ s, shell: lumOf(s), rim: lumOf(shellTones(s).rim), a: shellTones(s).rimA }));
+  const sunk = rims.filter((r) => r.shell < 0.25);
+  t('W40b · every shell keeps an edge against the night · the rim opens up as the shell darkens',
+    rims.every((r) => r.rim > 0.55) && sunk.every((r) => r.a === 0.80)
+      && rims.filter((r) => r.shell >= 0.35).every((r) => r.a === 0.55),
+    `min rim ${Math.min(...rims.map((r) => r.rim)).toFixed(3)} · ${sunk.length}/12 shells at 0.80 alpha`);
+  t('W40b control · without the rim, two thirds of the palette sinks into the background',
+    sunk.length === 8 && sunk.every((r) => r.shell - 0.040 < 0.19),
+    `${sunk.length}/12 shells under 0.25 luminance · bg 0.040`);
+
+  /*
+   * ONE PAINTER, EVERY PART. The old face had exactly two coloured elements, so both call sites
+   * recoloured it with two setAttribute calls. This one has nine, four of them DERIVED from the
+   * shell — so the same two-call patch would leave the crown, the pods and the rim showing the
+   * PREVIOUS player's colour, on the one screen whose entire job is choosing a colour. Every
+   * token the drawing emits must be one `paintLook` knows, and neither view may name a part.
+   */
+  const tokens = new Set();
+  for (const s of svgs) for (const m of s.matchAll(/data-(?:paint|stroke)="([a-z]+)"/g)) tokens.add(m[1]);
+  const KNOWN = new Set(['shell', 'crown', 'pod', 'rim', 'seam', 'lit']);
+  const phoneSrc = await readFile(new URL('../src/views/party-phone.js', import.meta.url), 'utf8');
+  const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
+  t('W40c · every coloured part routes through one painter, and no view names a part itself',
+    tokens.size >= 5 && [...tokens].every((k) => KNOWN.has(k))
+      && /paintLook\(/.test(phoneSrc) && /paintLook\(/.test(hostSrc)
+      && !/bot-wedge|bot-shell'\)/.test(phoneSrc + hostSrc),
+    `${[...tokens].sort().join(' · ')}`);
+
+  /*
+   * The features are the shader's, not a redraw by eye: two eyes, a brow arc over each, one
+   * mouth. `doubt` is the one that has to survive — it is asymmetric on purpose, and a mood
+   * table that quietly went symmetric would take the accusation out of the face.
+   */
+  const NAMES = ['idle', 'clap', 'boo', 'sus', 'shock'];
+  const moods = NAMES.map((m) => robotFaceSvg('#2a2420', '#f5a14a', { treatment: 'screen', mood: m }));
+  const beforeLight = (s) => s.slice(0, s.indexOf('<path data-stroke="lit"'));
+  t('W40d · the face carries five expressions and ONLY the light differs between them',
+    new Set(moods).size === NAMES.length
+      && moods.every((s) => (s.match(/data-(?:paint|stroke)="lit"/g) || []).length >= 4)
+      && beforeLight(moods[0]).length > 100
+      && new Set(moods.map(beforeLight)).size === 1,
+    `${beforeLight(moods[0]).length} chars of plate identical across ${NAMES.join(' · ')}`);
+}
+
+/* =============================================================================================
+ * W37 · 🕯️ THE BALLROOM'S PRACTICALS REACH THE PARTY NIGHT.
+ *
+ * John, three times across two sessions: *"put the assets as we worked on it with much more
+ * details and furniture into the Prime Time … it seems it still hasn't done it."*
+ *
+ * The reason it kept not happening is worth recording, because it is a defect class rather than
+ * an oversight: **there was nothing to find in the ballroom files.** `ballroomFixtures` was
+ * written, shipping and correct — and mounted in exactly one place, `src/views/game.js`, behind
+ * an `?estate=port` flag. The party night builds the same house through the same `buildTestRoom`
+ * and never called it. Anyone searching `world/ballroom-*` would search forever.
+ * ============================================================================================= */
+{
+  const bedSrc2 = await readFile(new URL('../src/game/follow-bed.js', import.meta.url), 'utf8');
+
+  t('W37 · the party night mounts the ballroom practicals off the room\'s own order plan',
+    /ballroomFixtures\(\{/.test(bedSrc2)
+      && /plan: sp\.orderPlan/.test(bedSrc2)
+      && /s\.order === 'ballroom' && s\.orderPlan/.test(bedSrc2)
+      && /for \(const m of fx\.meshes\) sp\.root\.add\(m\)/.test(bedSrc2)
+      && /for \(const l of fx\.lights\) scene\.add\(l\)/.test(bedSrc2));
+
+  /*
+   * ⚠️ **GEOMETRY IS NOT THE POINT — EMISSION IS.** `BALLROOM_POINTS` is 0 and the rig hands the
+   * meshes back regardless, so a build that mounted three chandeliers and forgot `points` would
+   * hang three unlit props in a dark room and satisfy any check that counted objects. John chose
+   * the NIGHT reading of the asset: the fixtures are the light source.
+   */
+  t('W37a control · and it asks for point lights, or the fixtures are unlit props in a brown box',
+    /points: 3,/.test(bedSrc2) && BALLROOM_POINTS === 0,
+    `the rig defaults to ${BALLROOM_POINTS}; the party night asks for 3`);
+
+  /*
+   * The asset drives a 19,400-intensity shadow-casting spot through the windows — the daylight
+   * that makes it look the way it does. That was option A and John chose B. Porting it later is
+   * a decision, not a tidy-up, so its absence is pinned.
+   */
+  t('W37b control · the asset\'s DAYLIGHT rig is deliberately not ported — that was option A',
+    !/spotKey|ballroomEnv|lightShaft|dustMotes|dustSheetRow|paperScatter/.test(bedSrc2));
+
+  t('W37c · a practical that throws cannot stop the show opening',
+    /catch \(e\) \{\s*\r?\n?\s*console\.warn\('\[follow-bed\] ballroom fixtures skipped/.test(bedSrc2));
+
+  t('W37d · it reuses the house\'s baked estate materials rather than inventing surfaces',
+    /brass: room\.materials\?\.estate\?\.brass/.test(bedSrc2)
+      && /crystal: room\.materials\?\.estate\?\.crystal/.test(bedSrc2));
+}
+
+/* =============================================================================================
+ * W38 · 🏛️ THE BALLROOM PORT — pilasters that face the room, panels that leave the wall,
+ * a marble border, and oak at the brightness the sweep actually landed on.
+ *
+ * Four findings from a six-agent investigation of John's *"why are there so many things that
+ * didn't get ported over from the asset"*. THREE of the six items he listed were not what they
+ * looked like, and each of those would have been "fixed" wrongly by a builder working from the
+ * description alone. The controls below are what pin the difference.
+ * ============================================================================================= */
+{
+  const kitSrc = await readFile(new URL('../src/world/kit.js', import.meta.url), 'utf8');
+  const ordSrc = await readFile(new URL('../src/world/ballroom-order.js', import.meta.url), 'utf8');
+  const roomSrc2 = await readFile(new URL('../src/game/room.js', import.meta.url), 'utf8');
+
+  /*
+   * 🚨 THE PILASTER WINDING. John: *"pillars … a black rectangle box at the bottom and two side
+   * surfaces but no face surface."* Measured on the shipped build: of 1176 triangles in the
+   * pilaster's slice of the `wall` bucket, 1104 faced INTO the wall and ZERO faced the room, so a
+   * FrontSide material culled the entire shaft. The showcase had it too — this was never a
+   * game-versus-showcase divergence.
+   */
+  t('W38 · the pilaster shaft is wound to face the room, not the wall',
+    /rings\.map\(\(r\) => r\.slice\(\)\.reverse\(\)\)/.test(kitSrc)
+      && /uvs\.map\(\(u\) => u\.slice\(\)\.reverse\(\)\)/.test(kitSrc));
+  /*
+   * ⚠️ The tempting "fix" is to flip `stripFromRings`' index order. `column()`, `extrudeProfile()`
+   * and `archedOpening()`'s soffit all build their rings the other way and are correct; changing
+   * the shared helper would invert every one of them.
+   */
+  t('W38a control · and the shared strip helper was NOT flipped to do it',
+    /idx\.push\(a, c, b, b, c, d\)/.test(kitSrc));
+  t('W38a2 control · the uv rows are reversed in lockstep, or the flutes would remap',
+    /reverse\(\)\), false, uvs\.map/.test(kitSrc.replace(/\s+/g, ' ')));
+
+  /*
+   * 🪵 RAISED PANELS. Measured: the sunk field sits between z −0.12 and −0.048 inside a 0.30 m
+   * wall — buried in BOTH rooms, never rendered anywhere. `raised` puts it proud, and is fewer
+   * vertices into the same buckets.
+   */
+  t('W38b · the ballroom asks for raised panels, and the flag exists to be asked for',
+    /const raisedPanels = o\.raisedPanels === true;/.test(ordSrc)
+      && /raisedPanels: true,/.test(roomSrc2)
+      && /const raised = o\.raised === true;/.test(kitSrc));
+  t('W38b2 control · every wall run takes it — a half-threaded flag panels three walls of four',
+    (ordSrc.match(/raised: raisedPanels,/g) || []).length === 8,
+    `${(ordSrc.match(/raised: raisedPanels,/g) || []).length} of 8 wall runs`);
+  /*
+   * ⚠️ DEFAULT OFF. `views/room-ballroom.js` is pinned by a pixel diff and by a grade gate with
+   * 0.3 of headroom; a default-on flag would change it silently.
+   */
+  t('W38b3 control · but it is OFF by default, so the showcase is untouched',
+    !/o\.raisedPanels \?\? true/.test(ordSrc) && !/raisedPanels = true;/.test(ordSrc));
+
+  /*
+   * 🏛️ THE MARBLE BORDER. A ring over the existing floor's rim, not the showcase's two-plane
+   * sandwich — the game already draws a full-extent floor, so a second plane under it would be
+   * paying for a surface nothing can see.
+   */
+  t('W38c · the marble border is derived from the room and snapped to whole squares',
+    /function ballFloorBorder\(sp\)/.test(roomSrc2)
+      && /floor: ballFloorBorder\(sp\)/.test(roomSrc2)
+      && /if \(o\.floor\) \{/.test(ordSrc)
+      && /marbleFloor: 'floormarble'/.test(roomSrc2));
+  t('W38c2 control · a room too narrow to carry a border gets none rather than becoming marble',
+    /if \(border \* 2 >= short \* 0\.45\) return null;/.test(roomSrc2));
+  /*
+   * ⚠️ The UVs are authored room-local. `GeoBin.add` applies the matrix and THEN world-projects,
+   * so a generated ballroom at an arbitrary world position would get an arbitrary chequer phase
+   * and half squares against the skirting.
+   */
+  t('W38c3 control · the chequer is pinned to the room corner, not the world origin',
+    /worldUV\(g, f\.tile\);/.test(ordSrc)
+      && ordSrc.indexOf('g.translate(sx - f.x0, 0, sz - f.z0);') < ordSrc.indexOf('worldUV(g, f.tile);'));
+  // A 4 mm slab lying on the floor must not cast into the floor it lies on.
+  t('W38c4 · the border casts no shadow',
+    /'dark', 'floormarble'/.test(roomSrc2));
+
+  /* 🪵 The oak. The showcase swept 1.6/2.0/2.4x and shipped 2.0x; the game took the bare default. */
+  t('W38d · the ballroom floor is the swept 2.0x oak, and only the ballroom\'s',
+    /oak: \[0\.600, 0\.392, 0\.216\]/.test(roomSrc2)
+      && /floor: BR\.floor \?\? m\.floor/.test(roomSrc2));
+  t('W38d2 control · the house default is untouched — m.floor is every floor in the mansion',
+    /floor: call\(L\?\.parquetMat, \{ size: 1024 \}/.test(roomSrc2));
+
+  /*
+   * Found in passing: the ballroom's console tabletops had been rendering in oak FLOORBOARDS,
+   * because `marbleTop` was routed to the floor bucket to avoid a fifth material.
+   *
+   * ⚠️ Scoped to `ORDER_KEYS_BALL` on purpose. The gallery and the study still map `marbleTop` to
+   * their floor and are RIGHT to — neither has a marble bucket to route it to. A whole-file
+   * negative here fails on those two and says nothing about the ballroom.
+   */
+  const ballKeys = roomSrc2.slice(
+    roomSrc2.indexOf('const ORDER_KEYS_BALL = {'),
+    roomSrc2.indexOf('};', roomSrc2.indexOf('const ORDER_KEYS_BALL = {')),
+  );
+  t('W38e · the ballroom console tops are marble again, not floorboards',
+    /marbleTop: 'floormarble'/.test(ballKeys) && !/marbleTop: 'floor'[,\s]/.test(ballKeys),
+    ballKeys.length > 40 ? 'ORDER_KEYS_BALL read' : 'FAILED TO SLICE THE KEY MAP');
+}
+
+/* =============================================================================================
+ * W39 · 🎭🪞🏛️ THE CURTAIN SHADOW, THE FLANKING MIRRORS, AND THE BLIND ARCH.
+ * ============================================================================================= */
+{
+  const roomSrc3 = await readFile(new URL('../src/game/room.js', import.meta.url), 'utf8');
+  const ordSrc3 = await readFile(new URL('../src/world/ballroom-order.js', import.meta.url), 'utf8');
+
+  /*
+   * 🎭 The drape geometry is bit-identical between the two rooms; the SHADOW is the difference.
+   * One bucket casts and the rest of the order does not — the panelling is lit flat and would buy
+   * nothing for the shadow pass it would cost.
+   */
+  t('W39 · the curtains cast a shadow and the rest of the order still does not',
+    /m\.castShadow = m\.name === 'kit:drape';/.test(roomSrc3));
+  t('W39a control · exactly one bucket was carved out, not the whole sweep',
+    !/for \(const m of built\.meshes\) \{\s*\r?\n\s*m\.castShadow = true/.test(roomSrc3)
+      && (roomSrc3.match(/m\.castShadow = m\.name === 'kit:drape';/g) || []).length === 1);
+
+  /*
+   * 🪞 The two pier glasses on the arch wall. The module could always place these — `room.js`
+   * simply never passed `mirrors.plates`, so all four of the room's glasses sat on the east wall.
+   */
+  t('W39b · the arch wall gets its two flanking mirrors',
+    /const endPlates = \[\];/.test(roomSrc3)
+      && /mirrors: \{ pier: mirrorPlates, plates: endPlates \}/.test(roomSrc3)
+      && /mirrors: mirrorPlates\.length \+ endPlates\.length > 0/.test(roomSrc3));
+  /*
+   * ⚠️ Derived outward until BOTH sides are clear, never authored. Hand-placed x values are the
+   * mistake the mirror grid above this one already records paying for.
+   */
+  t('W39b2 control · the pair is derived symmetrically, and refuses rather than overlapping a door',
+    /if \(!clear\(ef, sp\.cx - dx, EP\.w \/ 2 \+ 0\.30\)\) continue;/.test(roomSrc3)
+      && /if \(!clear\(ef, sp\.cx \+ dx, EP\.w \/ 2 \+ 0\.30\)\) continue;/.test(roomSrc3));
+  t('W39b3 control · and they are flat — the showcase\'s 9° rake aimed a reflection we do not port',
+    /rotY: 0, w: EP\.w, h: EP\.h,/.test(roomSrc3) && !/rake:/.test(roomSrc3));
+
+  /*
+   * 🏛️ The blind arch. The showcase's 5.2 m motif drawn AROUND the real 1.9 m doorway, because
+   * widening the doorway is a gameplay change (pathfinding, dig instancing groups, chase
+   * sightlines) and must not be done for a picture.
+   */
+  t('W39c · a blind arch frames the doorway at the showcase\'s scale',
+    /const blindArch = \(\(\) => \{/.test(roomSrc3)
+      && /w: W, h: 4\.70, spring: 2\.60/.test(roomSrc3)
+      && /if \(blindArch\) arches\.push\(blindArch\);/.test(roomSrc3));
+  t('W39c2 control · it is concentric with a real opening, not placed on clear wall',
+    /arches\.reduce\(\(a, b\) => \(Math\.abs\(b\.x - sp\.cx\) < Math\.abs\(a\.x - sp\.cx\) \? b : a\)\)/.test(roomSrc3));
+  t('W39c3 control · it refuses when its span would cross another opening',
+    /const crosses = ef\.cuts\.some/.test(roomSrc3) && /if \(crosses\) return null;/.test(roomSrc3));
+  /*
+   * ⚠️ It emits no spandrel — a spandrel fill on a blind arch is masonry extruded into masonry —
+   * and it stays OUT of `archesWorld`, which is a route hint. A blind arch is not a route.
+   */
+  t('W39c4 control · no spandrel, and it is not advertised as a way through',
+    !/blindArch[\s\S]{0,200}spandrelSteps/.test(roomSrc3)
+      && /\.filter\(\(a\) => a !== blindArch\)/.test(roomSrc3));
+  /*
+   * A 150 mm moulding is 16% of a 1.9 m doorway and 3% of a 5.2 m arch. The trim key matters too:
+   * gilt is a metal with no diffuse term, so on a dim wall a gilt moulding renders dark.
+   */
+  t('W39c5 · a wide arch gets a heavier moulding, in stone rather than gilt',
+    /archivolt: kit\?\.architraveProfile\?\.\(0\.34, 0\.085\)/.test(roomSrc3)
+      && /trim: 'stone',/.test(roomSrc3)
+      && /trim: a\.trim \?\? 'gilt'/.test(ordSrc3));
+  t('W39c6 control · and both forwards default to what every existing caller already got',
+    /archivolt: a\.archivolt,/.test(ordSrc3) && /o\.archivolt \?\? architraveProfile\(0\.15, 0\.055\)/
+      .test(await readFile(new URL('../src/world/kit.js', import.meta.url), 'utf8')));
+}
+
+/* =============================================================================================
+ * W41 · 🌙 WHAT IS OUTSIDE THE BALLROOM'S WINDOWS AT NIGHT.
+ *
+ * John, playing the party game: *"there is depth outside the windows in the asset but nothing
+ * going on outside in the primetime.bat."*
+ *
+ * 🚨 THE TWO FACTS THAT SHAPED THE FIX, BOTH PROBED IN THE RUNNING PAGE RATHER THAN READ OFF
+ * THE SOURCE, because the obvious plan — "the game already has a whole walled-yard system in
+ * `game/exterior.js`, including an `x.ballroom.terrace_w` spec, just switch it on" — is wrong
+ * twice over:
+ *
+ *   1. **THAT SYSTEM IS NOT ON THIS VIEW'S CHAIN AT ALL.** `buildExterior` has exactly one
+ *      importer, `views/game.js`; the party path is `views/party-follow.js` ->
+ *      `game/follow-bed.js` -> `game/room.js`. There was no yard here to enable, no `s.damaged`
+ *      gate to relax, no resident-count to trip. W41h holds that, so that if anyone ever DOES
+ *      wire the exterior into this view, the reasoning gets revisited instead of doubling up.
+ *   2. **THE GLAZING WAS OPAQUE** (`transparent: false, opacity: 1, depthWrite: true`,
+ *      `emissiveIntensity: 3.4`) and measured a FLAT ~L 220 — a lamp, not a window — so anything
+ *      built behind it was depth-rejected and invisible.
+ *
+ * The fix is therefore two halves in two different functions, and W41d is the gate that stops
+ * them drifting apart: transparent glass with no backdrop is a hole onto `#05070b`, and a
+ * backdrop behind opaque glass is nothing at all.
+ * ============================================================================================= */
+{
+  const nightSrc = await readFile(new URL('../src/world/ballroom-night.js', import.meta.url), 'utf8');
+  const roomSrc4 = await readFile(new URL('../src/game/room.js', import.meta.url), 'utf8');
+  const followSrc4 = await readFile(new URL('../src/party/follow.js', import.meta.url), 'utf8');
+  /*
+   * ⚠️ **THE "IT NEVER DOES X" GATES BELOW MUST READ CODE, NOT PROSE, AND THE FIRST RUN OF THIS
+   * BLOCK PROVED IT.** `W41a` and `W41c` are absence assertions — "never routes through GeoBin",
+   * "registers no colliders" — and both went red against a correct implementation, because the
+   * file's own header EXPLAINS why it avoids `GeoBin` and where the window `solids` actually
+   * live. An absence grep over a heavily commented file is a grep over the commentary.
+   */
+  const stripComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const nightCode = stripComments(nightSrc);
+
+  /*
+   * ONE material for the whole outside — sky, planting, treeline, the lit wing, the lot. Draw
+   * calls scale with MATERIAL KEYS, not with geometry, so a thousand extra boxes in the same bin
+   * cost nothing and one extra material would cost a call.
+   */
+  const mats41 = nightSrc.match(/new THREE\.Mesh[A-Za-z]*Material\(/g) || [];
+  t('W41 · the whole night exterior is ONE material and one merged mesh',
+    mats41.length === 1 && /new THREE\.MeshBasicMaterial\(\{/.test(nightSrc)
+      && /mergeGeometries\(this\.parts, false\)/.test(nightSrc),
+    `${mats41.length} material(s)`);
+  /*
+   * ⚠️ It must NOT route through `kit.js`'s GeoBin: `GeoBin.add()` strips every attribute that is
+   * not position/normal/uv — exactly the vertex-colour attribute the baked light depends on.
+   * That is why this file carries its own `Paint`, as `exterior.js` does for the same reason.
+   */
+  t('W41a control · it carries its own Paint and never routes through GeoBin, which strips colour',
+    !/GeoBin/.test(nightCode) && !/from '\.\/kit\.js'/.test(nightCode)
+      && /class Paint \{/.test(nightCode)
+      && /g\.setAttribute\('color', new THREE\.BufferAttribute\(col, 3\)\)/.test(nightCode));
+  t('W41a2 control · …and the comment stripper those two gates rely on actually stripped something',
+    nightCode.length < nightSrc.length * 0.75 && /GeoBin/.test(nightSrc) && /solids/.test(nightSrc),
+    `${nightSrc.length} chars of source, ${nightCode.length} of code`);
+
+  /*
+   * 🚨 RESIDENCY: parented to the SPACE root, so `room.js`'s own toggle already gates it and
+   * there is no new per-frame code to get wrong. Measured: parked in the gallery with the
+   * ballroom not resident, both `?ballnight` arms read 106 calls / 249,422 triangles — a delta
+   * of exactly zero. At the window station it is 145 against 142.
+   */
+  t('W41b · the backdrop hangs off the ballroom SPACE, so residency already gates it',
+    /sp\.root\.add\(night\.mesh\);/.test(roomSrc4)
+      && /s\.root\.visible = s\.visible;/.test(roomSrc4));
+  /*
+   * ⚠️ …and it is added OUTSIDE the order-mesh loop on purpose, so it cannot pick up that loop's
+   * `receiveShadow = true`. Forty-six metres of backdrop in the shadow pass would be the most
+   * expensive thing in the room.
+   */
+  t('W41b2 control · it takes no part in the shadow pass, unlike the order meshes beside it',
+    /m\.castShadow = m\.name === 'kit:drape';/.test(roomSrc4)
+      && /m\.castShadow = false;\r?\n\s*m\.receiveShadow = false;/.test(nightSrc)
+      && !/night\.mesh\.receiveShadow = true/.test(roomSrc4));
+  /*
+   * ⚠️ NO COLLIDERS. It is scenery on the far side of a wall that already has its own (the
+   * per-window glazing boxes in `ballroomOrderFor`'s `solids`). `exterior.js`'s yards DO return
+   * colliders; this deliberately returns a mesh and nothing else.
+   */
+  t('W41c · the backdrop registers no colliders at all',
+    /return \{ mesh, tris: P\.tris \};/.test(nightCode) && !/solids/.test(nightCode));
+
+  /*
+   * 🚨 THE TWO HALVES CANNOT DRIFT — the backdrop is decided in `emit`, the glazing in
+   * `binMaterials`, and both must read ONE flag, stashed on the space by `ballroomOrderFor`.
+   * The URL is parsed exactly once.
+   */
+  t('W41d · both halves read the same single flag on the space, not the URL twice',
+    /sp\.nightOutside = !!\(BALLNIGHT && hasNight\);/.test(roomSrc4)
+      && /if \(sp\.nightOutside\) \{/.test(roomSrc4)
+      && /clere: sp\?\.nightOutside/.test(roomSrc4)
+      && (roomSrc4.match(/get\('ballnight'\)/g) || []).length === 1);
+  /*
+   * ⚠️ A CLONE, NOT A MUTATION. `mats.clearGlass` is a singleton SHARED WITH THE GALLERY; going
+   * transparent in place would turn the gallery's windows into holes, since only the ballroom
+   * gets a backdrop behind them.
+   */
+  t('W41d2 control · the shared gallery glazing is cloned, never mutated in place',
+    /BR\._nightClere \?\?= \(\(\) => \{/.test(roomSrc4)
+      && /const g = BR\.clere\.clone\(\);/.test(roomSrc4)
+      && !/mats\.clearGlass\.transparent = true/.test(roomSrc4));
+  t('W41d3 · and the night pane is DIMMED as well as opened, or it washes the backdrop out',
+    /g\.transparent = true;/.test(roomSrc4) && /g\.depthWrite = false;/.test(roomSrc4)
+      && /g\.emissiveIntensity = 0\.55;/.test(roomSrc4));
+
+  /*
+   * The ablation. A before/after taken in two browser sessions is not a control pair — this
+   * project's own rule — so it has to be photographable from one camera in one boot.
+   */
+  t('W41e · ?ballnight is accepted at the follow door as an INSTRUMENT',
+    /FOLLOW_INSTRUMENTS = \['still', 'shot', 'campose', 'ballnight'\]/.test(followSrc4)
+      && followViolations('?view=party.follow&ballnight=0').length === 0);
+  t('W41e2 control · and the TV never emits it — it is not a FOLLOW_KEYS name',
+    !FOLLOW_KEYS.includes('ballnight') && FOLLOW_INSTRUMENTS.includes('ballnight')
+      && !FOLLOW_FORBIDDEN.includes('ballnight')
+      && followViolations('?view=party.follow&ballnightt=0').length === 1);
+
+  /*
+   * 🚨 THE BLACK-POINT GATE, AND IT IS THE ONE THAT MATTERS MOST.
+   *
+   * `lighting/ballroom-rig.js`: the composite runs `col = (col - 0.5) * uContrast + 0.5` BEFORE
+   * the toe, so a low enough scene-linear value goes negative and clamps to literal zero, and no
+   * light, hemisphere or ambient term recovers it. Through this view's grade (exposure 1.85,
+   * contrast 1.05, toeCrush 0.005) that floor is about 0.021 linear. A "dark night exterior"
+   * authored naively therefore delivers exactly the black rectangle it was meant to replace.
+   *
+   * So every colour in the palette is checked as ARITHMETIC ON THE SOURCE rather than trusted to
+   * review. Measured through the glass, on both stations, 0.00% of the delivered pixels sit at
+   * literal black — this gate is what keeps that true when the palette is next touched.
+   */
+  const BLACK_POINT = 0.021;
+  const lin41 = (a) => 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2];
+  const palette = [...nightSrc.matchAll(/^const (SKY_[A-Z]+|MOON[A-Z_]*|A_[A-Z_]+) = \[([^\]]+)\];/gm)]
+    .map((m) => ({ name: m[1], v: m[2].split(',').map(Number) }));
+  const darkest = palette.length ? Math.min(...palette.map((c) => lin41(c.v))) : 0;
+  t('W41f · every colour in the night palette clears the grade\'s black point',
+    palette.length >= 10 && palette.every((c) => lin41(c.v) > BLACK_POINT),
+    `${palette.length} colours, darkest ${darkest.toFixed(4)} vs floor ${BLACK_POINT}`);
+  /*
+   * ⚠️ THE CONTROL THAT PROVES THE CHECK CAN FAIL. A palette parser that matched nothing, or a
+   * comparison that was always true, would pass W41f silently — which is exactly the
+   * "result-shaped output instead of an error" class this project keeps catching.
+   */
+  t('W41f control · that check rejects a colour under the floor, and really did find the palette',
+    lin41([0.005, 0.005, 0.005]) <= BLACK_POINT && lin41([0.30, 0.33, 0.43]) > BLACK_POINT
+      && palette.some((c) => c.name === 'SKY_ZENITH') && palette.some((c) => c.name === 'A_TREE'),
+    `parsed ${palette.length}: ${palette.map((c) => c.name).join(',')}`);
+
+  /*
+   * ⚠️ DEPTH IS A GRADIENT — one flat tone can never read as depth. That is
+   * `views/room-ballroom.js`'s vestibule post-mortem, which spent two rounds discovering it: a
+   * plane forced to PURE WHITE still read as a flat card, and what finally worked was a stepped
+   * value ramp. So the sky and the ground are SUBDIVIDED enough to carry a real ramp rather than
+   * four corner colours stretched over forty-odd metres.
+   */
+  t('W41g · the sky and the ground are subdivided enough to carry a real ramp',
+    /P\.wallZ\(Z0, Z1, -8, 40, OUT\(SKY_D\), skyShade, 30, 26\);/.test(nightSrc)
+      && /lawnShade, 26, 30\);/.test(nightSrc));
+  t('W41g2 control · and the sky ramp is a real function of height, not one flat fill',
+    /const k = smoothstep\(-4, 34, y\);/.test(nightSrc)
+      && /mix3\(SKY_HORIZON\[c\], SKY_ZENITH\[c\], k\)/.test(nightSrc)
+      && lin41(palette.find((c) => c.name === 'SKY_HORIZON').v)
+        > lin41(palette.find((c) => c.name === 'SKY_ZENITH').v) * 2);
+
+  /*
+   * 🚨 W41h — THE PREMISE CHECK, and the reason it is a gate rather than a comment: the whole
+   * argument for this file existing is that the party path has no exterior module. If that ever
+   * stops being true, `ballroom-night.js`'s header is stale and the two systems would be drawing
+   * the same outside twice.
+   */
+  const gameSrc4 = await readFile(new URL('../src/views/game.js', import.meta.url), 'utf8');
+  const bedSrc4 = await readFile(new URL('../src/game/follow-bed.js', import.meta.url), 'utf8');
+  const pfSrc4 = await readFile(new URL('../src/views/party-follow.js', import.meta.url), 'utf8');
+  t('W41h · the party path still has no exterior module — which is why this file exists',
+    !/buildExterior/.test(bedSrc4) && !/buildExterior/.test(pfSrc4)
+      && !/from '\.\.\/views\/game\.js'/.test(bedSrc4));
+  t('W41h control · and views/game.js really is the one place that does import it',
+    /import \{ buildExterior \} from '\.\.\/game\/exterior\.js';/.test(gameSrc4));
+
+  /*
+   * 🚨 W41i — THE TIME-OF-DAY BOUNDARY, AND IT IS THE RISKIEST LINE IN THE WHOLE CHANGE.
+   *
+   * `buildTestRoom` has exactly TWO callers and they are two different times of day: this party
+   * NIGHT (`game/follow-bed.js`) and the playable run (`views/game.js`), which mounts
+   * `game/exterior.js` and lights the outside with a LATE AFTERNOON SUN. A night backdrop
+   * defaulted ON would hang a moonlit sky and lit windows outside a room the other view is busy
+   * lighting with daylight — and would open its glazing onto both at once.
+   *
+   * So it is OPT-IN: the party bed asks, the daylight view says nothing and is bit-identical to
+   * before. This gate is what keeps that true, because the failure would be invisible in every
+   * party screenshot and only show up in the OTHER view.
+   */
+  t('W41i · the night exterior is opt-in, and only the party night opts in',
+    /nightOutside: true/.test(bedSrc4)
+      && /const BALLNIGHT = o\.nightOutside === true &&/.test(roomSrc4)
+      && !/nightOutside/.test(gameSrc4));
+  t('W41i2 control · the daylight view still builds its room the way it always did',
+    /buildTestRoom\(engine, \{ wallField, panels: _panels \}\)/.test(gameSrc4)
+      && /buildExterior\(\{/.test(gameSrc4),
+    'views/game.js passes no night flag and still mounts the daylight yard');
+  /*
+   * ⚠️ …and the URL flag can only ever take it AWAY. There is deliberately no `?ballnight=1`
+   * that forces a moonlit sky into the daylight view.
+   */
+  t('W41i3 control · ?ballnight can only ablate, never force it on somewhere it is off',
+    /get\('ballnight'\) : null\) !== '0'/.test(roomSrc4)
+      && !/get\('ballnight'\)\s*===\s*'1'/.test(roomSrc4));
+}
+
+/* =============================================================================================
+ * W42 · 🚪 THE BALLROOM NEVER GETS A SMASH-DOOR, AND ITS OWN OPENINGS ARE ARCHES.
+ *
+ * John, from a generated night: *"when we use the generator to make new procedural room layouts
+ * the ballroom should never have this dig door"* and *"I also want the whole arch to be the
+ * doorway. the dig wasn't on that wall anyway."*
+ * ============================================================================================= */
+{
+  const gen = await readFile(new URL('../src/world/genplan.js', import.meta.url), 'utf8');
+  const roomSrc4 = await readFile(new URL('../src/game/room.js', import.meta.url), 'utf8');
+
+  t('W42 · a wall touching the ballroom is never given a shut door',
+    /const ballroomSide = typeOf\(a\) === 'ballroom' \|\| typeOf\(b\) === 'ballroom';/.test(gen)
+      && /if \(SHUT_DOORS && !ballroomSide\) pushDoor\(a, b, run\); else pushPortal/.test(gen));
+  /*
+   * ⚠️ **IT DEGRADES, IT DOES NOT DELETE.** Dropping the row would remove a ROUTE, and this file's
+   * own history records a connector that became "the ONLY way ANYONE enters the spur" the day
+   * another was removed. An open portal carries every route the shut one did, so no seed can be
+   * made unreachable by the rule.
+   */
+  t('W42a control · the rule degrades the door to an OPEN portal rather than removing the route',
+    !/if \(ballroomSide\) continue;/.test(gen)
+      && !/if \(ballroomSide\) return;/.test(gen));
+
+  t('W42b · the ballroom\'s own openings are cut at the showcase\'s arch size',
+    /const BALL_DOOR_W = 5\.20;/.test(gen) && /const BALL_DOOR_H = 4\.70;/.test(gen)
+      && /const w = grand \? BALL_DOOR_W : Math\.min\(DOORWAY_W, run\.clear\)/.test(gen)
+      && /h: grand \? BALL_DOOR_H : DOORWAY_H,/.test(gen));
+  /*
+   * ⚠️ `canDoor` only guarantees `L_DOOR` 2.48 m of clear run. A 5.2 m opening needs its own
+   * jambs, so a run that cannot hold one must fall back rather than cut a hole wider than its wall.
+   */
+  t('W42b2 control · a run too short for a grand opening falls back to a normal doorway',
+    /&& run\.clear >= BALL_DOOR_W \+ 2 \* 0\.20;/.test(gen));
+  /*
+   * ⚠️ 4.70, not 5.20: all four of this room's walls cap at SPLIT 4.80 and the upper wall run
+   * starts there. Both are far above `PASS_H.hunter` 2.40, so nothing about passage changes.
+   */
+  t('W42b3 control · the grand opening stays under the storey cap the walls are built to',
+    /const BALL_DOOR_H = 4\.70;/.test(gen) && 4.70 < 4.80);
+
+  /*
+   * With a real 5.2 m arch, a decorative one of the same width drawn concentric with it is a
+   * second archivolt in the same millimetre — z-fighting, not architecture. The blind arch stays
+   * for AUTHORED plans, where the opening is still a 1.90 m door.
+   */
+  t('W42c · the decorative blind arch stands down when the doorway is already grand',
+    /if \(host\.w >= W - 0\.01\) return null;/.test(roomSrc4));
+}
+
+/* =============================================================================================
+ * W41-W46 · 📺 THE RUN BEAT FITS ON A TELEVISION, AND THE BADGE MOVES WITHOUT THRASHING.
+ *
+ * The reaction strip was falling off the bottom of the screen. Measured on the real skin: at
+ * 1920x1080, 24 px of every 74 px chip sat below the screen edge and the player's NAME was not
+ * on the television at all; at 1280x720 it was 39 px and no names. Nothing LOOKED broken —
+ * `.night.on-run .night-main` hides its overflow, so the bottom of the feature was simply
+ * absent. That is fatal to this feature specifically, whose entire premise (`react.js` decision
+ * 1) is that a reaction is ATTRIBUTED.
+ *
+ * ⚠️ **THESE ARE STRUCTURAL GATES, AND THE MEASURED ONE LIVES ELSEWHERE ON PURPOSE.** CI runs
+ * `gates:party` with no `npm install` (see `.github/workflows/gates.yml`), so nothing in this
+ * chain may drive a browser. `harness/react-fit.mjs` is the instrument that actually measures
+ * the layout at five resolutions; it needs playwright and is deliberately out of the chain, the
+ * same arrangement `harness/cam-clip-drive.mjs` documents. What is asserted HERE is the shape
+ * that makes the layout self-correcting, so a later edit cannot quietly delete it.
+ * ============================================================================================= */
+{
+  const skin = await readFile(new URL('../src/party/night-skin.js', import.meta.url), 'utf8');
+  const rule = (sel) => skin.match(new RegExp(`${sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\{[\\s\\S]*?\\}\\r?\\n`))?.[0] ?? '';
+  const stage = rule('.night.on-run .run-stage');
+  const frame = rule('.night.on-run .run-frame');
+  // Anchored on the four-space indent: ".run-frame {" also matches INSIDE the longer
+  // ".night.on-run .run-frame {" rule above it, which is a 45-character false positive.
+  const base = skin.match(/\n {4}\.run-frame \{[\s\S]*?\}\r?\n/)?.[0] ?? '';
+
+  t('W44-pre · the run-beat layout rules were actually extracted · an empty match fails HERE',
+    stage.length > 20 && frame.length > 20 && base.length > 100,
+    `stage ${stage.length} · frame ${frame.length} · base ${base.length} chars`);
+
+  /*
+   * The frame keeps TV_FRAME_PCT as a CEILING and is allowed to fall below it. `min-height:0` is
+   * the load-bearing half: a flex item defaults to `min-height:auto`, which refuses to shrink
+   * below its content — and that refusal is exactly what pushed the strip off the screen.
+   */
+  t('W44 · the picture takes what is LEFT OVER, so the strip is laid out first',
+    /flex:\s*1 1 auto/.test(stage) && /min-height:\s*0/.test(stage)
+      && /flex:\s*0 1 auto/.test(frame) && /min-height:\s*0/.test(frame),
+    'run-stage 1 1 auto · run-frame 0 1 auto · both min-height:0');
+  t('W44b · and TV_FRAME_PCT is still the ceiling, at 16:9 · the picture never GROWS to fill',
+    /height:min\(\$\{TV_FRAME_PCT\}vh/.test(base) && /aspect-ratio:16\/9/.test(base)
+      && !/flex:\s*0 0/.test(frame),
+    'height stays a max, shrink stays enabled');
+
+  /*
+   * THE STRIP IS PATCHED PER PLAYER. It used to assign `innerHTML` for the whole row, which
+   * destroys and recreates all six chips whenever any one of them changes — several times a
+   * second during a run — restarting every entrance animation and making the strip judder under
+   * the picture. Keyed on the player and ordered by SEAT so nobody's chip moves when someone
+   * else reacts; a moved node restarts its animation just as a rebuilt one does.
+   */
+  const host = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
+  // `\r?\n`, for the same reason W17a-pre carries it: a Windows checkout writes `}\r\n`.
+  const painter = host.match(/function paintReactStrip\(\)[\s\S]*?\r?\n {2}\}\r?\n/)?.[0] ?? '';
+  t('W45-pre · the strip painter was extracted', painter.length > 400, `${painter.length} chars`);
+  t('W45 · one arrival touches one chip · the row is never rebuilt, and it is ordered by seat',
+    !/mount\.innerHTML\s*=/.test(painter)
+      && /dataset\.rk === e\.from/.test(painter)
+      && /sort\(\(a, b\) => seatOf\(a\.from\) - seatOf\(b\.from\)\)/.test(painter)
+      && /el\.remove\(\)/.test(painter));
+
+  /*
+   * MOTION. Every loop rests at both ends and none alternate, so a chip replaced mid-flight
+   * lands where it already was instead of snapping to the bottom of its cycle. Transform only —
+   * the main thread on this beat is also feeding a WebGL mansion.
+   */
+  const frames = [...skin.matchAll(/@keyframes (badge-[a-z]+)\s*\{([^}]*\}[^}]*)\}/g)];
+  t('W46-pre · the badge keyframes were extracted', frames.length === 4,
+    frames.map((f) => f[1]).join(' · '));
+  t('W46 · every badge loop rests at 0% AND 100%, animates only transform, and never alternates',
+    frames.length === 4
+      && frames.every((f) => /0%,\s*100%\s*\{\s*transform:\s*none;/.test(f[2]))
+      && frames.every((f) => !/[^-]\b(?:opacity|width|height|stroke-width|r|cx|cy|d)\s*:/.test(f[2]))
+      && !/animation:[^;]*alternate/.test(skin),
+    'transform-only · rest at both ends · no alternate');
+  t('W46b · the night screen finally has a reduced-motion block, and it covers the badge',
+    /@media \(prefers-reduced-motion: reduce\)/.test(skin)
+      && /\.bot-badge[\s\S]{0,160}animation: none !important/.test(skin),
+    'badge · run-face · rec dot · react chip');
 }
 
 console.log(`\nparty-warm: ${pass} passed, ${fail} failed`);

@@ -1,0 +1,92 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; }
+    a { color: #f5a14a; } a:hover { color: #ffbe7d; }
+  </style>
+</helmet>
+
+<!-- =========== D2 - THE TAG THAT EATS THE ROOM ===========
+     chest-nameplate.js scales the sprite by clamp(d / TAG_REF_DIST, 1, TAG_FAR_K). The LOW end
+     clamps at 1, so inside 4 metres the plate keeps its full 0.92m world size under
+     sizeAttenuation and grows as 1/d with no ceiling - about 6.7x at 0.6m. Walking up to
+     someone in the Debrief covers the person you walked up to.
+     The fix is one number: let distK go BELOW 1 near the camera, so the plate holds a roughly
+     constant SCREEN size instead of a constant world size. Same far behaviour, same legibility
+     floor, no blow-up. Shown here at three distances. -->
+
+<div style="width: 1600px; height: 900px; position: relative; background: #0c0a08; color: #f3ece3; overflow: hidden; padding: 34px 40px; box-sizing: border-box;">
+  <div style="font-size: 12px; letter-spacing: .26em; text-transform: uppercase; font-weight: 700; color: #f5a14a;">Name tag - near field</div>
+  <h1 style="margin: 8px 0 4px; font-size: 40px; font-weight: 800;">The plate must not grow without a ceiling</h1>
+  <p style="margin: 0 0 26px; font-size: 19px; color: #a89884; max-width: 1080px;">One clamp, two rows. Same distances, same font, same plate. The only change is that the near end of the distance curve is allowed to shrink the sprite.</p>
+
+  <sc-for list="{{rows}}" as="r" hint-placeholder-count="2">
+    <div style="margin-bottom: 22px; padding: 20px 24px; border-radius: 14px; background: {{r.bg}}; border: 1px solid {{r.edge}};">
+      <div style="display: flex; align-items: baseline; gap: 14px; margin-bottom: 16px;">
+        <span style="font-size: 12px; letter-spacing: .26em; text-transform: uppercase; font-weight: 800; color: {{r.tint}};">{{r.label}}</span>
+        <span style="font-size: 15px; color: #8a7d70;">{{r.rule}}</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 46px; height: 250px;">
+        <sc-for list="{{r.shots}}" as="s">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
+            <div style="height: 190px; display: flex; align-items: center;">
+              <div style="display: flex; align-items: stretch; height: {{s.h}}px; border-radius: 3px; overflow: hidden; box-shadow: 0 0 0 2px #000;">
+                <div style="width: {{s.chrome}}px; background: #B9BEC2;"></div>
+                <div style="display: flex; align-items: center; padding: 0 {{s.pad}}px; background: #EDEFF0; color: #054E84; font-weight: 900; font-size: {{s.font}}px; letter-spacing: .02em; line-height: 1;">JELLIE</div>
+              </div>
+            </div>
+            <div style="font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: #8a7d70;">{{s.d}}</div>
+          </div>
+        </sc-for>
+      </div>
+      <p style="margin: 14px 0 0; font-size: 16px; color: {{r.tint}};">{{r.note}}</p>
+    </div>
+  </sc-for>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() {
+    const BASE = 34;
+    const shot = (d, k) => ({
+      d: d + ' m',
+      h: Math.round(BASE * k),
+      font: Math.round(BASE * k * 0.62),
+      pad: Math.max(3, Math.round(BASE * k * 0.22)),
+      chrome: Math.max(2, Math.round(BASE * k * 0.16)),
+    });
+    return {
+      rows: [
+        {
+          label: 'Today',
+          rule: 'clamp(d / 4, 1, 2) - the low end is pinned at 1',
+          bg: 'rgba(255,138,122,.06)',
+          edge: 'rgba(255,138,122,.35)',
+          tint: '#ff8a7a',
+          note: 'Inside 4 m the plate keeps its world size and 1/d takes over. At 0.6 m it is about 6.7x - it covers the robot wearing it and everyone behind them.',
+          shots: [shot('4.0', 1), shot('2.0', 2), shot('1.2', 3.3), shot('0.6', 5.4)],
+        },
+        {
+          label: 'Proposed',
+          rule: 'clamp(d / 4, 0.34, 2) - the near end is allowed to shrink',
+          bg: 'rgba(159,242,200,.06)',
+          edge: 'rgba(159,242,200,.35)',
+          tint: '#9ff2c8',
+          note: 'Roughly constant on screen from arms length out to 4 m, then identical far behaviour. Nothing about the far read changes, so the legibility gate still holds.',
+          shots: [shot('4.0', 1), shot('2.0', 1.02), shot('1.2', 1.05), shot('0.6', 1.1)],
+        },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,232 @@
+{
+  "pages": [
+    {
+      "id": "page-1",
+      "name": "Pick a direction"
+    },
+    {
+      "id": "page-2",
+      "name": "The night — Rundown Rail"
+    },
+    {
+      "id": "page-3",
+      "name": "Fixes — Recap + talk overlays"
+    }
+  ],
+  "artboards": [
+    {
+      "file": "DirectionA.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1280,
+      "h": 720,
+      "page": "page-1"
+    },
+    {
+      "file": "DirectionB.dc.html",
+      "x": 1400,
+      "y": 0,
+      "w": 1280,
+      "h": 720,
+      "page": "page-1"
+    },
+    {
+      "file": "DirectionC.dc.html",
+      "x": 2800,
+      "y": 0,
+      "w": 1280,
+      "h": 720,
+      "page": "page-1"
+    },
+    {
+      "file": "Lobby.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1280,
+      "h": 720,
+      "page": "page-2"
+    },
+    {
+      "file": "Casting.dc.html",
+      "x": 1400,
+      "y": 0,
+      "w": 1280,
+      "h": 720,
+      "page": "page-2"
+    },
+    {
+      "file": "Main.dc.html",
+      "x": 2800,
+      "y": 0,
+      "w": 1280,
+      "h": 720,
+      "page": "page-2"
+    },
+    {
+      "file": "Recap.dc.html",
+      "x": 0,
+      "y": 900,
+      "w": 1280,
+      "h": 720,
+      "page": "page-2"
+    },
+    {
+      "file": "Debrief.dc.html",
+      "x": 1400,
+      "y": 900,
+      "w": 1280,
+      "h": 720,
+      "page": "page-2"
+    },
+    {
+      "file": "Reckoning.dc.html",
+      "x": 2800,
+      "y": 900,
+      "w": 1280,
+      "h": 720,
+      "page": "page-2"
+    },
+    {
+      "file": "Vote.dc.html",
+      "x": 0,
+      "y": 1800,
+      "w": 1280,
+      "h": 720,
+      "page": "page-2"
+    },
+    {
+      "file": "Execution.dc.html",
+      "x": 1400,
+      "y": 1800,
+      "w": 1280,
+      "h": 720,
+      "page": "page-2"
+    },
+    {
+      "file": "Verdict.dc.html",
+      "x": 2800,
+      "y": 1800,
+      "w": 1280,
+      "h": 720,
+      "page": "page-2"
+    },
+    {
+      "file": "Reunion.dc.html",
+      "x": 0,
+      "y": 2700,
+      "w": 1280,
+      "h": 720,
+      "page": "page-2"
+    },
+    {
+      "file": "Before.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1280,
+      "h": 720,
+      "page": "page-3"
+    },
+    {
+      "file": "RecapA.dc.html",
+      "x": 1400,
+      "y": 0,
+      "w": 1280,
+      "h": 720,
+      "page": "page-3"
+    },
+    {
+      "file": "RecapB.dc.html",
+      "x": 2800,
+      "y": 0,
+      "w": 1280,
+      "h": 720,
+      "page": "page-3"
+    },
+    {
+      "file": "TalkA.dc.html",
+      "x": 0,
+      "y": 900,
+      "w": 1280,
+      "h": 720,
+      "page": "page-3"
+    },
+    {
+      "file": "TalkB.dc.html",
+      "x": 1400,
+      "y": 900,
+      "w": 1280,
+      "h": 720,
+      "page": "page-3"
+    },
+    {
+      "file": "TalkVerdict.dc.html",
+      "x": 2800,
+      "y": 900,
+      "w": 1280,
+      "h": 720,
+      "page": "page-3"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "dir-a",
+      "x": 0,
+      "y": -190,
+      "w": 460,
+      "page": "page-1",
+      "text": "A — CAMERA BUG\nChrome shrinks to a corner bug; the picture is the whole screen.\n\nWhy: the run is the only thing on the TV worth looking at.\nCost: someone walking in cannot tell the beat or the time from the couch. Problem 2 unsolved."
+    },
+    {
+      "id": "dir-b",
+      "x": 1400,
+      "y": -190,
+      "w": 460,
+      "page": "page-1",
+      "text": "B — RUNDOWN RAIL  (recommended)\nThe shooting schedule sits across the top all night. Current beat lit, its bar draining.\n\nWhy: fixes phase literacy and continuity in one move — same rail Lobby to Reunion.\nCost: 22px of picture during the run, and eight chips is real furniture."
+    },
+    {
+      "id": "dir-c",
+      "x": 2800,
+      "y": -190,
+      "w": 460,
+      "page": "page-1",
+      "text": "C — STUDIO CARD\nA built set: amber spine, beat name and clock set huge, picture inset as a plate.\n\nWhy: loudest and most readable across a room. Most obviously a show.\nCost: the picture loses about a third of the frame. Hard to sit through for 90 seconds of chase."
+    },
+    {
+      "id": "night-note",
+      "x": 0,
+      "y": -190,
+      "w": 520,
+      "page": "page-2",
+      "text": "THE NIGHT IN DIRECTION B\nOne rail, one nameplate, one clock, one colour code:\namber = the show · mint = true/alive · salmon = false/dark/gone.\n\nAsymmetry held: the guide map never appears here, and no plate reveals an alignment before the Reunion."
+    },
+    {
+      "id": "fix-before",
+      "x": 0,
+      "y": -230,
+      "w": 470,
+      "page": "page-3",
+      "text": "BEFORE — measured, not guessed\nnode harness/talk-frames.mjs · progress/talk/\n\nThe overlay is pinned to the STAGE (full 1920) while the picture is 1596 wide and centred. So the nameplate, the kicker and the recap strip paint in the black gutters and the picture clips them: \"Recko…\", \"The cir…\", \"CAME BA…\".\n\nRecap separately: one narrow column pinned left. Three facts fill it; the fourth scrolls the beat off screen."
+    },
+    {
+      "id": "fix-recap",
+      "x": 1400,
+      "y": -230,
+      "w": 470,
+      "page": "page-3",
+      "text": "RECAP A — FACT WALL  (recommended)\nSix facts as a 3x2 grid that is SIZED, not stacked. Rows share the frame height, so no fact count can ever push it off the screen.\n\nWhy: the beat exists to hand the room things to argue about in Debrief. Six of them, all readable, no scroll.\nCost: no single hero word.\n\nRECAP B beside it trades five of those facts for one huge SMASHED. Louder, thinner."
+    },
+    {
+      "id": "fix-talk",
+      "x": 0,
+      "y": -230,
+      "w": 470,
+      "page": "page-3",
+      "text": "TALK A — TWO BANDS  (recommended)\nOverlay anchored to the FRAME. A scrimmed strip along the top, one along the bottom, and the middle band belongs to the seated robots. Nominations run left-to-right in the bottom band instead of down the centre.\n\nWhy: one rule holds for every talk beat, including the loud ones — see the Execution board.\nCost: a long list has to stay a row, so the bottom band caps at about five plates.\n\nTALK B (side dock) holds a longer list, but its own cards cross into the chair band. That is what ruled it out."
+    }
+  ],
+  "launch": {
+    "view": "canvas",
+    "page": "page-3"
+  }
+}

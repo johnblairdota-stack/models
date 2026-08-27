@@ -1,0 +1,232 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&display=swap">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    :root{
+      --bg:#0c0a08; --deep:#080604; --panel:#161310; --well:#12100c;
+      --accent:#f5a14a; --accent-rgb:245,161,74;
+      --ink:#f3ece3; --soft:#a89884; --dim:#8a7d70;
+      --live:#9ff2c8; --live-well:#122019;
+      --bad:#ff8a7a; --bad-rgb:255,138,122;
+      --rec:#e8452f;                       /* PROPOSED: the on-air dot. --bad is a text salmon. */
+      --scrim:rgba(8,6,4,.78);             /* PROPOSED: safe-area bed over live picture */
+    }
+    body{width:1280px;height:720px;overflow:hidden;background:var(--bg);color:var(--ink);
+      font-family:'Archivo',ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased;
+      font-variant-numeric:tabular-nums;}
+    a{color:var(--accent);} a:hover{color:#ffc07f;}
+
+    /* THE FRAME ------------------------------------------------------- */
+    .tv{position:relative;width:1280px;height:720px;display:flex;flex-direction:column;
+      background:radial-gradient(900px 520px at 50% -8%,rgba(var(--accent-rgb),.10),transparent 58%),var(--bg);}
+
+    /* TOP BAR — brand, on-air dot, episode, beat, clock ---------------- */
+    .bar{flex:0 0 auto;height:46px;display:flex;align-items:center;justify-content:space-between;
+      padding:0 30px;gap:20px;}
+    .brand{display:flex;align-items:center;gap:10px;}
+    .brand .mark{font-size:15px;font-weight:900;letter-spacing:.22em;color:var(--accent);}
+    .rec{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:800;letter-spacing:.20em;
+      color:var(--ink);}
+    .rec i{width:9px;height:9px;border-radius:50%;background:var(--rec);display:block;
+      box-shadow:0 0 0 3px rgba(232,69,47,.22);}
+    .barR{display:flex;align-items:center;gap:16px;}
+    .ep{font-size:13px;font-weight:700;letter-spacing:.20em;color:var(--dim);}
+    .clock{font-size:34px;font-weight:900;letter-spacing:.01em;line-height:1;color:var(--ink);}
+    .clock.hot{color:var(--accent);}
+
+    /* THE RUNDOWN RAIL — the whole shooting schedule, always on screen -- */
+    .rail{flex:0 0 auto;display:flex;gap:3px;height:50px;padding:0 30px 10px;}
+    .rail .b{flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:6px;
+      padding:0 10px 7px;border-bottom:3px solid rgba(var(--accent-rgb),.16);position:relative;}
+    .rail .b span{font-size:13px;font-weight:800;letter-spacing:.14em;color:#544a40;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .rail .b.done span{color:var(--dim);}
+    .rail .b.done{border-bottom-color:rgba(var(--accent-rgb),.34);}
+    .rail .b.now span{color:var(--accent);}
+    .rail .b.now{border-bottom-color:rgba(var(--accent-rgb),.28);}
+    .rail .b.now::after{content:"";position:absolute;left:0;bottom:-3px;height:3px;
+      background:var(--accent);box-shadow:0 0 12px rgba(var(--accent-rgb),.7);}
+
+    /* Slim variant — over live picture the rail gives the frame its height back */
+    .rail.thin{height:22px;padding:0 30px 6px;}
+    .rail.thin .b{padding-bottom:4px;}
+    .rail.thin .b span{display:none;}
+    .rail.thin .b.now span{display:block;font-size:11px;letter-spacing:.16em;}
+
+    /* STAGE ----------------------------------------------------------- */
+    .stage{flex:1;min-height:0;position:relative;padding:0 30px;}
+    .stage.bleed{padding:0;}
+    .plate{position:absolute;inset:0;overflow:hidden;background:#05070a;}
+    .plate img{width:100%;height:100%;object-fit:cover;display:block;}
+    .plate.dim img{filter:brightness(.30) saturate(.7);}
+    .scrimT{position:absolute;left:0;right:0;top:0;height:120px;
+      background:linear-gradient(180deg,var(--scrim),transparent);}
+    .scrimB{position:absolute;left:0;right:0;bottom:0;height:190px;
+      background:linear-gradient(0deg,var(--scrim) 30%,transparent);}
+
+    /* LOWER THIRD — one nameplate language, Lobby to Reunion ----------- */
+    .lt{position:absolute;left:30px;bottom:22px;display:flex;align-items:center;gap:16px;}
+    .lt .chev{width:52px;height:52px;flex:0 0 auto;}
+    .lt .who{font-size:46px;font-weight:900;line-height:1;letter-spacing:-.01em;}
+    .lt .role{margin-top:7px;display:flex;align-items:center;gap:9px;font-size:13px;font-weight:800;
+      letter-spacing:.20em;color:var(--live);}
+    .lt .role b{color:var(--soft);font-weight:800;}
+    .cam{position:absolute;right:30px;bottom:30px;display:flex;align-items:center;gap:9px;
+      font-size:13px;font-weight:800;letter-spacing:.20em;color:var(--soft);}
+    .cam i{width:8px;height:8px;border-radius:50%;background:var(--rec);}
+
+    /* TYPE RAMP ------------------------------------------------------- */
+    .hero{font-size:132px;font-weight:900;line-height:.88;letter-spacing:-.025em;}
+    .big{font-size:74px;font-weight:900;line-height:.94;letter-spacing:-.015em;}
+    .name{font-size:44px;font-weight:800;line-height:1;}
+    .beat{font-size:30px;font-weight:900;letter-spacing:.10em;text-transform:uppercase;}
+    .body{font-size:20px;font-weight:500;color:var(--soft);line-height:1.35;}
+    .lab{font-size:13px;font-weight:800;letter-spacing:.20em;text-transform:uppercase;color:var(--dim);}
+    .mint{color:var(--live);} .salmon{color:var(--bad);} .amber{color:var(--accent);}
+
+    /* PANELS ---------------------------------------------------------- */
+    .card{background:var(--panel);border:1px solid rgba(var(--accent-rgb),.16);border-radius:10px;}
+    .card.lit{border-color:var(--accent);box-shadow:0 0 0 1px rgba(var(--accent-rgb),.30);}
+
+    /* BOTTOM STRIP ---------------------------------------------------- */
+    .strip{flex:0 0 auto;height:76px;display:flex;flex-direction:column;align-items:center;
+      justify-content:center;gap:5px;padding:0 30px;}
+    .strip .line{font-size:26px;font-weight:800;letter-spacing:-.005em;}
+    .strip .facts{font-size:13px;font-weight:700;letter-spacing:.20em;color:var(--dim);
+      text-transform:uppercase;}
+  </style>
+</helmet>
+<div class="tv">
+  <div class="bar">
+      <div class="brand"><div class="mark">PRIME TIME</div><div class="rec"><i></i>ON AIR</div></div>
+      <div class="barR"><div class="ep">PRE-SHOW &middot; LOBBY</div></div>
+    </div>
+  <div class="rail"><div class="b"><span>CASTING</span></div><div class="b"><span>EXPEDITION</span></div><div class="b"><span>RECAP</span></div><div class="b"><span>DEBRIEF</span></div><div class="b"><span>RECKONING</span></div><div class="b"><span>VOTE</span></div><div class="b"><span>EXECUTION</span></div><div class="b"><span>VERDICT</span></div></div>
+  <div class="stage" style="display:flex;gap:34px;align-items:stretch;">
+    <div style="position:relative;flex:0 0 500px;"><div style="position:absolute;left:50%;top:262px;transform:translate(-50%,-50%);
+      width:352px;height:298px;border:1px solid rgba(var(--accent-rgb),.20);border-radius:50%;"></div>
+    <div style="position:absolute;left:50%;top:262px;transform:translate(-50%,-50%);width:236px;height:198px;
+      border-radius:50%;background:radial-gradient(closest-side,rgba(var(--accent-rgb),.10),transparent);"></div>
+    <div style="position:absolute;left:175px;top:67px;width:110px;
+        display:flex;flex-direction:column;align-items:center;gap:4px;">
+        <svg width="50" height="50" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+          <rect x="9" y="6" width="46" height="48" rx="17" fill="#EDEFF0"/>
+          <rect x="15" y="16" width="34" height="22" rx="11" fill="#2659A0"/>
+          <circle cx="25" cy="27" r="4.2" fill="#7EBDF0"/><circle cx="39" cy="27" r="4.2" fill="#7EBDF0"/>
+          <rect x="6" y="44" width="52" height="8" rx="4" fill="#8FC9BD"/>
+        </svg>
+        <div style="font-size:21px;font-weight:800;line-height:1;white-space:nowrap;">John</div>
+        <div style="font-size:13px;font-weight:800;letter-spacing:.16em;color:var(--live);">SEATED</div>
+      </div><div style="position:absolute;left:299px;top:111px;width:110px;
+        display:flex;flex-direction:column;align-items:center;gap:4px;">
+        <svg width="50" height="50" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+          <rect x="9" y="6" width="46" height="48" rx="17" fill="#EDEFF0"/>
+          <rect x="15" y="16" width="34" height="22" rx="11" fill="#2659A0"/>
+          <circle cx="25" cy="27" r="4.2" fill="#7EBDF0"/><circle cx="39" cy="27" r="4.2" fill="#7EBDF0"/>
+          <rect x="6" y="44" width="52" height="8" rx="4" fill="#8FC9BD"/>
+        </svg>
+        <div style="font-size:21px;font-weight:800;line-height:1;white-space:nowrap;">Ellie</div>
+        <div style="font-size:13px;font-weight:800;letter-spacing:.16em;color:var(--live);">SEATED</div>
+      </div><div style="position:absolute;left:351px;top:216px;width:110px;
+        display:flex;flex-direction:column;align-items:center;gap:4px;">
+        <svg width="50" height="50" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+          <rect x="9" y="6" width="46" height="48" rx="17" fill="#EDEFF0"/>
+          <rect x="15" y="16" width="34" height="22" rx="11" fill="#2659A0"/>
+          <circle cx="25" cy="27" r="4.2" fill="#7EBDF0"/><circle cx="39" cy="27" r="4.2" fill="#7EBDF0"/>
+          <rect x="6" y="44" width="52" height="8" rx="4" fill="#8FC9BD"/>
+        </svg>
+        <div style="font-size:21px;font-weight:800;line-height:1;white-space:nowrap;">Ozz</div>
+        <div style="font-size:13px;font-weight:800;letter-spacing:.16em;color:var(--live);">SEATED</div>
+      </div><div style="position:absolute;left:299px;top:321px;width:110px;
+        display:flex;flex-direction:column;align-items:center;gap:4px;">
+        <svg width="50" height="50" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+          <rect x="9" y="6" width="46" height="48" rx="17" fill="#EDEFF0"/>
+          <rect x="15" y="16" width="34" height="22" rx="11" fill="#2659A0"/>
+          <circle cx="25" cy="27" r="4.2" fill="#7EBDF0"/><circle cx="39" cy="27" r="4.2" fill="#7EBDF0"/>
+          <rect x="6" y="44" width="52" height="8" rx="4" fill="#8FC9BD"/>
+        </svg>
+        <div style="font-size:21px;font-weight:800;line-height:1;white-space:nowrap;">Mara</div>
+        <div style="font-size:13px;font-weight:800;letter-spacing:.16em;color:var(--live);">SEATED</div>
+      </div><div style="position:absolute;left:175px;top:365px;width:110px;
+        display:flex;flex-direction:column;align-items:center;gap:4px;">
+        <svg width="50" height="50" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+          <rect x="9" y="6" width="46" height="48" rx="17" fill="#EDEFF0"/>
+          <rect x="15" y="16" width="34" height="22" rx="11" fill="#2659A0"/>
+          <circle cx="25" cy="27" r="4.2" fill="#7EBDF0"/><circle cx="39" cy="27" r="4.2" fill="#7EBDF0"/>
+          <rect x="6" y="44" width="52" height="8" rx="4" fill="#8FC9BD"/>
+        </svg>
+        <div style="font-size:21px;font-weight:800;line-height:1;white-space:nowrap;">Bex</div>
+        <div style="font-size:13px;font-weight:800;letter-spacing:.16em;color:var(--live);">SEATED</div>
+      </div><div style="position:absolute;left:51px;top:321px;width:110px;
+        display:flex;flex-direction:column;align-items:center;gap:4px;opacity:.38;">
+        <svg width="50" height="50" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+          <rect x="9" y="6" width="46" height="48" rx="17" fill="#4a4c4e"/>
+          <rect x="15" y="16" width="34" height="22" rx="11" fill="#1b2531"/>
+          <circle cx="25" cy="27" r="4.2" fill="#2e3a48"/><circle cx="39" cy="27" r="4.2" fill="#2e3a48"/>
+          <rect x="6" y="44" width="52" height="8" rx="4" fill="#41504c"/>
+        </svg>
+        <div style="font-size:18px;font-weight:800;line-height:1;white-space:nowrap;">Robot 6</div>
+        <div style="font-size:13px;font-weight:800;letter-spacing:.16em;color:var(--dim);">EMPTY</div>
+      </div><div style="position:absolute;left:-1px;top:216px;width:110px;
+        display:flex;flex-direction:column;align-items:center;gap:4px;opacity:.38;">
+        <svg width="50" height="50" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+          <rect x="9" y="6" width="46" height="48" rx="17" fill="#4a4c4e"/>
+          <rect x="15" y="16" width="34" height="22" rx="11" fill="#1b2531"/>
+          <circle cx="25" cy="27" r="4.2" fill="#2e3a48"/><circle cx="39" cy="27" r="4.2" fill="#2e3a48"/>
+          <rect x="6" y="44" width="52" height="8" rx="4" fill="#41504c"/>
+        </svg>
+        <div style="font-size:18px;font-weight:800;line-height:1;white-space:nowrap;">Robot 7</div>
+        <div style="font-size:13px;font-weight:800;letter-spacing:.16em;color:var(--dim);">EMPTY</div>
+      </div><div style="position:absolute;left:51px;top:111px;width:110px;
+        display:flex;flex-direction:column;align-items:center;gap:4px;opacity:.38;">
+        <svg width="50" height="50" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+          <rect x="9" y="6" width="46" height="48" rx="17" fill="#4a4c4e"/>
+          <rect x="15" y="16" width="34" height="22" rx="11" fill="#1b2531"/>
+          <circle cx="25" cy="27" r="4.2" fill="#2e3a48"/><circle cx="39" cy="27" r="4.2" fill="#2e3a48"/>
+          <rect x="6" y="44" width="52" height="8" rx="4" fill="#41504c"/>
+        </svg>
+        <div style="font-size:18px;font-weight:800;line-height:1;white-space:nowrap;">Robot 8</div>
+        <div style="font-size:13px;font-weight:800;letter-spacing:.16em;color:var(--dim);">EMPTY</div>
+      </div></div>
+    <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:20px;min-width:0;">
+      <div>
+        <div class="lab">JOIN ON YOUR PHONE &middot; ROOM CODE</div>
+        <div style="font-size:104px;font-weight:900;letter-spacing:.20em;line-height:1;margin-top:6px;">RB42</div>
+      </div>
+      <div style="display:flex;gap:22px;align-items:center;">
+        <div style="background:#f4efe6;border-radius:8px;padding:11px;flex:0 0 auto;line-height:0;"><svg width="150" height="150" viewBox="0 0 21 21" fill="#0c0a08" shape-rendering="crispEdges" aria-hidden="true">
+          <rect x="8" y="0" width="1" height="1"/><rect x="11" y="0" width="1" height="1"/><rect x="12" y="0" width="1" height="1"/><rect x="13" y="0" width="1" height="1"/><rect x="10" y="1" width="1" height="1"/><rect x="7" y="2" width="1" height="1"/><rect x="9" y="2" width="1" height="1"/><rect x="12" y="2" width="1" height="1"/><rect x="13" y="2" width="1" height="1"/><rect x="8" y="3" width="1" height="1"/><rect x="11" y="3" width="1" height="1"/><rect x="9" y="4" width="1" height="1"/><rect x="11" y="4" width="1" height="1"/><rect x="13" y="4" width="1" height="1"/><rect x="7" y="5" width="1" height="1"/><rect x="8" y="5" width="1" height="1"/><rect x="9" y="5" width="1" height="1"/><rect x="10" y="5" width="1" height="1"/><rect x="11" y="5" width="1" height="1"/><rect x="12" y="5" width="1" height="1"/><rect x="9" y="6" width="1" height="1"/><rect x="12" y="6" width="1" height="1"/><rect x="13" y="6" width="1" height="1"/><rect x="0" y="7" width="1" height="1"/><rect x="1" y="7" width="1" height="1"/><rect x="2" y="7" width="1" height="1"/><rect x="5" y="7" width="1" height="1"/><rect x="6" y="7" width="1" height="1"/><rect x="7" y="7" width="1" height="1"/><rect x="9" y="7" width="1" height="1"/><rect x="10" y="7" width="1" height="1"/><rect x="12" y="7" width="1" height="1"/><rect x="13" y="7" width="1" height="1"/><rect x="14" y="7" width="1" height="1"/><rect x="15" y="7" width="1" height="1"/><rect x="17" y="7" width="1" height="1"/><rect x="19" y="7" width="1" height="1"/><rect x="20" y="7" width="1" height="1"/><rect x="0" y="8" width="1" height="1"/><rect x="1" y="8" width="1" height="1"/><rect x="4" y="8" width="1" height="1"/><rect x="6" y="8" width="1" height="1"/><rect x="11" y="8" width="1" height="1"/><rect x="18" y="8" width="1" height="1"/><rect x="19" y="8" width="1" height="1"/><rect x="20" y="8" width="1" height="1"/><rect x="1" y="9" width="1" height="1"/><rect x="2" y="9" width="1" height="1"/><rect x="4" y="9" width="1" height="1"/><rect x="6" y="9" width="1" height="1"/><rect x="11" y="9" width="1" height="1"/><rect x="14" y="9" width="1" height="1"/><rect x="15" y="9" width="1" height="1"/><rect x="16" y="9" width="1" height="1"/><rect x="17" y="9" width="1" height="1"/><rect x="18" y="9" width="1" height="1"/><rect x="19" y="9" width="1" height="1"/><rect x="20" y="9" width="1" height="1"/><rect x="0" y="10" width="1" height="1"/><rect x="2" y="10" width="1" height="1"/><rect x="3" y="10" width="1" height="1"/><rect x="5" y="10" width="1" height="1"/><rect x="8" y="10" width="1" height="1"/><rect x="9" y="10" width="1" height="1"/><rect x="10" y="10" width="1" height="1"/><rect x="16" y="10" width="1" height="1"/><rect x="17" y="10" width="1" height="1"/><rect x="0" y="11" width="1" height="1"/><rect x="1" y="11" width="1" height="1"/><rect x="2" y="11" width="1" height="1"/><rect x="3" y="11" width="1" height="1"/><rect x="4" y="11" width="1" height="1"/><rect x="7" y="11" width="1" height="1"/><rect x="8" y="11" width="1" height="1"/><rect x="10" y="11" width="1" height="1"/><rect x="12" y="11" width="1" height="1"/><rect x="13" y="11" width="1" height="1"/><rect x="14" y="11" width="1" height="1"/><rect x="15" y="11" width="1" height="1"/><rect x="16" y="11" width="1" height="1"/><rect x="17" y="11" width="1" height="1"/><rect x="19" y="11" width="1" height="1"/><rect x="20" y="11" width="1" height="1"/><rect x="2" y="12" width="1" height="1"/><rect x="3" y="12" width="1" height="1"/><rect x="4" y="12" width="1" height="1"/><rect x="7" y="12" width="1" height="1"/><rect x="9" y="12" width="1" height="1"/><rect x="10" y="12" width="1" height="1"/><rect x="14" y="12" width="1" height="1"/><rect x="16" y="12" width="1" height="1"/><rect x="18" y="12" width="1" height="1"/><rect x="19" y="12" width="1" height="1"/><rect x="0" y="13" width="1" height="1"/><rect x="1" y="13" width="1" height="1"/><rect x="4" y="13" width="1" height="1"/><rect x="5" y="13" width="1" height="1"/><rect x="11" y="13" width="1" height="1"/><rect x="13" y="13" width="1" height="1"/><rect x="15" y="13" width="1" height="1"/><rect x="16" y="13" width="1" height="1"/><rect x="19" y="13" width="1" height="1"/><rect x="10" y="14" width="1" height="1"/><rect x="11" y="14" width="1" height="1"/><rect x="14" y="14" width="1" height="1"/><rect x="15" y="14" width="1" height="1"/><rect x="17" y="14" width="1" height="1"/><rect x="19" y="14" width="1" height="1"/><rect x="20" y="14" width="1" height="1"/><rect x="9" y="15" width="1" height="1"/><rect x="11" y="15" width="1" height="1"/><rect x="12" y="15" width="1" height="1"/><rect x="13" y="15" width="1" height="1"/><rect x="14" y="15" width="1" height="1"/><rect x="15" y="15" width="1" height="1"/><rect x="16" y="15" width="1" height="1"/><rect x="9" y="16" width="1" height="1"/><rect x="13" y="16" width="1" height="1"/><rect x="14" y="16" width="1" height="1"/><rect x="17" y="16" width="1" height="1"/><rect x="19" y="16" width="1" height="1"/><rect x="7" y="17" width="1" height="1"/><rect x="11" y="17" width="1" height="1"/><rect x="12" y="17" width="1" height="1"/><rect x="17" y="17" width="1" height="1"/><rect x="18" y="17" width="1" height="1"/><rect x="7" y="18" width="1" height="1"/><rect x="9" y="18" width="1" height="1"/><rect x="11" y="18" width="1" height="1"/><rect x="14" y="18" width="1" height="1"/><rect x="15" y="18" width="1" height="1"/><rect x="16" y="18" width="1" height="1"/><rect x="17" y="18" width="1" height="1"/><rect x="18" y="18" width="1" height="1"/><rect x="10" y="19" width="1" height="1"/><rect x="12" y="19" width="1" height="1"/><rect x="15" y="19" width="1" height="1"/><rect x="18" y="19" width="1" height="1"/><rect x="19" y="19" width="1" height="1"/><rect x="20" y="19" width="1" height="1"/><rect x="8" y="20" width="1" height="1"/><rect x="9" y="20" width="1" height="1"/><rect x="11" y="20" width="1" height="1"/><rect x="12" y="20" width="1" height="1"/><rect x="13" y="20" width="1" height="1"/><rect x="15" y="20" width="1" height="1"/><rect x="0" y="0" width="7" height="7"/><rect x="1" y="1" width="5" height="5" fill="#f4efe6"/><rect x="2" y="2" width="3" height="3"/><rect x="14" y="0" width="7" height="7"/><rect x="15" y="1" width="5" height="5" fill="#f4efe6"/><rect x="16" y="2" width="3" height="3"/><rect x="0" y="14" width="7" height="7"/><rect x="1" y="15" width="5" height="5" fill="#f4efe6"/><rect x="2" y="16" width="3" height="3"/>
+        </svg></div>
+        <div style="min-width:0;">
+          <div class="body" style="color:var(--ink);font-weight:700;font-size:22px;">Two of you go in.<br>One walks, one talks.</div>
+          <div class="body" style="margin-top:8px;">The rest of us watch. Someone here is lying.</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:18px;">
+        <div style="background:var(--accent);color:#1a1208;font-size:21px;font-weight:900;letter-spacing:.14em;
+          padding:19px 30px;border-radius:7px;">START THE NIGHT</div>
+        <div>
+          <div style="font-size:20px;font-weight:800;">5 phones live</div>
+          <div class="lab" style="margin-top:3px;">EMPTY CHAIRS STAY EMPTY</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="strip">
+    <div class="facts" style="letter-spacing:.20em;">WARMING THE MANSION &middot; 84%</div>
+    <div style="width:520px;height:5px;border-radius:3px;background:rgba(var(--accent-rgb),.18);overflow:hidden;">
+      <div style="width:84%;height:100%;background:var(--accent);"></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

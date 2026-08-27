@@ -1,7 +1,8 @@
 import { estate } from './_studio.js';
 import { buildFollowBed } from '../game/follow-bed.js';
 import {
-  CAM_LABEL, FOLLOW_CHROME_CSS, cleanThrottle, cueViolations, followViolations, warmViolations,
+  CAM_LABEL, FOLLOW_CHROME_CSS, cleanCampose, cleanThrottle, cueViolations, followViolations,
+  warmViolations,
 } from '../party/follow.js';
 import { DEFAULT_LOOK, cleanLook, robotFaceSvg } from '../party/look.js';
 import { pickPlanSeed } from '../party/mansion.js';
@@ -121,6 +122,7 @@ export default async function partyFollow({ params }) {
     accent: parseInt(look.accent.slice(1), 16),
     still: params.get('still') === '1',
     pinShot: params.get('shot') || null,
+    campose: cleanCampose(params.get('campose')),
     onStage: report,
   });
 
@@ -209,6 +211,17 @@ export default async function partyFollow({ params }) {
      * `innerHTML` and the slot's `src` for the word "hunter", and it must keep coming back clean.
      * There is still nothing here to render and nothing here to see.
      */
+    /* 🟢 The link streams in flight, for jellie-play. A count and how many glyphs are lit —
+     * there is nothing here about WHO is paired that the television is not already showing, and
+     * nothing at all about what was said. */
+    stream: () => bed.streamReport?.() ?? [],
+    /*
+     * 🎥 The lens, for `harness/cam-clip-drive.mjs`. How far it is from the runner, which way the
+     * STICK's frame points, and how many times the shot has had to be corrected — the three
+     * numbers John's *"the camera pushes into the players robot and the direction of the movement
+     * is affected"* is made of. Nothing here is a secret: it is the shot the room is watching.
+     */
+    cam: () => bed.camReport?.() ?? null,
     hunter: () => bed.hunterTelemetry(),
     storeyOfCamera: () => bed.room.spaceAt(engine.camera.position)?.storey ?? null,
   };
@@ -248,7 +261,7 @@ function buildChrome({ name, look, warm }) {
     <div class="bar t"></div><div class="bar b"></div>
     <div class="rec"><span class="dot"></span><span>${esc(CAM_LABEL)}</span></div>
     <div class="third">
-      <div class="face">${robotFaceSvg(look.shell, look.accent, { size: 64 })}</div>
+      <div class="face">${robotFaceSvg(look.shell, look.accent, { size: 64, treatment: 'chip' })}</div>
       <div>
         <div class="who">${esc(name)}</div>
         <div class="sub">live · expedition</div>

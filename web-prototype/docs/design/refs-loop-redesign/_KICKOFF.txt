@@ -1,0 +1,5 @@
+Read and follow docs/design/PROMPT-claude-loop-redesign.md. Study every PNG in docs/design/refs-loop-redesign/ (especially 15-tv-recap-live.png, 16-phone-recap-john.png, 17-phone-recap-ellie.png) as the BEFORE.
+
+First action — run this slash command now:
+
+/design a few options for the Prime Time TV host reality-show chrome system (Lobby, Casting, Expedition lower-thirds, Recap, Debrief+timer, Reckoning, Vote, Execution, Verdict, Reunion). 16:9, 10-foot UI. Match STYLE_CONTRACT robot palette; Jackbox phone / reality-TV host feel. Do not implement code until I pick an artboard.

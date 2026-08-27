@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; background: #0c0a08; color: #f3ece3; }
+    a { color: #f5a14a; } a:hover { color: #ffbe78; }
+    svg { display: block; }
+  </style>
+</helmet>
+<div style="padding: 38px 42px; display: flex; flex-direction: column; gap: 24px;">
+  <div><p style="font-size: 11px; letter-spacing: 0.26em; text-transform: uppercase; color: #8a7d70; margin: 0;">Plan · build order</p><h1 style="font-size: 29px; letter-spacing: -0.01em; font-weight: 650; color: #f3ece3; margin: 6px 0 0;">Four steps, in this order</h1><p style="font-size: 15px; line-height: 1.5; color: #a89884; margin: 10px 0 0; max-width: 66ch; text-wrap: pretty;">The first two are not about symbols at all — they are the reasons the symbols would not land well today. Each step is separately shippable and each one leaves the game better than it found it.</p></div>
+
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <div style="background: #161310; border: 1px solid rgba(245,161,74,0.14); border-radius: 10px; padding: 18px 20px; display: flex; gap: 20px; align-items: flex-start;">
+      <span style="font-size: 26px; font-weight: 650; color: #f5a14a; line-height: 1; width: 26px; flex-shrink: 0;">1</span>
+      <div style="display: flex; flex-direction: column; gap: 6px; flex-grow: 1;">
+        <span style="font-size: 17px; font-weight: 650; color: #f3ece3;">Give the strip its space back</span>
+        <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #a89884; text-wrap: pretty;">Option B on the first board — the picture takes what is left after the strip. Nothing else works until the strip is on the television.</p>
+        <p style="margin: 2px 0 0; font-size: 12.5px; line-height: 1.45; color: #8a7d70;"><strong style="color: #9ff2c8; font-weight: 600;">Locked by:</strong> A gate that measures the strip against the screen edge at 1080p and 720p, so this cannot silently come back.</p>
+      </div>
+    </div><div style="background: #161310; border: 1px solid rgba(245,161,74,0.14); border-radius: 10px; padding: 18px 20px; display: flex; gap: 20px; align-items: flex-start;">
+      <span style="font-size: 26px; font-weight: 650; color: #f5a14a; line-height: 1; width: 26px; flex-shrink: 0;">2</span>
+      <div style="display: flex; flex-direction: column; gap: 6px; flex-grow: 1;">
+        <span style="font-size: 17px; font-weight: 650; color: #f3ece3;">Stop rebuilding the whole strip</span>
+        <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #a89884; text-wrap: pretty;">Add and remove one face at a time. Fixes the judder that ships today and is the precondition for any motion.</p>
+        <p style="margin: 2px 0 0; font-size: 12.5px; line-height: 1.45; color: #8a7d70;"><strong style="color: #9ff2c8; font-weight: 600;">Locked by:</strong> A gate that asserts one arrival touches one chip, not six.</p>
+      </div>
+    </div><div style="background: #161310; border: 1px solid rgba(245,161,74,0.14); border-radius: 10px; padding: 18px 20px; display: flex; gap: 20px; align-items: flex-start;">
+      <span style="font-size: 26px; font-weight: 650; color: #f5a14a; line-height: 1; width: 26px; flex-shrink: 0;">3</span>
+      <div style="display: flex; flex-direction: column; gap: 6px; flex-grow: 1;">
+        <span style="font-size: 17px; font-weight: 650; color: #f3ece3;">Draw the badge</span>
+        <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #a89884; text-wrap: pretty;">Four tiles, four glyphs, fixed colours, inside the existing 100×100 box — the box cannot be widened without breaking the eight-faces-at-once rule.</p>
+        <p style="margin: 2px 0 0; font-size: 12.5px; line-height: 1.45; color: #8a7d70;"><strong style="color: #9ff2c8; font-weight: 600;">Locked by:</strong> Four different pictures, no element ids, and the badge is absent on idle.</p>
+      </div>
+    </div><div style="background: #161310; border: 1px solid rgba(245,161,74,0.14); border-radius: 10px; padding: 18px 20px; display: flex; gap: 20px; align-items: flex-start;">
+      <span style="font-size: 26px; font-weight: 650; color: #f5a14a; line-height: 1; width: 26px; flex-shrink: 0;">4</span>
+      <div style="display: flex; flex-direction: column; gap: 6px; flex-grow: 1;">
+        <span style="font-size: 17px; font-weight: 650; color: #f3ece3;">Add the motion</span>
+        <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #a89884; text-wrap: pretty;">One short loop each, plus the reduced-motion switch.</p>
+        <p style="margin: 2px 0 0; font-size: 12.5px; line-height: 1.45; color: #8a7d70;"><strong style="color: #9ff2c8; font-weight: 600;">Locked by:</strong> A gate that asserts every loop returns to rest, and that the badge still reads with motion off.</p>
+      </div>
+    </div>
+  </div>
+
+  <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #a89884; text-wrap: pretty; max-width: 104ch;">Steps 1 and 2 are fixes to things already shipping and I would do them whatever you decide about symbols. Steps 3 and 4 are your partner&#39;s idea, in the robot&#39;s own vocabulary.</p>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

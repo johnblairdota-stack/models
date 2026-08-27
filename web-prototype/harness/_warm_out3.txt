@@ -1,0 +1,229 @@
+﻿
+party-warm ΓÇö the lobby-warm night
+  ok   W1 ┬╖ the warm url is pure, and the room code normalises the same way the run slot does ┬╖ http://localhost:5178/?view=party.follow&warm=1&seed=3&room=q7kd
+  ok   W1b ┬╖ it names the follow view, and carries the seed and the warm flag
+  ok   W1c ┬╖ it carries NO runner, name or look ΓÇö those are what change during a night
+  ok   W1d ┬╖ a missing or junk seed is 0, never absent ΓÇö an absent seed would move the url later
+  ok   W1e ┬╖ the origin is the page's own ΓÇö the night can never be pointed off-site
+  ok   W1f ┬╖ and the warm slot satisfies its own closed schema ┬╖ clean
+  ok   W2 ┬╖ `warm` is an allowed follow key, so the shared door does not reject the night slot
+  ok   W2b ┬╖ but the RUN slot never emits it ΓÇö F2c still means what it says
+  ok   W2c ┬╖ a run param on a warm url is a violation ΓÇö the night slot is the STRICTER of the two
+  ok   W2d ┬╖ and the warm key list is a strict subset of the follow key list
+  ok   W3 ┬╖ a real intros cue has no violations ┬╖ clean
+  ok   W3 ┬╖ a real run cue has no violations ┬╖ clean
+  ok   W3 ┬╖ a real move cue has no violations ┬╖ clean
+  ok   W3 ┬╖ a real shot cue has no violations ┬╖ clean
+  ok   W3 ┬╖ a real idle cue has no violations ┬╖ clean
+  ok   W3a ┬╖ every kind the channel declares has a real allow-list and a passing example ┬╖ intros,run,move,shot,idle
+  ok   W3 control L1 flyover on a run cue ┬╖ must be a violation ┬╖ cue.run.flyover
+  ok   W3 control L2 marks on an intros cue ┬╖ must be a violation ┬╖ cue.intros.marks
+  ok   W3 control L3 hunter on a move cue ┬╖ must be a violation ┬╖ cue.move.hunter
+  ok   W3 control L4 lid on an idle cue ┬╖ must be a violation ┬╖ cue.idle.lid
+  ok   W3 control L5 role smuggled into the cast ┬╖ must be a violation ┬╖ cue.intros.cast[0].role
+  ok   W3 control L6 alignment smuggled into the cast ┬╖ must be a violation ┬╖ cue.intros.cast[0].alignment
+  ok   W3 control L7 an unknown kind entirely ┬╖ must be a violation ┬╖ cue.kind=godview
+  ok   W3b ┬╖ all seven controls red ΓÇö the cue gate can still see a leak ┬╖ 7/7
+  ok   W3c ┬╖ an unknown key is a violation too ΓÇö deny by default on every kind
+  ok   W3d ┬╖ a shot the operator does not have is refused, not silently ignored
+  ok   W3e ┬╖ `role` is refused on every cue kind
+  ok   W3e ┬╖ `alignment` is refused on every cue kind
+  ok   W3e ┬╖ `cover` is refused on every cue kind
+  ok   W3e ┬╖ `claim` is refused on every cue kind
+  ok   W3e ┬╖ `castSeed` is refused on every cue kind
+  ok   W3e ┬╖ `you` is refused on every cue kind
+  ok   W3e ┬╖ `teammates` is refused on every cue kind
+  ok   W3e ┬╖ `flyover` is refused on every cue kind
+  ok   W3e ┬╖ `hunter` is refused on every cue kind
+  ok   W3e ┬╖ `deal` is refused on every cue kind
+  ok   W3e ┬╖ `marks` is refused on every cue kind
+  ok   W3e ┬╖ `lid` is refused on every cue kind
+  ok   W3e ┬╖ `plan` is refused on every cue kind
+  ok   W3f ┬╖ no cue key is also a forbidden word
+  ok   W3g ┬╖ the intro cast carries nothing the public lobby snapshot does not already carry ┬╖ id,seat,name,shell,accent
+  ok   W4 ┬╖ a real pad message is clean
+  ok   W4b ┬╖ the stick is CLAMPED at the door ΓÇö a phone cannot post a 40 m/s thumb
+  ok   W4c ┬╖ the pad cannot smuggle a position ΓÇö there is no x/z, only a stick
+  ok   W4d ┬╖ a real world report is clean ┬╖ clean
+  ok   W4e ┬╖ a world report cannot carry a role, an alignment or a cover
+  ok   W4f ┬╖ nor can one of its spots
+  ok   W4g ┬╖ a mission phase off the list is refused
+  ok   W4h ┬╖ the forbidden list partitions exactly into spatial words and identity secrets ┬╖ 5 spatial + 8 identity = 13
+  ok   W4i ┬╖ no world key is an identity secret ΓÇö the report is about the house, never a person ┬╖ t,runner,hunter,mission,seq
+  ok   W4j control ┬╖ and the identity half is STILL refused into the renderer, both channels
+  ok   W4k control ┬╖ a spatial word is refused into the renderer and allowed out of it
+  ok   W5 ┬╖ five named stages ┬╖ boot < engine < house < dress < ready
+  ok   W5b ┬╖ the ladder only ever goes up ┬╖ 8 < 22 < 55 < 80 < 100
+  ok   W5c ┬╖ it starts above zero (something IS happening) and ends at exactly 100
+  ok   W5d ┬╖ a stage nobody declared reads 0 rather than throwing on the TV
+  ok   W5e ┬╖ the copy says ready only when it is ready
+  ok   W6 ┬╖ the night asks for six rooms, because below six the mandatory list is SUBSET ┬╖ {"rooms":6,"align":0.35,"gap":2.2,"waste":0.04,"doors":"open","homeCorner":true}
+  ok   W6a ┬╖ and it asks for open doors ΓÇö the first mission is a walk, not a dig test
+  ok   W6b ┬╖ the seed is stringified identically on both sides
+  ok   W6c ┬╖ every world seed 0..23 resolves to a house with a gallery AND a ballroom in it ┬╖ worst case 1/32 candidates
+  ok   W6d control ┬╖ the check really does reject a house without the mission rooms in it ┬╖ 23/24 three-room plans refused ΓÇö this is why PLAN_OPTS.rooms is 6
+  ok   W6d2 ┬╖ and the six-room plans it accepts are accepted on their merits, not by fallback ┬╖ 24/24 clean on the first candidate
+  ok   W6e ┬╖ the pick is deterministic ΓÇö the TV and the phone derive the same house
+  ok   W6f ┬╖ the plan flattens to drawable rects with no zero-area decomposition slivers ┬╖ 6 rooms, 8 halls
+  ok   W6g ┬╖ and it has doors to draw ┬╖ 14 doors
+  ok   W7 ┬╖ evil sees BOTH bodies, exactly, at the same time ┬╖ {"grade":"exact","age":0,"hunter":{"room":"r1.ballroom","at":"30.0,0.0"},"runner":{"room":"r0.gallery","at":"0.0,0.0"}}
+  ok   W7a ┬╖ and is never gated on a camera ΓÇö the ladder is the GOOD team's economy
+  ok   W7b ┬╖ a good read names a room and NOTHING that could be a coordinate ┬╖ {"hunter":{"room":"r1.ballroom"},"grade":"far from","age":0}
+  ok   W7c ┬╖ and it is a relative grade, not a distance ┬╖ far from
+  ok   W7d ┬╖ the grade bands read the way a person would say them
+  ok   W7e ┬╖ a good read is dark until a camera is lit
+  ok   W7f ┬╖ a good read is SPORADIC ΓÇö one in three is dropped outright
+  ok   W7g ┬╖ a good read is STALE, and says how stale
+  ok   W7h ┬╖ and staleness is capped rather than growing without bound
+  ok   W7i control ┬╖ the two alignments are told DIFFERENT things about the same hunter ┬╖ good {room} vs evil {room,at}
+  ok   W7j ┬╖ the copy never implies more precision than the data has ┬╖ Something far from them, in the Ballroom.
+  ok   W7m ┬╖ a room reaches the copy as something a person can say out loud
+  ok   W7n ┬╖ and a corridor stays vague ΓÇö there are nine of them and none has a name
+  ok   W7p ┬╖ every room on the night has a name no other room shares ┬╖ 24 seeds carry a repeated type; none produced a repeated NAME
+  ok   W7q ┬╖ and the second of a pair is called by direction, not by number ┬╖ North Study / South Study
+  ok   W7r ┬╖ the guide's map and the phone's feed speak the same word ┬╖ the South Study
+  ok   W7s ┬╖ and a passage is still a passage, labels or not
+  ok   W7o ┬╖ no intel line anywhere prints a raw space id ┬╖ Hunter in the Ballroom ┬╖ Runner in the Gallery
+  ok   W7k ┬╖ every intel field has a `self` row in the entitlement matrix ┬╖ 6 rows
+  ok   W7l ┬╖ and every one of them is `self` ΓÇö never `phones`, which would hand it to the room
+  ok   W8 ┬╖ the map draws the house ┬╖ 9143 chars
+  ok   W8b ┬╖ it rings the objective so the guide can call it
+  ok   W8c ┬╖ a blind guide gets a floor plan, not an invented mark
+  ok   W8d ┬╖ and a sighted one gets the mark that arrived
+  ok   W8e ┬╖ it names rooms ΓÇö which is the guide's job and never the TV's
+  ok   W8h ┬╖ no two rooms on the map carry the same printed name ┬╖ Ballroom / Gallery / South Study / North Study / Chapel
+  ok   W8i ┬╖ and the pair is told apart by direction, so the guide can say which ┬╖ South Study / North Study
+  ok   W8f ┬╖ the map CSS holds no hex of its own ┬╖ no literals
+  ok   W8g ┬╖ every variable it reaches for is a palette name ┬╖ 9 tokens
+  ok   W9 ┬╖ there are more colours than there were ┬╖ 12 shells, 12 accents
+  ok   W9b ┬╖ and every colour that shipped before is still valid, at its original index
+  ok   W9c ┬╖ so a saved look still cleans
+  ok   W9d ┬╖ no shell is duplicated and no accent is duplicated
+  ok   W9e ┬╖ every entry is a full 6-digit hex ΓÇö the swatch CSS interpolates it raw
+  ok   W10 ┬╖ `warm` has a key list ┬╖ t,pct,stage
+  ok   W10b ┬╖ and a real warm message passes the public side-channel schema
+  ok   W10c control ┬╖ an extra key on it is still a violation
+  ok   W10d ┬╖ the warm message carries no secret ΓÇö it is a percentage and a word
+  ok   W11 ┬╖ a two- and three-phone table has a composition at all ┬╖ 2:{"informed":1,"contestant":0,"outsider":0,"minion":0,"producer":1,"cameras":1}
+  ok   W11a ┬╖ the 2-player bag fills exactly 2 seats ┬╖ 2
+  ok   W11b ┬╖ and puts exactly one Production seat at the table
+  ok   W11a ┬╖ the 3-player bag fills exactly 3 seats ┬╖ 3
+  ok   W11b ┬╖ and puts exactly one Production seat at the table
+  ok   W11c ┬╖ at 2 players the deal spreads across the bag rather than stamping one card ┬╖ 7 distinct roles, commonest 50% ΓÇö producer,fanFavourite,cameraOp,continuity,stuntDouble,editor,focusPuller
+  ok   W11d control ┬╖ and every 2-player deal still has exactly one evil
+  ok   W11c ┬╖ at 3 players the deal spreads across the bag rather than stamping one card ┬╖ 7 distinct roles, commonest 33% ΓÇö fanFavourite,producer,focusPuller,continuity,cameraOp,editor,stuntDouble
+  ok   W11d control ┬╖ and every 3-player deal still has exactly one evil
+  ok   W11c ┬╖ at 4 players the deal spreads across the bag rather than stamping one card ┬╖ 8 distinct roles, commonest 25% ΓÇö cameraOp,producer,stuntDouble,contestant,editor,fanFavourite,focusPuller,continuity
+  ok   W11d control ┬╖ and every 4-player deal still has exactly one evil
+  ok   W11e ┬╖ the seated ids are what the deal is keyed to, so seat 0 is not always the same card ┬╖ producer,cameraOp,producer,fanFavourite
+  ok   W11f ┬╖ the bible's own rows are unchanged
+  ok   W12 ┬╖ the welcome carries the world seed, so the FIRST paint can build the right house ┬╖ welcome.worldSeed=7
+  ok   W12a ┬╖ and at the very first message ΓÇö before any state frame ΓÇö the seed is already right ┬╖ first message welcome ┬╖ frame null ┬╖ seed 7
+  ok   W12b ┬╖ so the slot the TV mounts is seeded with the room's real world, not a default ┬╖ http://localhost:5178/?view=party.follow&warm=1&seed=7&room=warm
+  ok   W12c ┬╖ the phone agrees, from the frame as well as the welcome
+  ok   W12d ┬╖ THE TV'S HOUSE AND THE GUIDE'S MAP ARE THE SAME HOUSE ┬╖ tv plan 7 ┬╖ phone plan 7
+  ok   W12e control ┬╖ a defaulted seed really would have been a different house ┬╖ default plan 0 vs real 7
+  ok   W12f ┬╖ and a socket that knows nothing yet says so, rather than guessing 0
+  ok   W13 ┬╖ a generated room id maps onto the camera roster
+  ok   W13a ┬╖ a passage is honestly uncovered ΓÇö there is no camera in a corridor
+  ok   W13b ┬╖ and every mapped name is one the roster can actually answer about ┬╖ ballroom,gallery,study,chapel,hall,cellar
+  ok   W13c control ┬╖ the raw id is invisible at FULL coverage; the mapped one is not ┬╖ raw false ┬╖ mapped true
+  ok   W14 ┬╖ the night asks the packer for a corner ballroom ┬╖ {"rooms":6,"align":0.35,"gap":2.2,"waste":0.04,"doors":"open","homeCorner":true}
+  ok   W14b ┬╖ every world seed 0..23 puts the ballroom in an env corner ┬╖ 24/24
+  ok   W14c ┬╖ and homeCorner does that on the first candidate, not by retry luck ┬╖ 24/24 first-try
+  ok   W14d control ┬╖ planPasses refuses a playable house whose ballroom is not in a corner ┬╖ 37/48 unconstrained plans caught
+  ok   W14e ┬╖ locked seats follow joined players, not an eight-chair bake
+  ok   W14f ┬╖ `?chairs=` is the seating lock a developer typed
+  ok   W14g ┬╖ layout ids are all 24 real furn-catalog rows ┬╖ chair,desk,console,crate,cam-wall,cam-tripod,fireplace,chandelier,rug-circle,wingback,settee,sideboard,bookcase,grand-piano,armor,pedestal-bust,table-round,chaise,gramophone,torchiere,card-table,hall-stand,vitrine,ottoman
+  ok   W14h ┬╖ placements only emit catalog ids, and a three-room house still gets the lock ┬╖ armor,hall-stand,crate,wingback,settee,chaise,ottoman,desk,bookcase,chair,fireplace,gramophone,grand-piano,chandelier,rug-circle,torchiere,card-table,console,vitrine,sideboard,cam-wall,table-round,cam-tripod,pedestal-bust
+  ok   W14i ┬╖ dressLooseFurniture is the catalog placer hook
+  ok   W14j ┬╖ follow-bed and game.js go through that hook, not furn-layout
+  ok   W14i2 ┬╖ GeoBin kit is gated (`?kitdress=1`), not the default night
+  ok   W14i3 ┬╖ mansion catalog dress uses the smash-lab fit (targetH/maxSpan, not AABB-only)
+  ok   W14k ┬╖ all 24 catalog GLBs are real glTF blobs on disk, not LFS pointers ┬╖ 24/24 ┬╖ ptr 0 ┬╖ tiny 0 ┬╖ magic-fail 0
+  ok   W14l ┬╖ layout URLs are /models/furn/<file> and resolve to those blobs ┬╖ chair:7369124,desk:5884724,console:7907404,crate:7479936,cam-wall:5259556,cam-tripod:7202512,fireplace:7373920,chandelier:12933312,rug-circle:11386992,wingback:6969860,settee:7615504,sideboard:5697000,bookcase:7145036,grand-piano:5529516,armor:8579060,pedestal-bust:6132240,table-round:7159676,chaise:6744396,gramophone:6599036,torchiere:9430336,card-table:6558796,hall-stand:6119972,vitrine:6132556,ottoman:6573616
+  ok   W14m ┬╖ authored HOUSE_PLAN shape (order, no roomType) still places the lock ┬╖ armor@service,armor@service,armor@service,hall-stand@service,crate@service,wingback@study_w,settee@study_w,chaise@study_w,ottoman@study_w,desk@study_w,bookcase@study_e,chair@study_w,fireplace@study_e,gramophone@study_e,grand-piano@ballroom,chandelier@ballroom,chandelier@ballroom,rug-circle@ballroom,torchiere@ballroom,card-table@ballroom,console@gallery,vitrine@gallery,sideboard@gallery,pedestal-bust@gallery,cam-wall@gallery,table-round@chapel,cam-tripod@ballroom
+  ok   W14n ┬╖ a full authored house places every one of the 24 smash ids ┬╖ placed 24/24 ┬╖ 
+  ok   W14o ┬╖ a table on D1 is the playtest overlap (control)
+  ok   W14p ┬╖ catalog slots stay out of every authored opening
+  ok   W14q ┬╖ catalog cams sit on the kit camera sites, not a random wall ┬╖ wall -13.15,-27.65 ┬╖ tripod -5.40,3.55
+  ok   W15 ┬╖ a few seconds of map, then a longer stretch of static ┬╖ 6s clear / 14s jammed
+  ok   W15a ┬╖ the window opens at the top of the cycle and closes on the second
+  ok   W15b ┬╖ and it comes back ΓÇö the map is not dead furniture for the rest of the run
+  ok   W15c ┬╖ the RESTING state is blind ΓÇö a hidden-role map should fail toward less sight ┬╖ 70% of ticks jammed
+  ok   W15d ┬╖ `left` counts down to the turnover rather than being decoration
+  ok   W15e control ┬╖ Production is NEVER jammed, at any point in the cycle ┬╖ clear
+  ok   W15f ┬╖ junk or negative time is a phase, not a throw and not a permanent blackout
+  ok   W15g ┬╖ `flyover.jam` has a `guide` row, like every other flyover field ┬╖ flyover.jam -> guide
+  ok   W15h ┬╖ and it is not `all` or `phones` ΓÇö the TV is still not the map
+  ok   W16 ┬╖ the heading a thumb asks for is the direction player.js would strafe it ┬╖ 7/7 sticks agree
+  ok   W16a ┬╖ drag right heads right, drag left heads left ┬╖ right -> -1.00,0.00
+  ok   W16b ┬╖ straight ahead is no turn at all
+  ok   W16c ┬╖ and pulling back turns the body around instead of walking on ┬╖ -180┬░
+  ok   W16d control ┬╖ the formula PR #8 shipped really is left-right MIRRORED, not merely different ┬╖ it sent a right thumb to 1.00,0.00
+  ok   W16e control ┬╖ and it agreed on FORWARD, which is why it looked like it worked
+  ok   W16f control ┬╖ while a pull-back read as a push-forward ΓÇö the clamp's own half of it
+  ok   W15g ┬╖ a held thumb SETTLES on a heading ΓÇö left is a direction, not a turn rate ┬╖ 90┬░ of turning in ten seconds, resting at 90┬░
+  ok   W15h control ┬╖ measured from the live heading it never settles ΓÇö this is the observed spin ┬╖ 1.5 revolutions per second, forever
+  ok   W15i ┬╖ the latch is per PUSH ΓÇö it arms on contact, holds while held, clears at centre ┬╖ deadzone 0.15
+  ok   W15j ┬╖ and the phone's own nub lights on the same deadzone the bed steers on
+  ok   W15k ┬╖ leaving the deadzone starts at speed 0, not at the zone itself ┬╖ mag@zone+╬╡=0.000
+  ok   W15l control ┬╖ the raw hypot at the same sample is the lurch this rescales away
+  ok   W15m ┬╖ the latch has hysteresis ΓÇö a thumb on the rim does not chatter ┬╖ arm 0.15 / release 0.1
+  ok   W15n ┬╖ the heading chase is slower than the snap that read as a slide ┬╖ 6.4 rad/s
+  ok   W15o control ┬╖ the number the bed used to hardcode really is the snap
+  ok   W15p ┬╖ the phone nub and the bed both read the exported zone, not a restated 0.12
+  ok   W16 ┬╖ leftoverRuns is how an envelope leftover is cut from a shared side
+  ok   W16a ┬╖ barrier fill is 1 only on envelope edges
+  ok   W16b ┬╖ digEdges appends envDigTable ΓÇö interior ids are not rewritten
+  ok   W16c ┬╖ setDigPlan sets G from spec.envelope and does not call setInterconnect on free faces
+  ok   W16d ┬╖ DamageField default remains G=1 so furniture smash does not silently open
+  ok   W17 ┬╖ the broadcast picture is about 90% of the short side ┬╖ 90%
+  FAIL W17a ┬╖ and the run frame's height INTERPOLATES it rather than restating a number
+  ok   W17b ┬╖ with no pixel cap ΓÇö a cap in px shrinks the picture on the biggest television ┬╖ no px cap
+  ok   W17c ┬╖ the chrome around it gets out of the way on the run beat, or 90% does not fit
+  ok   W18 ┬╖ the DOOR'S OWN WIDTH lands on the axis it spans, and the stride depth across it ┬╖ axis x -> 2.8 x 2.7 m ┬╖ axis z -> 2.7 x 2.8 m
+  ok   W18a ┬╖ and it is wider than the opening, because a body does not arrive square-on ┬╖ 2.8 m of clear for a 1.90 m door
+  ok   W18b ┬╖ NO catalog placement stands in a doorway, on any of 24 world seeds ┬╖ 0 of 648 placements
+  ok   W18c control ┬╖ the table that shipped really did block doorways ΓÇö the rule rejects something ┬╖ 80 of 648 blocked before the fix, 0 dropped rather than retried
+  ok   W18d ┬╖ a nudged prop is still inside its own room ┬╖ centres out 0 ┬╖ nudge 2.08 m
+  ok   W18e ┬╖ the gallery console clears the gallery's own doors on every seed ┬╖ 0 blocked ┬╖ 0 dropped
+  ok   W18f control ┬╖ and the un-nudged placement really did shut the mission room ┬╖ 10/24 world seeds had the gallery console on a door
+  ok   W18g ┬╖ a chandelier at 2.85 m is left where it hangs ┬╖ moved 0 m
+  ok   W18h control ┬╖ and the same footprint standing on the floor is moved off the door ┬╖ moved 2.17 m
+  ok   W18i ┬╖ registerGroup asks before it places, so every authored prop inherits the rule
+  ok   W18j ┬╖ and the catalog loader hands the house's real doorways to the table
+  ok   W19 ┬╖ the show clock is a backstop, not the beat ΓÇö minutes, not seconds ┬╖ 8.0 min
+  ok   W19a control ┬╖ and it is not infinite, so a dead TV cannot strand the room on expedition ┬╖ 480000 ms
+  ok   W19b ┬╖ only a FINISHED mission ends the run ΓÇö the painting down AND the runner home ┬╖ done
+  ok   W19c ┬╖ the server ends the run off the TV's world report, not off a timer
+  ok   W19d ┬╖ the painting is broken by a swing AIMED at it, not by one that landed nearby
+  ok   W20 arm ┬╖ the three expedition sheets were all found in the source ┬╖ guide 2704 ┬╖ seated 499 ┬╖ runner 2091 chars
+  ok   W20a ┬╖ the guide's sheet asks for PRODUCTION'S feed only, never the house word
+  ok   W20b ┬╖ the runner's pad still has no intel block at all
+  ok   W20c control ┬╖ a SEATED watcher keeps it ΓÇö the strip was moved to one seat, not deleted
+  ok   W20d ┬╖ a Production guide keeps their feed, decided by ALIGNMENT rather than by a grade
+  ok   W20e ┬╖ and the patcher cannot relabel a Production strip back to the house word
+  ok   W21 ┬╖ the intro lens is a portrait, not the run's 62┬░ plate ┬╖ 38┬░
+  ok   W21a ┬╖ and the CASTING picture is a centred frame, not a full-bleed strip ┬╖ 78%
+  ok   W21b ┬╖ intros clone the already-loaded Meshy body rather than baking eight new ones
+  ok   W21c control ┬╖ a failed fetch still builds a unit4h body, so a chair is never empty
+  ok   W21d ┬╖ the intro camera snaps onto a new robot instead of lerping from the warm dolly
+  ok   W21e ┬╖ CASTING promotes the follow layer to a highlighted intro frame
+  ok   W21f ┬╖ the skin interpolates INTRO_FRAME_PCT and drops the warm blur on that beat
+  ok   W21g control ┬╖ the lobby warm layer is still the dim blurred backdrop
+  ok   W23 ┬╖ the portal in front of the camera wins, not the widest door and not the one behind ┬╖ study_w->gallery
+  ok   W23a control ┬╖ looking the other way does not pick the door behind your head
+  ok   W23b ┬╖ the rim sits PAST the doorway, in the other room ┬╖ z=8.35 past=2.2
+  ok   W23c control ┬╖ a rim left at the current room's centre is the defect
+  ok   W23d ┬╖ the facing rim is closer to the room you are looking into than the table's cool ┬╖ bleed 0.85 m vs table 11.20 m
+  ok   W23e ┬╖ the cone widen is a few degrees, not a flood ┬╖ +0.12 rad
+  ok   W23f ┬╖ the follow rig actually calls the rule, and `?bleed=0` is the control
+  ok   W23g ┬╖ the rig repositions the existing cool ΓÇö it does not construct a sixth light
+  ok   W24 ┬╖ RUN_END names the three honest words and only those
+  ok   W24a ┬╖ the show fanout may carry `end` ΓÇö otherwise a recap reload loses the word
+  ok   W24b ┬╖ mission done posts SMASHED; the backstop posts TIME
+  ok   W24c ┬╖ nothing posts CAUGHT yet ΓÇö hunter take is still the next slice
+  ok   W24d ┬╖ phone paints runEnd when present and never invents TIME when end is missing
+
+party-warm: 224 passed, 1 failed

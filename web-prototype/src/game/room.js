@@ -266,8 +266,49 @@ export async function buildTestRoom(engine, o = {}) {
    */
   const BALLFIX = (typeof location !== 'undefined'
     ? new URLSearchParams(location.search).get('ballfix') : null) !== '0';
+  /**
+   * 🌙 **`?ballnight=0` — THE PERMANENT ABLATION FOR WHAT IS OUTSIDE THE BALLROOM'S WINDOWS.**
+   *
+   * John, playing `?view=party.follow`: *"there is depth outside the windows in the asset but
+   * nothing going on outside in the primetime.bat."*
+   *
+   *   ?ballnight=1  (default) a night backdrop outside the window wall, and the ballroom's
+   *                 glazing dimmed and made transparent so it can be seen through.
+   *   ?ballnight=0  the build before it: no backdrop, and `mats.clearGlass` verbatim — the
+   *                 opaque emissive pane that measures a flat ~L 220 and reads as a lit panel.
+   *
+   * ⚠️ **IT IS ONE FLAG FOR BOTH HALVES BECAUSE EITHER HALF ALONE IS WORTH NOTHING.** The pane
+   * is opaque (probed live: `transparent: false, opacity: 1, depthWrite: true`), so a backdrop
+   * without the glass change is depth-rejected and invisible; the glass change without a
+   * backdrop opens the window onto `scene.background`, which is `#05070b`. Splitting them would
+   * give two arms that both look broken and neither of which is the thing being judged.
+   *
+   * Same reasoning as `?ballfix` above: a before/after taken in two browser sessions is not a
+   * control pair, so the arm has to be switchable in one boot.
+   *
+   * See `src/world/ballroom-night.js` for why this is NOT `game/exterior.js`'s yard — that
+   * module is imported by `views/game.js` alone and is not on this view's chain at all.
+   *
+   * 🚨 **OPT-IN BY THE CALLER, AND THAT IS NOT TIDINESS — IT IS THE WHOLE CORRECTNESS OF IT.**
+   * `buildTestRoom` has exactly TWO callers and they are two different times of day:
+   * `game/follow-bed.js` (the party night) and `views/game.js` (the playable run, which mounts
+   * `game/exterior.js` and lights it with a LATE AFTERNOON SUN — `exterior.js`'s `SUN` is
+   * *"a low late sun, warm"*). Defaulting this ON would hang a moonlit sky and a lit-window
+   * treeline outside a room the other view is busy lighting with daylight, and would open its
+   * glazing onto both at once. So the party bed asks for it (`nightOutside: true`) and the
+   * daylight view says nothing and gets exactly what it got before.
+   *
+   * ⚠️ The URL flag can only ever take it AWAY. `?ballnight=0` ablates it where it is on; there
+   * is deliberately no `?ballnight=1` that forces it into the daylight view, because that arm
+   * would be a picture nobody wants and a bug report waiting to happen.
+   */
+  const BALLNIGHT = o.nightOutside === true && (typeof location !== 'undefined'
+    ? new URLSearchParams(location.search).get('ballnight') : null) !== '0';
+  const nightMod = (BALL && BALLNIGHT)
+    ? await tryImport(() => import('../world/ballroom-night.js')) : null;
   const hasStudy = !!studyMod?.studyOrder;
   const hasBall = !!ballMod?.ballroomOrder;
+  const hasNight = !!nightMod?.buildBallroomNight;
 
   /**
    * ⚠️ `?walls=legacy | occlude | instanced` — THE ABLATION FOR THE INSTANCING GATE, AND IT IS
@@ -2876,6 +2917,25 @@ export async function buildTestRoom(engine, o = {}) {
    * over the other three, and every one of them is a hole a hand-placed pilaster could stand in.
    */
   function ballroomOrderFor(sp) {
+    /**
+     * 🌙 **THE ONE SOURCE OF TRUTH FOR `?ballnight`, SET HERE BECAUSE `binMaterials` IS A
+     * MODULE-LEVEL FUNCTION AND CANNOT SEE THIS CLOSURE'S FLAGS.**
+     *
+     * The two halves of the night exterior are decided in two different places — the glazing in
+     * `binMaterials` (which paints the buckets) and the backdrop in `emit` (which adds the mesh)
+     * — and they MUST agree, because transparent glass with no backdrop behind it is a hole
+     * onto `scene.background` and a backdrop behind opaque glass is invisible. Stashing the
+     * single answer on the space is what stops them drifting apart.
+     *
+     * ⚠️ `hasNight` IS PART OF IT, NOT JUST THE URL FLAG. The backdrop is a dynamic import that
+     * is allowed to fail (same contract as the order modules); if it did, the glazing must stay
+     * opaque, or a failed import would be visible as a black rectangle instead of as nothing.
+     *
+     * The ordering this relies on is `buildSpace`'s and it is not incidental: `makeOrder(sp)`
+     * (which calls this) runs first, then `ord.emit(bin)`, then `bin.build(binMaterials(mats,
+     * sp))`. So this is set before either consumer reads it.
+     */
+    sp.nightOutside = !!(BALLNIGHT && hasNight);
     const H = sp.storey;
     const HP = Math.PI / 2;
     const SPLIT = 4.80;                      // `kit.STOREY` — the showcase's own storey break
@@ -2963,6 +3023,71 @@ export async function buildTestRoom(engine, o = {}) {
       });
     }
 
+    /* =========================================================================================
+     * 🏛️ **THE GRAND BLIND ARCH — the showcase's 5.2 m motif, drawn AROUND the real doorway.**
+     *
+     * John: *"there is a big arch way… that doesn't exist at all in the game."* It does exist; it
+     * is a DOOR. The loop above builds this wall's arches from real connectors, so each is 1.90 m
+     * wide and 2.72 m tall against the showcase's 5.20 x 5.20. Same code, 2.7x narrower — and at
+     * that size the 150 mm archivolt is 16% of the opening instead of 6%, which reads as a door
+     * case rather than as an arch.
+     *
+     * 🚨 **WIDENING THE DOORWAY IS A GAMEPLAY CHANGE AND MUST NOT BE DONE.** `clearWidth` and
+     * `clearHeight` feed `pathPortals`; `dig.js` groups its instanced meshes by aperture size, so
+     * a new one is a new instancing group against a budgeted count; and a 5.2 m hole into the
+     * service passage destroys the chase-arena sightlines `spaces.js` sets up deliberately.
+     *
+     * So the motif is a BLIND arch — architecture, not an opening — concentric with the middle
+     * doorway, which keeps working exactly as it does. It costs no draw calls: both its buckets
+     * are already drawn. Two details make it work rather than fight:
+     *   · **No `spandrelSteps`.** The default is 0 and `spandrel()` returns immediately. A
+     *     spandrel fill on a blind arch is masonry extruded into solid masonry.
+     *   · **`h` 4.70, not the showcase's 5.20.** All four walls cap at `SPLIT` 4.80 and the upper
+     *     run starts there; a crown at 5.20 would put 0.40 m into the upper wall's clash list and
+     *     suppress a strip of panelling over 5.2 m for nothing. Spring 2.60 keeps a true
+     *     semicircle either way.
+     *
+     * ⚠️ **PUSHED LAST, DELIBERATELY.** PHASE C iterates `P.arches` in array order and both
+     * `wallRun` calls take the openings in that order, so appending keeps the three real doorway
+     * arches emitting exactly as they did. The blind archivolt (radius 2.60) and the doorway's
+     * (radius 0.95) are concentric and never touch, so there is nothing to z-fight.
+     *
+     * ⚠️ It is NOT added to `plan.archesWorld`. That list is a route hint, and a blind arch is
+     * not a route — see the note where `archesWorld` is assigned.
+     * ========================================================================================= */
+    const blindArch = (() => {
+      if (!BALLFIX || !arches.length) return null;
+      // Concentric with the doorway nearest the wall's centre — that is the one the composition
+      // is built around, and `clear()` is the WRONG test here: this arch is meant to sit ON a
+      // hole, not beside one.
+      const host = arches.reduce((a, b) => (Math.abs(b.x - sp.cx) < Math.abs(a.x - sp.cx) ? b : a));
+      const W = 5.20;
+      /*
+       * ⚠️ **NOT WHEN THE DOORWAY IS ALREADY GRAND.** John: *"I also want the whole arch to be the
+       * doorway."* `genplan.js` now cuts the ballroom's own openings at `BALL_DOOR_W` 5.20, so on
+       * a generated house the real arch IS this size — and a blind arch of the same width drawn
+       * concentric with it would be a second archivolt in the same millimetre, i.e. z-fighting
+       * rather than architecture. The blind arch stays for AUTHORED plans, where the opening is
+       * still a 1.90 m door.
+       */
+      if (host.w >= W - 0.01) return null;
+      // …but its 5.2 m span must not run across any OTHER opening in the wall, or the archivolt
+      // draws through a second doorway or a breachable panel.
+      const crosses = ef.cuts.some((c) => Math.abs(c.u - host.x) > 1e-6
+        && Math.abs(c.u - host.x) < W / 2 + c.w / 2);
+      if (crosses) return null;
+      if (host.x - W / 2 < ef.lo || host.x + W / 2 > ef.hi) return null;
+      // A heavier moulding, because 150 mm on a 5.2 m arch is 3% of the opening.
+      return {
+        x: host.x, w: W, h: 4.70, spring: 2.60, t: ef.t, inset: 0.005,
+        // `kit` is the same dynamic import `GeoBin` comes from; optional-chained because a house
+        // built without the estate kit still has to open.
+        archivolt: kit?.architraveProfile?.(0.34, 0.085),
+        trim: 'stone',
+      };
+    })();
+    if (blindArch) arches.push(blindArch);
+
     // ---- the piers and pilasters, dropped where an opening is ---------------------------
     const mf = byId('mirror'), nf = byId('near');
     const pierZ = Array.from({ length: 7 }, (_, i) => sp.z1 - (i * sp.d) / 6)
@@ -2994,6 +3119,44 @@ export async function buildTestRoom(engine, o = {}) {
         const z = (grid[i] + grid[i + 1]) / 2;
         if (!clear(mf, z, PLATE.w / 2 + 0.25)) continue;
         mirrorPlates.push({ x: sp.x1 - 0.06, y: PLATE.y, z, rotY: -HP, w: PLATE.w, h: PLATE.h });
+      }
+    }
+
+    /* =========================================================================================
+     * 🪞 **THE TWO PIER GLASSES FLANKING THE ARCH — the module could always place these.**
+     *
+     * John: *"there is a big arch way with two mirrors either side and that doesn't exist at all
+     * in the game."* The mirrors half of that was never a missing feature: `ballroomOrder`'s
+     * PHASE F concatenates `mirrors.pier` and `mirrors.plates` and treats them identically, at
+     * any position and any yaw. `room.js` simply never passed `plates`, so all four of this
+     * room's glasses ended up on the east wall, thirteen metres away and perpendicular.
+     *
+     * They merge into the `pier-mirrors` mesh that already exists, so this is **+0 draw calls**.
+     *
+     * ⚠️ **DERIVED OUTWARD FROM THE ARCH, NOT AUTHORED.** This wall carries three real doorways
+     * and a breachable panel, and their positions move with the floor plan. Hand-placing a pair
+     * of x values is the mistake the mirror grid above already records — *"hand-placing four z
+     * values would have put a mirror across the east terrace door the first time the floor plan
+     * moved."* So: step outward from the centre and take the first offset that is clear on BOTH
+     * sides, which keeps the pair symmetric whatever the generator did.
+     *
+     * ⚠️ **FLAT, NOT RAKED.** The showcase leans these 9°, solely to aim a planar reflection at
+     * its chequer floor. That reflection is not ported — see this file's own note on the plate
+     * material — so the rake would buy nothing optically and only give the glass a visible lean.
+     * ========================================================================================= */
+    const endPlates = [];
+    if (BALLFIX && mats.estate?.ball?.mirror) {
+      const EP = { w: 1.70, h: 3.10, foot: 1.30 };
+      for (let dx = 3.2; dx <= Math.min(sp.w, sp.d) / 2 - 1.2; dx += 0.30) {
+        if (!clear(ef, sp.cx - dx, EP.w / 2 + 0.30)) continue;
+        if (!clear(ef, sp.cx + dx, EP.w / 2 + 0.30)) continue;
+        for (const s of [-1, 1]) {
+          endPlates.push({
+            x: sp.cx + s * dx, y: EP.foot + EP.h / 2, z: sp.z0 + 0.22,
+            rotY: 0, w: EP.w, h: EP.h,
+          });
+        }
+        break;
       }
     }
 
@@ -3041,7 +3204,15 @@ export async function buildTestRoom(engine, o = {}) {
     plan.windowsWorld = winZ.map((z) => ({
       x: sp.x0, z, rotY: HP, u: z, w: WIN.w, sill: WIN.sill, head: winHead, face: 'x', into: 1,
     }));
-    plan.archesWorld = arches.map((a) => ({ x: a.x, z: sp.z0, w: a.w, h: a.h }));
+    /*
+     * ⚠️ **THE BLIND ARCH IS EXCLUDED, BECAUSE THIS LIST IS A ROUTE HINT AND IT IS NOT A ROUTE.**
+     * `archesWorld` has no consumer in `src/` today, which is exactly why this matters: the first
+     * thing that uses it — door glows, navigation, a camera park — would be handed a 5.2 m
+     * opening that is solid masonry, and would be right to trust it.
+     */
+    plan.archesWorld = arches
+      .filter((a) => a !== blindArch)
+      .map((a) => ({ x: a.x, z: sp.z0, w: a.w, h: a.h }));
     // Same floor sites as ballroom-rig candelabra — FurnProp dress when `furn` is on.
     plan.furnCandelabra = [
       { x: sp.x0 + 2.6, z: sp.z1 - 2.4 },
@@ -3095,6 +3266,19 @@ export async function buildTestRoom(engine, o = {}) {
       emit(bin) {
         const built = ballMod.ballroomOrder(bin, {
           plan, base: null, remap: ORDER_KEYS_BALL,
+          /*
+           * 🪵 Raised panels — see the flag's own note in `ballroom-order.js`. The sunk path this
+           * replaces sits INSIDE the wall slab and has never rendered in any view; this one is
+           * proud, and it is fewer vertices into the same two buckets.
+           */
+          raisedPanels: true,
+          /*
+           * 🏛️ The marble border, derived from the room rather than authored. The showcase's
+           * 2.2 m on a 16 m short side is 0.1375 of it; snapping that to whole marble squares is
+           * what stops a generated ballroom showing a sliver of a square against the skirting.
+           * `estateMarbleChequer` bakes 6 x 6 squares per tile, so the repeat is 6 x SQ.
+           */
+          floor: ballFloorBorder(sp),
           // the wall boxes already exist with every connector cut out of them, and `buildWall`
           // already drew this room's skirting where the openings are — but nothing else puts
           // anything at the 4.80 storey break, which is half of what makes two storeys read
@@ -3107,20 +3291,67 @@ export async function buildTestRoom(engine, o = {}) {
           // is what makes the order hand the merged plate back instead of discarding it, and it
           // is the flag that keeps `views/room-ballroom.js` byte-identical.
           parts: {
-            mirrors: mirrorPlates.length > 0,
+            mirrors: mirrorPlates.length + endPlates.length > 0,
             // FurnProp owns urns / consoles; keep architecture, skip merged dressing.
             ...(furnDressEnabled() ? { dressing: false } : {}),
           },
-          mirrors: { pier: mirrorPlates },
+          mirrors: { pier: mirrorPlates, plates: endPlates },
           mirrorPlates: true,
           material: {
             baluster: mats.estate?.stone ?? mats.skirt,
             mirror: mats.estate?.ball?.mirror ?? null,
           },
         });
+        /* =====================================================================================
+         * 🎭 **THE CURTAINS CAST, AND NOTHING ELSE IN THE ORDER DOES.**
+         *
+         * John, comparing the two rooms: *"the curtains look like red boxes vs the layering in
+         * the asset."* The geometry is not the difference — the showcase and the game emit
+         * **bit-identical** drapes, three axis-aligned boxes per window, out of this same shared
+         * builder. What the showcase has and the game does not is the SHADOW: it lets its drape
+         * bucket cast, and this loop switched casting off for every order mesh in one sweep. A box
+         * with no shadow on it or beside it has nothing to read as a fold.
+         *
+         * The carve-out is exactly one bucket. A curtain hangs beside a window — the one place in
+         * this room with a light source right next to it and a player standing in front of it.
+         * The panelling and the cornice are lit flat and would buy nothing for the shadow pass
+         * they would cost.
+         *
+         * ⚠️ **THIS IS THE CHEAP HALF AND IT IS DELIBERATELY FIRST.** Fold GEOMETRY was tried once
+         * in the showcase and REVERTED: it broke that page's darkest-decile gate, which runs 7.7
+         * against a ceiling of 8.0 and lost 0.35 to a 12 mm displacement. If shadow plus the
+         * material still reads flat, folds are next — game-only, and default off.
+         * ===================================================================================== */
         for (const m of built.meshes) {
-          m.castShadow = false; m.receiveShadow = true;
+          m.castShadow = m.name === 'kit:drape';
+          m.receiveShadow = true;
           sp.root.add(m);
+        }
+        /**
+         * 🌙 **WHAT IS OUTSIDE THE WINDOWS.** One merged `MeshBasicMaterial` mesh — terrace,
+         * balustrade, parterre, treeline, a lit wing and a moonlit sky — so the whole outside
+         * is **ONE DRAW CALL**, no lights and no GLSL. `?ballnight=0` removes it.
+         *
+         * ⚠️ **PARENTED TO `sp.root`, WHICH IS THE ENTIRE RESIDENCY STORY.** `room.js`'s own
+         * toggle already does `s.root.visible = s.visible` every frame, so this costs nothing
+         * from the other rooms in the house and there is no new per-frame code to get wrong.
+         * It is added AFTER the order meshes and outside that loop on purpose: it must not take
+         * the `castShadow`/`receiveShadow` those get — it is 46 m of backdrop and putting it in
+         * the shadow pass would be the most expensive thing in the room.
+         *
+         * ⚠️ **AND IT REGISTERS NO COLLIDERS.** It is scenery on the far side of a wall that
+         * already has its own (the glazing boxes in `solids` above). Nothing here is reachable
+         * and nothing here is standable — see the note in `ballroom-night.js`.
+         */
+        if (sp.nightOutside) {
+          try {
+            const night = nightMod.buildBallroomNight(sp, { seed: (sp.z0 * 7 + sp.x0 * 13) | 0 });
+            sp.root.add(night.mesh);
+          } catch (e) {
+            // degrade to the shipped windows for THIS ROOM ONLY — same contract as the order
+            // modules above. A backdrop is scenery; it may never be the reason a house fails.
+            console.warn('[ballroom-night] backdrop skipped:', e?.message ?? e);
+          }
         }
         // ⚠ ONE `InstancedMesh`, ONE DRAW CALL, ~47 balusters. It cannot go in the bin — an
         // instanced mesh is the opposite of a merge — and it is the cheapest way to draw a
@@ -3528,8 +3759,30 @@ const ORDER_KEYS_STUDY = {
  */
 const ORDER_KEYS_BALL = {
   wall: 'wall', gilt: 'gilt', frieze: 'gilt', glass: 'clere', drape: 'drape',
-  stone: 'skirt', wintrim: 'skirt', ceil: 'ceiling', marbleTop: 'floor',
+  stone: 'skirt', wintrim: 'skirt', ceil: 'ceiling',
+  /*
+   * ⚠️ `marbleTop` IS THE CONSOLE TABLETOPS, NOT THE ROOM FLOOR — it was routed to `floor` to
+   * avoid a fifth bucket, which meant the ballroom's console tables have been rendering in OAK
+   * FLOORBOARDS. Now that a marble bucket exists for the border, they can have it.
+   */
+  marbleTop: 'floormarble', marbleFloor: 'floormarble',
 };
+
+/**
+ * 🏛️ The marble border's geometry, derived from the space. Returns null when the room is too
+ * narrow to carry one without becoming all marble — a guard, not a preference.
+ */
+function ballFloorBorder(sp) {
+  const SQ = 1.10;                                    // metres per marble square; showcase runs 1.00-1.17
+  const short = Math.min(sp.w, sp.d);
+  const nSq = Math.max(1, Math.min(3, Math.round((short * 0.1375) / SQ)));
+  const border = nSq * SQ;
+  if (border * 2 >= short * 0.45) return null;
+  return {
+    x0: sp.x0, x1: sp.x1, z0: sp.z0, z1: sp.z1,
+    y: 0.004, border, tile: 6 * SQ,
+  };
+}
 
 /**
  * Buckets that must not cast a shadow. See the note at the call site.
@@ -3538,7 +3791,9 @@ const ORDER_KEYS_BALL = {
  * bucket is a second draw of that mesh in the shadow pass. Inert for the gallery, which has no
  * `dark` bucket at all.
  */
-const NO_CAST = new Set(['clere', 'ceiling', 'dark']);
+// `floormarble` is a 4 mm slab lying ON the floor: a shadow from it lands in the surface it is
+// lying on, which is acne plus a wasted shadow-pass draw.
+const NO_CAST = new Set(['clere', 'ceiling', 'dark', 'floormarble']);
 
 /**
  * @param sp  the space being built, or null. Only present so a space with an ORDER can take the
@@ -3599,13 +3854,72 @@ function binMaterials(m, sp = null) {
   if (BR) {
     return {
       wall: BR.wall,
-      floor: m.floor,
+      /* ⚠️ **THE BALLROOM'S FLOOR IS TWICE THE OAK OF EVERY OTHER FLOOR, AND THAT IS MEASURED.**
+       *
+       * `m.floor` is `parquetMat()` at its bare defaults — `oak [0.300, 0.196, 0.108]`, which is
+       * `room.gallery`'s. The showcase swept exactly this material against its reference at 1.6× /
+       * 2.0× / 2.4× and read meanL 27.6 / 32.6 / 37.7 against a matched bar of 36.2, then shipped
+       * **2.0×** — 2.4× matched the art but pushed the grade gate's darkest decile 7.9 → 8.1, out
+       * of its 2–8 band. The party ballroom had been taking the un-swept default, so the room the
+       * whole show is set in was running at half the brightness the sweep settled on.
+       *
+       * ⚠️ Ballroom-only, deliberately: `m.floor` is EVERY floor in the mansion, and this number
+       * was solved for one room under its own rig. */
+      floor: BR.floor ?? m.floor,
       ceiling: BR.ceil,
       mould: BR.stone,
       skirt: BR.stone,
       gilt: BR.gilt,
-      clere: BR.clere,
+      /**
+       * 🌙 **THE NIGHT GLAZING — HALF OF `?ballnight`, AND THE HALF THAT MAKES THE OTHER HALF
+       * VISIBLE AT ALL.** See `world/ballroom-night.js` for the whole argument.
+       *
+       * 🚨 **THE OPAQUE EMISSIVE PANE IS THE DEFECT, NOT MERELY THE THING IN FRONT OF IT.**
+       * `BR.clere` is `mats.clearGlass`, probed live in `?view=party.follow` as `transparent:
+       * false, opacity: 1, depthWrite: true, emissiveIntensity: 3.4`. That is a DAYLIGHT
+       * glazing panel, lit from nowhere, in a night scene: the window crop measures a flat
+       * ~L 220 with no value structure in it, which is exactly John's *"nothing going on
+       * outside"*. And because it is opaque and writes depth, a backdrop built behind it is
+       * depth-rejected and never drawn. Both halves or neither.
+       *
+       * ⚠️ **A CLONE, AND ONLY FOR THIS ROOM.** `mats.clearGlass` is a lazily-built singleton
+       * SHARED WITH THE GALLERY (`materials-local.js`: *"clear leaded daylight glazing for the
+       * ballroom and the gallery"*). Mutating it in place would make the gallery's windows
+       * transparent too — onto nothing, since only the ballroom gets a backdrop — turning a
+       * window into a hole. Memoised on `BR` so a second ballroom in one house shares the clone
+       * rather than baking a second copy.
+       *
+       * ⚠️ **AND IT IS FREE IN DRAW CALLS.** `GeoBin` already emits ONE `kit:clere` mesh per
+       * space; this swaps the material on a mesh that exists either way. A different material
+       * in the same bucket is the same draw call — `binMaterials`' own note above says so.
+       *
+       * The numbers: `opacity 0.22` lets the backdrop through while the leaded quarry pattern
+       * still reads as glazing across it. `emissiveIntensity 0.55` (from 3.4) is what stops the
+       * pane washing the backdrop out — ⚠️ emissive is NOT a light source in three.js, there is
+       * no GI here, so this changes THIS SURFACE'S OWN PIXELS and nothing else in the room's
+       * lighting; the sconces, chandeliers and candelabra are untouched. `depthWrite: false` is
+       * the ordinary transparent-surface rule, and it is safe against the crimson drape hanging
+       * in front of the glass because the drape is opaque, draws in the opaque pass first, and
+       * the glass still depth-TESTS against it.
+       *
+       * ⚠️ **GATED ON `sp.nightOutside`, WHICH `ballroomOrderFor` SET — NOT ON THE URL.** That
+       * flag already folds in whether the backdrop module actually imported. Reading the query
+       * string again here would let a failed import ship transparent glass onto the void, which
+       * is a worse picture than the one being fixed.
+       */
+      clere: sp?.nightOutside
+        ? (BR._nightClere ??= (() => {
+          const g = BR.clere.clone();
+          g.name = 'ball-night-glazing';
+          g.transparent = true;
+          g.opacity = 0.22;
+          g.emissiveIntensity = 0.55;
+          g.depthWrite = false;
+          return g;
+        })())
+        : BR.clere,
       drape: BR.drape,
+      floormarble: BR.chequer,
       marble: m.marble ?? m.floor, paper: m.paper ?? m.wall,
       ...(m.brick ? { brick: m.brick } : {}),
     };
@@ -3854,6 +4168,16 @@ async function loadEstateSurfaces(L) {
          * brightness from the rooms either side of it.
          */
         wall: L.boiserieMat({ paint: [0.330, 0.302, 0.262], grime: 0.85, size: 1024 }),
+        /**
+         * 🪵 **THE SHOWCASE'S 2.0× OAK — the numbers it swept and landed on, not a taste call.**
+         * `parquetMat()`'s default is `room.gallery`'s dark oak and it measured meanL 20.5 against
+         * a matched bar at 36.2. See the note at the `floor:` line in `binMaterials` for the sweep.
+         * `wear: 0.6` and the doubled `oakDark` come with it — they were swept together.
+         */
+        chequer: mats.marbleChequer,
+        floor: L.parquetMat({
+          oak: [0.600, 0.392, 0.216], oakDark: [0.280, 0.168, 0.092], wear: 0.6, size: 1024,
+        }),
         // the showcase's own gilding, unchanged — it is already solved through the tone curve
         gilt: mats.gilt,
         stone: mats.stone,

@@ -103,12 +103,27 @@ const NOT_AFTER_RUN = [PHASE.CASTING, PHASE.EXPEDITION];
 }
 
 // ---------------------------------------------------------------- E5 · the decision still fits the window
+/*
+ * Keeping the premiere vote cost 105s, and this is the assertion that said it was affordable.
+ *
+ * ⚠️ **IT FIRED EXACTLY AS DESIGNED ON 2026-08-25 AND THE ANSWER WAS "YES, SPEND IT".** Debrief
+ * went 75s -> 300s, which took the absolute worst case to 56.1 min, and E5 was the first gate to
+ * go red — which is the whole reason it exists. John took the trade knowingly: Debrief is a
+ * CEILING now, ended by a majority tapping READY (`party-night` N21), and 600 simulated matches
+ * showed the night cannot be shortened by cutting episodes instead (only 7.3% of games finish by
+ * episode 3; an eight-player table averages 4.98).
+ *
+ * So the threshold moved to sixty minutes and the forty-minute claim moved to `round-loop` R2c,
+ * where it is asserted against the night a real table PLAYS rather than the one it could
+ * theoretically suffer. **This is still the assertion that fails first if a beat's duration
+ * grows** — that job is unchanged, only the number moved, and it must not be quietly widened
+ * again without the same kind of argument.
+ */
 {
-  // Keeping the premiere vote cost 105s. This is the assertion that says it was affordable, and
-  // the one that will fail first if any beat's duration grows.
   const worst = sessionSeconds(EPISODE_CAP, 3) / 60;
-  t('E5 · the worst case still fits forty minutes with the premiere voting', worst < 40,
-    `${worst.toFixed(1)} min at ${EPISODE_CAP} episodes, three noms each`);
+  t('E5 · the worst case still stops inside an hour with the premiere voting', worst < 60,
+    `${worst.toFixed(1)} min at ${EPISODE_CAP} episodes, three noms each · `
+    + 'the 40-minute claim now lives in round-loop R2c, measured on a table that taps READY');
 }
 
 console.log(`\nepisode-order: ${pass} passed, ${fail} failed`);

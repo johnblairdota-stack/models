@@ -2,7 +2,7 @@
  * Public lobby cosmetics — a face, two colours. Not a role, not a deal.
  *
  * Closed palettes so a phone cannot smuggle a string through `shell` / `accent`.
- * The face is one SVG (Grok-Bot wedge energy, not a second 3D pipeline).
+ * The face is one SVG — a 2D drawing of UNIT-4H's own head, not a second 3D pipeline.
  */
 
 import { RUNDOWN_BEATS, SHOW_BEATS, railDrainPct, rundownRibbon } from './show.js';
@@ -64,17 +64,304 @@ export function normalizeCodeWire(raw) {
 }
 
 /**
- * Small robot face. `shell` is the helmet; `accent` is the wedge visor.
- * No element ids — the TV lobby mounts one per chair.
+ * 🤖 **THE FACE IS UNIT-4H'S OWN HEAD, MEASURED — NOT A MASCOT DRAWN BESIDE IT.**
+ *
+ * What was here until now was a diamond on a rounded blob, authored before the character
+ * existed and never revisited. It shared nothing with the robot the player drives: not the
+ * silhouette, not the screen, not the eyes. A room full of them told you which colours a
+ * player picked and nothing about what they were.
+ *
+ * This one is taken off the two things that already define the head:
+ *
+ *  - **The silhouette** off the front render (`assets/mv/player/baseline_front.png`) — a
+ *    rounded shell 0.88 as wide as it is tall, side pods proud of it at mid-height, a lighter
+ *    crown cap, and a faceplate 83% of the shell's width with a THICKER rim under the chin
+ *    than at the sides. That last asymmetry is most of what reads as "helmet" rather than
+ *    "circle", and it is the first thing to go wrong if these numbers get tidied.
+ *  - **The features** off `FACE_SURFACE` in `src/materials/surfaces/robot.js`, which is the
+ *    shader that paints the real plate: two upright rounded-rect eyes, a thin near-straight
+ *    brow arc over each, and one wide flat crescent mouth. Placement below is in fractions of
+ *    the PLATE box, so the same drawing lands correctly on the helmet and on a bare screen.
+ *
+ * 🎨 **WHERE THE PLAYER'S TWO COLOURS GO.** Shell → the helmet (and four tones derived from
+ * it, see `shellTones`). Accent → **the light**: eyes, brows, mouth. The glass stays blue for
+ * everyone, because the glass is the robot and the light is the player. This is also why an
+ * emote costs no new art — the face is a screen, so an expression is the light redrawn.
+ *
+ * 🚨 **NO ELEMENT IDS, STILL.** The TV lobby mounts one of these per chair, so anything id-
+ * scoped (a gradient, a filter, a clip path) would collide across eight faces and the last one
+ * mounted would win. The glow is faked with a stacked low-alpha rectangle for exactly this
+ * reason — it is not a stylistic preference, and a blur filter would break the lobby.
  */
-export function robotFaceSvg(shell = DEFAULT_LOOK.shell, accent = DEFAULT_LOOK.accent, { size = 120 } = {}) {
+
+/** sRGB luminance, 0..1. Decides how hard the rim light has to work — see `shellTones`. */
+const lum = (hex) => {
+  const n = parseInt(hex.slice(1), 16);
+  return (0.2126 * (n >> 16) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255;
+};
+
+/** Mix `hex` toward white (amt > 0) or black (amt < 0). */
+const shade = (hex, amt) => {
+  const n = parseInt(hex.slice(1), 16);
+  const t = amt > 0 ? 255 : 0, k = Math.abs(amt);
+  return '#' + [n >> 16, (n >> 8) & 255, n & 255]
+    .map((v) => Math.round(v + (t - v) * k).toString(16).padStart(2, '0')).join('');
+};
+
+/**
+ * The four tones and one alpha the helmet derives from a single shell colour.
+ *
+ * ⚠️ **THE RIM IS NOT DECORATION.** Eight of the twelve `SHELLS` are darker than
+ * `--night-bg`, so a flat fill puts the whole head below the TV's floor: the silhouette
+ * disappears and a player becomes two floating eyes. Every tone here opens up as the shell
+ * gets darker — the crown lifts further, the pods stop being crushed to black, and the rim
+ * goes from a hint to a real edge light at 0.80 alpha. Gate: `party-warm` W40b.
+ */
+export function shellTones(shell) {
+  const dark = lum(shell) < 0.35;
+  return {
+    crown: shade(shell, dark ? 0.28 : 0.18),
+    pod: shade(shell, dark ? -0.08 : -0.24),
+    rim: shade(shell, dark ? 0.66 : 0.36),
+    seam: shade(shell, dark ? 0.10 : -0.34),
+    rimA: dark ? 0.80 : 0.55,
+  };
+}
+
+/** The glass. `C.glass` is #2659A0; the shipped plate is greyed by `facegrey`, and this sits
+ *  between the two so the light still pops against `--night-bg`. */
+const GLASS = '#27476e';
+const GLASS_LIT = '#4d78a6';
+
+const SHELL_D = 'M16.95 34C16.95 18.6 31.5 8 50.9 8C70.3 8 84.9 18.6 84.9 34L84.9 64C84.9 81 70.3 92 50.9 92C31.5 92 16.95 81 16.95 64Z';
+const CROWN_D = 'M22.4 24C22.4 12 33 8.7 51 8.7C69 8.7 79.8 12 79.8 24C79.8 24 66 26.8 51 26.8C36 26.8 22.4 24 22.4 24Z';
+const PLATE = { x: 23.1, y: 24.0, w: 56.7, h: 56.0, r: 16.5 };
+const SCREEN_PLATE = { x: 7, y: 13, w: 86, h: 74, r: 24 };
+
+/**
+ * 😐 **THE EXPRESSIONS.** Each entry says only how the three lit features differ from idle,
+ * so a new one is three numbers rather than a new drawing. `eyeK` scales eye height per side
+ * (or `'arc'` for a closed happy eye), `browDY` lifts each brow as a fraction of plate height,
+ * `mouth` names the stroke. Asymmetry is the whole trick: `doubt` squints one side and lifts
+ * the other brow, and that alone reads as an accusation at 44px.
+ */
+const MOODS = {
+  /** The lobby, the seat grid, the role card — the face at rest. */
+  idle: { eyeK: [1, 1], browDY: [0, 0], browRot: [0, 0], mouth: 'smile' },
+  /* ---- the four reactions ---------------------------------------------------------------- */
+  /** Approval. Eyes shut into happy arcs, brows up, the widest mouth of the four. */
+  clap: { eyeK: ['arc', 'arc'], browDY: [-0.048, -0.048], browRot: [0, 0], mouth: 'grin' },
+  /**
+   * Disapproval, and it has to read as HOSTILE rather than sad — a sad boo is a shrug. The
+   * work is done by `browRot`: the INNER end of each brow drops, which is the same cue the
+   * hunter's `uEyeCant` uses for menace in the 3D face. Narrowed eyes and a frown alone read
+   * as disappointed; the angled brow is what makes it an objection.
+   */
+  boo: { eyeK: [0.62, 0.62], browDY: [0.030, 0.030], browRot: [18, -18], mouth: 'frown' },
+  /**
+   * Doubt — the load-bearing one, because this is the accusation. Everything is ASYMMETRIC: a
+   * squint on one side, a raised brow on the other. Make it symmetric and it becomes a
+   * generic frown that names nobody.
+   */
+  sus: { eyeK: [0.40, 1.05], browDY: [0.020, -0.062], browRot: [6, -10], mouth: 'flat' },
+  /** Surprise. Fires on the moment something happens, so it has to be legible in one frame. */
+  shock: { eyeK: [1.28, 1.28], browDY: [-0.050, -0.050], browRot: [0, 0], mouth: 'oh' },
+};
+
+/** The lit face, placed as fractions of whatever plate box it is given. */
+function litFace(p, { halo = true, spec = true, bold = 0, mood = 'idle' } = {}) {
+  const F = MOODS[mood] || MOODS.idle;
+  const eyeW = 0.141 * p.w * (1 + bold * 0.16);
+  const eyeH = 0.221 * p.h * (1 + bold * 0.16);
+  const eyeDX = 0.205 * p.w;
+  const cx = p.x + p.w / 2, cy = p.y + 0.468 * p.h;
+  const n = (v) => v.toFixed(2);
+
+  const eye = (sx, i) => {
+    const k = F.eyeK[i], bx = cx + sx * eyeDX;
+    if (k === 'arc') {
+      const hw = eyeW * 0.72;
+      return `<path data-stroke="lit" fill="none" stroke="@LIT@" stroke-width="${n(eyeW * 0.52)}" stroke-linecap="round" d="M${n(bx - hw)} ${n(cy + eyeH * 0.20)}Q${n(bx)} ${n(cy - eyeH * 0.34)} ${n(bx + hw)} ${n(cy + eyeH * 0.20)}"/>`;
+    }
+    const w = eyeW * (k > 1 ? 1.12 : 1), h = eyeH * k;
+    const x = bx - w / 2, y = cy - h / 2, rr = Math.min(w, h) * 0.48;
+    let s = '';
+    if (halo) s += `<rect data-paint="lit" x="${n(x - w * 0.30)}" y="${n(y - h * 0.18)}" width="${n(w * 1.60)}" height="${n(h * 1.36)}" rx="${n(rr * 1.7)}" fill="@LIT@" opacity="0.16"/>`;
+    s += `<rect data-paint="lit" x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" rx="${n(rr)}" fill="@LIT@"/>`;
+    if (spec && k >= 1) s += `<rect x="${n(x + w * 0.20)}" y="${n(y + h * 0.13)}" width="${n(w * 0.30)}" height="${n(h * 0.26)}" rx="${n(w * 0.15)}" fill="#ffffff" opacity="0.55"/>`;
+    return s;
+  };
+
+  const browY = p.y + 0.300 * p.h, browHW = 0.100 * p.w;
+  const browT = Math.max(1.1, 0.026 * p.h * (1 + bold * 0.5));
+  const brow = (sx, i) => {
+    const bx = cx + sx * eyeDX, by = browY + F.browDY[i] * p.h;
+    /* Rotated about the brow's own centre, so a tilt drops the inner end without sliding the
+       brow off its eye. Left brow's inner end is its RIGHT one, hence the mirrored signs. */
+    const rot = (F.browRot?.[i] || 0);
+    const tf = rot ? ` transform="rotate(${rot} ${n(bx)} ${n(by)})"` : '';
+    return `<path data-stroke="lit" fill="none" stroke="@LIT@" stroke-width="${n(browT)}" stroke-linecap="round" opacity="0.85"${tf} d="M${n(bx - browHW)} ${n(by + browHW * 0.20)}Q${n(bx)} ${n(by - browHW * 0.16)} ${n(bx + browHW)} ${n(by + browHW * 0.20)}"/>`;
+  };
+
+  const mY = p.y + 0.808 * p.h, mHW = 0.122 * p.w;
+  const mT = Math.max(1.6, 0.052 * p.h * (1 + bold * 0.45));
+  /* `dir` +1 is the shader's upward crescent (a smile); -1 flips it into a frown. */
+  const arc = (hw, sag, t, dir = 1) => `<path data-stroke="lit" fill="none" stroke="@LIT@" stroke-width="${n(t)}" stroke-linecap="round" d="M${n(cx - hw)} ${n(mY - sag * dir)}Q${n(cx)} ${n(mY + sag * 1.9 * dir)} ${n(cx + hw)} ${n(mY - sag * dir)}"/>`;
+  const mouth = {
+    smile: arc(mHW, mHW * 0.17, mT),
+    grin: arc(mHW * 1.30, mHW * 0.52, mT * 1.25),
+    frown: arc(mHW * 1.05, mHW * 0.42, mT * 1.15, -1),
+    flat: `<path data-stroke="lit" fill="none" stroke="@LIT@" stroke-width="${n(mT)}" stroke-linecap="round" d="M${n(cx - mHW * 0.82)} ${n(mY)}H${n(cx + mHW * 0.82)}"/>`,
+    oh: `<ellipse data-paint="lit" cx="${n(cx)}" cy="${n(mY)}" rx="${n(mHW * 0.46)}" ry="${n(mHW * 0.62)}" fill="@LIT@"/>`,
+  }[F.mouth];
+
+  return brow(-1, 0) + brow(1, 1) + eye(-1, 0) + eye(1, 1) + mouth;
+}
+
+/**
+ * 🏷️ **THE REACTION BADGE — one filled tile, top-right, glyph knocked out of it.**
+ *
+ * John's note, via his partner: *"floating symbols near them… red question marks around the
+ * 'sus' reaction, exclamation marks around the shock, frustration squiggles or a thumbs down for
+ * boo and clapping hands for the clap."* Three parts of that were measured and changed, and the
+ * reasons are worth keeping because each is a thing someone will try to put back:
+ *
+ * 1. **One big mark, not several small ones.** The clear margin around the helmet inside this
+ *    box is 9 units — 5 px at the 56 px the TV strip uses. Three glyphs scattered there are
+ *    coloured dust at sofa distance. Rendered side by side, one 34-unit tile is legible where a
+ *    scatter is not, because at distance the SATURATED FILL survives and a thin glyph does not.
+ * 2. **Not red, and no exclamation mark.** `--night-bad` already means *taken / dark /
+ *    Production*, and a red `!` above a head is this game's locked word for **nominee** — a mark
+ *    the room reads ninety seconds later at the Reckoning. Teaching it a second meaning during
+ *    the run is how a table ends up arguing about what the television said. The `?` SHAPE is
+ *    kept; the red is not, and shock gets a spark instead of a `!`.
+ * 3. **No hands.** This character has no hands anywhere in its art — a helmet, two pods and a
+ *    lit screen, drawn flat. A clapping hand or a thumbs-down would be the only human body part
+ *    on the screen, and it would look borrowed because it would be. Clap and boo are the SAME
+ *    chevron mirrored (John's call), which also makes the pair read as one control with two
+ *    directions rather than as two unrelated pictures.
+ *
+ * 🚨 **NO IDS, AND THE BOX CANNOT GROW.** Eight faces mount at once in the lobby, so the badge is
+ * a `<rect>` and a `<path>` inside the existing `0 0 100 100` — no filter, no gradient, no
+ * `url(#…)`. "Floating AROUND the head" is therefore not available in the literal sense: the
+ * tile overlaps the crown, which is what a status pip does anyway.
+ *
+ * The colours are FIXED per reaction rather than the player's accent. The badge's only job is
+ * *which reaction* — identity is already carried twice, by the face and by the name under it —
+ * and a fixed colour has to work against all twelve accents rather than disappear into one.
+ * Gate: `react-pad` R60+.
+ */
+const BADGE = {
+  clap: ['#9ff2c8', '<path d="M72.4 24.4L79 17.6L85.6 24.4" fill="none" stroke="#080604" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>'],
+  boo: ['#ff8a7a', '<path d="M72.4 17.6L79 24.4L85.6 17.6" fill="none" stroke="#080604" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>'],
+  sus: ['#f5a14a', '<path d="M74.2 16.4Q74.2 11.4 79 11.4Q83.9 11.4 83.9 16.2Q83.9 19.5 79 21.6L79 24.1" fill="none" stroke="#080604" stroke-width="3.3" stroke-linecap="round"/><circle cx="79" cy="28.6" r="2" fill="#080604"/>'],
+  shock: ['#f3ece3', '<path d="M79 10.6L81.3 18.7L89.4 21L81.3 23.3L79 31.4L76.7 23.3L68.6 21L76.7 18.7Z" fill="#080604"/>'],
+};
+
+/**
+ * The badge for a mood, or '' for `idle`.
+ *
+ * ⚠️ **IDLE NEVER GETS ONE, AND THAT IS STRUCTURAL RATHER THAN A CALL SITE'S JOB.** Seven of the
+ * nine places this face is mounted are hard-coded idle — the colour picker, the run slate, the
+ * lobby grid, the lower third, the nominee rows, the pair board, the spectator view. A badge on
+ * any of them would be an emotion the player never sent, and on the pair board (two faces
+ * overlapping by a third of their width) it would land underneath the other player's head.
+ * Deriving it from the mood means no caller can turn it on by accident.
+ */
+function reactBadge(mood) {
+  const b = BADGE[mood];
+  if (!b) return '';
+  return `<g class="bot-badge" data-react="${mood}">`
+    + `<rect x="62" y="4" width="34" height="34" rx="11" fill="${b[0]}" stroke="${NIGHT_BG}" stroke-width="3.4"/>`
+    + `${b[1]}</g>`;
+}
+
+/** The night's own background, so the badge reads as a chip lifted off the head. */
+const NIGHT_BG = '#0c0a08';
+
+/** The helmet, without the lit face. `detail` 2 keeps the seams and the screen sheen. */
+function helmet(t, detail) {
+  let s = `<rect data-paint="pod" data-stroke="rim" x="9.8" y="36.6" width="12.2" height="34.4" rx="6.1" fill="@POD@" stroke="@RIM@" stroke-width="1" stroke-opacity="0.4"/>`
+    + `<rect data-paint="pod" data-stroke="rim" x="79" y="36.6" width="12.2" height="34.4" rx="6.1" fill="@POD@" stroke="@RIM@" stroke-width="1" stroke-opacity="0.4"/>`
+    + `<path class="bot-shell" data-paint="shell" data-stroke="rim" fill="@SHELL@" stroke="@RIM@" stroke-width="1.5" stroke-opacity="${t.rimA}" d="${SHELL_D}"/>`
+    + `<path data-paint="crown" fill="@CROWN@" d="${CROWN_D}"/>`;
+  if (detail > 1) {
+    s += `<path data-stroke="seam" d="M51 9.4V13.6" stroke="@SEAM@" stroke-width="1" stroke-linecap="round" opacity="0.5"/>`
+      + `<path data-stroke="seam" d="M33 86.4Q51 90.2 69 86.4" fill="none" stroke="@SEAM@" stroke-width="1" stroke-linecap="round" opacity="0.4"/>`;
+  }
+  s += `<rect x="${PLATE.x}" y="${PLATE.y}" width="${PLATE.w}" height="${PLATE.h}" rx="${PLATE.r}" fill="${GLASS}"/>`;
+  if (detail > 1) {
+    s += `<rect x="${PLATE.x + 3.4}" y="${PLATE.y + 3.0}" width="${PLATE.w - 6.8}" height="${PLATE.h * 0.52}" rx="${PLATE.r - 3.4}" fill="${GLASS_LIT}" opacity="0.30"/>`;
+  }
+  return s;
+}
+
+/** A bare screen — the faceplate with no helmet around it. */
+function bareScreen(t) {
+  const p = SCREEN_PLATE;
+  return `<rect data-paint="shell" data-stroke="rim" x="${p.x - 3}" y="${p.y - 3}" width="${p.w + 6}" height="${p.h + 6}" rx="${p.r + 3}" fill="@SHELL@" stroke="@RIM@" stroke-width="1.3" stroke-opacity="0.6"/>`
+    + `<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" rx="${p.r}" fill="${GLASS}"/>`;
+}
+
+/**
+ * `portrait` is the lobby and the role card. `chip` is the same silhouette with the seams and
+ * the sheen dropped and the features fattened, for a row of eight at 40px. `screen` drops the
+ * helmet entirely — the plate is the whole graphic, which is what survives furthest away.
+ */
+const TREATMENTS = {
+  portrait: (t, m) => helmet(t, 2) + litFace(PLATE, { halo: true, spec: true, bold: 0, mood: m }) + reactBadge(m),
+  chip: (t, m) => helmet(t, 1) + litFace(PLATE, { halo: false, spec: false, bold: 1, mood: m }) + reactBadge(m),
+  screen: (t, m) => bareScreen(t) + litFace(SCREEN_PLATE, { halo: true, spec: false, bold: 0.5, mood: m }) + reactBadge(m),
+};
+
+/** The tokens the drawing is authored against, so `paintLook` and the initial render agree. */
+const paintOf = (look, t) => ({
+  SHELL: look.shell, CROWN: t.crown, POD: t.pod, RIM: t.rim, SEAM: t.seam, LIT: look.accent,
+});
+
+/**
+ * Small robot face. `shell` is the helmet; `accent` is the light on the screen.
+ * `treatment` picks how much detail survives; `mood` picks the expression.
+ */
+export function robotFaceSvg(shell = DEFAULT_LOOK.shell, accent = DEFAULT_LOOK.accent,
+  { size = 120, treatment = 'portrait', mood = 'idle' } = {}) {
   const s = cleanLook({ shell, accent }) || DEFAULT_LOOK;
-  return `<svg class="bot-face" viewBox="0 0 80 80" width="${size}" height="${size}" aria-hidden="true">
-    <path class="bot-shell" fill="${s.shell}" d="M40 7C55 7 67 18 67 34v15c0 17-14 25-27 25S13 66 13 49V34C13 18 25 7 40 7z"/>
-    <path class="bot-wedge" fill="${s.accent}" d="M40 18l20 17-20 24L20 35z"/>
-    <rect class="bot-eye" x="29.5" y="33" width="6.5" height="4.2" rx="2.1" fill="#1a120c"/>
-    <rect class="bot-eye" x="44" y="33" width="6.5" height="4.2" rx="2.1" fill="#1a120c"/>
-  </svg>`;
+  const t = shellTones(s.shell);
+  let body = (TREATMENTS[treatment] || TREATMENTS.portrait)(t, mood);
+  for (const [k, v] of Object.entries(paintOf(s, t))) body = body.split(`@${k}@`).join(v);
+  return `<svg class="bot-face" viewBox="0 0 100 100" width="${size}" height="${size}" aria-hidden="true">${body}</svg>`;
+}
+
+/**
+ * 🖌️ **RECOLOUR AN ALREADY-MOUNTED FACE IN PLACE**, so the picker keeps its CSS fill
+ * transition instead of the swatch tap replacing the whole node under the player's thumb.
+ *
+ * The old face could be recoloured by two `setAttribute` calls, because it had exactly two
+ * coloured parts. This one has nine, four of them DERIVED from the shell — so both call sites
+ * (the phone picker and the TV seat grid) patched the two they knew about and would silently
+ * leave the crown, the pods and the rim on the previous player's colour. Hence one painter,
+ * driven by the same `data-paint` / `data-stroke` tags the drawing is authored with: add a
+ * part to the face and it is recoloured here for free. Gate: `party-warm` W40c.
+ *
+ * Returns false if `faceEl` is missing or the look is not in the palette — the caller should
+ * fall back to a full re-render, which is also the path for a face that is not mounted yet.
+ */
+export function paintLook(faceEl, look) {
+  const s = cleanLook(look);
+  if (!faceEl || !s) return false;
+  const t = shellTones(s.shell);
+  const paint = paintOf(s, t);
+  for (const el of faceEl.querySelectorAll('[data-paint]')) {
+    const v = paint[String(el.dataset.paint).toUpperCase()];
+    if (v) el.setAttribute('fill', v);
+  }
+  for (const el of faceEl.querySelectorAll('[data-stroke]')) {
+    const v = paint[String(el.dataset.stroke).toUpperCase()];
+    if (v) el.setAttribute('stroke', v);
+  }
+  const shellEl = faceEl.querySelector('[data-paint="shell"]');
+  if (shellEl) shellEl.setAttribute('stroke-opacity', String(t.rimA));
+  return true;
 }
 
 /**
@@ -291,6 +578,52 @@ export const SHOW_CHROME_CSS = `
     .recap .v.bad { color:var(--night-bad); }
     .recap .v.ok { color:var(--night-live); }
     .night.on-recap .show-clock .talk-clock { font-size:clamp(28px, 4vw, 44px); }
+    /* The recap facts, in the lower chrome instead of the plate. Sofa distance, not desk. */
+    .talk-chrome-bot .recap.talk-facts { grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));
+      gap:10px; margin-bottom:2px; }
+    .talk-chrome-bot .recap.talk-facts .k { font-size:12px; letter-spacing:.26em; }
+    .talk-chrome-bot .recap.talk-facts .v { font-size:clamp(28px, 4vw, 56px); }
+    /* 🔢 Which SAM. The player's own accent, carrying their seat number. */
+    .seat-chip { flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center;
+      min-width:30px; height:30px; padding:0 6px; border-radius:15px; color:var(--night-panel);
+      font-weight:900; font-size:15px; line-height:1; }
+    /* 📊 The ballot box filling up. Count and threshold — never a name, never a tally. */
+    .tally-board { margin-bottom:10px; }
+    .tally-n { display:flex; align-items:baseline; gap:8px; }
+    .tally-in { font-size:clamp(28px, 4vw, 52px); font-weight:800; line-height:1;
+      color:var(--night-accent); font-variant-numeric:tabular-nums; }
+    .tally-in.ok, .tally-board.full .tally-in { color:var(--night-live); }
+    .tally-of { font-size:clamp(14px, 1.4vw, 20px); font-weight:700; color:var(--night-dim); }
+    .tally-bar { margin-top:8px; height:10px; border-radius:5px; background:var(--night-well);
+      overflow:hidden; }
+    .tally-fill { height:100%; background:var(--night-accent); transition:width .3s ease; }
+    .tally-board.full .tally-fill { background:var(--night-live); }
+    /* 🎬 The casting board — the room's own shape during the role-card window. */
+    .cast-board { width:100%; margin:0 0 14px; }
+    .cast-k { color:var(--night-accent); font-size:12px; letter-spacing:.26em;
+      text-transform:uppercase; font-weight:700; }
+    .cast-lead { font-size:clamp(26px, 3.4vw, 48px); font-weight:800; line-height:1.1; margin-top:4px; }
+    .cast-lamps { display:grid; grid-template-columns:repeat(auto-fit, minmax(132px, 1fr));
+      gap:10px; margin-top:14px; }
+    .cast-lamp { padding:14px 10px 12px; border-radius:12px; background:rgba(0,0,0,.55);
+      border:1px solid rgba(var(--night-accent-rgb), .16); text-align:center; opacity:.58;
+      display:flex; flex-direction:column; align-items:center; gap:8px;
+      transition:opacity .3s ease, border-color .3s ease; }
+    .cast-lamp.on { opacity:1; border-color:var(--night-live); }
+    .cast-lamp .who { font-size:clamp(15px, 1.5vw, 20px); font-weight:800; line-height:1.1; }
+    .cast-lamp .meta { font-size:10px; letter-spacing:.2em; text-transform:uppercase;
+      font-weight:700; color:var(--night-dim); }
+    .cast-lamp.on .meta { color:var(--night-live); }
+    .cast-count { display:flex; align-items:baseline; gap:8px; margin-top:14px; }
+    /* In the lower chrome band the same board is a strip, not a page. */
+    .talk-chrome-bot .cast-board { margin:0 0 4px; }
+    .talk-chrome-bot .cast-lead { font-size:clamp(18px, 2vw, 28px); }
+    .talk-chrome-bot .cast-lamps { margin-top:8px; gap:8px; }
+    .talk-chrome-bot .cast-lamp { padding:8px 8px 7px; gap:5px; border-radius:10px; }
+    .talk-chrome-bot .cast-lamp .who { font-size:clamp(13px, 1.1vw, 16px); }
+    .talk-chrome-bot .cast-lamp .seat-chip { min-width:24px; height:24px; font-size:13px; }
+    .talk-chrome-bot .cast-count { margin-top:8px; }
+    .talk-chrome-bot .cast-count .tally-in { font-size:clamp(22px, 2.4vw, 34px); }
     .pick-list.jackbox button { min-height:76px; font-size:clamp(22px, 7vw, 36px);
       padding:18px 20px; letter-spacing:.04em; }
     .pick-list.buzz button { animation: night-rise .35s ease; }

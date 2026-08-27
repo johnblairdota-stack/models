@@ -1,0 +1,15 @@
+{
+  "pages": [
+    { "id": "tv", "name": "TV" },
+    { "id": "phone", "name": "Phone" }
+  ],
+  "artboards": [
+    { "file": "Main.dc.html",        "page": "tv",    "x": 0,    "y": 0,    "w": 1600, "h": 900, "title": "Recap — the show says something" },
+    { "file": "Vote.dc.html",        "page": "tv",    "x": 1700, "y": 0,    "w": 1600, "h": 900, "title": "Vote — ballot progress" },
+    { "file": "Casting.dc.html",     "page": "tv",    "x": 0,    "y": 1000, "w": 1600, "h": 900, "title": "Casting — the blank 20 seconds" },
+    { "file": "Tags.dc.html",        "page": "tv",    "x": 1700, "y": 1000, "w": 1600, "h": 900, "title": "Name tags — near-field clamp" },
+    { "file": "PhoneReckon.dc.html", "page": "phone", "x": 0,    "y": 0,    "w": 390,  "h": 844, "title": "Phone — Reckoning, 8 players" },
+    { "file": "PhoneVote.dc.html",   "page": "phone", "x": 490,  "y": 0,    "w": 390,  "h": 844, "title": "Phone — Vote + receipt" }
+  ],
+  "launch": { "view": "canvas", "page": "tv" }
+}

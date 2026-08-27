@@ -389,15 +389,50 @@ export function generatedTables(seed, opts = {}) {
       rotY: rotYFor(run.axis), w: CONNECTOR_W, h: CONNECTOR_H,
     });
   };
+  /** The ballroom's own arched opening: the showcase's 5.2 m motif, one storey tall. */
+  const BALL_DOOR_W = 5.20;
+  const BALL_DOOR_H = 4.70;
   const pushPortal = (a, b, run, state = OPEN) => {
-    const w = Math.min(DOORWAY_W, run.clear);
+    /* =========================================================================================
+     * 🏛️ **THE BALLROOM'S DOORS ARE ARCHES, AND THE WHOLE ARCH IS THE OPENING.**
+     *
+     * John: *"I also want the whole arch to be the doorway. the dig wasn't on that wall anyway."*
+     *
+     * `room.js` `ballroomOrderFor` builds this room's arches FROM its connectors, so the arch is
+     * whatever the hole is. At `DOORWAY_W` 1.90 the showcase's 5.2 m motif came out 2.7x narrower
+     * and its 150 mm archivolt went from 6% of the opening to 16% — a door case, not an arch.
+     * Widening the connector is what makes the arch grand, and it is the connector that has to
+     * move: the hole is cut by `buildWall` from this row, not by the order.
+     *
+     * ⚠️ **THIS WAS REFUSED ONCE, ON GROUNDS THAT NO LONGER HOLD.** The objection was that a wider
+     * aperture is a gameplay change: it feeds `pathPortals`, and `dig.js` groups its instanced
+     * meshes by aperture size so a new size is a new instancing group. Pathfinding is fine — wider
+     * is easier, never harder. And the dig objection died with the rule above: **the ballroom can
+     * no longer carry a shut door, so there is no dig aperture on its walls to group.** What DOES
+     * change is sightlines into the next room, both ways, and that is John's call, made knowingly.
+     *
+     * ⚠️ **IT ASKS, IT DOES NOT ASSUME.** `canDoor` only guarantees `L_DOOR` 2.48 m of clear run;
+     * a 5.2 m opening needs its own jambs, so a run that cannot hold one falls back to the normal
+     * doorway rather than cutting a hole wider than the wall it is in.
+     * ========================================================================================= */
+    const grand = (rows.find((r) => r.id === a)?.roomType === 'ballroom'
+      || rows.find((r) => r.id === b)?.roomType === 'ballroom')
+      && run.clear >= BALL_DOOR_W + 2 * 0.20;
+    const w = grand ? BALL_DOOR_W : Math.min(DOORWAY_W, run.clear);
     if (w <= MIN_PASSABLE) return;                            // too narrow to ever pass — drop it
     if (!portalFacesPlayable(rows, openingAt(a, b, run))) return;
     portals.push({
       id: `D.g${gi++}`, state, a, b, axis: widthAxisOf(run.axis),
       x: run.axis === 'x' ? run.at : (run.lo + run.hi) / 2,
       z: run.axis === 'x' ? (run.lo + run.hi) / 2 : run.at,
-      w, h: DOORWAY_H,
+      w,
+      /*
+       * ⚠️ **4.70, NOT THE SHOWCASE'S 5.20.** All four of this room's walls cap at `SPLIT` 4.80
+       * and the upper wall run starts there; a crown at 5.20 puts 0.40 m into the upper run's
+       * clash list and suppresses a strip of panelling across 5.2 m for nothing. 4.70 keeps the
+       * whole motif in the lower storey. Well clear of `PASS_H.hunter` 2.40 either way.
+       */
+      h: grand ? BALL_DOOR_H : DOORWAY_H,
     });
   };
 
@@ -411,7 +446,26 @@ export function generatedTables(seed, opts = {}) {
     // collider); open = a PORTAL (a hole). Never the same row with a different `state`.
     // 🚪 And it is not a door if either landing is void / a sliver. Playtest: John walked
     // out of the mansion through an OPEN hole on a leftover envelope run.
-    if (SHUT_DOORS) pushDoor(a, b, run); else pushPortal(a, b, run, OPEN);
+    /* =========================================================================================
+     * 🚪 **THE BALLROOM NEVER GETS A SHUT DOOR. IT IS A RULE, NOT A SEED.**
+     *
+     * John, having played a generated night: *"when we use the generator to make new procedural
+     * room layouts the ballroom should never have this dig door."*
+     *
+     * A shut door here is a `CONNECTOR_W` 2.08 x `CONNECTOR_H` 2.68 boarded LEAF — a smash-through
+     * panel — and in the ballroom it reads as exactly what it is: a service door in the middle of
+     * the wall of the room the whole show is staged in. Every other room can have one; this one is
+     * the set.
+     *
+     * ⚠️ **IT DEGRADES TO AN OPEN PORTAL, IT DOES NOT DELETE THE CONNECTOR — and that difference
+     * is what makes this safe to do at all.** Dropping the row would remove a ROUTE, and this
+     * file's own history has the failure mode written down: a connector that looked redundant
+     * became *"the ONLY way ANYONE enters the spur"* the day another was removed. An open doorway
+     * carries every route the shut one did, so no seed can be made unreachable by this rule.
+     * ========================================================================================= */
+    const typeOf = (id) => rows.find((r) => r.id === id)?.roomType ?? null;
+    const ballroomSide = typeOf(a) === 'ballroom' || typeOf(b) === 'ballroom';
+    if (SHUT_DOORS && !ballroomSide) pushDoor(a, b, run); else pushPortal(a, b, run, OPEN);
   }
 
   for (const kept of corridorOf.values()) {

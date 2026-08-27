@@ -1,0 +1,154 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; }
+
+    /* ═══════ THE STREAM ═══════
+       Two animations per glyph, nested:
+         · flow  — travels the gap between the two name tags
+         · cycle — steps() through a vertical reel of characters, so each glyph
+                   keeps changing the way a Matrix column does
+       Everything is CSS so it runs anywhere this page is opened. */
+    .lane { position: absolute; top: 50%; height: 34px; transform: translateY(-50%); overflow: visible; }
+    .g { position: absolute; top: 0; height: 34px; width: 20px; overflow: hidden;
+         font-family: ui-monospace, "SF Mono", Menlo, monospace; font-weight: 700; font-size: 26px;
+         line-height: 34px; text-align: center; will-change: transform; }
+    .g .reel { display: block; animation: cycle .55s steps(10) infinite; }
+    .g .reel span { display: block; height: 34px; }
+    @keyframes cycle { from { transform: translateY(0); } to { transform: translateY(-340px); } }
+    @keyframes flowR { from { transform: translateX(0); } to { transform: translateX(var(--span)); } }
+    @keyframes flowL { from { transform: translateX(var(--span)); } to { transform: translateX(0); } }
+    /* The leading glyph is near-white and the tail falls away — the thing that makes it read
+       as a stream with a direction rather than as noise. */
+    @keyframes fadeTail { 0% { opacity: 0; } 8% { opacity: 1; } 70% { opacity: .55; } 100% { opacity: 0; } }
+
+    .thread { position: absolute; top: 50%; height: 1px; transform: translateY(-50%); opacity: .28; }
+
+    .tag { position: absolute; top: 50%; transform: translateY(-50%); display: flex; align-items: stretch;
+           height: 46px; border-radius: 4px; overflow: hidden; box-shadow: 0 0 0 3px #000, 0 0 26px rgba(0,0,0,.7); }
+    .tag .chrome { width: 8px; }
+    .tag .plate { display: flex; align-items: center; padding: 0 14px; font-weight: 900; font-size: 27px;
+                  letter-spacing: .02em; line-height: 1; }
+  </style>
+</helmet>
+
+<div style="width: 1600px; height: 900px; position: relative; background: #0c0a08; color: #f3ece3; overflow: hidden;">
+
+  <div style="position: absolute; left: 40px; top: 26px;">
+    <div style="font-size: 12px; letter-spacing: .26em; text-transform: uppercase; font-weight: 700; color: #f5a14a;">Jellie · the data stream</div>
+    <h1 style="margin: 8px 0 0; font-size: 38px; font-weight: 800;">Two people are sharing something, and the room can see it happen</h1>
+    <p style="margin: 8px 0 0; font-size: 19px; color: #a89884; max-width: 1180px;">Glyphs run between the two head tags for as long as the pair lives. The room never learns a single word — it learns <em>that</em> a channel is open, and between whom. Two colour directions, live, same geometry. Pick one.</p>
+  </div>
+
+  <sc-for list="{{panels}}" as="p" hint-placeholder-count="2">
+    <div style="position: absolute; left: 40px; width: 1520px; height: {{p.h}}px; top: {{p.top}}px; border-radius: 16px; overflow: hidden; background: {{p.bg}}; border: 1px solid {{p.edge}};">
+
+      <div style="position: absolute; left: 22px; top: 16px; display: flex; align-items: baseline; gap: 14px; z-index: 3;">
+        <span style="font-size: 26px; font-weight: 900; color: {{p.core}};">{{p.key}}</span>
+        <span style="font-size: 13px; letter-spacing: .24em; text-transform: uppercase; font-weight: 800; color: {{p.core}};">{{p.title}}</span>
+        <span style="font-size: 15px; color: #8a7d70;">{{p.note}}</span>
+      </div>
+
+      <!-- the two paired robots' head tags, at ballroom spacing -->
+      <div class="tag" style="left: 150px;">
+        <div class="chrome" style="background: {{p.chrome}}"></div>
+        <div class="plate" style="background: {{p.plate}}; color: {{p.ink}};">JELLIE</div>
+      </div>
+      <div class="tag" style="right: 150px;">
+        <div class="chrome" style="background: {{p.chrome}}"></div>
+        <div class="plate" style="background: {{p.plate}}; color: {{p.ink}};">JELLIE</div>
+      </div>
+
+      <div class="thread" style="left: 300px; width: 920px; background: linear-gradient(90deg, transparent, {{p.core}}, transparent);"></div>
+
+      <div class="lane" style="left: 300px; width: 920px;">
+        <sc-for list="{{p.glyphs}}" as="g">
+          <div class="g" style="--span: 900px; animation: {{g.dir}} {{g.dur}}s linear {{g.delay}}s infinite, fadeTail {{g.dur}}s linear {{g.delay}}s infinite; color: {{g.tint}}; text-shadow: 0 0 {{g.glow}}px {{p.core}}; left: 0; top: {{g.y}}px; font-size: {{g.size}}px;">
+            <span class="reel" style="animation-delay: {{g.reel}}s">
+              <span>ｱ</span><span>ﾂ</span><span>ﾉ</span><span>7</span><span>ﾑ</span><span>ｷ</span><span>3</span><span>ﾜ</span><span>ﾖ</span><span>ﾈ</span><span>ｱ</span>
+            </span>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="position: absolute; right: 22px; bottom: 14px; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: #8a7d70;">{{p.spec}}</div>
+    </div>
+  </sc-for>
+
+  <!-- ═══════ WHAT IT COSTS AND WHERE IT LIVES ═══════ -->
+  <div style="position: absolute; left: 40px; bottom: 26px; right: 40px; display: flex; gap: 40px; font-size: 15px; color: #a89884;">
+    <div><strong style="color: #f3ece3;">Where it draws.</strong> Caption layer 1, after the post grade — same pass as the name tags, so the room's fog can never eat it.</div>
+    <div><strong style="color: #f3ece3;">What it costs.</strong> Two pairs max, so at most two streams. One Points cloud each.</div>
+    <div><strong style="color: #f3ece3;">What it says.</strong> Only that a channel is open, and between whom — both already public on the TV.</div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{
+  "density": {"editor": "int", "default": 22, "min": 6, "max": 40, "section": "Stream"},
+  "speed": {"editor": "float", "default": 2.6, "min": 0.8, "max": 6, "section": "Stream"},
+  "twoWay": {"editor": "boolean", "default": true, "section": "Stream"}
+}'>
+class Component extends DCLogic {
+  renderVals() {
+    const n = Math.max(4, Math.min(this.props.density ?? 22, 40));
+    const dur = Math.max(0.8, this.props.speed ?? 2.6);
+    const twoWay = this.props.twoWay ?? true;
+
+    // Deterministic scatter — no Math.random, so the artboard is the same every time it opens
+    // and two people looking at it are looking at the same picture.
+    const jitter = (i, k) => ((Math.sin(i * 12.9898 + k * 78.233) * 43758.5453) % 1 + 1) % 1;
+
+    const build = (core, dim) => Array.from({ length: n }, (_, i) => {
+      const lead = i % 5 === 0;
+      const back = twoWay && i % 2 === 1;
+      return {
+        dir: back ? 'flowL' : 'flowR',
+        dur: (dur * (0.75 + jitter(i, 1) * 0.6)).toFixed(2),
+        delay: (-jitter(i, 2) * dur * 2).toFixed(2),
+        reel: (-jitter(i, 3)).toFixed(2),
+        y: Math.round((jitter(i, 4) - 0.5) * 30),
+        size: 18 + Math.round(jitter(i, 5) * 12),
+        tint: lead ? '#ffffff' : (jitter(i, 6) > 0.45 ? core : dim),
+        glow: lead ? 14 : 8,
+      };
+    });
+
+    return {
+      panels: [
+        {
+          key: 'A',
+          title: 'Pair green',
+          note: 'the same green as the merged plate — one mechanic, one colour',
+          h: 300, top: 208,
+          bg: 'radial-gradient(900px 300px at 50% 50%, rgba(31,122,61,.16), rgba(12,10,8,0) 72%), #0e0c0a',
+          edge: 'rgba(143,217,168,.30)',
+          core: '#8FD9A8', ink: '#1F7A3D', plate: '#EDEFF0', chrome: '#8FD9A8',
+          spec: 'LINK_CHROME #8FD9A8 · LINK_INK #1F7A3D',
+          glyphs: build('#8FD9A8', '#3E8F63'),
+        },
+        {
+          key: 'B',
+          title: 'Matrix green',
+          note: 'the classic — brighter and colder than anything else in the show',
+          h: 300, top: 528,
+          bg: 'radial-gradient(900px 300px at 50% 50%, rgba(0,255,65,.12), rgba(12,10,8,0) 72%), #0a0a08',
+          edge: 'rgba(0,255,65,.30)',
+          core: '#00FF41', ink: '#00320D', plate: '#EDEFF0', chrome: '#00FF41',
+          spec: 'core #00FF41 · tail #00913A',
+          glyphs: build('#00FF41', '#00913A'),
+        },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,96 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; }
+    a { color: #f5a14a; } a:hover { color: #ffbe7d; }
+  </style>
+</helmet>
+
+<div style="width: 1600px; height: 900px; position: relative; background: #0c0a08; color: #f3ece3; overflow: hidden;">
+
+  <!-- the ballroom picture, standing in for the live mansion -->
+  <div style="position: absolute; inset: 0 0 176px 0; background:
+      radial-gradient(900px 520px at 50% 22%, rgba(245,161,74,.10), transparent 60%),
+      linear-gradient(180deg, #171310 0%, #0e0b09 60%, #0a0806 100%);">
+    <div style="position: absolute; left: 50%; top: 58%; transform: translate(-50%,-50%); width: 900px; height: 300px; border-radius: 50%; background: radial-gradient(ellipse at center, rgba(94,44,38,.55), rgba(20,14,11,0) 70%);"></div>
+    <div style="position: absolute; left: 24px; top: 18px; display: flex; align-items: center; gap: 10px; font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: #f5a14a; font-weight: 700;">
+      <span style="width: 9px; height: 9px; border-radius: 50%; background: #ff8a7a; display: inline-block;"></span>
+      Prime Time · on air
+    </div>
+    <div style="position: absolute; right: 24px; top: 16px; font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: #8a7d70;">Episode 2 · Debrief</div>
+  </div>
+
+  <!-- ═══════════ THE PAIR RAIL ═══════════
+       The thing being designed. It replaces a 12px --night-dim caption in the
+       bottom-left gutter that no one could read from a sofa. Built out of the show's
+       existing lower-third vocabulary: black panel, right-rounded, amber key line. -->
+  <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 176px; display: flex; align-items: stretch; gap: 12px; padding: 14px 24px 16px 0;">
+
+    <!-- live pairs. Each carries its OWN hue, because two identical green tags on
+         opposite sides of the circle never read as one pair. -->
+    <sc-for list="{{pairs}}" as="p" hint-placeholder-count="2">
+      <div style="flex: 0 0 auto; min-width: 300px; display: flex; align-items: stretch; background: rgba(0,0,0,.62); border-radius: 0 12px 12px 0; overflow: hidden;">
+        <div style="width: 10px; background: {{p.hue}}; flex: 0 0 auto;"></div>
+        <div style="padding: 14px 22px 12px 16px; display: flex; flex-direction: column; justify-content: center;">
+          <div style="font-size: 11px; letter-spacing: .26em; text-transform: uppercase; font-weight: 700; color: {{p.hue}};">Connected</div>
+          <div style="font-size: 54px; font-weight: 800; line-height: .98; letter-spacing: .01em; color: #f3ece3; text-shadow: 0 3px 18px rgba(0,0,0,.95); margin-top: 4px;">{{p.name}}</div>
+          <div style="margin-top: 6px; font-size: 20px; font-weight: 700; letter-spacing: .04em; color: #a89884;">{{p.who}}</div>
+        </div>
+      </div>
+    </sc-for>
+
+    <!-- the event column: reaching out, and refusals. 24px, not 12px. -->
+    <div style="flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 8px; padding-left: 20px;">
+      <sc-for list="{{events}}" as="e" hint-placeholder-count="2">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span style="flex: 0 0 auto; width: 9px; height: 9px; background: {{e.tint}}; transform: rotate(45deg);"></span>
+          <span style="font-size: 24px; font-weight: 700; letter-spacing: .02em; color: {{e.tint}}; white-space: nowrap;">{{e.text}}</span>
+        </div>
+      </sc-for>
+      <sc-if value="{{full}}" hint-placeholder-val="{{ true }}">
+        <div style="margin-top: 2px; font-size: 15px; letter-spacing: .22em; text-transform: uppercase; font-weight: 700; color: #8a7d70;">Two conversations · the room is full</div>
+      </sc-if>
+    </div>
+
+    <!-- the beat clock, in the existing show-clock language -->
+    <div style="flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; text-align: right; padding-right: 6px;">
+      <div style="font-size: 11px; letter-spacing: .22em; text-transform: uppercase; font-weight: 700; color: #f5a14a;">Debrief</div>
+      <div style="font-size: 56px; font-weight: 800; line-height: 1; color: #f3ece3; font-variant-numeric: tabular-nums;">2:14</div>
+      <div style="margin-top: 4px; font-size: 13px; letter-spacing: .16em; text-transform: uppercase; color: #8a7d70;">4 of 5 ready</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{
+  "full": {"editor": "boolean", "default": true, "section": "State"},
+  "showEvents": {"editor": "boolean", "default": true, "section": "State"},
+  "hueA": {"editor": "color", "default": "#8FD9A8", "section": "Pair hues"},
+  "hueB": {"editor": "color", "default": "#8FB6F0", "section": "Pair hues"}
+}'>
+class Component extends DCLogic {
+  renderVals() {
+    const hueA = this.props.hueA ?? '#8FD9A8';
+    const hueB = this.props.hueB ?? '#8FB6F0';
+    const full = this.props.full ?? true;
+    const pairs = [
+      { name: 'JELLIE', who: 'John + Ellie', hue: hueA },
+      { name: 'MOZZ', who: 'Mara + Ozz', hue: hueB },
+    ];
+    const events = (this.props.showEvents ?? true) ? [
+      { text: 'BEX turned SAM down', tint: '#ff8a7a' },
+      { text: 'IVY reaches out to ZOE…', tint: '#f5a14a' },
+    ] : [];
+    return { pairs: full ? pairs : [pairs[0]], events, full };
+  }
+}
+</script>
+</body>
+</html>

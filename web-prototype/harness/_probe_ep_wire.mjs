@@ -1,0 +1,10 @@
+﻿import { createRoom } from '../src/party/room.js';
+const game = createRoom({ count: 8, castSeed: 1, worldSeed: 1, send: () => {}, emit: () => {} });
+game.start();
+const ids = game.state.players.slice(0, 3).map((p) => p.id);
+game.dealRoles(ids);
+game.beginCasting();
+game.playEpisode({ living: ids, ballots: ids.map(() => ({ runner: ids[0], guide: ids[1] })) });
+console.log({ episode: game.state.episode, airingEpisode: game.state.airingEpisode });
+console.log('FIXED', game.state.airingEpisode === 1 && game.state.episode === 2);
+console.log('chrome', `EXPEDITION · episode ${game.state.airingEpisode}`);

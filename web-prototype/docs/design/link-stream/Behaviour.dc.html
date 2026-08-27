@@ -1,0 +1,161 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; }
+    .lane { position: absolute; left: 0; right: 0; top: 50%; height: 30px; transform: translateY(-50%); }
+    .g { position: absolute; top: 0; height: 30px; width: 18px; overflow: hidden;
+         font-family: ui-monospace, Menlo, monospace; font-weight: 700; line-height: 30px;
+         text-align: center; }
+    .g .reel { display: block; animation: cycle .5s steps(10) infinite; }
+    .g .reel span { display: block; height: 30px; }
+    @keyframes cycle { from { transform: translateY(0); } to { transform: translateY(-300px); } }
+    @keyframes flowR { from { transform: translateX(0); } to { transform: translateX(var(--span)); } }
+    @keyframes fadeTail { 0% { opacity: 0; } 10% { opacity: 1; } 72% { opacity: .5; } 100% { opacity: 0; } }
+    @keyframes surge { 0%, 62% { opacity: 0; transform: scaleX(.2); }
+                       70% { opacity: 1; transform: scaleX(1); }
+                       100% { opacity: 0; transform: scaleX(1); } }
+    @keyframes born { 0% { transform: scaleX(0); opacity: 0; } 18% { opacity: 1; } 100% { transform: scaleX(1); opacity: 1; } }
+    .tag { position: absolute; top: 50%; transform: translateY(-50%); display: flex; height: 34px;
+           border-radius: 3px; overflow: hidden; box-shadow: 0 0 0 2px #000; }
+    .tag .chrome { width: 6px; }
+    .tag .plate { display: flex; align-items: center; padding: 0 10px; font-weight: 900;
+                  font-size: 19px; line-height: 1; background: #EDEFF0; }
+  </style>
+</helmet>
+
+<div style="width: 1600px; height: 900px; position: relative; background: #0c0a08; color: #f3ece3; overflow: hidden; padding: 34px 40px; box-sizing: border-box;">
+
+  <div style="font-size: 12px; letter-spacing: .26em; text-transform: uppercase; font-weight: 700; color: #f5a14a;">Jellie · the data stream</div>
+  <h1 style="margin: 8px 0 0; font-size: 36px; font-weight: 800;">When it starts, what it does, when it stops</h1>
+  <p style="margin: 8px 0 24px; font-size: 18px; color: #a89884;">The stream is tied to the pair, not to the words. It appears the instant two names merge and it is gone the instant they part — so it is the same public fact the CONNECTIONS board already carries, drawn on the picture instead of in a rail.</p>
+
+  <!-- ═══════ THE THREE MOMENTS ═══════ -->
+  <div style="display: flex; gap: 16px;">
+    <sc-for list="{{moments}}" as="m" hint-placeholder-count="3">
+      <div style="flex: 1 1 0; border-radius: 14px; background: #100e0c; border: 1px solid {{m.edge}}; overflow: hidden;">
+        <div style="padding: 16px 18px 12px;">
+          <div style="font-size: 11px; letter-spacing: .26em; text-transform: uppercase; font-weight: 800; color: {{m.tint}};">{{m.k}}</div>
+          <div style="margin-top: 6px; font-size: 24px; font-weight: 800; line-height: 1.1;">{{m.title}}</div>
+          <p style="margin: 8px 0 0; font-size: 15px; color: #a89884; min-height: 66px;">{{m.body}}</p>
+        </div>
+        <div style="position: relative; height: 120px; background: radial-gradient(400px 120px at 50% 50%, rgba(31,122,61,.14), transparent 72%); border-top: 1px solid rgba(255,255,255,.05);">
+          <div class="tag" style="left: 22px;"><div class="chrome" style="background: {{m.chrome}}"></div><div class="plate" style="color: {{m.ink}};">{{m.left}}</div></div>
+          <div class="tag" style="right: 22px;"><div class="chrome" style="background: {{m.chrome}}"></div><div class="plate" style="color: {{m.ink}};">{{m.right}}</div></div>
+          <div style="position: absolute; left: 130px; right: 130px; top: 0; bottom: 0;">
+            <sc-for list="{{m.glyphs}}" as="g">
+              <div class="g" style="--span: {{m.span}}px; position: absolute; top: {{g.y}}px; left: 0; font-size: {{g.size}}px; color: {{g.tint}}; text-shadow: 0 0 8px {{m.tint}}; animation: flowR {{g.dur}}s linear {{g.delay}}s infinite, fadeTail {{g.dur}}s linear {{g.delay}}s infinite, born {{m.bornMs}}ms ease-out both;">
+                <span class="reel" style="animation-delay: {{g.reel}}s"><span>ｱ</span><span>ﾂ</span><span>ﾉ</span><span>7</span><span>ﾑ</span><span>ｷ</span><span>3</span><span>ﾜ</span><span>ﾖ</span><span>ﾈ</span><span>ｱ</span></span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+
+  <!-- ═══════ THE ONE DECISION THAT IS NOT MINE TO MAKE ═══════ -->
+  <div style="margin-top: 26px; border-radius: 14px; border: 1px solid rgba(245,161,74,.35); background: rgba(245,161,74,.06); padding: 20px 24px;">
+    <div style="display: flex; align-items: baseline; gap: 14px;">
+      <span style="font-size: 11px; letter-spacing: .26em; text-transform: uppercase; font-weight: 800; color: #f5a14a;">Your call</span>
+      <span style="font-size: 24px; font-weight: 800;">Should the stream surge when a whisper is actually sent?</span>
+    </div>
+
+    <div style="display: flex; gap: 18px; margin-top: 18px;">
+      <sc-for list="{{options}}" as="o" hint-placeholder-count="2">
+        <div style="flex: 1 1 0; border-radius: 12px; background: #100e0c; border: 1px solid {{o.edge}}; overflow: hidden;">
+          <div style="padding: 14px 16px 10px;">
+            <div style="display: flex; align-items: baseline; gap: 10px;">
+              <span style="font-size: 20px; font-weight: 900; color: {{o.tint}};">{{o.k}}</span>
+              <span style="font-size: 19px; font-weight: 800;">{{o.title}}</span>
+            </div>
+            <p style="margin: 7px 0 0; font-size: 15px; color: #a89884;">{{o.body}}</p>
+            <p style="margin: 7px 0 0; font-size: 14px; color: {{o.costTint}};"><strong>{{o.costK}}</strong> {{o.cost}}</p>
+          </div>
+          <div style="position: relative; height: 92px; border-top: 1px solid rgba(255,255,255,.05);">
+            <div style="position: absolute; left: 26px; right: 26px; top: 50%; height: 3px; transform: translateY(-50%); border-radius: 2px; background: linear-gradient(90deg, transparent, {{o.tint}}, transparent); opacity: .35;"></div>
+            <div style="position: absolute; left: 26px; right: 26px; top: 50%; height: 7px; transform: translateY(-50%); border-radius: 4px; background: linear-gradient(90deg, transparent, #ffffff, {{o.tint}}, transparent); animation: {{o.pulse}};"></div>
+            <div style="position: absolute; left: 26px; bottom: 8px; font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: #8a7d70;">{{o.caption}}</div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() {
+    const CORE = '#8FD9A8';
+    const DIM = '#3E8F63';
+    const jitter = (i, k) => ((Math.sin(i * 12.9898 + k * 78.233) * 43758.5453) % 1 + 1) % 1;
+    const build = (n, span) => Array.from({ length: n }, (_, i) => ({
+      dur: (1.8 + jitter(i, 1) * 1.2).toFixed(2),
+      delay: (-jitter(i, 2) * 3).toFixed(2),
+      reel: (-jitter(i, 3)).toFixed(2),
+      y: Math.round(44 + (jitter(i, 4) - 0.5) * 26),
+      size: 15 + Math.round(jitter(i, 5) * 8),
+      tint: i % 5 === 0 ? '#ffffff' : (jitter(i, 6) > 0.45 ? CORE : DIM),
+      span,
+    }));
+
+    return {
+      moments: [
+        {
+          k: 'It starts',
+          title: 'Both names go green, and the line opens',
+          body: 'The same frame the merge pop fires. The stream grows out from each plate rather than switching on, so the eye is pulled to the two people it belongs to.',
+          left: 'JELLIE', right: 'JELLIE',
+          ink: '#1F7A3D', chrome: CORE, tint: CORE, edge: 'rgba(143,217,168,.35)',
+          span: 200, bornMs: 900, glyphs: build(9, 200),
+        },
+        {
+          k: 'It lives',
+          title: 'It runs for the whole 90 seconds',
+          body: 'Constant, both directions, indifferent to whether anyone is typing. It says a channel is open — which is exactly what the CONNECTIONS board already says out loud.',
+          left: 'JELLIE', right: 'JELLIE',
+          ink: '#1F7A3D', chrome: CORE, tint: CORE, edge: 'rgba(143,217,168,.35)',
+          span: 200, bornMs: 1, glyphs: build(14, 200),
+        },
+        {
+          k: 'It stops',
+          title: 'DONE, a walk-out, or the clock',
+          body: 'The line dies and both plates fall back to their own names. However the pair ended, the picture ends the same way — the room is not told which of the three it was.',
+          left: 'JOHN', right: 'ELLIE',
+          ink: '#054E84', chrome: '#B9BEC2', tint: '#8a7d70', edge: 'rgba(138,125,112,.35)',
+          span: 200, bornMs: 1, glyphs: [],
+        },
+      ],
+      options: [
+        {
+          k: 'A',
+          title: 'Constant only',
+          body: 'The stream is the CHANNEL. It looks identical whether they are plotting hard or have said nothing at all.',
+          costK: 'Costs:', cost: 'a little less spectacle at the exact moment something happens.',
+          costTint: '#8a7d70',
+          tint: CORE, edge: 'rgba(143,217,168,.35)',
+          pulse: 'none', caption: 'steady',
+        },
+        {
+          k: 'B',
+          title: 'Constant, plus a surge on every send',
+          body: 'A bright pulse runs the line each time a whisper actually lands. More alive, and it makes the mechanic legible from across a room.',
+          costK: 'Costs:', cost: 'it airs WHEN a message was sent. The room can time a pulse against a face and learn something the words were meant to hide.',
+          costTint: '#ff8a7a',
+          tint: CORE, edge: 'rgba(255,138,122,.35)',
+          pulse: 'surge 3.2s ease-out infinite', caption: 'surges on send',
+        },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+browser playwright-chromium
+CODE 2nne
+HEAD 027a078 stick-mag x bed-speed co-log
+JOIN Ada
+JOIN Ben
+START ok
+CARD_DOWN Ada
+CARD_DOWN Ben
+CAST Ada
+CAST Ben
+LOCK_POLL_0 {"hasLock":true,"lockDisabled":false,"hasSend":true,"beat":"casting","bodyHint":"PRIME TIME | CASTING · EPISODE 1 | Two of you go in. One walks, one talks. The rest of us watch. Someone in this room is lying. |  | Ballots land here, huge. Lock when the room has spoken. |  | Ada | SENT | RUNNER Ad"}
+LOCK sent
+LIVE_POLL_0 {"beat":"expedition","warm":"house","warmPct":55,"live":false,"fm":"run"}
+LIVE_READY {"i":6,"room":"r0.ballroom","mode":"run","warmPct":100}
+ROLES [{"name":"Ada","iAmRunner":true,"iAmGuide":false,"hasStick":true},{"name":"Ben","iAmRunner":false,"iAmGuide":true,"hasStick":false}]
+COLOG_START {"room":"r0.ballroom","levels":["0.00","0.25","0.40","0.60","0.80","1.00"]}
+SAMP_0.00_0 {"t":1270,"level":"0.00","cmdRaw":0,"cmdStickMag":0,"padRaw":0,"padStickMag":0,"stickOn":false,"speed":2.47,"throttle":"WALK","shot":"chase","room":"r0.ballroom","posX":14.201,"posZ":46.14}
+SAMP_0.00_1 {"t":1921,"level":"0.00","cmdRaw":0,"cmdStickMag":0,"padRaw":0,"padStickMag":0,"stickOn":false,"speed":2.52,"throttle":"WALK","shot":"chase","room":"r0.ballroom","posX":14.327,"posZ":45.922}
+SAMP_0.00_2 {"t":3296,"level":"0.00","cmdRaw":0,"cmdStickMag":0,"padRaw":0,"padStickMag":0,"stickOn":false,"speed":2.54,"throttle":"WALK","shot":"chase","room":"r0.ballroom","posX":14.395,"posZ":45.677}
+SAMP_0.25_0 {"t":5715,"level":"0.25","cmdRaw":0.25,"cmdStickMag":0.0135,"padRaw":0.25,"padStickMag":0.0135,"stickOn":true,"speed":2.55,"throttle":"WALK","shot":"chase","room":"r0.ballroom","posX":14.426,"posZ":44.915}
+SAMP_0.25_5 {"t":9270,"level":"0.25","cmdRaw":0.25,"cmdStickMag":0.0135,"padRaw":0.25,"padStickMag":0.0135,"stickOn":true,"speed":0,"throttle":"WALK","shot":"chase","room":"r0.ballroom","posX":14.407,"posZ":44.596}
+SAMP_0.40_0 {"t":11643,"level":"0.40","cmdRaw":0.4,"cmdStickMag":0.1554,"padRaw":0.4,"padStickMag":0.1554,"stickOn":true,"speed":0,"throttle":"STILL","shot":"chase","room":"r0.ballroom","posX":14.407,"posZ":44.596}
+SAMP_0.40_3 {"t":15424,"level":"0.40","cmdRaw":0.4,"cmdStickMag":0.1554,"padRaw":0.4,"padStickMag":0.1554,"stickOn":true,"speed":0.06,"throttle":"WALK","shot":"chase","room":"r0.ballroom","posX":14.407,"posZ":44.59}
+SAMP_0.40_4 {"t":16431,"level":"0.40","cmdRaw":0.4,"cmdStickMag":0.1554,"padRaw":0.4,"padStickMag":0.1554,"stickOn":true,"speed":0.06,"throttle":"WALK","shot":"chase","room":"r0.ballroom","posX":14.406,"posZ":44.578}
+SAMP_0.60_0 {"t":17933,"level":"0.60","cmdRaw":0.6,"cmdStickMag":0.555,"padRaw":0.6,"padStickMag":0.555,"stickOn":true,"speed":0.06,"throttle":"WALK","shot":"chase","room":"r0.ballroom","posX":14.405,"posZ":44.566}
+SAMP_0.60_5 {"t":21534,"level":"0.60","cmdRaw":0.6,"cmdStickMag":0.555,"padRaw":0.6,"padStickMag":0.555,"stickOn":true,"speed":0.79,"throttle":"WALK","shot":"chase","room":"r0.ballroom","posX":14.385,"posZ":44.246}
+SAMP_0.60_6 {"t":22174,"level":"0.60","cmdRaw":0.6,"cmdStickMag":0.555,"padRaw":0.6,"padStickMag":0.555,"stickOn":true,"speed":0.79,"throttle":"WALK","shot":"chase","room":"r0.ballroom","posX":14.38,"posZ":44.168}
+SAMP_0.80_0 {"t":23691,"level":"0.80","cmdRaw":0.8,"cmdStickMag":0.9114,"padRaw":0.8,"padStickMag":0.9114,"stickOn":true,"speed":0.79,"throttle":"WALK","shot":"chase","room":"r0.ballroom","posX":14.37,"posZ":44.011}
+SAMP_0.80_6 {"t":27269,"level":"0.80","cmdRaw":0.8,"cmdStickMag":0.9114,"padRaw":0.8,"padStickMag":0.9114,"stickOn":true,"speed":2.12,"throttle":"WALK","shot":"chase","room":"r0.ballroom","posX":14.304,"posZ":42.963}
+SAMP_0.80_7 {"t":27977,"level":"0.80","cmdRaw":0.8,"cmdStickMag":0.9114,"padRaw":0.8,"padStickMag":0.9114,"stickOn":true,"speed":2.12,"throttle":"WALK","shot":"chase","room":"r0.ballroom","posX":14.291,"posZ":42.751}
+SAMP_1.00_0 {"t":29706,"level":"1.00","cmdRaw":1,"cmdStickMag":1,"padRaw":1,"padStickMag":1,"stickOn":true,"speed":2.12,"throttle":"WALK","shot":"chase","room":"r0.ballroom","posX":14.264,"posZ":42.329}
+SAMP_1.00_6 {"t":33373,"level":"1.00","cmdRaw":1,"cmdStickMag":1,"padRaw":1,"padStickMag":1,"stickOn":true,"speed":2.55,"throttle":"WALK","shot":"chase","room":"r0.ballroom","posX":14.138,"posZ":40.319}
+AFTER_RELEASE [{"speed":0.1,"throttle":"STILL","shot":"chase"},{"speed":0,"throttle":"STILL","shot":"shoulder"},{"speed":0,"throttle":"STILL","shot":"shoulder"},{"speed":0,"throttle":"STILL","shot":"shoulder"},{"speed":0,"throttle":"STILL","shot":"shoulder"}]
+VERDICT {"head":"027a078","code":"2nne","durationMs":37729,"sampleCount":36,"roomsSeen":["r0.ballroom"],"summary":[{"level":"0.00","n":2,"cmdStickMag":0,"meanPadStickMag":0,"meanSpeed":2.53,"maxSpeed":2.54,"minSpeed":2.52,"throttles":{"WALK":2},"rooms":["r0.ballroom"],"ratioSpeedPerMag":null},{"level":"0.25","n":5,"cmdStickMag":0.0135,"meanPadStickMag":0.0135,"meanSpeed":0.636,"maxSpeed":2.55,"minSpeed":0,"throttles":{"WALK":5},"rooms":["r0.ballroom"],"ratioSpeedPerMag":null},{"level":"0.40","n":4,"cmdStickMag":0.1554,"meanPadStickMag":0.1554,"meanSpeed":0.03,"maxSpeed":0.06,"minSpeed":0,"throttles":{"WALK":4},"rooms":["r0.ballroom"],"ratioSpeedPerMag":0.1931},{"level":"0.60","n":6,"cmdStickMag":0.555,"meanPadStickMag":0.555,"meanSpeed":0.665,"maxSpeed":0.79,"minSpeed":0.14,"throttles":{"WALK":6},"rooms":["r0.ballroom"],"ratioSpeedPerMag":1.1982},{"level":"0.80","n":7,"cmdStickMag":0.9114,"meanPadStickMag":0.9114,"meanSpeed":1.8043,"maxSpeed":2.12,"minSpeed":0.16,"throttles":{"WALK":7},"rooms":["r0.ballroom"],"ratioSpeedPerMag":1.9797},{"level":"1.00","n":6,"cmdStickMag":1,"meanPadStickMag":1,"meanSpeed":2.085,"maxSpeed":2.55,"minSpeed":0.43,"throttles":{"STILL":1,"WALK":5},"rooms":["r0.ba
+DONE C:\Users\John\Documents\models\web-prototype\progress\overnight-stickmag-speed\summary.md

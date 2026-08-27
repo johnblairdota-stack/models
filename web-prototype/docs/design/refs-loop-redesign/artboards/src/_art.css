@@ -1,0 +1,91 @@
+/* Artboard system for the Prime Time loop redesign.
+   NOT production CSS. Boards render at 1920x1080 (TV) and 390x844 (phone).
+   Palette is STYLE_CONTRACT + src/party/palette.js, nothing else. */
+
+:root {
+  /* night tokens — src/party/palette.js */
+  --bg:#0c0a08; --deep:#080604; --panel:#161310; --well:#12100c;
+  --accent:#f5a14a; --accent-rgb:245,161,74;
+  --ink:#f3ece3; --soft:#a89884; --dim:#8a7d70;
+  --live:#9ff2c8; --live-well:#122019;
+  --bad:#ff8a7a; --bad-rgb:255,138,122;
+  /* robot palette — docs/STYLE_CONTRACT.md §2 */
+  --r-shell:#EDEFF0; --r-chrome:#B9BEC2; --r-mint:#8FC9BD; --r-mintLit:#66CCB4;
+  --r-glass:#2659A0; --r-faceLight:#7EBDF0; --r-ink:#054E84; --r-gap:#2A2E31; --r-sole:#212426;
+  --sans: "Inter", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+}
+
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:#141210; font-family:var(--sans); color:var(--ink); padding:40px; }
+figure { margin:0 0 56px; }
+figcaption { font:700 15px/1.4 var(--sans); letter-spacing:.22em; text-transform:uppercase;
+  color:var(--accent); margin-bottom:10px; }
+figcaption small { display:block; letter-spacing:.02em; text-transform:none; font-weight:400;
+  color:var(--soft); font-size:14px; margin-top:4px; max-width:1200px; }
+
+.board { position:relative; overflow:hidden; background:var(--bg); color:var(--ink); }
+.board.tv { width:1920px; height:1080px; }
+.board.ph { width:390px; height:844px; border:1px solid #2a2420; border-radius:22px; }
+
+/* ---------- shared show identity ---------- */
+.bug { position:absolute; top:26px; left:34px; display:flex; align-items:center; gap:12px; z-index:9; }
+.bug .mark { font:900 22px/1 var(--sans); letter-spacing:.30em; color:var(--accent); }
+.bug .ep { font:700 14px/1 var(--sans); letter-spacing:.22em; color:var(--dim);
+  border-left:1px solid rgba(var(--accent-rgb),.3); padding-left:12px; }
+
+.rec { display:inline-flex; align-items:center; gap:9px; font:800 14px/1 var(--sans);
+  letter-spacing:.24em; text-transform:uppercase; color:var(--ink);
+  background:rgba(8,6,4,.72); border:1px solid rgba(var(--bad-rgb),.45);
+  padding:8px 13px; border-radius:4px; }
+.rec i { width:10px; height:10px; border-radius:50%; background:var(--bad);
+  box-shadow:0 0 12px var(--bad); }
+
+.clock { font:800 var(--clock-size,84px)/1 var(--sans); font-variant-numeric:tabular-nums;
+  letter-spacing:.02em; color:#fff; }
+.clock.warn { color:var(--accent); }
+.clock.hot { color:var(--bad); }
+
+/* the picture — a mocked mansion camera */
+.pic { position:relative; overflow:hidden; background:
+  radial-gradient(120% 90% at 50% 92%, rgba(245,161,74,.10), transparent 60%),
+  linear-gradient(178deg,#0f1319 0%, #191b1c 42%, #2a1d12 78%, #150f0a 100%); }
+.pic .floor { position:absolute; left:-10%; right:-10%; bottom:0; height:46%;
+  background:
+    repeating-linear-gradient(76deg, rgba(0,0,0,.30) 0 3px, transparent 3px 44px),
+    repeating-linear-gradient(-76deg, rgba(0,0,0,.30) 0 3px, transparent 3px 44px),
+    linear-gradient(180deg,#3a2415 0%, #59371f 60%, #6b4325 100%);
+  opacity:.85; }
+.pic .wall { position:absolute; inset:0 0 46% 0;
+  background:
+    repeating-linear-gradient(90deg, rgba(120,140,170,.10) 0 2px, transparent 2px 168px),
+    linear-gradient(180deg,#101821 0%, #17222c 70%, #0d1218 100%); }
+.pic .gild { position:absolute; left:0; right:0; top:8%; height:12px;
+  background:linear-gradient(90deg,#6b5622 0%,#c8a24a 48%,#8a6c2c 100%); }
+.pic .lamp { position:absolute; width:44%; height:60%; left:28%; bottom:2%;
+  background:radial-gradient(ellipse 50% 50% at 50% 100%, rgba(255,236,200,.20), transparent 68%); }
+.pic .bot { position:absolute; bottom:8%; left:52%; width:110px; height:300px;
+  background:linear-gradient(180deg,var(--r-shell) 0%, var(--r-chrome) 62%, var(--r-sole) 100%);
+  border-radius:56px 56px 14px 14px;
+  box-shadow: 0 0 60px rgba(255,240,220,.13), inset -14px 0 24px rgba(0,0,0,.35); }
+.pic .bot::after { content:""; position:absolute; top:26px; left:50%; translate:-50% 0;
+  width:52px; height:34px; border-radius:16px; background:var(--r-glass);
+  box-shadow:0 0 22px var(--r-faceLight); }
+.pic .bot .pauldron { position:absolute; top:74px; left:-9px; width:34px; height:30px;
+  border-radius:12px; background:var(--r-mintLit); }
+.pic .scan { position:absolute; inset:0; pointer-events:none; opacity:.16;
+  background:repeating-linear-gradient(180deg, rgba(255,255,255,.10) 0 1px, transparent 1px 4px); }
+.pic .vig { position:absolute; inset:0; pointer-events:none;
+  box-shadow: inset 0 0 200px rgba(0,0,0,.7); }
+
+/* ballroom (talk beats): a ring of seated robots */
+.ring { position:absolute; inset:0; display:grid; place-items:center; }
+.ring .seatbot { position:absolute; width:62px; height:108px; border-radius:30px 30px 8px 8px;
+  background:linear-gradient(180deg,var(--r-shell),var(--r-chrome)); opacity:.92; }
+.ring .seatbot i { position:absolute; top:16px; left:50%; translate:-50% 0; width:30px; height:19px;
+  border-radius:9px; background:var(--r-glass); box-shadow:0 0 14px var(--r-faceLight); }
+.ring .seatbot.out { filter:grayscale(1) brightness(.42); }
+.ring .seatbot.out i { background:var(--r-gap); box-shadow:none; }
+
+.grain { position:absolute; inset:0; pointer-events:none; opacity:.05;
+  background-image:radial-gradient(rgba(255,255,255,.9) 1px, transparent 1px);
+  background-size:3px 3px; }
