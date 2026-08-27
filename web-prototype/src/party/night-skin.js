@@ -342,6 +342,37 @@ export function injectNightSkin() {
       width:100%; height:100%; min-height:0; flex:1; pointer-events:none; }
     .night.on-talk .intro-frame.talk-frame { height:100%; width:100%; max-width:100%;
       max-height:100%; aspect-ratio:auto; margin:0; }
+    /* 🎬 CASTING IS THE PICTURE, AND THE BALLOTS RIDE ON TOP OF IT RATHER THAN BESIDE IT.
+       John: bigger feed, take the right column, drop the counter / the lower third / the
+       'ballots land here' line, and run the results as an overlay. The frame taking all four
+       edges is the easy half. The hard half is the stack: the follow camera is a body-level
+       plate at z-index 5 and night is z-index 1, so anything drawn over the frame rect from
+       inside night is UNDER the chairs — which is exactly why the talk beats keep their chrome
+       in reserved bands, and why harness/talk-frames.mjs measures those five beats for it.
+       Casting buys the overlay by raising night above the plate and going transparent, so the
+       mansion shows through the chrome instead of sitting next to it. html and body carry the
+       same '#0c0a08', so nothing behind the picture changes colour.
+       ⚠️ ON-CAST MUST STAY BELOW THE ON-TALK BLOCK ABOVE — the two padding rules have equal
+       specificity, so the override is source order and only source order.
+       No backticks in this comment. */
+    .night.on-cast { z-index:6; background:transparent; }
+    body.rrr-warming .night.on-cast { background:transparent; }
+    .night.on-cast .night-main { position:relative; padding:0; overflow:hidden; }
+    .night.on-cast .talk-well { gap:0; }
+    /* 'background:transparent' is load-bearing rather than tidy: off cast the frame sits BEHIND
+       the camera plate, so its own night-deep fill is the slate you see while the mansion bakes.
+       On cast the night is in FRONT of the plate, and that same fill would paint a black
+       rectangle over the picture — here the frame is a hole, not a backdrop. */
+    .night.on-cast .intro-frame.talk-frame { height:100%; width:100%; max-width:100%;
+      max-height:100%; aspect-ratio:auto; margin:0; border:0; border-radius:0;
+      background:transparent; }
+    /* The plate is a <body> child, so squaring it off for a full-bleed frame is said here.
+       party-host.js toggles 'rrr-cast' next to the root class. */
+    body.rrr-cast .run-cam-layer.intros { border-radius:0; box-shadow:none; }
+    /* The 3-2-1 and the one recovery button float over the picture instead of taking a band off
+       the bottom of it. castStage stands the lamp strip down whenever either is on screen, so
+       these two never share the corner. */
+    .night.on-cast .actions { position:absolute; left:24px; bottom:16px; margin:0; z-index:3; }
     .recap-mini { align-self:flex-start; display:flex; flex-wrap:wrap; gap:6px 12px;
       padding:6px 10px; border-radius:6px; background:rgba(12,10,8,.72);
       border:1px solid rgba(var(--night-accent-rgb), .28); font-size:12px;

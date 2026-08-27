@@ -624,6 +624,56 @@ export const SHOW_CHROME_CSS = `
     .talk-chrome-bot .cast-lamp .seat-chip { min-width:24px; height:24px; font-size:13px; }
     .talk-chrome-bot .cast-count { margin-top:8px; }
     .talk-chrome-bot .cast-count .tally-in { font-size:clamp(22px, 2.4vw, 34px); }
+    /* 🎬 THE CASTING OVERLAY — the ONE place show chrome is allowed over the 3D layer, and only
+       because '.night.on-cast' in night-skin.js lifts the night above the body-level camera
+       plate first. Talk beats keep their reserved bands; nothing here applies to them.
+       No panel behind the column, just a scrim that fades out toward the middle of the picture,
+       so the ballots read from the couch without boxing off a quarter of the frame. */
+    .cast-overlay { position:absolute; inset:0 0 0 auto; width:clamp(230px, 26%, 380px);
+      display:flex; flex-direction:column; align-content:flex-start; gap:8px;
+      padding:14px 18px 16px; min-height:0; overflow:hidden; pointer-events:none; z-index:2;
+      background:linear-gradient(270deg, rgba(0,0,0,.82) 0%, rgba(0,0,0,.5) 58%, rgba(0,0,0,0) 100%); }
+    .cast-overlay-k { flex:0 0 auto; color:var(--night-accent); font-size:11px;
+      letter-spacing:.28em; text-transform:uppercase; font-weight:800;
+      text-shadow:0 2px 10px rgba(0,0,0,.9); }
+    .cast-slips { display:flex; flex-direction:column; gap:6px; min-height:0; overflow:hidden; }
+    /* No entry animation on a slip. paint() rebuilds root.innerHTML on every socket message and
+       the lobby fans a snapshot several times a second, so a per-slip fade-in would not read as
+       'a ballot just landed' — it would strobe the whole column for the length of the beat. */
+    .cast-slip { display:flex; flex-direction:column; gap:3px; padding:7px 10px;
+      border-radius:0 5px 5px 0; border-left:3px solid var(--night-accent);
+      background:rgba(0,0,0,.86); }
+    .cast-voter { font-size:clamp(15px, 1.5vw, 22px); font-weight:800; line-height:1;
+      color:var(--night-ink); text-shadow:0 2px 10px rgba(0,0,0,.9); }
+    .cast-picks { display:flex; flex-wrap:wrap; gap:4px 14px; font-weight:700;
+      font-size:clamp(12px, 1.1vw, 16px); line-height:1.1; color:var(--night-ink);
+      text-shadow:0 2px 10px rgba(0,0,0,.9); }
+    .cast-picks em { font-style:normal; margin-right:5px; font-size:10px; font-weight:800;
+      letter-spacing:.18em; text-transform:uppercase; color:var(--night-accent); }
+    .cast-empty { margin:0; color:var(--night-dim); font-size:12px; letter-spacing:.16em;
+      text-transform:uppercase; text-shadow:0 2px 10px rgba(0,0,0,.9); }
+    /* Directly under the slips, not floated to the bottom of the column — it is the footnote to
+       the ballots above it, and a tiebreak line stranded 900px away reads as unrelated chrome. */
+    .cast-why { flex:0 0 auto; margin:0; color:var(--night-soft); font-size:11px;
+      letter-spacing:.1em; text-transform:uppercase; line-height:1.35;
+      text-shadow:0 2px 10px rgba(0,0,0,.9); }
+    /* The role-card board, as a lower third over the picture rather than a band under it.
+       The BAND runs the full width so its scrim has no vertical seam where it meets the ballot
+       column's; it is the CONTENT that stops short, by reserving the column's width as padding.
+       Cutting the element short instead drew a hard edge straight down the picture. */
+    .cast-strip { position:absolute; inset:auto 0 0 0; pointer-events:none; z-index:2;
+      padding:14px 20px 16px; padding-right:calc(clamp(230px, 26%, 380px) + 20px);
+      background:linear-gradient(0deg, rgba(0,0,0,.86) 0%, rgba(0,0,0,.6) 55%, rgba(0,0,0,0) 100%); }
+    .cast-strip .cast-board { margin:0; }
+    .cast-strip .cast-k { font-size:11px; }
+    .cast-strip .cast-lead { font-size:clamp(16px, 1.8vw, 26px); margin-top:2px;
+      text-shadow:0 2px 12px rgba(0,0,0,.9); }
+    .cast-strip .cast-lamps { margin-top:9px; gap:8px; }
+    .cast-strip .cast-lamp { padding:7px 8px 6px; gap:4px; border-radius:8px;
+      background:rgba(0,0,0,.72); }
+    .cast-strip .cast-lamp .who { font-size:clamp(12px, 1.05vw, 15px); }
+    .cast-strip .cast-lamp .seat-chip { min-width:22px; height:22px; font-size:12px; }
+    .cast-strip .cast-warm { margin-top:9px; }
     .pick-list.jackbox button { min-height:76px; font-size:clamp(22px, 7vw, 36px);
       padding:18px 20px; letter-spacing:.04em; }
     .pick-list.buzz button { animation: night-rise .35s ease; }

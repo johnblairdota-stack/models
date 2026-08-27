@@ -1056,29 +1056,30 @@ export default async function partyHost({ params }) {
         body += `<div class="intro-frame" aria-label="Player intros"></div>
           <p class="intro-hint">the cast, walking in · phones are voting</p>`;
       } else if (ui.introsSent) {
-        body += talkStage({
-          recap, names, lobby: client.lobby, runEnd: ui.runEnd, clock,
-          kicker: 'Ballots land here. A pair goes in after a short count.', beat: 'casting',
-          who: joinedName(names, pair.runner || recap.runner, 'The circle'),
-          whoSub: 'live · casting',
-          whoId: pair.runner || recap.runner,
-          aside: ballotBoard(votes, names, pair, recap, episode, castTiebreaks(votes, episode)),
-          /*
-           * 🎬 **THE BOARD HAS TO OUTLIVE THE ROLE-CARD WINDOW OR ITS COUNTER IS A LIE.**
-           *
-           * First cut drew `castBoard` only on the pre-intros screen — which is the blank window
-           * the critic complained about, so that looked right. It is not: intros only fire once
-           * the mansion has finished baking, and the first ballot cannot land until after that.
-           * The board therefore vanished a beat BEFORE the number it prints could ever move, and
-           * "0 of 8 have sent a ballot" was structurally unable to say anything else. A probe
-           * driving eight real phones caught it — the lamps never lit, in either window.
-           */
-          facts: castBoard(client.lobby, votes, castWarm()),
+        /*
+         * 🎬 **THE BOARD HAS TO OUTLIVE THE ROLE-CARD WINDOW OR ITS COUNTER IS A LIE.**
+         *
+         * First cut drew `castBoard` only on the pre-intros screen — which is the blank window
+         * the critic complained about, so that looked right. It is not: intros only fire once the
+         * mansion has finished baking, and the first ballot cannot land until after that. The
+         * board therefore vanished a beat BEFORE the lamps it prints could ever light, and a
+         * probe driving eight real phones caught it — the lamps never lit, in either window. So
+         * it still rides through this window; it is now a strip over the picture rather than a
+         * band under it.
+         *
+         * It stands down for the 3·2·1: at that point every lamp is lit by definition, so the
+         * strip is saying what the countdown is already shouting, and the count needs the corner.
+         */
+        const counting = sendLeft != null || hasPair;
+        body += castStage({
+          votes, names,
+          tiebreaks: castTiebreaks(votes, episode),
+          board: counting ? '' : castBoard(client.lobby, votes, castWarm()),
         });
       } else {
         // The role-card window: the room's own shape, instead of an empty ballroom.
         body += castBoard(client.lobby, votes, castWarm());
-        body += ballotBoard(votes, names, pair, recap, episode, castTiebreaks(votes, episode));
+        body += ballotBoard(votes, names, recap, episode, castTiebreaks(votes, episode));
       }
       body += `<div class="actions">`;
       if (sendLeft != null) {
@@ -1120,7 +1121,17 @@ export default async function partyHost({ params }) {
      * `show` (`ui.beat`); that is the only word this chrome may say.
      */
     const onIntro = show === 'casting' && ui.introsSent && !ui.introsDone;
-    const onTalkFrame = onStage || onRecap || (show === 'casting' && ui.introsSent && ui.introsDone);
+    /*
+     * 🎬 **CASTING IS THE PICTURE.** John: *"make the live feed bigger to utilise that space,
+     * also extend the live feed to fill the right side ... run the ballots as an overlay on the
+     * live feed."* Post-walk casting is no longer a talk beat with a reserved side column and a
+     * lower band — it is a full-bleed camera with the ballots and the lamp strip floating on it.
+     * It still takes `on-talk` (the frame sizing and the padding are the same rules); `on-cast`
+     * is what lifts the night above the camera plate and takes the chrome bands away. See the
+     * `.night.on-cast` block in `night-skin.js` for why the stacking has to move with it.
+     */
+    const onCast = show === 'casting' && ui.introsSent && ui.introsDone;
+    const onTalkFrame = onStage || onRecap || onCast;
     /* =========================================================================================
      * ⏱️ ONE CLOCK. NOT TWO.
      *
@@ -1136,7 +1147,10 @@ export default async function partyHost({ params }) {
     const stageHasClock = body.includes('data-show-clock');
     const ribbon = onRun || rundownRibbon(show);
     const hold = holdMsFor(show, client.noms?.length ?? 0);
-    root.className = `night${onRun ? ' on-run' : ''}${onIntro ? ' on-intro' : ''}${onTalkFrame ? ' on-talk' : ''}${onRecap ? ' on-recap' : ''}`;
+    root.className = `night${onRun ? ' on-run' : ''}${onIntro ? ' on-intro' : ''}${onTalkFrame ? ' on-talk' : ''}${onCast ? ' on-cast' : ''}${onRecap ? ' on-recap' : ''}`;
+    // The camera plate is a body child, so squaring it off for the full-bleed cast frame has to
+    // be said on <body> rather than inside `root` — same shape as `rrr-warming` in `placeFollow`.
+    document.body.classList.toggle('rrr-cast', onCast);
     root.innerHTML = `
       <div class="night-top">
         <div class="night-brand-row">
@@ -1372,28 +1386,85 @@ function cssEscape(s) {
   return String(s ?? '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
-function ballotBoard(votes, names, pair, recap, episode, tiebreaks) {
+function ballotBoard(votes, names, recap, episode, tiebreaks) {
   const rows = (votes || []).map((v) => `
     <div class="row">
       <div class="who">${esc(joinedName(names, v.voter, 'Someone'))}</div>
       <div class="arrow">sent</div>
       <div class="pick">RUNNER ${esc(joinedName(names, v.runner, 'The runner'))}<br>GUIDE ${esc(joinedName(names, v.guide, 'The guide'))}</div>
     </div>`).join('');
-  const runner = pair.runner || recap.runner;
-  const guide = pair.guide || recap.guide;
-  const hero = runner
-    ? `<div class="pair-hero">${esc(joinedName(names, runner, 'The runner'))} walks · ${esc(joinedName(names, guide, 'The guide'))} talks</div>`
-    : `<p class="hint">Ballots land here, huge. A pair goes in on its own.</p>`;
   const why = describeCastTiebreaks(tiebreaks).join(' · ');
   const whyLine = why ? `<p class="ballot-why">${esc(why)}</p>` : '';
   // playEpisode increments episode after the premiere; recap.episode stays 1.
   const huge = Number(episode) === 1 || recap.episode === 1;
-  return `${hero}${whyLine}<div class="ballot${huge ? ' huge' : ''}">${rows || '<p class="hint">No ballots yet — phones pick a runner and a guide.</p>'}</div>`;
+  return `${whyLine}<div class="ballot${huge ? ' huge' : ''}">${rows || '<p class="hint">No ballots yet — phones pick a runner and a guide.</p>'}</div>`;
 }
 
 function standingLead(standing, names) {
   const first = (standing || [])[0];
   return first ? joinedName(names, first.target, 'Someone') : '';
+}
+
+/* =============================================================================================
+ * 🎬 **THE CASTING STAGE — ONE PICTURE, EDGE TO EDGE, WITH THE BALLOTS ON TOP OF IT.**
+ *
+ * What this deliberately does NOT emit, because John asked for all four of them to go:
+ *
+ *  - the ballot counter under the lamps (`n of m`). The lamps ARE the count — one lights when
+ *    that player's ballot lands — and the slips on the right name every one of them.
+ *  - the lower-third nameplate (`live · casting · seat n`). Nobody is being interviewed; the
+ *    plate named whoever happened to be leading the tally and re-cast itself mid-beat.
+ *  - the kicker under it, which explained where ballots were about to land. The board no longer
+ *    needs explaining, and the sentence was the same every night of the show's life.
+ *  - the pair hero — the runner's and the guide's names either side of a middot, in 120px. It is
+ *    re-cast every episode, so a watcher reads it, learns it, and then has to unlearn it two
+ *    minutes later; and by the time it can be printed at all, the slips already say the same
+ *    thing. `ballotBoard` lost it too, for the same reason.
+ *
+ * The whole lower band and the whole right column went with them, and the frame took the space:
+ * `.night.on-cast` in `night-skin.js` drops `night-main`'s padding to zero and lets `.talk-frame`
+ * run to all four edges, so the follow layer — placed on that rect every frame by `placeFollow` —
+ * is the full width of the television rather than 74% of it.
+ *
+ * ⚠️ **THE OVERLAY IS A CASTING-ONLY EXEMPTION.** Talk beats (debrief / reckoning / vote /
+ * execution / recap) still keep their chrome in reserved bands outside the frame — see the
+ * `.talk-chrome-*` note in `look.js`, and `harness/talk-frames.mjs`, which measures those five
+ * beats for exactly that. Casting can float chrome over the picture only because `on-cast` lifts
+ * the night above the body-level camera plate; nothing else on the TV may assume that stacking.
+ * ============================================================================================= */
+function castStage({ votes, names, tiebreaks, board }) {
+  return `
+    <div class="talk-stage cast-stage">
+      <div class="talk-well">
+        <div class="talk-picture">
+          <div class="intro-frame talk-frame" aria-label="Ballroom circle"></div>
+        </div>
+      </div>
+      ${castOverlay(votes, names, tiebreaks)}
+      ${board ? `<div class="cast-strip">${board}</div>` : ''}
+    </div>`;
+}
+
+/**
+ * One slip per ballot: who sent it, then the two names on it. Two lines, not a three-column grid
+ * at 84px — the picture behind it is the thing being watched, and a slip that has to be read
+ * across a 300px column is a slip nobody reads at all.
+ */
+function castOverlay(votes, names, tiebreaks) {
+  const slips = (votes || []).map((v) => `
+    <div class="cast-slip">
+      <div class="cast-voter">${esc(joinedName(names, v.voter, 'Someone'))}</div>
+      <div class="cast-picks">
+        <span><em>run</em>${esc(joinedName(names, v.runner, 'The runner'))}</span>
+        <span><em>guide</em>${esc(joinedName(names, v.guide, 'The guide'))}</span>
+      </div>
+    </div>`).join('');
+  const why = describeCastTiebreaks(tiebreaks).join(' · ');
+  return `<aside class="cast-overlay" aria-label="Ballots">
+    <div class="cast-overlay-k">ballots</div>
+    <div class="cast-slips">${slips || '<p class="cast-empty">phones are picking</p>'}</div>
+    ${why ? `<p class="cast-why">${esc(why)}</p>` : ''}
+  </aside>`;
 }
 
 function talkStage({
@@ -1659,10 +1730,19 @@ function castBoard(lobby, votes, warm) {
       <div class="meta">${on ? 'ballot in' : 'reading'}</div>
     </div>`;
   }).join('');
-  const foot = baking
-    ? `<div class="cast-warm">${warm.bar}</div>`
-    : `<div class="cast-count"><span class="tally-in${all ? ' ok' : ''}">${esc(String(done))}</span>
-      <span class="tally-of">of ${esc(String(seats.length))} have sent a ballot</span></div>`;
+  /*
+   * 🚫 **NO `n of m` UNDER THE LAMPS.** John cut the counter off the casting screen, and the
+   * lamps are why it can go: eight of them, one per chair, each lit by that player's own ballot —
+   * a watcher reads the same fact off the row without a number restating it, and the slips on the
+   * right name every ballot the number was summarising. `done` / `all` stay: `all` is what swaps
+   * the lead line to "Every ballot is in."
+   *
+   * ⚠️ **THE BAKE BAR IS NOT THE COUNTER AND DOES NOT GO WITH IT.** While the mansion is
+   * compiling, no ballot can exist — intros wait on `ui.warm === 'ready'` and the first ballot
+   * waits on the intros — so the bar is the only honest progress on this screen and it is the
+   * loading indicator John asked for by name. `party-warm` W35c2 is the control on that.
+   */
+  const foot = baking ? `<div class="cast-warm">${warm.bar}</div>` : '';
   return `<div class="cast-board">
     <div class="cast-k">Read your card</div>
     <div class="cast-lead">${all ? 'Every ballot is in.' : 'Nobody says a word yet.'}</div>

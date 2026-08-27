@@ -1794,13 +1794,18 @@ console.log('\nparty-warm — the lobby-warm night');
     && /space\.colliders\.push\(box\)/.test(introSrc)
     && /r\.via/.test(introSrc)
     && /c\._noSight/.test(roomSrc));
+  // W32b moved with the casting redress (W36 below). Casting no longer runs through `talkStage`,
+  // so `beat: 'casting'` and the `aside: ballotBoard` side column are gone with the rest of that
+  // beat's chrome. The invariant this gate was actually protecting — casting and recap both sit
+  // on the seated-circle picture rather than a black plate — is unchanged, and is what it still
+  // asserts, now against `castStage`'s frame.
   t('W32b · Casting and Recap keep the seated-circle talk picture, not a black plate',
     /const onCircle = /.test(hostSrc)
     && /onRecap \|\| onCastPicture/.test(hostSrc)
     && /show === 'casting' && ui\.introsDone/.test(hostSrc)
     && /beat: 'recap'/.test(hostSrc)
-    && /beat: 'casting'/.test(hostSrc)
-    && /aside: ballotBoard/.test(hostSrc));
+    && /function castStage/.test(hostSrc)
+    && /intro-frame talk-frame/.test(hostSrc));
   t('W32c · expedition hides the runner twin and keeps the chairs — it does not dispose the circle',
     /holdForRun/.test(bedSrc)
     && /intro\?\.holdForRun\?/.test(bedSrc)
@@ -3250,6 +3255,78 @@ console.log('\nparty-warm — the lobby-warm night');
     /@media \(prefers-reduced-motion: reduce\)/.test(skin)
       && /\.bot-badge[\s\S]{0,160}animation: none !important/.test(skin),
     'badge · run-face · rec dot · react chip');
+}
+
+// ---- W36 · CASTING IS THE PICTURE — FULL-BLEED FEED, BALLOTS AS AN OVERLAY -----------------
+//
+// John, on the casting screen: drop the `n of m` ballot counter, the `live · casting · seat n`
+// lower third and the `ballots land here` kicker; drop the `X walks · Y talks` hero because it is
+// re-cast every episode; make the feed bigger and let it run into the right-hand column; and
+// float the ballot results over the feed instead of beside it.
+//
+// The four cuts are asserted ABSENT rather than merely removed — this block is what stops any of
+// them coming back the next time the beat is dressed. What is NOT cut is asserted too: the lamps
+// and the bake bar are the two things on this screen that carry a fact nothing else carries.
+{
+  const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
+  const skin = await readFile(new URL('../src/party/night-skin.js', import.meta.url), 'utf8');
+
+  t('W36 · post-walk casting is its own full-bleed stage, not a talk beat with a side column',
+    /function castStage/.test(hostSrc)
+    && /const onCast = show === 'casting' && ui\.introsSent && ui\.introsDone/.test(hostSrc)
+    && /onCast \? ' on-cast' : ''/.test(hostSrc)
+    && /body \+= castStage\(/.test(hostSrc)
+    && !/aside: ballotBoard/.test(hostSrc));
+
+  t('W36a · the frame takes all four edges — no padding, no letterbox, no side column',
+    /\.night\.on-cast \.night-main \{ position:relative; padding:0; overflow:hidden/.test(skin)
+    && /\.night\.on-cast \.intro-frame\.talk-frame \{ height:100%; width:100%/.test(skin)
+    && /aspect-ratio:auto; margin:0; border:0; border-radius:0;\s*\r?\n\s*background:transparent/.test(skin));
+
+  t('W36b · the overlay is bought by lifting night above the camera plate, not by inlining chrome',
+    /\.night\.on-cast \{ z-index:6; background:transparent/.test(skin)
+    && /body\.rrr-warming \.night\.on-cast \{ background:transparent/.test(skin)
+    && /body\.rrr-cast \.run-cam-layer\.intros/.test(skin)
+    && /classList\.toggle\('rrr-cast', onCast\)/.test(hostSrc)
+    && skin.indexOf('.night.on-cast .night-main') > skin.indexOf('.night.on-talk .night-main'));
+
+  t('W36c · ballots ride on the feed as slips, and the overlay language lives in look.js',
+    /function castOverlay/.test(hostSrc)
+    && /class="cast-overlay"/.test(hostSrc)
+    && /cast-slip/.test(hostSrc)
+    && SHOW_CHROME_CSS.includes('.cast-overlay')
+    && SHOW_CHROME_CSS.includes('.cast-slip')
+    && !/class="cast-overlay"/.test(SHOW_CHROME_CSS));
+
+  t('W36d · the four things John cut are gone from the casting beat and stay gone',
+    !/Ballots land here/.test(hostSrc)
+    && !/whoSub: 'live · casting'/.test(hostSrc)
+    && !/have sent a ballot/.test(hostSrc)
+    && !/walks · /.test(hostSrc));
+
+  // Control. The cuts were four NAMED lines, not "everything in the lower band": the lamp row is
+  // the only thing on this screen that says who has not sent yet, and the bake bar is the only
+  // honest progress during the window where no ballot can exist (W35c2). Both survive the
+  // redress — as a lower third over the picture rather than a band under it.
+  t('W36e control · the lamps and the bake bar survived the cut, as a strip over the picture',
+    /class="cast-strip"/.test(hostSrc)
+    && /board \? `<div class="cast-strip">/.test(hostSrc)
+    && /const foot = baking \? `<div class="cast-warm">/.test(hostSrc)
+    && /cast-lamp/.test(hostSrc)
+    && SHOW_CHROME_CSS.includes('.cast-strip .cast-lamp'));
+
+  // The strip and the 3·2·1 both want the bottom-left corner, so they are never on screen at once.
+  t('W36f · the lamp strip stands down for the countdown instead of sharing its corner',
+    /const counting = sendLeft != null \|\| hasPair/.test(hostSrc)
+    && /board: counting \? '' : castBoard\(/.test(hostSrc)
+    && /\.night\.on-cast \.actions \{ position:absolute/.test(skin));
+
+  t('W36g · talk beats keep their reserved bands — the overlay is a casting-only exemption',
+    /talk-chrome-bot/.test(hostSrc)
+    && /talk-side/.test(hostSrc)
+    && !/cast-overlay/.test(hostSrc.slice(0, hostSrc.indexOf('function castStage')))
+    && !/\.night\.on-talk \.cast-overlay/.test(skin)
+    && !/\.night\.on-talk \.cast-strip/.test(skin));
 }
 
 console.log(`\nparty-warm: ${pass} passed, ${fail} failed`);
