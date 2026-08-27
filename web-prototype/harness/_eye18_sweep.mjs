@@ -41,7 +41,12 @@ await page.routeWebSocket((u) => u.hostname === '127.0.0.1' && u.port === String
 
 for (const cam of CAMS) {
   const t0 = Date.now();
-  await page.goto(`http://127.0.0.1:${PORT}/?view=room.ballroom&capture=1&cam=${encodeURIComponent(cam)}`,
+  // `--extra k=v&k=v` — a candidate value can be put on the board WITHOUT being shipped first,
+  // which is the only way to price a light change honestly: this project's own rule is that a
+  // term is spent at every camera, and a term judged at one and shipped is how round 18 lost
+  // three angles to `toneChroma` and nearly lost them again to a cornice.
+  const EXTRA = opt('extra') ? '&' + opt('extra') : '';
+  await page.goto(`http://127.0.0.1:${PORT}/?view=room.ballroom&capture=1&cam=${encodeURIComponent(cam)}${EXTRA}`,
     { waitUntil: 'load', timeout: 60000 });
   await page.waitForFunction(() => document.body.dataset.rrrReady === '1' || document.body.dataset.rrrError === '1',
     null, { timeout: 600000 });

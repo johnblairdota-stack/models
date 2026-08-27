@@ -121,6 +121,24 @@ export function studyEnv(renderer) {
 }
 
 /** Preset: a double-height ballroom with a whole wall of windows. */
+/**
+ * Multiply an environment box's colour by a tint and put its LUMINANCE back where it was.
+ *
+ * A shell box is a light source, so a tint that is not renormalised is two changes — a hue and
+ * an amount — arriving as one number, and this project has priced that pair as one thing twice
+ * in as many rounds. Renormalising means a `dayTint` sweep can only ever move chroma, and the
+ * median luminance is a control that must not move.
+ */
+function tintLuma(c, tint) {
+  if (!tint) return c;
+  const W = [0.2126, 0.7152, 0.0722];
+  const t = [c[0] * tint[0], c[1] * tint[1], c[2] * tint[2]];
+  const l0 = W[0] * c[0] + W[1] * c[1] + W[2] * c[2];
+  const l1 = W[0] * t[0] + W[1] * t[1] + W[2] * t[2];
+  const k = l1 > 1e-6 ? l0 / l1 : 1;
+  return [t[0] * k, t[1] * k, t[2] * k];
+}
+
 export function ballroomEnv(renderer, o = {}) {
   const CG = o.candleGlow ?? 1.0;
   const AS = o.ambientScale ?? 1.0;
@@ -160,7 +178,27 @@ export function ballroomEnv(renderer, o = {}) {
      */
     ambient: [0.148 * AS * AT[0], 0.152 * AS * AT[1], 0.166 * AS * AT[2]],
     boxes: [
-      { size: [0.3, 7.0, 16.0], pos: [-11.5, 3.0, 0.0], color: [2.60, 2.72, 2.95] },   // window wall, daylight
+      /**
+       * ⚠ **THE DAYLIGHT BOX IS THE BRIGHTEST THING IN THIS SHELL AND IT IS BLUE** (r/b 0.881).
+       *
+       * Round 44 located this room's remaining chroma defect by painting every cool-class pixel
+       * at or above decile 9 (`_coolmask44`): it is not the windows and not the marble, it is
+       * the HALO OF FLOOR AROUND EVERY SUN BAR. The bars themselves come out warm — the sun is
+       * `0xffe4c0`, matched to the bar's own patch at r-b 44.9 against 45.3 — and every surface
+       * the sun does NOT reach is lit by this box instead, and comes out blue. Ablated
+       * (`_coldwho44 env-off`) the bright band lands on the reference: deciles 7-9 go
+       * 0.24 / 0.24 / 0.10 to 0.33 / 0.35 / 0.17 against the bar's 0.34 / 0.33 / 0.34. It also
+       * takes the median from 49.3 to 29.6, so the shell cannot simply go — this is the room's
+       * fill as well as its cold.
+       *
+       * `dayTint` is a HUE knob and it holds luminance constant on purpose. The haze sweep in
+       * the same round set `haze` to the game's 0.042 instead of this room's 0.026 and priced a
+       * 62% amount change as a hue change; the control row moved the median 49.3 -> 40.7 before
+       * anyone noticed. A tint that renormalises cannot do that.
+       *
+       * ⚠ Default [1, 1, 1], so `prop.chandelier` — which shares this preset — is byte-identical.
+       */
+      { size: [0.3, 7.0, 16.0], pos: [-11.5, 3.0, 0.0], color: tintLuma([2.60, 2.72, 2.95], o.dayTint) },   // window wall, daylight
       /**
        * ⚠ THE FLOOR BOUNCE, AND ROUND 17 FOUND IT IS WHY THE PROPS ARE WARM. This box is the
        * dominant term in everything this room's shade sees — the comment below is right that a

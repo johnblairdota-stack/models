@@ -705,6 +705,58 @@ export default async function view(args = {}) {
   const AMBT = qs.get('ambtint') === 'cool' ? 'cool' : 'flat';
   const CANDLE = qs.has('candle')
     ? Math.max(0, Math.min(2, Number(qs.get('candle')) || 0)) : 1.0;
+  /**
+   * `?day=N` — HOW WARM THE DAYLIGHT BOX IS, AND ROUND 44'S ONE CHANGE TO THIS ROOM'S LIGHT.
+   *
+   * 🚨 **THE COLD IN THIS FRAME IS THE HALO OF FLOOR AROUND EVERY SUN BAR, NOT THE WINDOWS AND
+   * NOT THE MARBLE.** `_coolmask44` paints every cool-class pixel at or above decile 9 and that
+   * is what it paints. Split by hue class, this room's ninth decile is 37.7% cool with a mean
+   * r-b of -18.7, cancelling 72.8% of the band's warmth; the reference's ninth decile is 0.2%
+   * cool. That is the sharpest thing anyone has said about this frame and it replaces four
+   * rounds of arguing about "a ramp".
+   *
+   * The sun is not the problem — `0xffe4c0` is matched to the bar on its own sun patch, r-b
+   * 44.9 against 45.3. Everything the sun does NOT reach is lit by `ballroomEnv`'s window-wall
+   * box at [2.60, 2.72, 2.95], r/b 0.881, and comes out blue. Ablated whole (`_coldwho44
+   * env-off`) the bright band lands on the reference — deciles 7-9 go 0.24 / 0.24 / 0.10 to
+   * 0.33 / 0.35 / 0.17 against 0.34 / 0.33 / 0.34 — and the median falls 49.3 to 29.6, because
+   * this shell is the room's fill as well as its cold. So it is a HUE change or nothing.
+   *
+   * ⚠ TWO CANDIDATES WERE ABLATED FIRST AND BOTH ARE RECORDED AS DEAD ENDS RATHER THAN
+   * UNTRIED IDEAS. The two bounce cards — `0xc9d9f2`, the obvious suspect, sitting in the
+   * middle of each sun patch — swept through sky / neutral / sun / warm-bounce move decile 9
+   * from 0.10 to 0.11; at intensity 5 against a sun at 5705 they were never going to be it.
+   * The three `bounceFill` directionals carry most of the room's level (dropping them takes the
+   * median to 16.1) but not its colour.
+   *
+   * `day` is a scalar on a warm tint, and `tintLuma` renormalises so the box's LUMINANCE cannot
+   * move with it — the haze sweep in this same round priced a 62% amount change as a hue change
+   * because nothing stopped it. Swept at `overlook`, the ladder holds its luminance to a tenth
+   * of a count and the chroma moves the right way:
+   *
+   *     day        d1     d2     d3     d4     d5    d6    d7    d8    d9    median L
+   *     bar       0.79   0.40   0.38   0.40   0.36  0.36  0.34  0.33  0.34
+   *     0.0       0.81   0.78   0.53   0.39   0.25  0.22  0.24  0.24  0.10    49.3
+   *     0.5       0.83   0.78   0.55   0.41   0.27  0.24  0.26  0.25  0.13    49.3
+   *     1.0       0.84   0.79   0.57   0.43   0.29  0.26  0.28  0.27  0.15    49.3
+   *     1.5       0.85   0.80   0.59   0.45   0.31  0.28  0.29  0.28  0.17    49.4
+   *
+   * 🚨 **AND IT SHIPS AT 0, BECAUSE IT WAS PUT ON THE BOARD BEFORE IT WAS SHIPPED AND THE BOARD
+   * SAID NO.** `_eye18_sweep --extra day=0.5` against the same seventeen angles:
+   *
+   *     eye.mirror    0.140 -> 0.145   PASS -> WARN
+   *     eye.gallery   0.199 -> 0.213   WARN -> FAIL
+   *     (fourteen others within 0.04, eye.door and eye.up already failing)
+   *
+   * 13 PASS / 2 WARN / 2 FAIL becomes 12 / 2 / 3 for +0.02 to +0.03 of chroma at deciles 5-9.
+   * That is the same trade `toneChroma` was refused for one round earlier and it is refused on
+   * the same rule: a term is spent at every camera and must be judged at every camera. The knob
+   * stays because a measured arm is worth more than an untried idea, and because the next round
+   * — the one that rebalances the bright materials rather than the light on them — will want to
+   * hold this fixed while it moves those.
+   */
+  const DAY = qs.has('day') ? Math.max(0, Math.min(2, Number(qs.get('day')) || 0)) : 0.0;
+  const DAY_TINT = [1 + 0.30 * DAY, 1.0, 1 - 0.28 * DAY];
   scene.environment = ballroomEnv(renderer, {
     /**
      * ⚠ `key` CARRIES `candleGlow` NOW TOO. `roomEnv` caches on the key alone, so a shell baked
@@ -712,10 +764,11 @@ export default async function view(args = {}) {
      * function's own header documents for `bounceTint`, and the same one `bakeDust` documents
      * in the baker. `-r18` because the value below changes what this key means.
      */
-    key: `ballroom2-r18-cg${CANDLE}-a${AMB}-${AMBT}`, bounceTint: [1.075, 1.085, 1.075],
+    key: `ballroom2-r18-cg${CANDLE}-a${AMB}-${AMBT}-d${DAY}`, bounceTint: [1.075, 1.085, 1.075],
     candleGlow: CANDLE,
     ambientScale: AMB,
     ambientTint: AMBT === 'cool' ? [0.86, 1.00, 1.20] : [1, 1, 1],
+    dayTint: DAY_TINT,
   });
   scene.environmentIntensity = LIGHTS.env;
   scene.background = new THREE.Color(0x05070c);
