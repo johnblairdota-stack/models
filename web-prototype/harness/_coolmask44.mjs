@@ -6,13 +6,13 @@
 // `_declook26` did for a decile band — and the rule that came out of that one applies here too:
 // crop the rect and look at it before believing what it is.
 //
-//   node harness/_coolmask44.mjs <img> <out.png> [minDecile]
+//   node harness/_coolmask44.mjs <img> <out.png> [minDecile] [class: cool|neutralcool]
 import { openCanvasPage, toDataURL } from './imglib.mjs';
 import { writeFile } from 'node:fs/promises';
-const [img, out, minDec] = process.argv.slice(2);
+const [img, out, minDec, klass] = process.argv.slice(2);
 const { browser, page } = await openCanvasPage();
 const durl = await toDataURL(img);
-const res = await page.evaluate(async ({ durl, minDec }) => {
+const res = await page.evaluate(async ({ durl, minDec, klass }) => {
   const im = new Image(); im.src = durl; await im.decode();
   const cv = document.createElement('canvas');
   cv.width = im.naturalWidth; cv.height = im.naturalHeight;
@@ -26,13 +26,16 @@ const res = await page.evaluate(async ({ durl, minDec }) => {
   let hit = 0;
   for (let i = 0, j = 0; j < n; j++, i += 4) {
     const R = d[i], G = d[i + 1], B = d[i + 2];
-    const cool = R <= 0.92 * B && L[j] >= cut;
+    // `neutralcool` widens the mask to everything that is not at least mildly warm — the class
+    // the reference has only 7% of in its bright band against this room's 32%.
+    const inClass = klass === 'neutralcool' ? R <= 1.10 * B : R <= 0.92 * B;
+    const cool = inClass && L[j] >= cut;
     if (cool) { d[i] = 20; d[i + 1] = 190; d[i + 2] = 255; hit++; }
     else { const g = 40 + L[j] * 0.55; d[i] = g; d[i + 1] = g; d[i + 2] = g; }
   }
   cx.putImageData(id, 0, 0);
   return { url: cv.toDataURL('image/png'), pct: 100 * hit / n };
-}, { durl, minDec: Number(minDec ?? 0) });
+}, { durl, minDec: Number(minDec ?? 0), klass: klass || 'cool' });
 await writeFile(out, Buffer.from(res.url.split(',')[1], 'base64'));
 console.log(`cool-class pixels${minDec ? ` at or above decile ${minDec}` : ''}: ${res.pct.toFixed(1)}% of frame -> ${out}`);
 await browser.close();

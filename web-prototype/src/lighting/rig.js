@@ -710,6 +710,28 @@ export const GRADES = {
     toeSatLo: 0.125,
     toeSatHi: 0.175,
     /**
+     * ⚠ **AND THE HAZE HUE WAS RE-PRICED AGAINST THIS CURVE AND STILL DOES NOT SHIP.**
+     *
+     * Round 44 refused a warm haze early on: held at this room's own 0.026 and swept on hue
+     * alone it landed deciles 5-8 on the reference and took 1-4 to 1.10 / 0.98 / 0.71 / 0.55.
+     * That was measured against the FALLING toe weight, which could not defend deciles 2-3 — so
+     * the refusal was owed a re-test once the hump could. Re-swept on this curve, at `overlook`:
+     *
+     *     variant                                     d1     d2     d3     d4     d5    d6    d7    d8    d9
+     *     bar                                        0.79   0.40   0.38   0.40   0.36  0.36  0.34  0.33  0.34
+     *     shipped (cool haze, toe 0.65)              0.80   0.44   0.33   0.36   0.28  0.28  0.33  0.32  0.13
+     *     neutral haze, toe 0.78                     0.83   0.36   0.32   0.41   0.32  0.32  0.36  0.35  0.15
+     *     neutral haze, toe 0.65                     0.88   0.47   0.37   0.42   0.32  0.32  0.36  0.35  0.15
+     *     barely-cool haze, toe 0.78                 0.81   0.36   0.30   0.39   0.31  0.31  0.35  0.34  0.14
+     *
+     * The best of those improves the summed error over deciles 1-9 from 0.53 to 0.46 — and gets
+     * there by taking deciles 7 and 8 PAST the reference (0.36 / 0.35 against 0.34 / 0.33) and
+     * decile 2 under it. The shipped pair overshoots nothing. 0.07 of summed error is inside
+     * "which weighting of the ladder do you prefer", and buying it means re-opening round 18's
+     * haze argument and re-shooting seventeen angles for a term that touches every one of them.
+     * Recorded, not taken.
+     */
+    /**
      * 🆕 **`midWarm` 0.12 — CHROMA BACK IN THE MIDDLE OF THE LADDER, WHERE THE BLUE SHELL TOOK IT.**
      *
      * The other end of the same round. Deciles 5-9 read 0.25 / 0.22 / 0.24 / 0.24 / 0.10 against

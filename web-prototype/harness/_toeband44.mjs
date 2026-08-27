@@ -18,13 +18,19 @@ const argv = process.argv.slice(2);
 const opt = (n, d = null) => (argv.indexOf('--' + n) >= 0 ? argv[argv.indexOf('--' + n) + 1] : d);
 const OUT = opt('out') || 'out';
 const CAMS = (opt('cams') || 'overlook').split(',');
+// ⚠ THE HAZE COMES WITH IT, BECAUSE THE TWO TERMS COMPOSE AND WERE PRICED APART.
+// Round 44's first haze sweep found warming the haze lands deciles 5-8 on the reference and
+// takes 1-4 to 1.10 / 0.98 / 0.71 / 0.55 — refused. That was measured against a toe weight that
+// FELL from black and could not defend deciles 2-3. Against the hump it can, so the pair is
+// re-priced together here: `hz` null leaves the shipped cool haze, otherwise it is set with the
+// amount held at this room's own 0.026.
 const VARIANTS = [
-  { id: 'ship', sat: 0.35, lo: 0, hi: 0.20 },
-  { id: 'n-a', sat: 0.65, lo: 0.125, hi: 0.175 },
-  { id: 'n-b', sat: 0.80, lo: 0.125, hi: 0.175 },
-  { id: 'n-c', sat: 0.65, lo: 0.135, hi: 0.185 },
-  { id: 'n-d', sat: 0.80, lo: 0.115, hi: 0.165 },
-  { id: 'n-e', sat: 1.00, lo: 0.130, hi: 0.170 },
+  { id: 'ship', sat: 0.65, lo: 0.125, hi: 0.175, hz: null },
+  { id: 'nz-a', sat: 0.65, lo: 0.125, hi: 0.175, hz: [0.058, 0.058, 0.058] },
+  { id: 'nz-b', sat: 0.78, lo: 0.125, hi: 0.175, hz: [0.058, 0.058, 0.058] },
+  { id: 'nz-c', sat: 0.78, lo: 0.135, hi: 0.185, hz: [0.058, 0.058, 0.058] },
+  { id: 'nz-d', sat: 0.90, lo: 0.130, hi: 0.180, hz: [0.058, 0.058, 0.058] },
+  { id: 'nz-e', sat: 0.78, lo: 0.125, hi: 0.175, hz: [0.054, 0.056, 0.062] },
 ];
 const portOpen = (p) => new Promise((r) => {
   const s = net.connect(p, '127.0.0.1');
@@ -46,15 +52,18 @@ for (const cam of CAMS) {
     await page.evaluate((v) => {
       const g = window.__rrr.engine.pipeline.grade;
       if (!window.__toeband) {
-        window.__toeband = { toeSat: g.toeSat ?? 0, toeSatLo: g.toeSatLo ?? 0, toeSatHi: g.toeSatHi ?? 0.2 };
+        window.__toeband = { toeSat: g.toeSat ?? 0, toeSatLo: g.toeSatLo ?? 0, toeSatHi: g.toeSatHi ?? 0.2,
+          haze: g.haze, hazeColor: (g.hazeColor ?? []).slice() };
       }
-      window.__rrr.setGrade({ toeSat: v.sat, toeSatLo: v.lo, toeSatHi: v.hi });
+      const b = window.__toeband;
+      window.__rrr.setGrade({ toeSat: v.sat, toeSatLo: v.lo, toeSatHi: v.hi,
+        haze: b.haze, hazeColor: (v.hz ?? b.hazeColor).slice() });
       window.__rrr.redraw();
     }, v);
     const buf = await page.locator('canvas').first().screenshot();
     const f = `${OUT}/_toeband44-${cam.replace(/\./g, '_')}-${v.id}.png`;
     writeFileSync(f, buf);
-    console.log(`  ${cam} ${v.id} sat ${v.sat} lo ${v.lo} hi ${v.hi} -> ${f}`);
+    console.log(`  ${cam} ${v.id} sat ${v.sat} lo ${v.lo} hi ${v.hi} haze ${v.hz ? v.hz.join('/') : 'shipped'} -> ${f}`);
   }
   await page.evaluate(() => window.__rrr.setGrade(window.__toeband));
 }
