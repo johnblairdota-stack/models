@@ -677,7 +677,38 @@ export const GRADES = {
      * so shipping a term there that was derived from one room's ladder is the mistake this file
      * keeps recording. It is a per-piece grade field and it stays on the piece it was measured on.
      */
-    toeSat: 0.35,
+    toeSat: 0.65,
+    /**
+     * 🆕 **AND THE TOE WEIGHT IS A HUMP OVER DECILES 2-3, BECAUSE THE TARGET IS NOT MONOTONIC.**
+     *
+     * The reference's own chroma ladder is 0.79 / 0.40 / 0.38 / 0.40 — a spike in the darkest
+     * tenth and then flat. A weight that falls from black, which is what this term shipped with
+     * at 0.35, takes the MOST out of decile 1 and the least out of 2 and 3: it landed decile 1
+     * exactly and left decile 2 at 0.78 against 0.41, the largest single error in the frame, and
+     * no amount of it could reach decile 2 without pulling decile 1 under.
+     *
+     *     toeSat / lo / hi        d1     d2     d3     d4
+     *     bar                    0.79   0.40   0.38   0.40
+     *     0.35 / 0    / 0.20     0.81   0.78   0.53   0.39     (the falling weight)
+     *     0.55 / 0.09 / 0.20     0.49   0.48   0.40   0.36     (rise from black: takes both down)
+     *     0.65 / 0.105/ 0.22     0.58   0.36   0.30   0.30
+     *     0.65 / 0.125/ 0.24     0.79   0.43   0.25   0.25     (right at the top, too wide)
+     *     0.65 / 0.125/ 0.175    0.80   0.44   0.33   0.36     <- shipped
+     *     0.80 / 0.115/ 0.165    0.62   0.30   0.36   0.38
+     *
+     * ⚠ **THE RISE STARTS AT HALF THE KNEE AND THAT IS THE WHOLE MECHANISM.** Rising from black
+     * gives decile 1 half the weight of decile 2 — a ratio of two — so it takes both down
+     * together where the reference DROPS between them. Starting at `lo * 0.5` puts ~0.01 at
+     * decile 1 against ~0.87 at decile 2, which is the separation the target has.
+     *
+     * ⚠ **AND THE BAND WAS NARROWED TWICE, IN THE PIPELINE'S SPACE RATHER THAN THE HISTOGRAM'S.**
+     * `lo`/`hi` are luma BEFORE the 1.05 contrast expansion, so a band placed by reading decile
+     * luminances off the final frame lands lower than intended — the same trap `uMidWarm`'s
+     * comment records. 0.125/0.24 landed deciles 1-2 exactly and took 3 and 4 to 0.25; the fall
+     * came in to 0.175 and gave them back.
+     */
+    toeSatLo: 0.125,
+    toeSatHi: 0.175,
     /**
      * 🆕 **`midWarm` 0.12 — CHROMA BACK IN THE MIDDLE OF THE LADDER, WHERE THE BLUE SHELL TOOK IT.**
      *

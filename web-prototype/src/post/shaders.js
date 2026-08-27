@@ -258,6 +258,8 @@ uniform float uSaturation;
 uniform float uToneChroma;   // 0 = plain ACES - see the tonemap block below
 uniform float uToeSat;       // 0 = no-op - see the toe-saturation block in the grade
 uniform float uMidWarm;      // 0 = no-op - see the mid-band warm block in the grade
+uniform float uToeSatLo;     // toe band rise; 0 = the original falling-from-black weight
+uniform float uToeSatHi;     // toe band knee
 uniform float uContrast;
 uniform vec3  uShadowTint;
 uniform vec3  uHighlightTint;
@@ -416,7 +418,32 @@ void main(){
    */
   if (uToeSat > 0.0) {
     float tl = lumaW(col);
-    float tw = 1.0 - smoothstep(0.0, 0.20, tl);
+    /**
+     * THE WEIGHT IS A HUMP, NOT A FALL, BECAUSE THE TARGET IS NOT MONOTONIC EITHER.
+     *
+     * The reference's own chroma ladder runs 0.79 / 0.40 / 0.38 / 0.40 - a spike in the darkest
+     * tenth and then flat. This room ran 1.03 / 0.90 / 0.57 / 0.40. A weight that falls from
+     * black, which is what this term shipped with, takes the most out of decile 1 and least out
+     * of 2 and 3 - the opposite of the correction the pair of ladders asks for. It landed
+     * decile 1 exactly (0.81 against 0.79) and left decile 2 at 0.78 against 0.41, the largest
+     * single error in the frame, and no amount of it could reach decile 2 without pulling
+     * decile 1 under the bar.
+     *
+     * With uToeSatLo > 0 the weight rises to the knee instead of starting at 1, so it can be
+     * aimed at deciles 2-3 while leaving the darkest tenth nearer where the reference has it.
+     * uToeSatLo = 0 reproduces the original curve exactly, so every other piece and every
+     * earlier measurement still means what it said.
+     */
+    /**
+     * ⚠ THE RISE STARTS AT HALF THE KNEE, NOT AT BLACK, AND THAT IS THE WHOLE POINT OF THE
+     * SHAPE. Rising from zero gives decile 1 half the weight of decile 2 - a ratio of two - and
+     * the sweep showed what that buys: it takes both down together (0.81 / 0.78 -> 0.49 / 0.48)
+     * when the reference's own ladder DROPS between them, 0.79 to 0.40. A weight that starts at
+     * uToeSatLo * 0.5 is ~0.01 at decile 1 and ~0.87 at decile 2 in this room's ladder, which is
+     * the separation the target actually has.
+     */
+    float rise = uToeSatLo > 0.0 ? smoothstep(uToeSatLo * 0.5, uToeSatLo, tl) : 1.0;
+    float tw = rise * (1.0 - smoothstep(max(uToeSatLo, 0.0), max(uToeSatHi, 0.01), tl));
     col = mix(col, vec3(tl), uToeSat * tw);
   }
   /**
