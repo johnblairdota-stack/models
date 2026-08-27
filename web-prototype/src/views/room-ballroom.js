@@ -1249,6 +1249,23 @@ export default async function view(args = {}) {
    */
   const CORNICE = qs.get('cornice') === 'gilt' ? 'gilt' : 'stone';
   /**
+   * `?ceilbeam=gilt|stone` — WHAT THE COFFER BEAMS ARE MADE OF.
+   *
+   * 🚨 **THE ONE THING THAT CAN MOVE `eye.up`, AND THREE GRADE TERMS COULD NOT.** Round 44's
+   * board has `eye.up` at top-decile (r-b)/L 0.322 against a 0.14 target and a 0.2 fail line,
+   * and the three terms that round shipped moved it by 0.001 between them — every one is shaped
+   * so it cannot reach the top decile, which is what makes them safe at sixteen other cameras
+   * and useless at this one. The board's own note is the instruction: *"eye.up is 40 percent
+   * gilt by area where the bar's ceiling is a plain coved vault"*, and *"closing these two means
+   * changing what is IN those frames, not how they are graded."*
+   *
+   * The 7 x 4 beam grid is the largest gilt surface in this room. This routes it to the same
+   * dusted stone the entablature took one round earlier under `?cornice=`, on the same kind of
+   * evidence, and keeps the bosses and the roses gold so the ceiling still reads as gilded
+   * rather than as a plain slab.
+   */
+  const CEILBEAM = qs.get('ceilbeam') === 'gilt' ? 'gilt' : 'stone';
+  /**
    * `?cornval=N` — AND THE STONE CORNICE'S VALUE, WHICH IS WHAT MAKES THE TRADE GO AWAY.
    *
    * The note above priced `stone` as a trade: it wins the chroma and costs two median gates.
@@ -1870,6 +1887,7 @@ export default async function view(args = {}) {
    */
   ballroomOrder(bin, {
     plan: PLAN, keys: K, pilasterKey: 'pil', uvWall: 1.15,
+    ceilBeamKey: CEILBEAM,
     ...(CAP < 1 ? { capKey: 'cap' } : {}),
     parts: {
       windowWall: false, mirrorWall: false, endWall: false,

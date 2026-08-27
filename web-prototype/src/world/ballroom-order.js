@@ -806,7 +806,23 @@ export function ballroomOrder(bin, o = {}) {
     cofferedCeiling(B, {
       w: endLen - C.inset, d: wallLen - C.inset, cellsX: C.cellsX, cellsZ: C.cellsZ,
       y: C.y, beam: C.beam, drop: C.drop, x: C.x, z: C.z,
-      keys: { pan: 'ceil', beam: 'gilt', boss: 'gilt' },
+      /**
+       * 🆕 **`ceilBeamKey` — THE COFFER BEAMS DO NOT HAVE TO BE GOLD, AND AT `eye.up` THEY ARE
+       * WHY THE FRAME FAILS ITS OWN GATE.**
+       *
+       * Round 44's board: `eye.up` reads top-decile (r-b)/L 0.322 against a 0.14 target and a
+       * 0.2 fail line, and three grade terms in that round moved it by 0.001 between them —
+       * every one of them was shaped so it could not reach the top decile, which is exactly
+       * what makes them safe and exactly what makes them useless here. The board's own note:
+       * *"eye.up is 40 percent gilt by area where the bar's ceiling is a plain coved vault"*,
+       * and *"closing these two means changing what is IN those frames, not how they are
+       * graded."* The 7 x 4 beam grid is the single largest gilt surface in this room.
+       *
+       * Default `'gilt'`, so the showcase and the game both build what they built before until
+       * a caller says otherwise. Same shape as `?cornice=` one round earlier, which took the
+       * entablature from gilt to stone on the same kind of evidence.
+       */
+      keys: { pan: 'ceil', beam: o.ceilBeamKey ?? 'gilt', boss: 'gilt' },
       vary: o.ceilingVary === false ? null : { rng: crng, missing: 0.12 },
     });
     for (const cz of C.roseZ) {
