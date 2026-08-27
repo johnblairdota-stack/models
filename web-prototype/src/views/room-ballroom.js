@@ -1092,7 +1092,57 @@ export default async function view(args = {}) {
     ballroomGlass.needsUpdate = true;
   }
   engine.onDispose?.(() => ballroomGlass.dispose());
-  const ceilPaint = ceilingMat({ tint: [0.480, 0.452, 0.398], stain: 0.7, bakeDust: DUST });
+  /**
+   * `?ceiltint=N` — HOW MUCH OF THE CEILING PAINT'S OWN WARMTH IS LEFT, 1 = as authored.
+   *
+   * 🚨 **THE LARGEST SINGLE CONTRIBUTOR TO THE WORST ANGLE ON THE BOARD, AND IT IS NOT THE GILT.**
+   * `_bucket44 --cam eye.up` hides one merged bucket at a time and reads the top-decile chroma
+   * back. Against a baseline of 0.209 and a 0.2 fail line:
+   *
+   *     hide kit:ceil          0.071    -0.138
+   *     hide kit:frieze        0.133    -0.076
+   *     hide kit:wall          0.165    -0.044
+   *     hide kit:gilt          0.174    -0.035
+   *     hide kit:stone         0.189    -0.020
+   *     hide chandelier-brass  0.194    -0.015
+   *
+   * Four rounds have treated `eye.up` as a gilt problem — the board's own note says *"40 percent
+   * gilt by area"* — and the gilt is the FOURTH term. The ceiling PAINT is nearly twice the
+   * frieze and four times the gilt. Its tint is [0.480, 0.452, 0.398], r/b 1.21: a warm cream
+   * where the reference's vault is a pale grey-cream.
+   *
+   * ⚠ THE BLEND HOLDS LUMINANCE. A tint that also moved the value would change the ceiling's
+   * exposure and its bounce into the room in the same number — the fourth time this round that
+   * trap has had to be designed out rather than noticed afterwards.
+   *
+   *     ceiltint     eye.up   overlook
+   *     1.00 (as authored)   0.209    0.004     FAIL — the 0.2 line
+   *     0.40                 0.195    0.003     WARN
+   *     0.00                 0.186    0.003     WARN
+   *
+   * 0.40 rather than 0, because the difference between them at the gate is 0.009 and the
+   * difference in the room is a ceiling that is still a pale cream against one that is neutral
+   * grey. The reference's vault is not grey either. What this buys is `eye.up` off a fail line
+   * it has been over since the piece was first shot from more than one camera.
+   *
+   * ⚠ AND IT IS SMALLER THAN THE ABLATION LOOKED. Hiding `kit:ceil` outright takes the angle
+   * from 0.209 to 0.071, and neutralising its tint completely takes it to 0.186 — because most
+   * of the ceiling's warmth is the LIGHT on it (the warm key, the shell's candle boxes), not its
+   * albedo. An ablation says which OBJECT owns a number; it does not say which of that object's
+   * properties does, and the two are different questions.
+   */
+  const CEILTINT = qs.has('ceiltint')
+    ? Math.max(0, Math.min(1.5, Number(qs.get('ceiltint')) || 0)) : 0.40;
+  const CEIL_BASE = [0.480, 0.452, 0.398];
+  const ceilTint = (() => {
+    const W = [0.2126, 0.7152, 0.0722];
+    const l0 = W[0] * CEIL_BASE[0] + W[1] * CEIL_BASE[1] + W[2] * CEIL_BASE[2];
+    const t = CEIL_BASE.map((c) => l0 + (c - l0) * CEILTINT);
+    const l1 = W[0] * t[0] + W[1] * t[1] + W[2] * t[2];
+    const k = l1 > 1e-6 ? l0 / l1 : 1;
+    return t.map((c) => +(c * k).toFixed(4));
+  })();
+  const ceilPaint = ceilingMat({ tint: ceilTint, stain: 0.7, bakeDust: DUST });
 
   // The pilaster shafts, a shade down and a shade warmer than the wall they stand against —
   // see the note at the pilaster call in ballroom-order.js. Stone against painted joinery.

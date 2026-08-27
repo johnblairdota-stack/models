@@ -771,7 +771,30 @@ export const GRADES = {
      * means a lower pixel here. It lifted deciles 2-4 (0.78 / 0.53 / 0.39 -> 0.90 / 0.73 / 0.63)
      * as hard as the band it was aimed at. Raised, deciles 1-3 do not move at all.
      */
-    midWarm: 0.12,
+    /**
+     * ⚠ **RE-TUNED 0.12 -> 0.18 AFTER THE CEILING CHANGED UNDER IT.** Taking the coffer beams to
+     * stone and the ceiling paint two-fifths of the way to neutral removed warmth this term had
+     * been measured against, and deciles 5-8 fell from 0.28 / 0.28 / 0.33 / 0.32 to
+     * 0.25 / 0.29 / 0.33 / 0.29. Re-swept on the new baseline at `overlook`:
+     *
+     *     midWarm     d5    d6    d7    d8    d9      gallery gate   up gate
+     *     bar        0.36  0.36  0.34  0.33  0.34
+     *     0.12       0.25  0.29  0.33  0.29  0.12        0.142         0.187
+     *     0.18       0.28  0.33  0.38  0.34  0.13        0.142         0.187
+     *     0.24       0.30  0.37  0.42  0.38  0.14        0.142         0.187
+     *
+     * ⚠ 0.18 TAKES DECILE 7 PAST THE REFERENCE BY 0.04, WHICH IS A DEPARTURE FROM THIS FILE'S
+     * OWN RULE, AND THE REASON IS THAT THE TARGET PROPERTY IS FLATNESS. The bar runs flat at
+     * 0.36 / 0.36 / 0.34 / 0.33 across this band; against a flat 0.35 the deviations are
+     * 0.10 / 0.06 / 0.02 / 0.06 at 0.12 and 0.07 / 0.02 / 0.03 / 0.01 at 0.18. Three deciles
+     * improve, one overshoots slightly, and the band comes out flatter — which is the shape the
+     * whole complaint has been about since round 18.
+     *
+     * ⚠ AND THE GATE DOES NOT MOVE AT ALL: `eye.gallery` 0.142 and `eye.up` 0.187 to three
+     * decimals at every value swept. The term's weight is zero above L 0.46; the gate reads the
+     * top decile. That is the property, measured rather than argued.
+     */
+    midWarm: 0.18,
     // toeCrush 0 and a small lift, because the rebalance put 6.0% of the frame at L <= 2.6 and
     // the locked art holds 0.1%. Crushed black is a render tell in its own right and it was
     // about to be bought with the macro win.
