@@ -11,6 +11,10 @@ or off the source, and each says which. Frames come from two instruments:
 | `harness/loop-ui-play.mjs` | 8 phones, casting **played for real** | TV 1600×900, phone 390×844 | Picture AND chrome |
 | `harness/talk-frames.mjs` | 5 phones, beats walked with the `]` dev key | TV 1920×1080 | **Chrome only** |
 
+`progress/` is gitignored, so every `progress/...` path cited below is a REGENERATED artifact, not
+a committed file: run the instrument named beside the finding and it writes them again. Neither
+driver is in `gates:party` — both need `npm install` and a browser.
+
 > ⚠️ **`talk-frames` SKIPS CASTING, SO ITS BALLROOM IS EMPTY BY CONSTRUCTION.** `DEV_SKIP` in
 > `party-host.js:325` walks `casting → recap`, and the seated circle is placed *during* casting —
 > so its Debrief / Reckoning / Vote / Execution frames photograph a room with no chairs and no
