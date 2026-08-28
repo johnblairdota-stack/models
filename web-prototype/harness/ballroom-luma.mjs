@@ -83,6 +83,7 @@ const STATIONS = {
   floor:  { eye: { u: 0.50, v: 0.62, y: 1.35 }, at: { u: 0.34, v: 0.14, y: 0.02 } },
   mirror: { eye: { u: 0.22, v: 0.50, y: 1.62 }, at: { u: 0.98, v: 0.50, y: 2.40 } },
   up:     { eye: { u: 0.50, v: 0.50, y: 1.40 }, at: { u: 0.50, v: 0.50, y: 9.00 } },
+  corner: { eye: { u: 0.30, v: 0.30, y: 1.62 }, at: { u: 0.03, v: 0.03, y: 1.20 } },
 };
 
 /* A probe is a SUBJECT mesh name and a REFERENCE mesh name. Names rather than materials:
@@ -109,7 +110,10 @@ const PROBE_SPEC = {
      * erosion correctly ate all of them.
      */
     narrow: 'radius',
-    stations: ['floor', 'mirror', 'arch'],
+    /* `corner` is here because it is the station where a WINDOW throws a hard pool onto the
+     * border, and fixing three stations while a fourth still shouts is precisely the shape of
+     * the D1 mistake this whole instrument exists to stop repeating. */
+    stations: ['floor', 'mirror', 'arch', 'corner'],
     /*
      * 🚨 **THE MEAN IS THE WRONG STATISTIC FOR A CHEQUER, AND IT HID THE DEFECT COMPLETELY.**
      * Half of this surface is Nero Marquina at 0.070 albedo, so the black tiles drag the mean

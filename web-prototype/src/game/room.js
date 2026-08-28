@@ -250,6 +250,8 @@ export async function buildTestRoom(engine, o = {}) {
    */
   const BALL = !!(PORT && ESTATE?.ballroom);
   const ballMod = BALL ? await tryImport(() => import('../world/ballroom-order.js')) : null;
+  // `skirtProfile` / `extrudeProfile` for the ballroom's gilt skirting — see `skirtMould`.
+  const kitMod = BALL ? await tryImport(() => import('../world/kit.js')) : null;
   /**
    * 🆕 **`?ballfix=0` — THE PERMANENT ABLATION FOR `ballroom-fix-1`'S TWO CHANGES**, and it is
    * one flag for both because they were measured as one round.
@@ -2228,6 +2230,22 @@ export async function buildTestRoom(engine, o = {}) {
         if (key === 'ceiling') (sp._lid ??= []).push({ key, mesh: m, took: false });
       }
     };
+    /**
+     * 🆕 **THE SAME BIN, BUT FOR A PROFILE RATHER THAN A BOX.** `put` can only emit an
+     * axis-aligned box, which is why this room's skirting was a flush grey slab. `GeoBin.add`
+     * has always taken arbitrary geometry — the kit's own mouldings go in that way — so a
+     * moulded run needs an emitter, not a new bin. `bin.add` CLONES, so the source geometry is
+     * disposed here; in the no-kit fallback the mesh owns it and must not be.
+     */
+    const putGeo = (key, geo, m, uv) => {
+      if (bin) { bin.add(key, geo, m, uv); geo.dispose?.(); }
+      else {
+        const mesh = new THREE.Mesh(geo, mats[key] ?? mats.wall);
+        if (m) mesh.applyMatrix4(m);
+        mesh.castShadow = true; mesh.receiveShadow = true;
+        sp.root.add(mesh);
+      }
+    };
     // Returns the box so a caller that may have to REMOVE it later can keep the reference —
     // see `dropCollider`. Every existing caller ignores the return value.
     const solid = (w, h, d, x, y, z) => {
@@ -2282,9 +2300,39 @@ export async function buildTestRoom(engine, o = {}) {
        * showcase). Same machinery, two answers, and the only branch is inside `makeOrder`.
        */
       const cap = ord?.capFor(side, alongZ) ?? null;
+      /* =====================================================================================
+       * 🆕 **THE GILT SKIRTING, AND IT IS `buildWall`'s TO PLACE — NOT `wallRun`'s.**
+       *
+       * John: *"there is also a golden skirting that traces the edges of the room that we need
+       * to add. Its important that skirting doesn't block the arch way."* The constraint IS the
+       * problem. `wallRun` owns a moulded gilt skirting already, and this room turns it off
+       * (`skirtLower: false`) for two reasons that both still hold: it would double-draw and
+       * z-fight with the flush box below, and it is ONE CONTINUOUS EXTRUSION that openings do
+       * not cut — the dado did exactly that, crossed three doorways at 0.92 m, read as a
+       * barrier, and is why `dado: { end: false }` exists.
+       *
+       * `buildWall`'s sorted walk already emits this room's skirting PER SEGMENT, between the
+       * cuts, because it is the thing that knows where the openings are. So the segmentation is
+       * not rebuilt — the segments simply stop being flush grey boxes and start being the kit's
+       * own moulded profile in the gilt bucket. The arch gets its jambs for free, because the
+       * walk never had a segment there to begin with.
+       *
+       * ⚠️ **OPT-IN, AND OFF FOR EVERY OTHER ROOM.** `giltSkirt` is a property of the ORDER, so
+       * a room without one is byte-identical. The profile factory is passed in rather than
+       * imported: `kit.js` is a dynamic import here and `buildWall` has no business knowing
+       * about it.
+       * ===================================================================================== */
       buildWall(sp, {
         axis: alongZ ? 'z' : 'x', at: n, t, u0, u1, H, put, solid, tracked,
         skirtShrink: 0.999,
+        skirtMould: (ord?.giltSkirt && kitMod?.extrudeProfile && kitMod?.skirtProfile) ? {
+          key: 'gilt',
+          // +1 when the room lies on the +axis side of the wall centre line, which is the
+          // direction the moulding has to project. zmin/xmin sit BELOW the room, zmax/xmax above.
+          inward: (side === 'zmin' || side === 'xmin') ? 1 : -1,
+          geo: (len) => kitMod.extrudeProfile(kitMod.skirtProfile(0.34, 0.055), len),
+          put: putGeo,
+        } : null,
         // ⚠️ The order's own openings (the study's windows) are APPENDED to the connector cuts,
         // not merged into them: a window is a hole in this wall like any other, and it has to go
         // through the SAME sorted walk so its sill and its lintel land where the infill stops.
@@ -3236,6 +3284,13 @@ export async function buildTestRoom(engine, o = {}) {
 
     return {
       kind: 'ballroom', plan, base: null, solids,
+      /*
+       * 🆕 **THE ASSET'S GILT SKIRTING, SEGMENTED BY THE OPENING WALK.** See the long note at the
+       * `buildWall` call site. `skirtLower: false` stays exactly as it is below — this REPLACES
+       * the flush grey box `buildWall` was drawing, and turning `wallRun`'s continuous run back
+       * on as well is the double-draw this avoids.
+       */
+      giltSkirt: true,
       /**
        * ⚠️ **ALL FOUR WALLS CAP AT 4.80, AND ONLY THE WINDOW WALL'S BAND HAS HOLES IN IT.** The
        * band is the same boiserie with the top of each window in it, so it keeps the default
@@ -3416,10 +3471,39 @@ export async function buildTestRoom(engine, o = {}) {
       const b = alongZ ? solid(w, h, o.t, u, y, o.at) : solid(o.t, h, w, o.at, y, u);
       if (track) lintelOf.set(`${sp.id}|${track}`, { geo, box: b, space: sp });
     };
+    /**
+     * One skirting run, for ONE SOLID SEGMENT of this wall. The walk below calls it only where
+     * it has just emitted wall, so an opening never gets one — which is the whole reason the
+     * gilt moulding is placed here rather than in `wallRun`. See the note at the call site.
+     */
     const skirt = (w, u) => {
       const k = o.skirtShrink ?? 1.0;
-      if (alongZ) put('skirt', w * k, 0.34, o.t + 0.03, u, 0.17, o.at, 0.6);
-      else put('skirt', o.t * k, 0.34, w + 0.03, o.at, 0.17, u, 0.6);
+      const M = o.skirtMould;
+      if (!M) {
+        if (alongZ) put('skirt', w * k, 0.34, o.t + 0.03, u, 0.17, o.at, 0.6);
+        else put('skirt', o.t * k, 0.34, w + 0.03, o.at, 0.17, u, 0.6);
+        return;
+      }
+      /*
+       * `extrudeProfile` builds along +X with the profile's first coordinate on +Z (the
+       * projection) and its second on +Y (the height), so the run needs a BASIS rather than an
+       * Euler angle: local +X along the wall, local +Z into the room. Built as a basis, the
+       * handedness is right by construction on all four walls — with a rotation it is four sign
+       * conventions and three of them look plausible.
+       */
+      const len = w * k;
+      const inward = M.inward;
+      const ex = alongZ ? new THREE.Vector3(inward, 0, 0) : new THREE.Vector3(0, 0, -inward);
+      const ey = new THREE.Vector3(0, 1, 0);
+      const ez = alongZ ? new THREE.Vector3(0, 0, inward) : new THREE.Vector3(inward, 0, 0);
+      // the run starts at whichever end of the segment `ex` points away from
+      const forward = alongZ ? ex.x > 0 : ex.z > 0;
+      const uStart = forward ? u - len / 2 : u + len / 2;
+      // the room-side face of the wall, plus a hair so the moulding cannot z-fight the wall
+      const face = o.at + inward * (o.t / 2 + 0.001);
+      const m = new THREE.Matrix4().makeBasis(ex, ey, ez);
+      m.setPosition(alongZ ? uStart : face, 0, alongZ ? face : uStart);
+      M.put(M.key, M.geo(len), m);
     };
 
     /**
@@ -4196,14 +4280,18 @@ async function loadEstateSurfaces(L) {
          * tiles are the brightest thing in the frame. Measured with `ballroom-luma.mjs` on the
          * p90 instead — the white tiles — against the parquet's own p90:
          *
-         *     station   white tile   parquet p90   ratio
-         *     floor        167.0        159.6      1.05
-         *     mirror       127.1        144.6      0.88
-         *     arch         150.3        120.8      1.24
+         *     station   white tile   parquet p90   before  ->  after
+         *     floor        167.0        159.6       1.05        0.79
+         *     mirror       127.1        144.6       0.88        0.64
+         *     arch         150.3        120.8       1.24        0.88
+         *     corner         —            —         1.01*       0.96   (* measured mid-fix)
          *
-         * `groundA`/`veinA` are the Carrara, scaled to 0.65 of the showcase's. 0.72 was measured
-         * first and left `arch` at 1.01 — level with the parquet rather than under it, and too
-         * close to call a fix; the second step buys the margin. `room.js` already
+         * `groundA`/`veinA` are the Carrara, scaled to **0.60** of the showcase's, and it took
+         * three measured steps rather than one. 0.72 left `arch` at 1.01; 0.65 cleared `arch` but
+         * `corner` — the station where a window throws a hard pool onto the border — was still
+         * sitting at 1.01. 🚨 **THAT IS THE D1 MISTAKE'S EXACT SHAPE: a value derived at some of
+         * the stations and never checked at the rest.** `corner` is in the probe's station list
+         * now so the next person cannot repeat it. `room.js` already
          * makes this argument one bucket along for the study floor — *"Carrara is a grey stone
          * with white in it"* — and lands that one at 0.255 against the showcase's 0.395, so 0.65
          * here is mild by the same file's own standard.
@@ -4220,7 +4308,7 @@ async function loadEstateSurfaces(L) {
          * band throws under a moving camera.
          */
         chequer: L.estateMarbleChequer ? L.estateMarbleChequer({
-          groundA: [0.587, 0.581, 0.568], veinA: [0.263, 0.257, 0.247],
+          groundA: [0.540, 0.535, 0.523], veinA: [0.242, 0.236, 0.227],
           veinB: [0.420, 0.412, 0.396],
           wear: 0.30, dust: 0.35, size: 1024,
         }) : mats.marbleChequer,

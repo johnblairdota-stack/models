@@ -381,9 +381,15 @@ const orderSrc = await read('src/world/ballroom-order.js');
  * defect is:
  *
  *     station   white tile p90   parquet p90   before  ->  after
- *     floor          167.0          159.6       1.05       0.83
- *     mirror         127.1          144.6       0.88       0.67
- *     arch           150.3          120.8       1.24       0.94
+ *     floor          167.0          159.6       1.05       0.79
+ *     mirror         127.1          144.6       0.88       0.64
+ *     arch           150.3          120.8       1.24       0.88
+ *     corner           —              —         1.01*      0.96     (* measured mid-fix)
+ *
+ * ⚠️ **`corner` WAS ADDED TO THE PROBE MID-FIX AND IT EARNED ITS PLACE IMMEDIATELY.** Three
+ * stations had cleared 1.00 when it was first measured, and it read 1.01 — a window throws a
+ * hard pool onto the border there. Deriving a value at some stations and never checking it at
+ * the rest is exactly how D1 shipped twice, so a fourth station is now in the list.
  *
  * ⚠️ **AND UNLIKE D1, THERE IS NO AUTHORED PROXY FOR THIS ONE — DO NOT INVENT ONE.** D1's
  * plate/wall ratio could be gated on `silver x colour x (1 - metalness)` because that quantity
@@ -426,7 +432,7 @@ const orderSrc = await read('src/world/ballroom-order.js');
 
     t('B20 · the white tile is darkened well below the showcase Carrara',
       ballGround <= baseGround * 0.75,
-      `${ballGround.toFixed(3)} against ${baseGround.toFixed(3)} (${(ballGround / baseGround).toFixed(2)}x) · delivered p90 0.83 / 0.67 / 0.94`);
+      `${ballGround.toFixed(3)} against ${baseGround.toFixed(3)} (${(ballGround / baseGround).toFixed(2)}x) · delivered p90 0.79 / 0.64 / 0.88 / 0.96`);
     t('B20c · CONTROL the shared Carrara fails B20 — it is the value that shipped the band',
       !(baseGround <= baseGround * 0.75), `${baseGround.toFixed(3)}`);
 
@@ -546,6 +552,80 @@ const orderSrc = await read('src/world/ballroom-order.js');
   t('B27 · every coffer still gets a boss — it was never the cause',
     /if \(o\.boss !== false\) \{/.test(kit) && !/boss: false/.test(order),
     'cofferedCeiling emits 28 of them in this room');
+}
+
+/* =============================================================================================
+ * THE GILT SKIRTING — AND THE CONSTRAINT JOHN NAMED IS THE WHOLE PROBLEM
+ * =============================================================================================
+ * John: *"there is also a golden skirting that traces the edges of the room that we need to add.
+ * Its important that skirting doesn't block the arch way."*
+ *
+ * `wallRun` has owned a moulded gilt skirting all along, and this room turns it off
+ * (`skirtLower: false`) for two reasons that both still hold: it would double-draw and z-fight
+ * with `buildWall`'s own flush box, and it is ONE CONTINUOUS EXTRUSION that openings do not cut.
+ * That is not hypothetical — the dado rail did exactly this, crossed three doorways at 0.92 m,
+ * read as a barrier, and is why `dado: { end: false }` exists to this day.
+ *
+ * So placement stays with `buildWall`, whose sorted walk already emits skirting PER SEGMENT
+ * between the cuts because it is the thing that knows where the openings are. The segments stop
+ * being flush grey boxes and start being the kit's own moulded profile in the gilt bucket. The
+ * arch gets its jambs for free: the walk never had a segment there to begin with.
+ * ============================================================================================= */
+{
+  const kit = await read('src/world/kit.js');
+
+  t('B28 · the ballroom order opts into a gilt skirting', /giltSkirt: true,/.test(roomSrc));
+  t('B29 · ...and it is placed by buildWall, which segments per opening',
+    /skirtMould: \(ord\?\.giltSkirt && kitMod\?\.extrudeProfile/.test(roomSrc)
+    && /const M = o\.skirtMould;/.test(roomSrc),
+    'the same walk that emits the wall between the cuts');
+  t('B30 · it uses the kit\'s own moulded profile, not a box',
+    /geo: \(len\) => kitMod\.extrudeProfile\(kitMod\.skirtProfile\(0\.34, 0\.055\), len\)/.test(roomSrc)
+    && /export function skirtProfile/.test(kit),
+    'skirtProfile at SKIRT_H 0.34, 55 mm proud');
+  t('B31 · it lands in the gilt bucket, so it is +0 draw calls', /key: 'gilt',/.test(roomSrc));
+
+  /*
+   * 🚨 **THE DOUBLE-DRAW GUARD.** Turning `wallRun`'s continuous run back on IS the obvious
+   * "fix", and it both z-fights the box below it and runs straight across every doorway. If
+   * `skirtLower` ever goes true while `buildWall` is still emitting, the room gets both.
+   */
+  t('B32 · wallRun\'s continuous skirting stays OFF, or the room draws two of them',
+    /skirtLower: false, skirtUpper: true,/.test(roomSrc),
+    'and that one does not stop at a jamb');
+
+  /*
+   * The emitter must be the SEGMENT emitter. `skirt(w, u)` is called from exactly two places in
+   * the walk -- the infill before a cut and the tail after the last one -- and never for the
+   * span of a cut. That is the property that keeps the moulding out of the archway, so it is
+   * the property under lock rather than the picture.
+   */
+  const walk = roomSrc.match(/const cuts = \[\.\.\.o\.cuts\][\s\S]*?if \(o\.u1 - cursor > 0\.01\) \{[\s\S]{0,220}?\}/);
+  t('B33 · skirt() is only ever called where the walk has just emitted WALL', !!walk
+    && (walk[0].match(/skirt\(w, cursor \+ w \/ 2\);/g) || []).length === 2
+    && !/skirt\(c\.w/.test(walk[0]),
+    'twice: the infill before a cut, and the tail after the last one — never across one');
+
+  /* --- CONTROLS ------------------------------------------------------------------------- */
+  t('B30c · CONTROL a room WITHOUT giltSkirt still gets the flush box, unchanged',
+    /if \(!M\) \{\r?\n\s*if \(alongZ\) put\('skirt', w \* k, 0\.34, o\.t \+ 0\.03, u, 0\.17, o\.at, 0\.6\);/.test(roomSrc),
+    'twelve other rooms are byte-identical');
+  t('B30c2 · CONTROL only ONE order opts in — this is not on for the whole house',
+    (roomSrc.match(/giltSkirt: true,/g) || []).length === 1);
+
+  /*
+   * The basis, not a rotation. `extrudeProfile` builds along +X with the profile's projection on
+   * +Z, so each of the four walls needs a different frame; built from a basis the handedness is
+   * right by construction, and a mirrored one would push the moulding INTO the wall on two walls
+   * out of four — which reads as "no skirting on that side" rather than as an error.
+   */
+  t('B34 · the run is framed by a basis, so all four walls project into the room',
+    /makeBasis\(ex, ey, ez\)/.test(roomSrc)
+    && /const ex = alongZ \? new THREE\.Vector3\(inward, 0, 0\) : new THREE\.Vector3\(0, 0, -inward\)/.test(roomSrc)
+    && /inward: \(side === 'zmin' \|\| side === 'xmin'\) \? 1 : -1,/.test(roomSrc));
+  t('B34c · CONTROL the emitter offsets to the ROOM-side face, not the wall centre',
+    /const face = o\.at \+ inward \* \(o\.t \/ 2 \+ 0\.001\);/.test(roomSrc),
+    'at the centre line it would be half-buried in the wall');
 }
 
 console.log(`\n  ${pass} passed, ${fail} failed\n`);
