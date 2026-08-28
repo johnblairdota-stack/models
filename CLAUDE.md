@@ -134,6 +134,22 @@ file is deliberately NOT in `gates:party`**, because a red gate in the chain red
 it is a finding with a measurement behind it. The fix moves where the tag floats relative to the
 head, which is inside the locked tag rule below — **John's call, not a refactor.**
 
+**`t:'show'` is a door into a beat, not a repaint** (2026-08-28). It called `setShow` only, so the
+dev `]` key and the host's shipped "Watch the run" workaround could leave a room on a RECKONING
+screen the server was not in — `applyNominate` gates on `room.show` and lets the tap through,
+`nominatePlayer` gates on `state.phase` and refuses it, and the `t:'nominate'` handler discards
+the result, so **every nomination died with `not reckoning` and nothing on any screen said so.**
+It now routes through the same `enter*Live` the clock uses. The naive coupling is a WORSE bug and
+was rejected: `enter*Live` are transitions, not setters — `enterReckoningLive` clears
+`state.nominations`, `enterExecutionLive` closes the ballot — and the server re-sends `show` more
+than once per beat, so coupling it unguarded wipes a live Reckoning every time the TV repeats
+itself. A same-beat send therefore re-broadcasts without re-entering. `lobby` and `expedition`
+stay `setShow`-only on purpose, because `playEpisode` owns EXPEDITION and needs a locked pair.
+Gate: `show-beat` — and per the `episode-order` lesson nothing in it is a hand-kept table, so
+**SB2 reddens the day a ninth `SHOW_BEATS` entry is added without deciding which side of the door
+it is on.** Still open, and NOT this bug: a genuine refusal is still silent — `lynchVote` pushes a
+`ballotOk` receipt, `nominate` pushes nothing.
+
 **Smash-target visibility is guarded now, and the guard is RED** (2026-08-28). It was the last
 live-found bug class with no regression net; `harness/target-sight.mjs` is the net, it is pure
 node and runs 64 seeds in ~2s, and it reproduces the bug rather than clearing it: **24 of 64

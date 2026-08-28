@@ -724,6 +724,79 @@ function enterNextCasting(room) {
   fanout(room, lobbySnapshot(room));
 }
 
+/* =============================================================================================
+ * 🚪 **ONE DOOR INTO A BEAT — `t:'show'` USED TO BE A SECOND ONE, AND IT LOST NOMINATIONS.**
+ *
+ * `{t:'show', beat}` is the TV's beat verb: the host's "Watch the run" button, the `?dev=1` `]`
+ * key, and the gates' pacing seam all send it. It used to call `setShow` and nothing else, while
+ * every OTHER way into a beat — `progressShow`, the shooting-schedule timers, the casting
+ * backstop, the late-Debrief nominate — goes through the `enter*Live` function that ALSO moves
+ * `room.game.state.phase`. Two doors into the same room, one of which only repainted the sign.
+ *
+ * 🩸 **THE REPRODUCTION.** TV + 3 phones, `t:'start'`, `t:'casting'`, then the `]` walk
+ * (`casting → recap → debrief → reckoning`, `party-host.js` `DEV_SKIP` + `nextShowBeat`):
+ *
+ *     ] -> recap      room.show=recap      TV fanout beat=recap      state.phase=CASTING
+ *     ] -> debrief    room.show=debrief    TV fanout beat=debrief    state.phase=CASTING
+ *     ] -> reckoning  room.show=reckoning  TV fanout beat=reckoning  state.phase=CASTING
+ *
+ *     THE TELEVISION SAYS : RECKONING
+ *     EVERY PHONE WAS TOLD: RECKONING
+ *     THE SERVER IS IN    : CASTING
+ *     applyNominate(p1 -> p2) => {"ok":false,"why":"not reckoning"}
+ *     standing nominations after a real wire nominate: 0
+ *
+ * `applyNominate` gates on `room.show`, so it lets the tap through; `room.js` `nominatePlayer`
+ * gates on `state.phase`, so it refuses it — and the message handler drops the result. Every
+ * nomination in the room is swallowed, with nothing on the television to say so. It is reachable
+ * in the shipped product from the `]` key and from the host's beat workaround, not just here.
+ *
+ * ⚠️ **THE ONE-LINE FIX — "make `t:'show'` call `enterReckoningLive`" — IS A WORSE BUG.**
+ * `t:'show'` sets ALL the beats, and the `enter*Live` functions are transitions, not setters:
+ * `enterReckoningLive` CLEARS `state.nominations`, `enterVoteLive` overwrites `lynchVotes` with
+ * the assumed nominator votes, `enterExecutionLive` CLOSES the ballot, `enterNextCasting` empties
+ * the ballot box. The server re-sends `show` more than once per beat (`setShow` then
+ * `scheduleShowProgress`), a resuming TV asks for its current beat, and `party-night` N21j sends
+ * exactly that — so an unguarded coupling would wipe a live Reckoning's standing nominations
+ * every time the TV repeated itself. Hence the two rules below:
+ *
+ *   1. **A re-send of the CURRENT beat re-broadcasts and NEVER re-enters.** The duplicate `show`
+ *      still goes out (N21j is about the client surviving it), the transition does not re-run.
+ *   2. **`lobby` and `expedition` stay `setShow`-only, and that is deliberate, not an oversight.**
+ *      Neither has a live transition to call. EXPEDITION is entered by `playEpisode`, which needs
+ *      a locked pair — "Watch the run" must not manufacture an episode. And `playEpisode` runs the
+ *      whole offline episode ahead of the room, so `state.phase` legitimately reads VERDICT during
+ *      a live expedition (`PRIME-TIME-STATE.md` §4). The beat and the phase are NOT a mirror; the
+ *      invariant is narrower and it is the one `show-beat` asserts: **every beat that has a live
+ *      transition is only ever entered through it.**
+ *
+ * Gate: `harness/show-beat.mjs`. Its control re-opens this door and must go red.
+ * ============================================================================================= */
+const BEAT_DOOR = {
+  recap: (room) => { setShow(room, 'recap'); room.game.enterRecap?.(); scheduleShowProgress(room); },
+  debrief: enterDebriefLive,
+  reckoning: enterReckoningLive,
+  vote: enterVoteLive,
+  execution: enterExecutionLive,
+  casting: enterNextCasting,
+};
+
+/** The beats a `t:'show'` jump must enter through their live transition. Read by the gate. */
+export const LIVE_BEAT_DOORS = Object.keys(BEAT_DOOR);
+
+/** Beats with no live transition of their own — see rule 2 above. Read by the gate. */
+export const SETSHOW_ONLY_BEATS = ['lobby', 'expedition'];
+
+export function enterBeatLive(room, beat) {
+  if (!room || !isShowBeat(beat)) return room?.show ?? null;
+  // Rule 1. The wire still carries the repeat; the transition does not run twice.
+  if (room.show === beat) { fanout(room, showPayload(room)); return room.show; }
+  const door = BEAT_DOOR[beat];
+  if (door) door(room);
+  else setShow(room, beat);
+  return room.show;
+}
+
 function nomsPayload(room) {
   return {
     t: 'noms',
@@ -1342,8 +1415,13 @@ function handleClient(room, bound, self, msg) {
    */
   if (msg.t === 'show' && isTV && typeof msg.beat === 'string') {
     // Host workaround ("Watch the run") and N14 pacing. Not the product clock.
-    if (msg.beat !== 'expedition') clearShowClock(room);
-    setShow(room, msg.beat);
+    // ⚠️ `enterBeatLive`, NOT `setShow` — see its header. `setShow` here repainted the sign
+    // without moving `state.phase`, and a room on a RECKONING screen the server was not in
+    // refused every nomination with `not reckoning`, silently. Gate: `show-beat`.
+    // The clear stays ahead of the door: each `enter*Live` arms its own hold, and a stale
+    // clock from the beat being left must not fire into the beat being entered.
+    if (msg.beat !== 'expedition' && room.show !== msg.beat) clearShowClock(room);
+    enterBeatLive(room, msg.beat);
     return;
   }
   // start / episode stay callable from any socket so party-sockets (which drives
