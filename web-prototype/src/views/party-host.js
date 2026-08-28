@@ -21,7 +21,10 @@ import {
 import { REACT_MOOD, onAir } from '../party/react.js';
 import { mergePublicNames, publicName } from '../party/cast-ui.js';
 import { cueViolations, nextPerspective, warmLabel, warmPct, warmUrl } from '../party/follow.js';
-import { formatRemain, holdMsFor, isTalkBeat, nextShowBeat, remainingMs, rundownRibbon } from '../party/show.js';
+import {
+  formatRemain, holdMsFor, isTalkBeat, nextShowBeat, remainingMs, reunionBeatAt,
+  rollCallRevealed, rundownRibbon,
+} from '../party/show.js';
 import { NO_ONE, SHOWRUNNER } from '../party/vote.js';
 import { outcomeLine } from '../party/win.js';
 import { describeCastTiebreaks, previewCastTiebreaks, shouldArmCastSend } from '../party/ballot.js';
@@ -105,6 +108,16 @@ export default async function partyHost({ params }) {
      * a remote gets sat on. Epoch ms, so the arm expires on its own — see `SKIP_ARM_MS`.
      */
     skipArmedUntil: 0,
+    /**
+     * Epoch ms the Reunion started on this screen. The Reunion is the one beat with no server
+     * clock (see `REUNION_PLAN`'s header), so the television paces itself — and a TV that joins
+     * or refreshes mid-special simply starts its own roll call, which is the right failure: it
+     * shows the whole cast rather than picking up halfway through a reveal nobody saw.
+     */
+    reunionAt: 0,
+    /** Which plate / which of the four beats the special is on. Keyed so the ticker repaints
+     *  on the step rather than four times a second — see `startClockTick`. */
+    reunionKey: '',
     nomsKey: '',
     /** Refusals still on air. Transient — an event, not a fact. See REFUSAL_HOLD_MS. */
     refusals: [],
@@ -153,6 +166,13 @@ export default async function partyHost({ params }) {
       // `end` rides with `beat` and is cleared whenever a `show` message omits it (an expedition
       // start never carries one) — the TV must not keep showing SMASHED/TIME from a past run.
       if (m.t === 'show' && m.beat) {
+        /*
+         * ⏱️ The Reunion's own clock starts on the beat CHANGE, not on every `show` message.
+         * `setShow` fans the beat and `scheduleShowProgress` fans it again — the second one would
+         * restart the roll call a few milliseconds in. This is the same bug `night-client.js`'s
+         * ready-tally comment describes, and it is worth writing twice.
+         */
+        if (m.beat === 'reunion' && ui.beat !== 'reunion') ui.reunionAt = Date.now();
         ui.beat = m.beat;
         ui.runEnd = m.end || null;
         ui.showUntil = Number.isFinite(m.until) ? m.until : null;
@@ -790,6 +810,19 @@ export default async function partyHost({ params }) {
         const n = String(Math.max(1, Math.ceil(sendLeft / 1000)));
         for (const el of root.querySelectorAll('[data-send-count]')) el.textContent = n;
       }
+      /*
+       * 🎬 **THE REUNION IS THE ONE BEAT THAT REPAINTS ITSELF, AND IT IS KEYED.**
+       *
+       * No server message arrives during the special, so nothing else would ever advance the roll
+       * call. But this ticker runs four times a second and `paint()` rebuilds `root.innerHTML` —
+       * so it repaints on the STEP, not on the tick: the key changes when a plate turns or a beat
+       * of the special ends, roughly every nine seconds. Same idiom as `nomsKey` and `pairKey`.
+       */
+      if (ui.beat === 'reunion') {
+        const el = Date.now() - (ui.reunionAt || Date.now());
+        const key = `${reunionBeatAt(el).beat}|${rollCallRevealed(el, client.reveal?.seats?.length || 0)}`;
+        if (key !== ui.reunionKey) { ui.reunionKey = key; paint(); }
+      }
       const left = remainingMs(ui.showUntil);
       const label = formatRemain(left);
       for (const el of root.querySelectorAll('[data-show-clock]')) el.textContent = label;
@@ -1098,26 +1131,24 @@ export default async function partyHost({ params }) {
       });
     } else if (show === 'reunion') {
       /* =======================================================================================
-       * 🎬 **THE REUNION SPECIAL — the only thing that has ever ended a session.**
+       * 🎬 **THE REUNION SPECIAL — everything the game withheld, paid back at once.**
        *
-       * This is the holding frame: the season's status, and the promise of the roll call. The
-       * four beats behind it (roll call, Director's Cut, awards, unmixed chat) all read
-       * `src/party/reunion.js`, which is fully computed and fully tested by
-       * `harness/reunion-truth.mjs` — and every one of them needs a payload that deliberately
-       * breaks `entitle.js`'s "NO ROW. Nobody, ever, pre-REUNION". That disclosure is its own
-       * step, and it is not on this screen yet.
+       * `rrr-social-round.md` §7's four beats, paced off `REUNION_PLAN` rather than four numbers
+       * living in this file. The whole special is a QUERY over the log the room has been writing
+       * all night (`reunion.js`), so nothing here is state — it is a view over `client.reveal`.
        *
-       * ⚠️ **NOTHING HERE MAY NAME AN ALIGNMENT OR A ROLE UNTIL THAT PAYLOAD EXISTS.** A screen
-       * that reveals a beat before the beat is the one risk the whole Reunion design has.
+       * 🚨 **`client.reveal` IS NULL UNTIL THE SERVER SENDS IT, AND NULL IS DRAWN AS NULL.** The
+       * one risk this design has is a screen that renders the reveal a beat before the beat, and
+       * the way that happens is a defaulted empty shape that looks like an answer. If the payload
+       * is not here, this says the roll call is coming and names nobody.
        * ======================================================================================= */
       const season = seasonCopy(client.season || client.verdict?.status);
-      body += talkStage({
-        recap, names, lobby: client.lobby, runEnd: ui.runEnd, clock: '',
-        kicker: 'The cast is back in its chairs.', beat: 'reunion',
-        who: '',
-        verdict: client.season || 'THE SEASON IS OVER',
-        verdictKicker: 'THE REUNION SPECIAL',
-        verdictSub: season.line,
+      const seats = client.reveal?.seats || [];
+      const at = reunionBeatAt(Date.now() - (ui.reunionAt || Date.now()));
+      const shown = client.reveal ? rollCallRevealed(Date.now() - (ui.reunionAt || Date.now()), seats.length) : 0;
+      body += reunionStage({
+        lobby: client.lobby, names, reveal: client.reveal, at, shown,
+        status: client.season || client.verdict?.status || '', line: season.line,
       });
     } else if (show === 'casting') {
       const showingIntros = ui.introsSent && !ui.introsDone;
@@ -1704,6 +1735,122 @@ function recapFacts(recap, names, runEnd) {
       <div class="fact"><div class="k">Runner</div><div class="v ${recap.taken?.length ? 'bad' : 'ok'}">${esc(taken)}</div></div>
       <div class="fact"><div class="k">Alarms</div><div class="v">${esc(String(recap.alarmCount ?? 0))}</div></div>
     </div>`;
+}
+
+/* =============================================================================================
+ * 🎭 THE REUNION SPECIAL — four beats, one payload, and a cast list that fills in.
+ *
+ * Every row is a QUERY, not a record: `rollCall(log)` already returns id / seat / role /
+ * alignment / believedTheyWere / finalClaim / death per seat, so nothing here needs a new field.
+ *
+ * 🚨 **ALIGNMENT IS SPELLED OUT AS WELL AS TINTED.** Colour is never the only carrier — the same
+ * rule the role card and the guide marks already follow — and this is the screen where getting it
+ * wrong means a colour-blind player cannot read the answer to the whole night.
+ *
+ * 🚨 **A SEAT THE ROLL CALL HAS NOT REACHED YET SHOWS ITS NAME AND NOTHING ELSE.** Not a greyed
+ * role, not a dimmed alignment: the point of turning the plates one at a time is that the room
+ * does not have the answer until the plate turns, and a "dim" reveal is still a reveal.
+ * ============================================================================================= */
+function reunionStage({ lobby, names, reveal, at, shown, status, line }) {
+  const seats = reveal?.seats || [];
+  const cast = seats.map((p, i) => {
+    const turned = i < shown;
+    const look = seatLook(lobby, p.id) || DEFAULT_LOOK;
+    const face = robotFaceSvg(look.shell, look.accent, { size: 48, treatment: 'chip' });
+    const side = p.alignment === 'evil' ? 'Production' : 'The cast';
+    const end = p.death ? `${p.death.by === 'EXECUTED' ? 'executed' : 'taken'}` : 'survived';
+    return `<div class="roll-row${turned ? ' turned' : ''}${turned && p.alignment === 'evil' ? ' evil' : ''}">
+      ${nameplateHtml({
+    name: joinedName(names, p.id, `Seat ${(p.seat ?? 0) + 1}`),
+    sub: turned ? `${p.role} · ${end}` : end,
+    face,
+  })}
+      <div class="roll-side">${turned ? esc(side) : '—'}</div>
+    </div>`;
+  }).join('');
+
+  const current = seats[Math.max(0, shown - 1)];
+  const centre = !reveal
+    ? `<div class="roll-plate"><div class="roll-k">The roll call</div>
+        <div class="roll-v">Standing by</div>
+        <div class="roll-s">Every nameplate is about to be turned over.</div></div>`
+    : reunionCentre(at, current, names, reveal);
+
+  return `
+    <div class="talk-stage has-side reunion-stage">
+      <div class="talk-chrome-top">
+        <div class="recap-mini"><span class="mini-v">${esc(status || 'THE SEASON IS OVER')}</span>
+          <span class="mini-v">${esc(reunionBeatLabel(at.beat))}</span></div>
+      </div>
+      <div class="talk-well">
+        <div class="talk-picture">
+          <div class="intro-frame talk-frame" aria-label="Ballroom circle"></div>
+          <div class="roll-overlay">${centre}</div>
+        </div>
+        <aside class="talk-side">
+          <div class="nom-board roll-board">
+            <p class="hint">${esc(reveal ? 'The cast' : 'Waiting on the reveal')}</p>
+            ${cast}
+          </div>
+        </aside>
+      </div>
+      <div class="talk-chrome-bot">
+        <p class="talk-kicker">${esc(line || 'Everything the game withheld, paid back at once.')}</p>
+      </div>
+    </div>`;
+}
+
+function reunionBeatLabel(beat) {
+  if (beat === 'rollCall') return 'ROLL CALL';
+  if (beat === 'cut') return "DIRECTOR'S CUT";
+  if (beat === 'awards') return 'THE AWARDS';
+  return 'THE CHAT, UNMIXED';
+}
+
+/*
+ * The middle of the screen, one beat at a time.
+ *
+ * ⚠️ **THE DIRECTOR'S CUT HAS NO FOOTAGE AND SAYS SO.** `decisiveEpisode` returns a bare
+ * `{episode, because, atSeq}` pointer and there is no replay behind it — that is its own slice.
+ * A beat that pretended to cut to footage it does not have would be the worst kind of stub, so
+ * this prints the pointer honestly: which episode decided it, and why the query says so.
+ */
+function reunionCentre(at, current, names, reveal) {
+  if (at.beat === 'rollCall') {
+    if (!current) return `<div class="roll-plate"><div class="roll-k">The roll call</div>
+      <div class="roll-v">Nobody was dealt in</div></div>`;
+    const side = current.alignment === 'evil' ? 'Production' : 'The cast';
+    return `<div class="roll-plate${current.alignment === 'evil' ? ' evil' : ''}">
+      <div class="roll-k">Claimed</div>
+      <div class="roll-claim">${esc(current.finalClaim || current.believedTheyWere || 'Said nothing')}</div>
+      <div class="roll-k">Actually</div>
+      <div class="roll-v">${esc(current.role)}</div>
+      <div class="roll-s">${esc(side)}${current.death
+      ? ` · ${current.death.by === 'EXECUTED' ? 'executed' : 'taken'}` : ' · survived'}</div>
+    </div>`;
+  }
+  if (at.beat === 'cut') {
+    const d = reveal.decisive;
+    return `<div class="roll-plate"><div class="roll-k">The Director's Cut</div>
+      <div class="roll-v">${d ? `Episode ${esc(String(d.episode))}` : 'No single episode'}</div>
+      <div class="roll-s">${d ? `${esc(d.because)} · seq ${esc(String(d.atSeq))}` : 'Nothing decided it'}
+        — the footage is not cut yet.</div></div>`;
+  }
+  if (at.beat === 'awards') {
+    const rows = (reveal.awards || []).map((a) => `<div class="award-row">
+      <div class="award-k">${esc(a.award)}</div>
+      <div class="award-v">${esc(joinedName(names, a.winner, 'A player'))}</div>
+      <div class="award-s">${esc(a.why)}</div>
+    </div>`).join('');
+    return `<div class="roll-plate awards">${rows
+      || '<div class="roll-v">No award had evidence behind it</div>'}</div>`;
+  }
+  const lines = (reveal.chat || []).slice(-6).map((c) => `<div class="chat-row">
+    <div class="chat-t">${esc(c.text)}</div>
+    <div class="chat-a">${c.generated ? 'the house' : esc(joinedName(names, c.author, 'someone'))}</div>
+  </div>`).join('');
+  return `<div class="roll-plate">${lines
+    || '<div class="roll-v">Nothing was said on the record</div>'}</div>`;
 }
 
 /* =============================================================================================

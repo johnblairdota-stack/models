@@ -145,6 +145,55 @@ export const EMPTY_RECKONING_EXTEND_CAP = 3;
 export const TALK_BEATS = ['debrief', 'reckoning', 'vote', 'execution', 'verdict', 'reunion'];
 export const isTalkBeat = (beat) => TALK_BEATS.includes(String(beat || ''));
 
+/* =================================================================================================
+ * 🎬 **THE REUNION'S FOUR BEATS, AND WHY THEY ARE A TABLE RATHER THAN FOUR NUMBERS IN A VIEW.**
+ *
+ * `rrr-social-round.md` §7 gives the special four beats and `phases.js` has budgeted
+ * `SECONDS[PHASE.REUNION]` at 240s since the schedule was written — a number nothing has ever
+ * spent. This is how it is spent, and `harness/round-loop.mjs` can check the arithmetic because
+ * this file is bare node.
+ *
+ * ⚠️ **THE REUNION HAS NO SERVER CLOCK, ON PURPOSE.** Every other beat is server-owned because a
+ * beat change decides what a phone may do; nothing happens after this one, nobody presses
+ * anything, and the room leaves when it leaves. So the television paces itself off `reunionBeatAt`
+ * and the server never has to be asked. If a future beat here becomes interactive, that decision
+ * flips and this comment is the argument to revisit.
+ *
+ * 75s for the roll call is the design's own staging note — *"Slow. Let the room shout."* Eight
+ * seats at nine seconds each, and the pause after each flip is the product.
+ * ================================================================================================= */
+export const REUNION_PLAN = [
+  { beat: 'rollCall', ms: 75_000 },
+  { beat: 'cut', ms: 45_000 },
+  { beat: 'awards', ms: 60_000 },
+  { beat: 'chat', ms: 60_000 },
+];
+
+/** Which of the four the Reunion is on, `ms` after it started, and how far into it. */
+export function reunionBeatAt(elapsedMs) {
+  let at = 0;
+  const t = Number.isFinite(elapsedMs) ? Math.max(0, elapsedMs) : 0;
+  for (const step of REUNION_PLAN) {
+    if (t < at + step.ms) return { beat: step.beat, into: t - at, of: step.ms };
+    at += step.ms;
+  }
+  const last = REUNION_PLAN[REUNION_PLAN.length - 1];
+  return { beat: last.beat, into: last.ms, of: last.ms };
+}
+
+/**
+ * How many plates the roll call has turned over `ms` in. Ticks one at a time across the roll
+ * call's whole window and then stays complete — the later beats do not un-reveal the cast.
+ */
+export function rollCallRevealed(elapsedMs, seats) {
+  const n = Math.max(0, seats | 0);
+  if (!n) return 0;
+  const roll = REUNION_PLAN[0].ms;
+  const t = Number.isFinite(elapsedMs) ? Math.max(0, elapsedMs) : 0;
+  if (t >= roll) return n;
+  return Math.min(n, Math.floor(t / (roll / n)) + 1);
+}
+
 /**
  * Server-owned. Expedition is immediate so the TV is never waiting on a click.
  *

@@ -373,6 +373,41 @@ export function injectNightSkin() {
     .nom-n { color:var(--night-accent); font-weight:800; letter-spacing:.16em; font-size:12px; }
     .nom-who { font-size:clamp(16px, 2vw, 24px); font-weight:800; line-height:1.05; }
     .nom-by { color:var(--night-dim); font-size:11px; letter-spacing:.1em; text-transform:uppercase; }
+    /* 🎭 THE REUNION. The cast list fills in one plate at a time and the centre carries whichever
+       of the four beats is running. A seat the roll call has not reached shows its NAME and its
+       fate and nothing else — a dimmed role is still a role. Alignment is spelled out in
+       '.roll-side' as well as tinted, because colour is never the only carrier. */
+    .roll-board { gap:5px; }
+    .roll-row { display:grid; grid-template-columns:1fr auto; gap:10px; align-items:center;
+      padding:7px 10px; border-radius:6px; background:rgba(18,14,10,.82);
+      border:1px solid rgba(var(--night-accent-rgb), .12); opacity:.55;
+      transition: opacity .5s ease, border-color .5s ease; }
+    .roll-row.turned { opacity:1; border-color:rgba(var(--night-accent-rgb), .32); }
+    .roll-row.turned.evil { border-left:5px solid var(--night-bad); }
+    .roll-side { color:var(--night-dim); font-size:11px; letter-spacing:.14em;
+      text-transform:uppercase; font-weight:800; }
+    .roll-row.turned.evil .roll-side { color:var(--night-bad); }
+    .roll-overlay { position:absolute; inset:0; display:flex; align-items:center;
+      justify-content:center; pointer-events:none; padding:24px; }
+    .roll-plate { max-width:min(720px, 90%); padding:22px 26px; border-radius:14px;
+      background:rgba(0,0,0,.72); border-left:5px solid var(--night-accent);
+      box-shadow:0 24px 60px rgba(0,0,0,.6); }
+    .roll-plate.evil { border-left-color:var(--night-bad); }
+    .roll-k { color:var(--night-dim); font-size:11px; letter-spacing:.26em;
+      text-transform:uppercase; font-weight:700; }
+    .roll-claim { margin:6px 0 16px; color:var(--night-soft); font-size:clamp(18px, 2vw, 26px);
+      line-height:1.2; }
+    .roll-v { margin-top:6px; font-size:clamp(28px, 4vw, 48px); font-weight:800; line-height:1.05; }
+    .roll-s { margin-top:8px; color:var(--night-soft); font-size:clamp(14px, 1.4vw, 18px); }
+    .roll-plate.awards { display:flex; flex-direction:column; gap:12px; }
+    .award-k { color:var(--night-accent); font-size:11px; letter-spacing:.24em;
+      text-transform:uppercase; font-weight:800; }
+    .award-v { font-size:clamp(20px, 2.4vw, 30px); font-weight:800; line-height:1.05; }
+    .award-s { margin-top:3px; color:var(--night-soft); font-size:13px; }
+    .chat-row { padding:6px 0; }
+    .chat-t { font-size:clamp(15px, 1.6vw, 20px); }
+    .chat-a { margin-top:2px; color:var(--night-dim); font-size:11px; letter-spacing:.14em;
+      text-transform:uppercase; }
     /* '.night' is opaque by design — it is the show's own black. While the mansion is warming
        behind it, it becomes a scrim instead, and 'party-host.js' sets 'rrr-warming' on <body> only
        once the layer is live so the lobby never fades toward a frame that has not rendered. */
@@ -412,6 +447,12 @@ export function injectNightSkin() {
     .role-card .role { font-size:34px; font-weight:800; }
     .role-card .side { margin-top:10px; letter-spacing:.2em; font-size:18px; }
     .role-card .rule { margin-top:16px; color:#d8cbb8; font-size:20px; line-height:1.35; }
+    /* 🎭 The Reunion's copy of the card: the label goes ABOVE the role rather than below it,
+       because this one is an announcement and not a reminder. Nothing else changes — it must
+       read as the same object the player has been guarding all night. */
+    .role-card.reunion-card { display:flex; flex-direction:column; min-height:0; }
+    .role-card.reunion-card .rule { order:-1; margin:0 0 10px; font-size:12px; letter-spacing:.22em;
+      text-transform:uppercase; color:#f5a14a; font-weight:800; }
     .pad { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:16px; }
     .pad button { min-height:100px; font-size:18px; letter-spacing:.1em; text-transform:uppercase;
       font-weight:700; border:0; border-radius:10px; background:#1c1712; color:#f3ece3; }

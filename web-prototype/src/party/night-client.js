@@ -13,6 +13,7 @@ export {
   RECAP_HOLD_MS, DEBRIEF_HOLD_MS, RECKONING_HOLD_MS, VOTE_HOLD_MS, EXECUTION_HOLD_MS,
   VERDICT_HOLD_MS,
   LATE_DEBRIEF_MS, EMPTY_RECKONING_EXTEND_CAP,
+  REUNION_PLAN, reunionBeatAt, rollCallRevealed,
 } from './show.js';
 
 export function makeCode(rand = Math.random) {
@@ -83,6 +84,15 @@ export class PartyNightClient {
     this.verdict = null;
     /** The season's final status, once the night is over. Null every episode that is RENEWED. */
     this.season = null;
+    /**
+     * 🎭 **THE REVEAL — roll call, awards, the decisive episode, the unmixed chat.**
+     *
+     * Null until the server sends it, and the server sends it exactly once, inside
+     * `enterReunionLive`. **Do not default this to an empty shape.** A `{seats: []}` default reads
+     * as "the Reunion says nobody was anybody", and every view that draws it would then be
+     * correct-looking and wrong; `null` means "not yet" and forces the caller to say so.
+     */
+    this.reveal = null;
     /** Aired lynch ballots — empty until tallied. */
     /** What the server says I voted. Null until it answers. */
     this.myBallot = null;
@@ -185,6 +195,12 @@ export class PartyNightClient {
           };
         }
         if (m.t === 'season') this.season = m.status || null;
+        if (m.t === 'reveal') {
+          this.reveal = {
+            seats: m.seats || [], awards: m.awards || [],
+            decisive: m.decisive || null, chat: m.chat || [],
+          };
+        }
         if (m.t === 'lynch') {
           this.lynchVotes = m.votes || [];
           this.lynchResult = m.result || null;

@@ -63,6 +63,7 @@ import {
   AFTER_RUN_BEATS, DEBRIEF_HOLD_MS, RECAP_BACKSTOP_MS, RECAP_HOLD_MS, SHOW_BEATS,
   RUNDOWN_BEATS, holdMsFor, missionEndsRun, nextShowBeat, railDrainPct, recapAfterMs,
   remainingMs, rundownRibbon, RUN_END, isTalkBeat,
+  REUNION_PLAN, reunionBeatAt, rollCallRevealed,
 } from '../src/party/show.js';
 import { missionFor, MISSION_TABLE } from '../src/party/mission.js';
 import { ROOMS, hunterVisibleToGuide } from '../src/party/coverage.js';
@@ -79,8 +80,9 @@ import { isNightToken } from '../src/party/palette.js';
 import { BALLROOM_POINTS } from '../src/lighting/ballroom-rig.js';
 import { leftoverRuns, barrierFillForEdge } from '../src/game/dig-policy.js';
 import { MATRIX } from '../net/party/entitle.js';
-import { FANOUT_KEYS, fanoutViolations } from '../net/party/local.mjs';
+import { FANOUT_FORBIDDEN, FANOUT_KEYS, fanoutViolations } from '../net/party/local.mjs';
 import { OUTCOME, outcomeLine } from '../src/party/win.js';
+import { PHASE, SECONDS } from '../src/party/phases.js';
 import { existsSync, openSync, readSync, closeSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -3394,9 +3396,72 @@ console.log('\nparty-warm — the lobby-warm night');
       // the send is behind the arm check, not beside it
       && /if \(Date\.now\(\) < ui\.skipArmedUntil\)[\s\S]{0,140}client\.send\(\{ t: 'skip' \}\)/.test(hostSrc));
 
-  t('W47e · and the Reunion sheet still reveals nothing — that payload is its own step',
-    /DO NOT PUT A ROLE OR AN ALIGNMENT ON THIS SHEET/.test(phoneSrc)
-      && /NOTHING HERE MAY NAME AN ALIGNMENT OR A ROLE/.test(hostSrc));
+  /* ===========================================================================================
+   * 🎭 **W47e — REPLACED 2026-08-28.** This asserted that the Reunion screens revealed NOTHING,
+   * which was true for exactly one commit: the payload was staged and the views were holding
+   * frames. Leaving it would have made the gate an argument against finishing the beat. What
+   * replaces it is the property that actually has to hold once the reveal exists.
+   *
+   * 🚨 **`null` IS DRAWN AS `null`.** The one risk the Reunion design has is a screen that renders
+   * the reveal a beat before the beat, and the way that happens is a defaulted empty shape that
+   * looks like an answer — `{seats: []}` reads as "the Reunion says nobody was anybody". Both
+   * views take the payload optionally and neither invents one.
+   * =========================================================================================== */
+  t('W47e · both Reunion screens draw the reveal, and neither defaults it into existence',
+    /client\.reveal/.test(hostSrc) && /c\.reveal/.test(phoneSrc)
+      && /this\.reveal = null/.test(clientSrc)
+      && !/reveal \|\| \{ seats/.test(clientSrc)
+      && /Do not default this to an empty shape/.test(clientSrc));
+
+  /*
+   * ⚠️ **THE PHONE'S REUNION CARD MUST NOT COME FROM `role.card`.** The card this view has held
+   * all game carries the player's COVER — the Glitched believes they are the Camera Op — so a
+   * Reunion sheet built from it would tell them the lie one last time on the one screen whose
+   * whole job is the truth. `reunion-truth` U2 caught exactly this substitution once already, in
+   * the other direction. `believedTheyWere` is where the cover belongs and it is named as such.
+   */
+  t('W47g · the phone\'s face-up card is the reveal\'s row for this seat, not the role card',
+    /c\.reveal\?\.seats \|\| \[\]\)\.find\(\(s\) => s\.id === me\?\.playerId\)/.test(phoneSrc)
+      && /believedTheyWere/.test(phoneSrc)
+      && !/state\.card[\s\S]{0,200}reunion/i.test(phoneSrc));
+
+  /*
+   * The Reunion is the one beat with no server clock — nothing after it decides what a phone may
+   * do — so the television paces itself off one table. The arithmetic is checkable in bare node,
+   * which is the whole reason the table is in `show.js` rather than four numbers in a view.
+   */
+  t('W47h · the Reunion\'s four beats spend exactly the budget phases.js set aside for them',
+    REUNION_PLAN.reduce((a, b) => a + b.ms, 0) === SECONDS[PHASE.REUNION] * 1000
+      && REUNION_PLAN.map((b) => b.beat).join(',') === 'rollCall,cut,awards,chat'
+      && reunionBeatAt(0).beat === 'rollCall'
+      && reunionBeatAt(SECONDS[PHASE.REUNION] * 1000 + 60_000).beat === 'chat'
+      && rollCallRevealed(0, 8) === 1
+      && rollCallRevealed(REUNION_PLAN[0].ms, 8) === 8
+      && rollCallRevealed(1e9, 8) === 8
+      && rollCallRevealed(1e9, 0) === 0,
+    `${REUNION_PLAN.reduce((a, b) => a + b.ms, 0) / 1000}s of ${SECONDS[PHASE.REUNION]}s`);
+
+  /*
+   * 🚨 The reveal is the ONLY message allowed to carry a role or an alignment, and the exemption
+   * is named rather than achieved by deleting the blocklist. `cover` is deliberately still
+   * forbidden even there — `reunion.js` calls it `believedTheyWere`, which is its name in the
+   * design and not a synonym invented to get past a list.
+   */
+  t('W47i · the reveal is a named exemption from FANOUT_FORBIDDEN, not a hole in it',
+    FANOUT_FORBIDDEN.includes('role') && FANOUT_FORBIDDEN.includes('alignment')
+      && FANOUT_FORBIDDEN.includes('cover') && FANOUT_FORBIDDEN.includes('castSeed')
+      && FANOUT_KEYS.revealSeat.includes('role') && FANOUT_KEYS.revealSeat.includes('alignment')
+      && !FANOUT_KEYS.revealSeat.includes('cover')
+      && FANOUT_KEYS.revealSeat.includes('believedTheyWere')
+      && fanoutViolations({
+        t: 'reveal', seats: [{ id: 'p1', seat: 0, role: 'fixer', alignment: 'evil',
+          believedTheyWere: null, finalClaim: null, death: null }], awards: [], decisive: null, chat: [],
+      }).length === 0
+      && fanoutViolations({
+        t: 'reveal', seats: [{ id: 'p1', cover: 'cameraOp' }], awards: [], decisive: null, chat: [],
+      }).length > 0
+      && fanoutViolations({ t: 'lobby', seats: [{ id: 'p1', alignment: 'evil' }] }).length > 0,
+    FANOUT_KEYS.revealSeat.join(','));
 }
 
 console.log(`\nparty-warm: ${pass} passed, ${fail} failed`);

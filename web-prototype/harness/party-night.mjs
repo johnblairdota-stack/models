@@ -721,6 +721,67 @@ t('N13c · a refresh resumes the server show beat, not casting',
     roomx.showUntil == null && roomx.showClock == null && nextShowBeat('reunion') == null,
     JSON.stringify({ until: roomx.showUntil, clock: roomx.showClock != null }));
 
+  /* =============================================================================================
+   * 🎭 **N17m · THE REVEAL — the one message in the whole wire that names an alignment.**
+   *
+   * 🚨 **THE ORDERING ARM IS THE WHOLE GATE, AND IT IS DELIBERATELY WRITTEN AGAINST THE
+   * TRANSCRIPT RATHER THAN THE SERVER'S INTENT.** `party-isolation` drives `createRoom` directly,
+   * so it sweeps frames and events and never sees a fanout at all — which means nothing else in
+   * the suite is looking at this channel. It walks what a socket ACTUALLY GOT, in order, and
+   * asserts every alignment word arrived at or after the reveal. A `t:'reveal'` sent one beat
+   * early would pass a schema check and fail here, which is the right way round.
+   *
+   * ⚠️ It sweeps the PHONE, not the TV. Both get the reveal, but the phone is the socket with a
+   * player behind it and the one the leak would matter to.
+   * ============================================================================================= */
+  const revealMsg = last(p1x, 'reveal');
+  t('N17m · the reveal reaches the phones with a plate for every dealt seat',
+    revealMsg != null && Array.isArray(revealMsg.seats) && revealMsg.seats.length > 0
+      && revealMsg.seats.every((s) => typeof s.role === 'string' && typeof s.alignment === 'string')
+      && revealMsg.seats.length === roomx.game.truth().seats.length
+      && fanoutViolations(revealMsg).length === 0,
+    JSON.stringify({ seats: revealMsg?.seats?.length, awards: revealMsg?.awards?.length,
+      bad: fanoutViolations(revealMsg || {}) }));
+
+  t('N17m2 · and it reconciles with the sealed deal — no second reveal pipeline',
+    (revealMsg?.seats || []).every((s) => {
+      const truth = roomx.game.truth().seats.find((x) => x.id === s.id);
+      return truth && truth.role === s.role && truth.alignment === s.alignment
+        && (s.believedTheyWere ?? null) === (truth.cover ?? null);
+    }),
+    JSON.stringify((revealMsg?.seats || []).slice(0, 2)));
+
+  {
+    /*
+     * ⚠️ **THE SELF-CHANNEL IS STRIPPED FIRST, AND THE FIRST VERSION OF THIS DID NOT STRIP IT.**
+     * It swept raw messages for the word "evil" and failed on the Producer's OWN state frame —
+     * `you.alignment` is `self` in `entitle.js` and telling a player what they are is the whole
+     * point of dealing them a card. The claim worth gating is narrower and is the one that
+     * matters: **nothing told this phone about anybody ELSE.** So `you` goes, and so does any
+     * event addressed to this socket's own player (`ev.for`), both of which `party-isolation`
+     * I2/I3 already govern with a stronger walker than a text sweep.
+     */
+    const mine = p1x.welcome?.playerId;
+    const strip = (m) => {
+      if (m.t === 'state') { const { you, ...rest } = m.frame || {}; return { t: m.t, frame: rest }; }
+      if (m.t === 'event' && m.ev?.for === mine) return { t: 'event', ev: { type: m.ev.type } };
+      return m;
+    };
+    const words = new Set(roomx.game.truth().seats.map((s) => s.alignment));
+    const stream = p1x.msgs;
+    const revealIdx = stream.findIndex((m) => m.t === 'reveal');
+    let early = null;
+    for (let i = 0; i < revealIdx && !early; i++) {
+      const text = JSON.stringify(strip(stream[i]));
+      for (const w of words) {
+        if (new RegExp(`"${w}"`).test(text)) { early = `${stream[i].t} carried "${w}"`; break; }
+      }
+    }
+    t('N17m3 · nothing on this phone named ANYONE ELSE\'s side before the reveal did',
+      revealIdx >= 0 && words.size > 0 && early === null,
+      early || `${revealIdx} messages first, all clean · watched for ${[...words].join('/')}`);
+  }
+
   for (const c of [tvx, p1x, p2x]) c.close();
   srvx.close();
 }

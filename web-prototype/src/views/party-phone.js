@@ -1633,23 +1633,55 @@ export default async function partyPhone({ params }) {
   }
 
   /* ===========================================================================================
-   * 🎬 **THE REUNION — the holding sheet, until the reveal payload exists.**
+   * 🎬 **THE ONE MOMENT THE ROLE CARD IS ALLOWED TO BE FACE-UP.**
    *
-   * The finished screen is the personal half of the roll call: your own card face-up at last,
-   * what you claimed all night, how it ended, and any award. Every one of those needs a payload
-   * that deliberately breaks `entitle.js`'s "NO ROW. Nobody, ever, pre-REUNION", which is its own
-   * step. Until then this says the season is over and points at the television.
+   * All night the card is hold-to-reveal and blurred at rest, so a neighbour's glance at an
+   * unattended phone learns nothing. At the Reunion that rule expires: the TV is turning over
+   * every nameplate anyway. This is the personal half of the roll call — the TV says what you
+   * were, this says what it cost you.
    *
-   * ⚠️ **DO NOT PUT A ROLE OR AN ALIGNMENT ON THIS SHEET BEFORE THAT PAYLOAD LANDS.** The one
-   * risk the Reunion design has is a screen that renders the reveal a beat before the beat, and
-   * `role.card` — which this view already holds — carries the player's COVER, not their truth.
+   * 🚨 **IT DRAWS `c.reveal` OR IT DRAWS NOTHING — never `role.card`.** The card this view has
+   * held all game carries the player's COVER, not their truth: the Glitched believes they are the
+   * Camera Op, and a Reunion sheet that read the card would tell them the lie one last time, on
+   * the one screen whose entire job is the truth. `reunion.js` names the cover separately, as
+   * `believedTheyWere`, and that distinction is what `reunion-truth` U2 caught once already.
+   *
+   * ⚠️ **NULL IS DRAWN AS NULL.** If the payload has not arrived this points at the television and
+   * names nobody. A defaulted empty shape is how a reveal renders a beat before the beat.
    * =========================================================================================== */
   function paintReunion(me, c) {
     const status = c.season || c.verdict?.status || 'THE SEASON IS OVER';
-    return `<h1>${esc(status)}</h1>
-      <p class="hint">${esc(outcomeLine(c.season || c.verdict?.status))}</p>
-      <p class="hint">The Reunion is on the TV: the roll call, then the awards. Every nameplate
-        gets turned over.</p>`;
+    let html = `<h1>${esc(status)}</h1>
+      <p class="hint">${esc(outcomeLine(c.season || c.verdict?.status))}</p>`;
+    const mine = (c.reveal?.seats || []).find((s) => s.id === me?.playerId);
+    if (!mine) {
+      html += `<p class="hint">The Reunion is on the TV: the roll call, then the awards. Every
+        nameplate gets turned over.</p>`;
+      return html;
+    }
+    /*
+     * The same `.role-card` the deal drew, with no hold-to-reveal over it. Reusing the class is
+     * the point: the card the player has been protecting all night is the card that goes face-up,
+     * and a second look for the same object would read as a different thing.
+     */
+    html += `<div class="role-card reunion-card">
+      <div class="rule">Your card · face up at last</div>
+      <div class="role">${esc(mine.role)}</div>
+      <div class="side">${esc(mine.alignment === 'evil' ? 'Production' : 'The cast')}</div>
+    </div>`;
+    if (mine.believedTheyWere && mine.believedTheyWere !== mine.role) {
+      html += `<p class="hint">You spent the whole night believing you were the
+        ${esc(mine.believedTheyWere)}. Nobody was going to tell you.</p>`;
+    }
+    if (mine.finalClaim) html += `<p class="hint">What you told them: “${esc(mine.finalClaim)}”</p>`;
+    html += `<p class="hint">${mine.death
+      ? `You were ${mine.death.by === 'EXECUTED' ? 'executed' : 'taken'}.`
+      : 'You made it to the end.'}</p>`;
+    const won = (c.reveal?.awards || []).filter((a) => a.winner === me?.playerId);
+    for (const a of won) {
+      html += `<p class="hint"><b>${esc(a.award)}</b> — ${esc(a.why)}</p>`;
+    }
+    return html;
   }
 
   /**

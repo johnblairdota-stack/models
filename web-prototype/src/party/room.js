@@ -25,6 +25,7 @@ import { applyTake, resolveContact, MODE, PLATE } from './taken.js';
 import { tallyCasting } from './ballot.js';
 import { tallyVote, executioner, nominate, reckoningClosed, canLynchVote, assumedLynchVotes, nominatorLockedChoice, NO_ONE } from './vote.js';
 import { foldWin, OUTCOME, WIN_TARGETS } from './win.js';
+import { reunion } from './reunion.js';
 import { PHASE, EPISODE_CAP } from './phases.js';
 import { cleanLook } from './look.js';
 import { STALE_MAX, intelFor } from './intel.js';
@@ -924,6 +925,26 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       };
       const { frame } = project(fullFor(sock), ctx);
       send(sock.id, frame);
+    },
+    /* ===========================================================================================
+     * 🏆 **THE REUNION SPECIAL, COMPUTED — the room's whole night, read back off its own log.**
+     *
+     * `src/party/reunion.js` has been written, complete and fully exercised by
+     * `harness/reunion-truth.mjs` since long before anything called it: six exported queries and
+     * no product caller. This is the caller.
+     *
+     * 🚨 **THERE IS NO SECOND REVEAL PIPELINE, AND THIS IS THE LINE THAT KEEPS THAT TRUE.** It
+     * passes `log.all()` — the same stream the live filter reads — so a leak and a missing reveal
+     * are the same bug, and the only way to add something to the Reunion is to write the event
+     * during play. A hand-assembled reveal payload would let the two drift for a month.
+     *
+     * ⚠️ **IT DOES NOT CHECK THE PHASE, AND IT MUST NOT.** Deciding when the reveal is allowed is
+     * the transport's job (`enterReunionLive`), and putting a second guard here would make the
+     * real one look optional. This is a query; the room decides when to ask it.
+     * =========================================================================================== */
+    reunionSpecial() {
+      const align = Object.fromEntries(deal.seats.map((s) => [s.id, s.alignment]));
+      return reunion(log.all(), { alignmentOf: (id) => align[id] });
     },
     /** Ground truth. Belongs to the gate and the Reunion. Never to a socket. */
     truth: () => ({
