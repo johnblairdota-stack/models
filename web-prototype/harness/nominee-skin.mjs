@@ -20,8 +20,8 @@
  *
  * ⚠️ **NO IMPORTS FROM `src/characters/`.** `chest-nameplate.js` imports THREE and CI runs the
  * party gates with no `npm install` (`.github/workflows/gates.yml`). Its constants are read out
- * of the source as text — the same move `party-warm` makes on the same file. `link.js` is read
- * as text too, for the same reason: it imports `NAME_CAP` from the plate.
+ * of the source as text — the same move `party-warm` makes on the same file. `link.js` owns
+ * `NAME_CAP` as a number; the plate restates the same 8 so a tag and a merge never drift.
  *
  * WHAT IT ALSO RECORDS: the verdict on *"could the tag also say NAMED BY <accuser>"*. It cannot,
  * and S6 is that answer as arithmetic rather than as an opinion in a transcript — the plate is

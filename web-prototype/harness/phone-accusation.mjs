@@ -126,7 +126,6 @@
  * and the whole `gates:party` chain green.
  */
 
-import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
 import net from 'node:net';
 import path from 'node:path';
@@ -135,6 +134,17 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+let chromium;
+try {
+  ({ chromium } = await import('playwright'));
+} catch {
+  console.log('\nphone-accusation: SKIP (playwright not installed — CI has no npm install)\n');
+  process.exit(0);
+}
+if (!existsSync(path.join(ROOT, 'dist', 'index.html'))) {
+  console.log('\nphone-accusation: SKIP (no dist/index.html — CI does not vite-build)\n');
+  process.exit(0);
+}
 const argv = process.argv.slice(2);
 const KEEP = argv.includes('--keep');
 const MEASURE = argv.includes('--measure');

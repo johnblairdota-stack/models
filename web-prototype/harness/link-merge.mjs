@@ -31,10 +31,9 @@ import {
   mergeName, MERGE_BLOCK, freshLinks, requestLink, acceptLink, declineLink, unlink, linkBlock,
   pairOf, partnerOf, linkedIds, pruneLinks, whisperAudience, whisperViolations, cleanWhisper,
   publicLinks, isLinkBeat, LINK_BEATS, WHISPER_MAX, LINK_INK, usedIds, MAX_PAIRS, LINK_BLOCK_WHY,
-  PAIR_MS, expirePairs, pairRemaining, finishPair, isDone, bothDone,
+  PAIR_MS, expirePairs, pairRemaining, finishPair, isDone, bothDone, NAME_CAP,
 } from '../src/party/link.js';
 import { fanoutViolations, FANOUT_KEYS, applyLinkRequest, applyLinkAccept, roomLinks as linksOfRoom } from '../net/party/local.mjs';
-import { NAME_CAP } from '../src/characters/chest-nameplate.js';
 import { cueViolations } from '../src/party/follow.js';
 import { createRoom } from '../src/party/room.js';
 import { readFile } from 'node:fs/promises';
@@ -343,6 +342,11 @@ console.log('\nlink-merge — JELLIE, and the channel nobody else can read\n');
     /export function setNameTagLabel/.test(plate)
       && /old\.dispose\?\.\(\)/.test(plate)
       && LINK_INK === '#1F7A3D');
+  t('L22b · the plate and the merge share one NAME_CAP, and neither imports THREE for it',
+    NAME_CAP === 8
+      && /export const NAME_CAP = 8/.test(plate)
+      && !/from '\.\.\/characters\/chest-nameplate\.js'/.test(
+        await readFile(new URL('../src/party/link.js', import.meta.url), 'utf8')));
 }
 
 /* =============================================================================================

@@ -22,6 +22,7 @@ import { CAPTION_LAYER, captionAdded } from '../core/caption-layer.js';
 export const INK = '#054E84';
 export const SHELL = '#EDEFF0';
 export const CHROME = '#B9BEC2';
+/** Same number as `src/party/link.js` — the merge owns it so CI never imports THREE for a cap. */
 export const NAME_CAP = 8;
 /** Black outline under white glyphs — same language as the bang's dark stroke. */
 export const GLYPH_OUTLINE = '#000000';

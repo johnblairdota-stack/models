@@ -24,7 +24,11 @@
  * assert the privacy shape without a socket.
  */
 
-import { NAME_CAP } from '../characters/chest-nameplate.js';
+/**
+ * Same cap the head tag paints (`chest-nameplate.js` `NAME_CAP = 8`). Lives HERE so the
+ * room server / `party-sockets` gate never import THREE. CI has no `npm install`.
+ */
+export const NAME_CAP = 8;
 
 /**
  * 🚨 **DEBRIEF ONLY. RECKONING WAS CUT ON 2026-08-26, JOHN'S CALL, AFTER TWO CRITICS.**

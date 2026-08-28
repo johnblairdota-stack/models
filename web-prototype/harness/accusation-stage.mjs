@@ -30,9 +30,9 @@
  * behind the same two chairs and the staging is byte-identical.
  *
  * ---------------------------------------------------------------------------------------------
- * Pure node. `src/game/intro-bed.js` imports THREE but nothing in it touches a document at import
- * time, and the staging machine itself is THREE-free by construction — same discipline as
- * `chair-seats.js`, so the running order can be asserted without a browser or a GPU.
+ * Pure node. The staging machine lives in `src/game/accusation-stage.js` — THREE-free by
+ * construction, same discipline as `chair-seats.js`. Plate colours and `SWING_DUR` are read
+ * out of source: those files import THREE and CI has no `npm install`.
  * ---------------------------------------------------------------------------------------------
  */
 
@@ -40,12 +40,25 @@ import {
   ACCUSE, ACCUSE_CLIPS, createAccusationStage, nomKey, nomRows,
   planAccusation, reactorSeats, settleClip, gaspClip, pickAllowed,
   planExecute, EXECUTE,
-} from '../src/game/intro-bed.js';
+} from '../src/game/accusation-stage.js';
 import { SEATED_REACTION_CLIPS, SEATED_CLIPS_LEAVE_CHAIR, SIT_CLIP_ALLOW } from '../src/game/chair-seats.js';
-import { NOM_INK, NOM_CHROME, INK } from '../src/characters/chest-nameplate.js';
 import { executioner, SHOWRUNNER } from '../src/party/vote.js';
 import { WEAPON_RANGE } from '../src/game/rules.js';
-import { SWING_DUR } from '../src/game/sledge.js';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const ROOT = dirname(fileURLToPath(import.meta.url));
+const plateSrc = readFileSync(join(ROOT, '..', 'src', 'characters', 'chest-nameplate.js'), 'utf8');
+const sledgeSrc = readFileSync(join(ROOT, '..', 'src', 'game', 'sledge.js'), 'utf8');
+const hexOf = (src, name) => {
+  const m = src.match(new RegExp(`export const ${name} = '(#[0-9A-Fa-f]{6})'`));
+  return m ? m[1] : '';
+};
+const NOM_INK = hexOf(plateSrc, 'NOM_INK');
+const NOM_CHROME = hexOf(plateSrc, 'NOM_CHROME');
+const INK = hexOf(plateSrc, 'INK');
+const SWING_DUR = Number((sledgeSrc.match(/export const SWING_DUR = ([0-9.]+)/) || [])[1] || 0);
 
 let pass = 0, fail = 0;
 const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' · ' + d : ''}`); } else { fail++; console.log(`  FAIL ${n}${d ? ' · ' + d : ''}`); } return c; };

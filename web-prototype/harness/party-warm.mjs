@@ -91,7 +91,6 @@ import {
 } from '../src/party/look.js';
 import { COMPOSITION, dealCast } from '../src/party/cast.js';
 import { isNightToken } from '../src/party/palette.js';
-import { BALLROOM_POINTS } from '../src/lighting/ballroom-rig.js';
 import { leftoverRuns, barrierFillForEdge } from '../src/game/dig-policy.js';
 import { MATRIX } from '../net/party/entitle.js';
 import { FANOUT_FORBIDDEN, FANOUT_KEYS, fanoutViolations } from '../net/party/local.mjs';
@@ -2417,11 +2416,12 @@ console.log('\nparty-warm — the lobby-warm night');
    * sledge. Showrunner is a hold on the accused, not a ninth robot. Grip lock untouched.
    */
   const meshSrc = await readFile(new URL('../src/characters/mesh-avatar.js', import.meta.url), 'utf8');
+  const stageSrc = await readFile(new URL('../src/game/accusation-stage.js', import.meta.url), 'utf8');
   t('W33o · Execution stages the nominator — stand, walk, sledge — or a Showrunner hold',
     /function cueExecute/.test(hostSrc)
     && /kind === 'execute'/.test(bedSrc)
     && /setExecute\(/.test(introSrc)
-    && /function planExecute/.test(introSrc)
+    && /function planExecute/.test(stageSrc)
     && /playLoco/.test(introSrc)
     && /dropChair/.test(introSrc)
     && /fillExecuteEye/.test(introSrc)
@@ -2923,7 +2923,11 @@ console.log('\nparty-warm — the lobby-warm night');
    * meshes back regardless, so a build that mounted three chandeliers and forgot `points` would
    * hang three unlit props in a dark room and satisfy any check that counted objects. John chose
    * the NIGHT reading of the asset: the fixtures are the light source.
+   *
+   * Read out of source: `ballroom-rig.js` imports THREE and CI has no `npm install`.
    */
+  const rigSrc = await readFile(new URL('../src/lighting/ballroom-rig.js', import.meta.url), 'utf8');
+  const BALLROOM_POINTS = Number((rigSrc.match(/export const BALLROOM_POINTS = (\d+)/) || [])[1]);
   t('W37a control · and it asks for point lights, or the fixtures are unlit props in a brown box',
     /points: 3,/.test(bedSrc2) && BALLROOM_POINTS === 0,
     `the rig defaults to ${BALLROOM_POINTS}; the party night asks for 3`);

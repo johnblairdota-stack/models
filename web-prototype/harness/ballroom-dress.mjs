@@ -217,11 +217,15 @@ const orderSrc = await read('src/world/ballroom-order.js');
  * Nothing here is therefore a fix. It is a NET, because the failure the handoff imagined is one
  * frame-cull away from being real — see the NaN control below.
  * ============================================================================================= */
-{
+let THREE = null;
+try { THREE = await import('three'); } catch { THREE = null; }
+if (!THREE) {
+  console.log('  SKIP B10–B13 / B23–B26 harvest · three not installed (CI has no npm install)');
+}
+if (THREE) {
   const { ballroomPlan } = await import('../src/world/ballroom-order.js');
   const { ballroomFixtures } = await import('../src/lighting/ballroom-rig.js');
   const { FixtureBin } = await import('../src/lighting/fixture-merge.js');
-  const THREE = await import('three');
 
   const plan = ballroomPlan({ x0: 0.15, x1: 27.35, z0: 38.6, z1: 53.9, h: 9.6 });
   const fx = ballroomFixtures({ plan, points: 3, rng: () => 0.5 });
@@ -482,8 +486,7 @@ const orderSrc = await read('src/world/ballroom-order.js');
  * chandelier. `ballroomFixtures` had asked for `caustic: 0` — but `uStrength` lives in the
  * material the merge path discards.
  * ============================================================================================= */
-{
-  const THREE = await import('three');
+if (THREE) {
   const { buildChandelier } = await import('../src/world/chandelier.js');
   const { FixtureBin } = await import('../src/lighting/fixture-merge.js');
   const { ballroomPlan } = await import('../src/world/ballroom-order.js');
@@ -545,7 +548,9 @@ const orderSrc = await read('src/world/ballroom-order.js');
   const waxTop = wax ? wax.geometry.boundingBox.max.y : Infinity;
   t('B26 · nothing in the merged wax bucket reaches the coffered ceiling',
     waxTop < 8.0, `wax tops out at ${waxTop.toFixed(2)} m, soffit is at 9.24 (was 9.03)`);
+}
 
+{
   /* The bosses were never off. Asserted so nobody spends a round turning them on. */
   const kit = await read('src/world/kit.js');
   const order = orderSrc;
