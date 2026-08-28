@@ -3,6 +3,16 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { attachIdentity, attachChestWordmark } from './mesh-identity.js';
 import { shellWhite } from '../materials/surfaces/robot.js';
+/*
+ * The seated numbers live in `src/game/chair-seats.js` on purpose: that file is THREE-free so
+ * the gates can assert them with plain `node`, and it is already where the sit attach, the
+ * clip allow-lists and the measured hips anchors are written down. Importing it here costs
+ * nothing at runtime (it imports nothing itself, so there is no cycle) and stops the reaction
+ * allow-list from existing in two places and drifting.
+ */
+import {
+  seatedReactionAllowed, seatedAnchorDelta, seatedClipLoops, ARMATURE_M,
+} from '../game/chair-seats.js';
 
 /**
  * THE GAME AVATAR — the generated, auto-rigged, skinned character driving the PLAYER in-game.
@@ -1144,6 +1154,18 @@ export async function createMeshAvatar(opts = {}) {
     clipNames: [...byName.keys()],
 
     /**
+     * ONE CLIP BY NAME, for a consumer that wants to build its own action.
+     *
+     * `byName` has always held all 38 clips while `actions` only ever held the ~15 the runner
+     * plays, so the 13 seated performances in this file were loaded, parked in a Map and
+     * unreachable. `cloneMeshAvatar` needs them to give a seated twin a reaction, and it must
+     * NOT fetch the 9 MB file a second time to get them — the runner already paid for it
+     * during the lobby bake. Returns null rather than throwing: the Lumi fallback body has
+     * none of the seated clips, and a missing reaction is a no-op, not a crash.
+     */
+    clipNamed(name) { return byName.get(String(name ?? '')) ?? null; },
+
+    /**
      * The fine-detail plumbing, for the shader round that consumes it.
      *
      *   boneLocal.bones[id]   { name, axis, len, from, forked, verts, axial }
@@ -1430,13 +1452,99 @@ export function cloneMeshAvatar(source, opts = {}) {
   let sitClipName = null;
   let sitIdle = null;
 
+  /*
+   * 🎬 **SEATED PERFORMANCE STATE.** Actions are built ON DEMAND, never at clone time: eight
+   * twins x eleven clips is 88 actions the mixer would walk every frame of every beat for a
+   * performance that plays maybe twice a night. `source.clipNamed` hands over the clip the
+   * runner already downloaded, so the first reaction of the night still costs zero fetches.
+   */
+  const reactions = new Map();
+  let react = null;         // the action performing, or null
+  let reactName = null;
+  let reactHold = false;
+  let reactFade = 0.25;
+  let reactAmt = 0;         // 0..1 crossfade against the seated idle
+  let reactOut = false;     // once-through clip is finished and on its way home
+  let reactAnchor = null;   // constant hips fix-up, RAW TRACK UNITS (centimetres)
+
+  /** Opening-frame Hips translation of a clip, raw track units. Null if it has no hips track. */
+  const hipsOpen = (clip) => {
+    const tr = (clip?.tracks ?? []).find((t) => /hips\.position$/i.test(t.name));
+    if (!tr || tr.values.length < 3) return null;
+    return { x: tr.values[0], y: tr.values[1], z: tr.values[2] };
+  };
+
+  /**
+   * First-vs-last keyframe over every rotation track, plus the hips end-to-end travel. Decides
+   * whether `hold: true` may LOOP the clip or has to CLAMP its final frame — see
+   * `seatedClipLoops` in `chair-seats.js` for the measured spread these thresholds sit in.
+   * Measured off the clip rather than listed by name so a re-imported GLB reclassifies itself.
+   */
+  const closesLoop = (clip) => {
+    let deg = 0;
+    for (const tr of clip?.tracks ?? []) {
+      if (!/\.quaternion$/i.test(tr.name) || tr.values.length < 8) continue;
+      const n = tr.values.length;
+      let dot = 0;
+      for (let k = 0; k < 4; k++) dot += tr.values[k] * tr.values[n - 4 + k];
+      deg = Math.max(deg, 2 * Math.acos(Math.min(1, Math.abs(dot))) * 180 / Math.PI);
+    }
+    let drift = 0;
+    const tr = (clip?.tracks ?? []).find((t) => /hips\.position$/i.test(t.name));
+    if (tr && tr.values.length >= 6) {
+      const n = tr.values.length;
+      drift = Math.hypot(
+        tr.values[n - 3] - tr.values[0],
+        tr.values[n - 2] - tr.values[1],
+        tr.values[n - 1] - tr.values[2],
+      ) * ARMATURE_M;
+    }
+    return seatedClipLoops({ endQuatDeg: deg, endDrift: drift });
+  };
+
+  function reactionEntry(name) {
+    if (reactions.has(name)) return reactions.get(name);
+    const clip = source.clipNamed?.(name) ?? null;
+    let entry = null;
+    if (clip) {
+      const action = mixer.clipAction(clip);
+      action.enabled = true;
+      action.setEffectiveWeight(0);
+      entry = { action, loops: closesLoop(clip), open: hipsOpen(clip) };
+    }
+    // Cached either way: a body without the clip must not re-look-it-up every call.
+    reactions.set(name, entry);
+    return entry;
+  }
+
+  /** Drop whatever is performing. A new performance and a new sit both cancel the old one. */
+  function clearReaction() {
+    for (const entry of reactions.values()) {
+      if (!entry) continue;
+      entry.action.setEffectiveWeight(0);
+      entry.action.stop();
+    }
+    react = null; reactName = null; reactAnchor = null;
+    reactAmt = 0; reactOut = false; reactHold = false;
+  }
+
   function captureLean() {
     for (const row of leanRest) row.q.copy(row.bone.quaternion);
     leanFrozen = true;
   }
-  function applyLean() {
-    if (!leanFrozen) return;
-    for (const row of leanRest) row.bone.quaternion.copy(row.q);
+  /**
+   * `strength` is 1 for a plain seated idle and 0 while a reaction is at full weight: the
+   * upright freeze exists to stop Idle_M periodically folding the spine forward, and applying
+   * it during a performance would delete the performance — `Sit_Hands_on_Head_Lean_Back` is
+   * ENTIRELY spine. Slerping by the crossfade amount hands the torso back to the freeze over
+   * the same fade the weights use, so there is no pop when the reaction lets go.
+   */
+  function applyLean(strength = 1) {
+    if (!leanFrozen || strength <= 0) return;
+    for (const row of leanRest) {
+      if (strength >= 0.999) row.bone.quaternion.copy(row.q);
+      else row.bone.quaternion.slerp(row.q, strength);
+    }
   }
 
   return {
@@ -1479,11 +1587,66 @@ export function cloneMeshAvatar(source, opts = {}) {
        * Walk-in already showed them on their feet; occupying the seat is Idle_M.
        */
       if (sitDown) sitDown.setEffectiveWeight(0);
+      /*
+       * A sit CANCELS whatever was performing — the contract is that a held reaction runs
+       * until the next `playSeated` or `playSit`. It has to happen before the lean capture
+       * below, or the frozen upright quaternions get sampled off a reaction pose and every
+       * later idle wears a shrug.
+       */
+      clearReaction();
       sitIdle.setEffectiveWeight(1);
       sitIdle.time = SIT_UPRIGHT_T;
       mixer.update(0);
       captureLean();
       sitIdle.time = ((phase % dur) + dur) % dur;
+      return true;
+    },
+
+    /**
+     * 🎬 **PLAY ONE OF THE SEATED PERFORMANCES THE BODY ALREADY CARRIES.**
+     *
+     * The Reckoning puts a red `!` over a head and the circle reads as "something is up"
+     * without saying WHAT. `friendly_all38.glb` shipped 13 seated clips and exactly one of
+     * them was ever given a `clipAction`; this is that call, not an asset problem.
+     *
+     *   playSeated(name, { hold = false, fade = 0.25 }) -> boolean
+     *
+     *   hold: false  play once, then crossfade home to the seated idle over `fade` seconds
+     *   hold: true   stay in it — looping if the clip closes its own loop, otherwise clamped
+     *                on its last frame — until the next playSeated / playSit
+     *
+     * Returns FALSE and changes nothing for a name that is not on `SEATED_REACTION_CLIPS`, for
+     * a body that does not carry the clip (the Lumi fallback), and for an avatar that is not
+     * seated. It never throws: a reaction arrives from the show wire, and an unlisted name must
+     * not be able to put an untested pose on air mid-episode.
+     *
+     * ⚠️ TEN OF THE ELEVEN CLIPS ARE AUTHORED ON A DIFFERENT CHAIR — up to 0.34 m forward of
+     * Idle_M's hips and 8 cm lower, which played raw slides the robot off the front of the
+     * cushion. `reactAnchor` is the one-off correction (evidence and the full table are in
+     * `chair-seats.js` `seatedAnchorDelta`); `update` applies it scaled by the crossfade.
+     */
+    playSeated(clipName, { hold = false, fade = 0.25 } = {}) {
+      if (pose !== 'sit' || !sitIdle) return false;
+      const name = String(clipName ?? '');
+      if (!seatedReactionAllowed(name)) return false;
+      const entry = reactionEntry(name);
+      if (!entry) return false;
+      clearReaction();
+      react = entry.action;
+      reactName = name;
+      reactHold = !!hold;
+      reactFade = Math.max(0.01, Number.isFinite(+fade) ? +fade : 0.25);
+      const idleOpen = hipsOpen(sitIdle.getClip());
+      reactAnchor = (idleOpen && entry.open) ? seatedAnchorDelta(idleOpen, entry.open) : null;
+      react.reset();
+      // clampWhenFinished is what makes a held non-looping clip HOLD instead of snapping back
+      // to frame 0; it is ignored under LoopRepeat, so it is safe to set either way.
+      react.clampWhenFinished = true;
+      const looping = reactHold && entry.loops;
+      react.setLoop(looping ? THREE.LoopRepeat : THREE.LoopOnce, looping ? Infinity : 1);
+      react.setEffectiveTimeScale(1);
+      react.setEffectiveWeight(0);
+      react.play();
       return true;
     },
     update(dt, state = {}) {
