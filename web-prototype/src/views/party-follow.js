@@ -1,5 +1,6 @@
 import { estate } from './_studio.js';
 import { buildFollowBed } from '../game/follow-bed.js';
+import { SEAT_ANCHOR_CONTROL } from '../characters/mesh-avatar.js';
 import {
   CAM_LABEL, FOLLOW_CHROME_CSS, cleanCampose, cleanThrottle, cueViolations, followViolations,
   warmViolations,
@@ -222,6 +223,32 @@ export default async function partyFollow({ params }) {
      * is affected"* is made of. Nothing here is a secret: it is the shot the room is watching.
      */
     cam: () => bed.camReport?.() ?? null,
+    /*
+     * 🎭 The Reckoning's staging, for `harness/accusation-beat.mjs`. `accusation()` is what the
+     * stage believes (live keys, un-fired beats, who is performing, which plates wear the
+     * accusation ink); `sit()` is the seated circle a row at a time, each row carrying the
+     * PERFORMANCE (`seatedAction`) as well as the seat's resting `clip`. Without these two a
+     * bone probe can watch a robot stand up and cannot say what it is playing — AB2c's "the
+     * animation is real and no instrument can see which one it is".
+     *
+     * Both are public facts about a picture the whole room is watching: who was nominated is
+     * already on the plate, on the `!` and on the TV board. Neither reaches a phone, and this
+     * view still has no socket.
+     */
+    accusation: () => bed.accusationReport?.() ?? null,
+    sit: () => bed.sitReport?.() ?? [],
+    /*
+     * 🚦 **THE GATE'S CONTROL, AND IT IS THE ONE SWITCH HERE THAT CHANGES THE PICTURE.**
+     * `accusation-beat` AB2d-ctl flips this on to restore the unbounded hips accumulation the
+     * gate was written against, proves AB2d still goes red, and leaves it off. It is a pelvis
+     * offset and nothing else — it cannot reach a role, a frame or a socket — and it is the
+     * same shape as `room.js`'s `leak:` switches: the fault lives in the product file, off by
+     * default, reachable only from a harness. Nothing in the night calls it.
+     */
+    anchorControl: (on) => {
+      SEAT_ANCHOR_CONTROL.integrate = !!on;
+      return SEAT_ANCHOR_CONTROL.integrate;
+    },
     hunter: () => bed.hunterTelemetry(),
     storeyOfCamera: () => bed.room.spaceAt(engine.camera.position)?.storey ?? null,
   };

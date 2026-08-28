@@ -1551,6 +1551,28 @@ export async function buildFollowBed(engine, opts = {}) {
     return room.spaceAt(v)?.id ?? null;
   }
 
+  /**
+   * The seated PERFORMANCE for one cast id, read off the body in the scene rather than out of
+   * the intro bed — which owns its robots and does not hand them out. `mesh-avatar.js`
+   * `publishPose()` stamps `seatedAction` on the rig's `userData` on every pose transition
+   * precisely so a walker (this, and a browser probe that only has `player.intro-<id>`) can
+   * name the pose without holding the avatar object.
+   *
+   * Null for a body with no performance, for the `unit4h` fallback, and for an id that is not
+   * in the circle — all three are "no performance", and none of them is an error.
+   */
+  function seatedActionOf(id) {
+    if (id == null) return null;
+    const root = engine.scene?.getObjectByName?.(`player.intro-${id}`);
+    if (!root) return null;
+    let name = null;
+    root.traverse((o) => {
+      const a = o.userData?.seatedAction;
+      if (name == null && typeof a === 'string' && a) name = a;
+    });
+    return name;
+  }
+
   return {
     room,
     runner,
@@ -1580,6 +1602,32 @@ export async function buildFollowBed(engine, opts = {}) {
      */
     /** 🟢 Link streams in flight — the intro bed owns them; this is the seam to the drive. */
     streamReport: () => intro?.streamReport?.() ?? [],
+
+    /**
+     * 🎭 **WHAT THE ACCUSATION STAGE BELIEVES.** `keys` the live nominations, `pending` the
+     * un-fired beats, `performing` the chairs holding a pose, `skinned` the plates wearing the
+     * accusation ink. `intro-bed.js` has computed all four since the stage was written and
+     * nothing forwarded them, so the one gate that reads BONES out of the live ballroom
+     * (`accusation-beat` AB2c/AB3c) could see a robot move and could not name what it played.
+     *
+     * Nothing here is a secret. Who was nominated is on the plate, on the `!` and on the TV
+     * board; who is performing is the picture itself. It is the same class of hook as
+     * `streamReport` and `camReport` beside it, and this view still has no socket.
+     */
+    accusationReport: () => intro?.accusationReport?.() ?? null,
+
+    /**
+     * 🪑 **THE SEATED CIRCLE, ROW PER ROBOT — WITH THE PERFORMANCE ON THE ROW.**
+     *
+     * ⚠️ `sitReport()`'s own rows carry `clip`, and `clip` is the seat's RESTING pose: it stays
+     * `Chair_Sit_Idle_M` for the whole accusation BY DESIGN (`mesh-avatar.js` keeps "what is
+     * this seat's resting pose" and "what is it performing" apart, because `assertSeatedPose`
+     * needs the first one stable). **A probe that asserts on `clip` will never see the
+     * accusation.** So the row gains `seatedAction`, which is the performance and is null when
+     * there is none — the field `accusation-beat`'s header asks for by name.
+     */
+    sitReport: () => (intro?.sitReport?.() ?? [])
+      .map((row) => ({ ...row, seatedAction: seatedActionOf(row?.id) })),
 
     /** 🎥 The lens: distance to the runner, the stick's frame, and how often it has corrected. */
     camReport: () => ({

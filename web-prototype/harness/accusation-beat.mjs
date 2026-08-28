@@ -187,6 +187,17 @@ const AT_SETTLE = 3.0;
  */
 const AT_HELD = 12.0;
 /**
+ * 🚦 AB2d-ctl's one sample, in sim seconds after ITS cue. The stand clip clamps at 6.17 s and
+ * the accumulation only begins the frame after that, so this has to be past it: at 0.3588 m per
+ * frame and ~10 frames per sim second, +8.0 s buys about 1.8 s of unopposed integration, which
+ * is ~6 m against a 1.0 m ceiling. Anything under +6.2 s would measure the clip, not the bug,
+ * and would let the control go quietly green — which is the one thing a control may never do.
+ */
+const CTL_AT = 8.0;
+/** The control arm's own wall-clock budget. It buys 8 s of show where the main run bought 12. */
+const CTL_CAP_MS = 420000;
+
+/**
  * Wall-clock ceiling on reaching a sample, counted from the cue and shared by all three. At the
  * 0.027–0.06x sim/wall ratios measured here, twelve seconds of show costs 200–450 s, so this is
  * roughly 35% headroom on the worst run seen. A 420 s cap ran out twice at +11.7 and +9.5 s.
@@ -366,13 +377,16 @@ const inkProj = (rgb) => (rgb ? rgb[0] * INK_AXIS[0] + rgb[1] * INK_AXIS[1] + rg
  * this order:
  *
  *   1. `window.__rrrFollow.accusation()` — `intro-bed.js` `accusationReport()`, which already
- *      returns `{ keys, pending, performing, skinned }`. **It exists and is NOT REACHABLE FROM A
- *      BROWSER.** `follow-bed.js` forwards `streamReport` and `camReport` onto the bed's public
- *      face and `party-follow.js` republishes them on `window.__rrrFollow`; `accusationReport` and
- *      `sitReport` are on neither. Two one-line forwards, in the files those two already live in.
- *   2. `window.__rrrFollow.sit()` — `sitReport()`, same two forwards. Note its rows carry `clip`
- *      and NOT `seatedAction`, so if that is the route somebody wires, the row needs the action on
- *      it too or this gate still cannot name the pose.
+ *      returns `{ keys, pending, performing, skinned }`. **WIRED 2026-08-28**: `follow-bed.js`
+ *      forwards it beside `streamReport`/`camReport` and `party-follow.js` republishes it. It
+ *      says WHETHER a chair is performing, never what it plays — that is route 2's job.
+ *   2. `window.__rrrFollow.sit()` — `sitReport()`, same two forwards, and the rows now carry
+ *      `seatedAction` as well as `clip`. ⚠️ `sitReport()` is `intro-bed.js`'s and its own rows
+ *      still carry only `clip`; the field is added in `follow-bed.js`'s forward, read off the
+ *      rig's `userData` where `mesh-avatar.js` `publishPose()` stamps it on every pose
+ *      transition. That stamp is also route 3, so the two agree by construction — if that ever
+ *      stops being true, it is because somebody gave `intro-bed` a real `seatedAction` field,
+ *      which is where it belongs.
  *   3. `userData.seatedAction` / `userData.clip` stamped on anything under the robot's root.
  *   4. nothing — and then AB2c/AB3c fail saying exactly that.
  *
@@ -400,24 +414,40 @@ const SNAP = () => {
 
   /** Routes 1 and 2 of the chain above; both are per-room and read once. */
   const named = (() => {
-    const out = { rows: null, performing: null, via: null };
+    const out = { rows: null, seats: null, performing: null, staged: null, via: null };
     try {
       const acc = window.__rrrFollow?.accusation?.() ?? window.__rrr?.accusationReport?.();
       if (acc && Array.isArray(acc.performing)) {
-        out.performing = acc.performing.map(String);
+        /*
+         * ⚠️ **`performing` IS SEAT INDICES, NOT IDS, AND IT IS ROWS RATHER THAN NUMBERS.**
+         * `intro-bed.js` returns `stage.performing()` = `[{ seat, clip }]`. The first version of
+         * this file did `.map(String)` and compared against a public id, which is `[object
+         * Object] === 'p2'` — false for every robot, forever, in a field whose whole job is to
+         * say whether anybody is performing. A control that can only say "no" is not a control.
+         * Seat indices come back from `sit()`'s rows below, which is how these two are joined.
+         */
+        out.performing = acc.performing
+          .map((r) => (r && typeof r === 'object' ? r.seat : r))
+          .filter((n) => Number.isFinite(n));
+        out.staged = {};
+        for (const r of acc.performing) {
+          if (r && typeof r === 'object' && Number.isFinite(r.seat)) out.staged[r.seat] = r.clip ?? null;
+        }
         out.via = 'accusationReport';
       }
     } catch { /* not wired — that is what AB2c says */ }
     try {
       const rep = window.__rrrFollow?.sit?.() ?? window.__rrr?.sitReport?.();
       if (Array.isArray(rep)) {
-        const m = {};
+        const m = {}; const seats = {};
         for (const r of rep) {
           if (!r || r.id == null) continue;
           m[String(r.id)] = r.seatedAction ?? r.action ?? null;
+          if (Number.isFinite(r.seatIndex)) seats[String(r.id)] = r.seatIndex;
         }
         out.rows = m;
-        if (out.via == null) out.via = 'sitReport';
+        out.seats = seats;
+        out.via = out.via ? `${out.via}+sitReport` : 'sitReport';
       }
     } catch { /* ditto */ }
     return out;
@@ -566,9 +596,17 @@ const SNAP = () => {
       hips: bones.Hips ?? null,
       /** The PERFORMANCE, not the resting pose. See the block above on `seatedAction` vs `clip`. */
       action: fromRows ?? stamp ?? null,
-      actionVia: fromRows != null ? 'sitReport' : (stamp != null ? 'userData' : null),
-      /** Route 1 can only say WHETHER a chair is performing, not what it plays. Both help. */
-      performing: named.performing ? named.performing.includes(id) : null,
+      actionVia: fromRows != null ? 'sitReport.seatedAction' : (stamp != null ? 'userData' : null),
+      /**
+       * Route 1, joined on the seat index. What the STAGE believes it asked this chair for —
+       * independent of `action`, which is what the BODY says it is playing. The two disagreeing
+       * is a real defect (a beat that fired and a body that ignored it) and neither can fake
+       * the other, so both are printed and banked.
+       */
+      performing: (named.performing && named.seats && named.seats[id] != null)
+        ? named.performing.includes(named.seats[id]) : null,
+      staged: (named.staged && named.seats && named.seats[id] != null)
+        ? (named.staged[named.seats[id]] ?? null) : null,
       tag,
       bang,
     });
@@ -879,23 +917,36 @@ try {
    * not a broken pose, it is the accuser leaving the building at a constant rate while the other
    * seven sit and watch.
    *
-   * The suspect is `mesh-avatar.js` `update()`: under `hold: true` the reaction never sets
-   * `reactOut`, so `reactAmt` stays 1 and every frame runs
+   * ✅ **DIAGNOSED AND FIXED 2026-08-28, and the mechanism is one `if` inside three.js.** Under
+   * `hold: true` the reaction never sets `reactOut`, so `reactAmt` stays 1 and every frame ran
    *
    *     hips.position.y += reactAnchor.y * reactAmt;
    *     hips.position.z += reactAnchor.z * reactAmt;
    *
-   * That is a CORRECTION, written as an increment, and it is only self-limiting while the mixer
-   * keeps overwriting `hips.position` from the clip each frame. `Sit_to_Stand_Transition_M` is
-   * played `LoopOnce` with `clampWhenFinished`, and a clamped action stops writing — from that
-   * frame on the `+=` has nothing undoing it and integrates forever. Note `hips.position.x` is
-   * separately PINNED to `hipsRest.x` one line above and does not drift, which is consistent:
-   * the two axes that drift are exactly the two that are incremented.
+   * — a CORRECTION written as an increment, self-limiting only while something re-authors
+   * `hips.position` every frame. The mixer normally does. **IT STOPS.** `PropertyMixer.apply()`
+   * (three 0.180.0) ends with `if (buffer[i] !== buffer[i + stride]) binding.setValue(...)`:
+   * the scene graph is written only when the MIXED VALUE CHANGED since the previous frame. A
+   * `LoopOnce` + `clampWhenFinished` action parked on its last frame produces the same hips
+   * translation forever, so the mixer goes silent and the `+=` has nothing undoing it.
+   * Measured in bare node on a 2 s clip at the engine's 0.1 s dt: 20 writes, then none, and the
+   * value climbs by the increment every frame from the frame after the clamp.
    *
-   * ⚠️ That is a reading of the code that fits the numbers, not a proven diagnosis — the fix is
-   * `mesh-avatar.js`'s owner's call. What is not in doubt is the measurement: a robot 12–28 m
-   * from its chair, on air, in the middle of the Reckoning. The ceiling here is 1.0 m against a
-   * clip that travels 0.44 m end to end.
+   * The arithmetic closes on the numbers below. `Sit_to_Stand_Transition_M` clamps at 6.17 s
+   * (83.8° end-to-end, so `seatedClipLoops` refuses to loop it) and its anchor is 35.88 raw
+   * units = **0.3588 m per frame**; +6.17 s to the +12.09 s sample is ~61 frames at that run's
+   * 0.096 s/frame — **~22 m predicted against 20.80 m measured**. And `hips.position.x`, PINNED
+   * to `hipsRest.x` one line above, never drifted on any run: the two axes that drifted are
+   * exactly the two that were incremented.
+   *
+   * The fix un-applies the correction before `mixer.update()` and re-applies it after, so the
+   * pelvis carries exactly ONE correction whether or not the mixer wrote. The two `+=` lines
+   * are untouched — `seated-actions` A8f reads them literally.
+   *
+   * 🚦 **AND IT HAS A CONTROL: AB2d-ctl PUTS THE ACCUMULATION BACK AND REQUIRES THIS CEILING
+   * TO BREACH.** A gate whose control stops failing has gone blind — `party-isolation` reported
+   * 20 passed / 0 failed, its four blindness controls included, while leaking a secret role to
+   * every phone.
    * ═══════════════════════════════════════════════════════════════════════════════════════════
    */
   const nomDrift = Math.max(mFl[NOMINATOR]?.hipsMove ?? 0, mSe[NOMINATOR]?.hipsMove ?? 0,
@@ -1122,6 +1173,89 @@ try {
 
   await page.evaluate((cue) => { window.postMessage({ t: 'cue', cue }, '*'); }, CLEAR_NOMS_CUE);
 
+  /* ═════════════════════════════════════════════════════════════════════════════════════════
+   * 🚦 **AB2d-ctl · THE BUG PUT BACK, SO AB2d CANNOT GO BLIND.**
+   * ═════════════════════════════════════════════════════════════════════════════════════════
+   * AB2d is now green, and a green check is worth exactly as much as its ability to go red. This
+   * repo has the receipt: `party-isolation` reported 20 passed / 0 failed — its four blindness
+   * controls included — on the day it was leaking a secret role to every phone, because the
+   * controls had stopped exercising the thing they were controls for.
+   *
+   * So this arm restores the accumulation and requires the SAME ceiling AB2d enforces to breach.
+   * `mesh-avatar.js` `SEAT_ANCHOR_CONTROL.integrate` skips the un-apply and nothing else — the
+   * two `+=` lines are the shipped ones either way — and `party-follow.js` publishes the setter
+   * as `window.__rrrFollow.anchorControl`. Same shape as `room.js`'s `leak:` switches: the fault
+   * lives in the product file, off by default, reachable only from a harness.
+   *
+   * ⚠️ **IT RUNS LAST, AND IT CLEANS UP AFTER ITSELF.** A 6 m pelvis in the middle of the room
+   * would poison every measurement taken after it, so it goes after AB6 and the clear; the knob
+   * goes off and the circle is rested before the file exits. The recovery is printed rather than
+   * asserted — `clearReaction` un-applies the correction on the way out, and if that ever stops
+   * working the next run's AB1/AB5 are where it shows up, on a robot that is not in its chair.
+   *
+   * ⚠️ **AND IT IS ARMED FIRST.** A knob that is not there must FAIL here rather than skip: an
+   * unarmable control is not a passing control, it is no control at all.
+   * ═════════════════════════════════════════════════════════════════════════════════════════ */
+  const armed = await page.evaluate(() => {
+    if (typeof window.__rrrFollow?.anchorControl !== 'function') return null;
+    return window.__rrrFollow.anchorControl(true) === true;
+  });
+
+  let ctlDrift = null; let ctlRate = null; let ctlSim = null; let ctlRecover = null;
+  if (armed) {
+    // Let the clear's `parkSit` settle before the baseline snapshot, so the travel below is
+    // measured from a robot that is back in its chair rather than mid-restore.
+    const tp = Date.now();
+    const parkFrom = (await page.evaluate(SIMCLOCK)) ?? 0;
+    while (Date.now() - tp < 60000) {
+      const now = await page.evaluate(SIMCLOCK);
+      if (now != null && now >= parkFrom + 1.0) break;
+      await sleep(1000);
+    }
+    const ctlBefore = await page.evaluate(SNAP);
+    const ctlCue = ctlBefore.sim;
+    const ctlWall = Date.now();
+    await page.evaluate((cue) => { window.postMessage({ t: 'cue', cue }, '*'); }, NOMS_CUE);
+    while (Date.now() - ctlWall < CTL_CAP_MS) {
+      const now = await page.evaluate(SIMCLOCK);
+      if (now != null && now >= ctlCue + CTL_AT) break;
+      await sleep(1000);
+    }
+    const ctlAfter = await page.evaluate(SNAP);
+    ctlSim = +(ctlAfter.sim - ctlCue).toFixed(2);
+    const m = motionOf(byId(ctlBefore, NOMINATOR), byId(ctlAfter, NOMINATOR));
+    ctlDrift = m?.hipsMove ?? 0;
+    const frames = Math.max(1, ctlAfter.frame - ctlBefore.frame);
+    ctlRate = ctlDrift / frames;
+    console.log(`\n  AB2d-ctl: accumulation restored · sim +${ctlSim}s over ${frames} frames`
+      + ` · pelvis ${ctlDrift.toFixed(2)} m`);
+
+    // …and put it back. The knob off, the bed cleared, the circle rested.
+    await page.evaluate(() => window.__rrrFollow.anchorControl(false));
+    await page.evaluate((cue) => { window.postMessage({ t: 'cue', cue }, '*'); }, CLEAR_NOMS_CUE);
+    const tr = Date.now();
+    const from = (await page.evaluate(SIMCLOCK)) ?? 0;
+    while (Date.now() - tr < 90000) {
+      const now = await page.evaluate(SIMCLOCK);
+      if (now != null && now >= from + 1.0) break;
+      await sleep(1000);
+    }
+    const rec = await page.evaluate(SNAP);
+    ctlRecover = motionOf(byId(before, NOMINATOR), byId(rec, NOMINATOR))?.hipsMove ?? null;
+    console.log(`  AB2d-ctl: knob off, circle cleared · the accuser's pelvis is`
+      + ` ${ctlRecover == null ? '—' : ctlRecover.toFixed(2)} m from where it started the run`);
+  }
+
+  t('AB2d-ctl control · with the accumulation restored, AB2d\'s ceiling breaches (fixture: must exceed)',
+    armed === true && ctlDrift != null && ctlDrift > STAND_TRAVEL_MAX_M,
+    armed == null
+      ? 'window.__rrrFollow.anchorControl is not on the page — AB2d has no control and cannot be '
+        + 'shown to still work; wire it in views/party-follow.js (see this block)'
+      : `pelvis travelled ${(ctlDrift ?? 0).toFixed(2)} m in sim +${ctlSim}s,`
+        + ` ceiling ${STAND_TRAVEL_MAX_M} m — ${((ctlRate ?? 0)).toFixed(4)} m per frame against`
+        + ' the 0.3588 m the anchor of Sit_to_Stand_Transition_M predicts;'
+        + ` the fixed arm managed ${(nomDrift).toFixed(2)} m in sim +${AT_HELD}s`);
+
   await writeFile(path.join(SHOTDIR, 'accusation.json'), JSON.stringify({
     nominator: NOMINATOR, accused: ACCUSED, bystander: BYSTANDER,
     reactorSeats: [...REACTORS], idleIds: IDLE_IDS,
@@ -1131,6 +1265,10 @@ try {
     tags: (held?.robots ?? []).map((r) => ({ id: r.id, action: r.action, proj: inkProj(r.tag?.rgb), ...r.tag })),
     bangs: (bangs?.robots ?? []).map((r) => ({ id: r.id, ...r.bang })),
     inkAxis: { from: INK, to: NOM_INK, unit: INK_AXIS },
+    drift: {
+      fixed: nomDrift, armed, control: ctlDrift, controlSim: ctlSim, perFrame: ctlRate,
+      afterRecovery: ctlRecover, ceiling: STAND_TRAVEL_MAX_M,
+    },
     raw: { before, flinch, settle, held },
     errs: [...new Set(errs)],
   }, null, 2));

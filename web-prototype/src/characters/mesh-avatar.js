@@ -327,6 +327,22 @@ const SIT_UPRIGHT_T = 0;
 const SIT_LEAN_BONES = ['Hips', 'Spine02', 'Spine01', 'Spine'];
 
 /**
+ * 🚦 **THE GATE'S CONTROL — THE ACCUSER-LEAVES-THE-BUILDING BUG, PUT BACK ON DEMAND.**
+ *
+ * `harness/accusation-beat.mjs` AB2d found a nominator whose pelvis was 12.6–28.4 m from its
+ * chair by sim +12 s. `AB2d-ctl` has to be able to turn it red again on demand, because this
+ * repo's rule is that a gate whose control stops failing has gone blind — `party-isolation`
+ * reported 20 passed / 0 failed, controls included, while leaking a role to every phone.
+ *
+ * With `integrate` true, `update()` skips the un-apply below and the anchor correction goes
+ * back to being an ACCUMULATOR, exactly as it shipped. It is the same shape as `room.js`'s
+ * `leak:` switches: the fault lives in the product file, off by default, reachable only from a
+ * harness. Nothing in the night ever sets it — `views/party-follow.js` publishes the setter on
+ * `window.__rrrFollow` for the one gate that needs it, and that view has no socket.
+ */
+export const SEAT_ANCHOR_CONTROL = { integrate: false };
+
+/**
  * Where the hammer sits in the hand — locked to John's 2026-08-24 grip-tool readout, not to
  * a single roll.
  *
@@ -1466,6 +1482,37 @@ export function cloneMeshAvatar(source, opts = {}) {
   let reactAmt = 0;         // 0..1 crossfade against the seated idle
   let reactOut = false;     // once-through clip is finished and on its way home
   let reactAnchor = null;   // constant hips fix-up, RAW TRACK UNITS (centimetres)
+  /**
+   * 🩹 **WHAT OF THAT FIX-UP IS CURRENTLY SITTING IN `hips.position` — and the whole of AB2d.**
+   *
+   * The correction below is written `hips.position.y += anchor.y * reactAmt`, and it is only a
+   * CORRECTION while something else re-authors `hips.position` every frame. The mixer normally
+   * does. **It stops.** `three/src/animation/PropertyMixer.js` `apply()` ends with
+   *
+   *     for (let i = stride, e = stride + stride; i !== e; ++i)
+   *       if (buffer[i] !== buffer[i + stride]) { binding.setValue(buffer, offset); break; }
+   *
+   * — the scene graph is only written when the MIXED VALUE CHANGED since the previous frame. A
+   * `LoopOnce` + `clampWhenFinished` action that has reached its last frame produces the same
+   * hips translation every frame forever, so from the frame after it clamps the mixer writes
+   * nothing at all and the `+=` has nothing undoing it. Measured in bare node against three
+   * 0.180.0: 20 writes, then silence, and the value climbs by the increment every frame after.
+   *
+   * `ACCUSE_CLIPS.stand` is `Sit_to_Stand_Transition_M`, which clamps (83.8° end-to-end, so
+   * `seatedClipLoops` refuses to loop it) at 6.17 s and whose anchor is 35.88 raw units =
+   * **0.3588 m per frame**. At the engine's 0.1 s dt clamp that is 3.59 m per second of show,
+   * which is the 20.80 m AB2d measured at +12 s and the 28.4 m it measured at +14 s.
+   *
+   * ⚠️ `hips.position.x` is PINNED (`= hipsRest.x`) one line above and never drifted, on any
+   * run. The two axes that drift are exactly the two that were incremented — that is what
+   * pointed at this, and it is the shape of the whole bug in one line.
+   *
+   * So the correction is UN-APPLIED before the mixer runs and re-applied after it. Whether the
+   * mixer wrote or not, `hips.position` is the clip's own value by the time the `+=` lands, and
+   * the pelvis carries exactly one correction instead of one per frame since the clip clamped.
+   * The two `+=` lines are unchanged and stay unchanged — `seated-actions` A8f reads them.
+   */
+  const anchorFix = { y: 0, z: 0 };
 
   /** Opening-frame Hips translation of a clip, raw track units. Null if it has no hips track. */
   const hipsOpen = (clip) => {
@@ -1517,8 +1564,24 @@ export function cloneMeshAvatar(source, opts = {}) {
     return entry;
   }
 
+  /**
+   * Take the anchor correction back out of the pelvis, so what is left is the mixer's own
+   * authored value. Safe to call on a frame where the mixer DID write: `anchorFix` is zeroed
+   * every time it is applied, so this never subtracts a correction twice.
+   */
+  function unfixHips() {
+    if (hips) {
+      if (anchorFix.y) hips.position.y -= anchorFix.y;
+      if (anchorFix.z) hips.position.z -= anchorFix.z;
+    }
+    anchorFix.y = 0; anchorFix.z = 0;
+  }
+
   /** Drop whatever is performing. A new performance and a new sit both cancel the old one. */
   function clearReaction() {
+    // Before the reaction's own anchor is forgotten — otherwise its correction is stranded in
+    // the pelvis until some clip happens to overwrite `hips.position` again.
+    unfixHips();
     for (const entry of reactions.values()) {
       if (!entry) continue;
       entry.action.setEffectiveWeight(0);
@@ -1526,6 +1589,29 @@ export function cloneMeshAvatar(source, opts = {}) {
     }
     react = null; reactName = null; reactAnchor = null;
     reactAmt = 0; reactOut = false; reactHold = false;
+    // 📛 The performance is over, and the scene says so. See `publishPose`.
+    publishPose();
+  }
+
+  /**
+   * 📛 **PUBLISH THE POSE WHERE A SCENE WALKER CAN READ IT.**
+   *
+   * `get clip()` and `get seatedAction()` answer this already, but only to whoever holds the
+   * avatar object — and the intro bed does not hand its bodies out. A browser probe walking
+   * `player.intro-<id>` had no way to name what a chair was playing, which is the whole of
+   * `accusation-beat` AB2c/AB3c: "the animation is real and no instrument can see which one it
+   * is". `follow-bed.js` reads this back onto `sitReport()`'s rows.
+   *
+   * Two fields, kept apart for the same reason the two getters are: `clip` is the seat's
+   * RESTING pose and stays `Chair_Sit_Idle_M` through the whole accusation; `seatedAction` is
+   * the performance on top of it, and is null when there is none. Written on transitions only —
+   * never per frame.
+   */
+  function publishPose() {
+    rig.userData.clip = pose === 'sit'
+      ? (sitClipName || sitIdle?.getClip?.().name || 'sit')
+      : null;
+    rig.userData.seatedAction = reactName;
   }
 
   function captureLean() {
@@ -1606,6 +1692,7 @@ export function cloneMeshAvatar(source, opts = {}) {
       mixer.update(0);
       captureLean();
       sitIdle.time = ((phase % dur) + dur) % dur;
+      publishPose();
       return true;
     },
 
@@ -1654,9 +1741,16 @@ export function cloneMeshAvatar(source, opts = {}) {
       react.setEffectiveTimeScale(1);
       react.setEffectiveWeight(0);
       react.play();
+      publishPose();
       return true;
     },
     update(dt, state = {}) {
+      /*
+       * 🩹 **THE PELVIS GOES BACK TO WHERE THE CLIP PUT IT BEFORE ANYTHING ELSE HAPPENS.** See
+       * `anchorFix`. This is outside the pose branch on purpose: a body that stands up and walks
+       * away between frames must not carry a seated chair's correction into the run.
+       */
+      unfixHips();
       if (pose === 'sit') {
         if (sitDown && sitIdle && sitDown.getEffectiveWeight() > 0.05) {
           const done = sitDown.time >= sitDown.getClip().duration - 0.08;
@@ -1697,6 +1791,15 @@ export function cloneMeshAvatar(source, opts = {}) {
           if (reactAnchor && reactAmt > 0) {
             hips.position.y += reactAnchor.y * reactAmt;
             hips.position.z += reactAnchor.z * reactAmt;
+            /*
+             * …and what was applied is REMEMBERED, so the next frame can take it out again.
+             * Under the gate's control this is skipped, `unfixHips` becomes a no-op and the
+             * `+=` above goes back to integrating — which is the bug, and AB2d-ctl's job.
+             */
+            if (!SEAT_ANCHOR_CONTROL.integrate) {
+              anchorFix.y = reactAnchor.y * reactAmt;
+              anchorFix.z = reactAnchor.z * reactAmt;
+            }
           }
         }
         applyLean(1 - reactAmt);

@@ -28,9 +28,12 @@
 
 import { FURN_SMASH_ASSETS, FURN_FIT_BOOST } from './furn-catalog.js';
 import {
+  blockedBy,
   blockedByOpenings,
   openingsFromRoom,
+  propFootprint,
 } from './portal-clearance.js';
+import { MISSION_PAINTING } from '../party/mission.js';
 
 export { openingsFromRoom } from './portal-clearance.js';
 
@@ -120,6 +123,89 @@ export function walkHalf(spec) {
   // non-thin meshes by `FURN_FIT_BOOST`; a keep-out that ignores it leaves a crate
   // (catalog maxSpan 0.63 after ×0.7 → ~0.98 m on the floor) filling a 1.90 m door.
   return halfSpan(spec) * FURN_FIT_BOOST;
+}
+
+/**
+ * 📏 **HOW MUCH FLOOR THE PROP IS DRAWN OVER — which is NOT `walkHalf` and NOT `halfSpan`.**
+ *
+ * `walkHalf` answers "what can I walk through": it is 0 for anything hung and a sliver for a rug,
+ * because you walk under a chandelier and over a carpet. That is the right answer for a doorway
+ * and the WRONG one for a wall inset, where the question is where the prop's BODY ends.
+ *
+ * `halfSpan` is the catalog's pre-boost span, and `fitCatalogProp` draws every non-thin mesh at
+ * `FURN_FIT_BOOST`. Using it to inset a prop off a wall is the same mistake W34d/W34j fixed for
+ * doorways, one wall over: **`vitrine` is authored at inset 0.62 with a drawn half of 0.651, so
+ * its case stood 3 cm THROUGH the gallery's north wall** — and straight through the mission
+ * painting hung 22 cm off it, on 12 of 64 world seeds (`harness/target-sight.mjs` T2, T6: 13% of
+ * the frame left visible). `console` (0.845 vs 1.031) and a fallback `bookcase` (0.912 vs 1.086)
+ * had the same arithmetic and only missed the painting on height.
+ */
+export function drawHalf(spec) {
+  if (spec?.thin) return halfSpan(spec);
+  return halfSpan(spec) * FURN_FIT_BOOST;
+}
+
+/**
+ * 🖼️ **THE ONE THING IN THE ROOM THIS PLACER DOES NOT PLACE — and used to hang furniture through.**
+ *
+ * `follow-bed.js` `buildPainting` hangs the episode-1 smash target itself: the longest wall, the
+ * side furthest from the room's centre, 0.22 m off it, a 1.46 × 1.86 × 0.09 frame at 1.85 m.
+ * It is not a `FurnProp` and it is not in `FURN_SMASH_ASSETS`, so nothing here ever saw it —
+ * and `candidatesFor`'s `cam-wall` slots are `{ x: space.x0 + 0.22, z: c.z }` and
+ * `{ x: c.x, z: space.z0 + 0.22 }`, which is that formula character for character. **Two placers
+ * owned one slot and neither knew it**: on 12 of 64 world seeds the catalog smash cam was hung
+ * through the canvas (`target-sight` T2), and `accept`'s 0.45 m clamp cannot separate them
+ * because it is smaller than the frame's own 0.73 m half-width.
+ *
+ * So the placer is told. The rect is the frame's footprint grown by a body DIAMETER
+ * (`Player.radius` = `height * 0.20` = 0.34 m at the 1.7 m default `follow-bed` builds with) on
+ * the three sides that face the room: laterally, so a runner can stand square-on to any part of
+ * the frame; forward, so there is a lane to stand in and swing from. Backwards it stops at the
+ * wall, because there is no floor behind a wall to keep clear.
+ *
+ * ⚠️ **THIS IS A SECOND COPY OF `buildPainting`'S FORMULA AND THAT IS A DEBT, NOT A DESIGN.**
+ * `follow-bed.js` imports THREE, so this file cannot ask it where the painting went without
+ * pulling the renderer into every caller; `target-sight.mjs` G4 pins the harness's own third copy
+ * against `follow-bed.js`'s source text for exactly this reason. The day `buildPainting` moves,
+ * these numbers move with it — T2 is what will say so.
+ */
+export const PAINTING_WALL_OFF = 0.22;
+export const PAINTING_W = 1.46;
+export const PAINTING_D = 0.09;
+/** `Player`: `this.radius = this.height * 0.20`, and `follow-bed` builds the runner at 1.7 m. */
+export const RUNNER_R = 0.34;
+
+export function paintingKeepOut(space) {
+  if (!space) return null;
+  const w = space.x1 - space.x0, d = space.z1 - space.z0;
+  if (!(w > 0) || !(d > 0)) return null;
+  const alongX = w >= d;                                   // `buildPainting`: the longest wall
+  const c = mid(space);
+  const lane = 2 * RUNNER_R;
+  const hw = PAINTING_W / 2 + lane;                        // along the wall
+  const hd = PAINTING_D / 2 + lane;                        // out into the room
+  return alongX
+    ? { id: `${space.id}.painting`, x0: c.x - hw, x1: c.x + hw, z0: space.z0, z1: space.z0 + PAINTING_WALL_OFF + hd }
+    : { id: `${space.id}.painting`, x0: space.x0, x1: space.x0 + PAINTING_WALL_OFF + hd, z0: c.z - hw, z1: c.z + hw };
+}
+
+/**
+ * Every rect a catalog prop may not stand in, for one set of spaces. Today that is one rect — the
+ * mission painting's — in the room `mission.js` names, and it is derived rather than passed so
+ * that a caller cannot forget it: `dressCatalogFurniture` and `party-warm` and `target-sight` all
+ * call `catalogPlacements(spaces, openings)` and all three must get the same house.
+ *
+ * The chapel's episode-2 target needs no row here: it IS a catalog prop (`table-round`), so
+ * `farEnough` already holds the others off it.
+ */
+export function missionKeepOuts(spaces = []) {
+  const out = [];
+  for (const s of spaces ?? []) {
+    if (spaceKind(s) !== MISSION_PAINTING.room) continue;
+    const rect = paintingKeepOut(s);
+    if (rect) out.push(rect);
+  }
+  return out;
 }
 
 function wallSlot(s, wall, t, inset) {
@@ -212,10 +298,16 @@ function pickSpaces(spaces, assign, pick) {
 function candidatesFor(recipe, space, spec) {
   const minDim = Math.min(space.x1 - space.x0, space.z1 - space.z0);
   if (minDim < 1.6 && recipe.place !== 'hang') return [];
-  const half = Math.max(0.35, halfSpan(spec));
+  /*
+   * The inset is measured to the prop's CENTRE, so it has to clear the prop's DRAWN half or the
+   * body stands through the wall — see `drawHalf`. The room clamp keeps a prop out of its own
+   * middle third; where a prop is too big for that, the clamp yields to the wall line rather
+   * than pushing the body back through it. `inset >= half` therefore holds on every branch.
+   */
+  const half = Math.max(0.35, drawHalf(spec));
   const inset = Math.min(
     Math.max(recipe.inset ?? 0.8, half + 0.18),
-    minDim * 0.38,
+    Math.max(minDim * 0.38, half),
   );
   const out = [];
   if (recipe.place === 'hang') {
@@ -266,7 +358,7 @@ function candidatesFor(recipe, space, spec) {
   return out;
 }
 
-function accept(space, spec, slot, openings, placed, recipe) {
+function accept(space, spec, slot, openings, placed, recipe, keepOuts = []) {
   const margin = Math.max(0.45, walkHalf(spec) * 0.35);
   const p = clampIn(space, slot.x, slot.z, margin);
   if (p.x <= space.x0 + 0.2 || p.x >= space.x1 - 0.2) return null;
@@ -277,6 +369,14 @@ function accept(space, spec, slot, openings, placed, recipe) {
     if (Math.hypot(p.x - c.x, p.z - c.z) < recipe.clearCentre) return null;
   }
   if (blockedByOpenings(p.x, p.z, half, half, openings)) return null;
+  /*
+   * The mission keep-out is asked of the DRAWN body, not `walkHalf`: a hung cam-wall has no
+   * footprint to walk around and still hangs through the canvas, which is the 12-seed defect.
+   * World-space, so a prop in the room NEXT DOOR whose body reaches through the shared wall is
+   * refused by the same rect that refuses one in the gallery.
+   */
+  const body = drawHalf(spec);
+  if (body > 0 && blockedBy(propFootprint(p.x, p.z, body, body), keepOuts)) return null;
   const minDist = Math.max(1.35, halfSpan(spec) + 0.45);
   if (!farEnough(p.x, p.z, placed, minDist)) return null;
   return { x: p.x, z: p.z, rotY: slot.rotY ?? 0 };
@@ -304,6 +404,7 @@ export function openingsArg(openingsOrOpts) {
  */
 export function catalogPlacements(spaces = [], openings = []) {
   openings = openingsArg(openings);
+  const keepOuts = missionKeepOuts(spaces);
   const out = [];
   const used = new Set();
 
@@ -323,7 +424,7 @@ export function catalogPlacements(spaces = [], openings = []) {
       // One room may take several copies (two chandeliers, up to three knights).
       for (const slot of candidatesFor(recipe, space, spec)) {
         if (n >= want) break;
-        const hit = accept(space, spec, slot, openings, out, recipe);
+        const hit = accept(space, spec, slot, openings, out, recipe, keepOuts);
         if (!hit) continue;
         out.push({
           id: `${space.id}.${recipe.id}.${n}`,
@@ -350,7 +451,7 @@ export function catalogPlacements(spaces = [], openings = []) {
     const fallback = spaces.filter((s) => Math.min(s.x1 - s.x0, s.z1 - s.z0) >= 2.4);
     for (const space of fallback) {
       for (const slot of candidatesFor({ ...recipe, place: recipe.place ?? 'wall', walls: WALLS_ALL, inset: 0.9 }, space, spec)) {
-        const hit = accept(space, spec, slot, openings, out, recipe);
+        const hit = accept(space, spec, slot, openings, out, recipe, keepOuts);
         if (!hit) continue;
         out.push({
           id: `${space.id}.${id}.fb`,
