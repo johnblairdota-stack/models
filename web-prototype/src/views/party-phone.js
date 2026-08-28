@@ -1753,8 +1753,22 @@ export default async function partyPhone({ params }) {
             : 'Reach out to one person. The room sees who — not what.'))}</p>
       <div class="picks">${others.map((p) => {
     const block = why(L, me, p.id, living, c?.beat);
+    /*
+     * 🔢 **WHICH SAM — AND THIS IS THE LIST WHERE IT MATTERS MOST.**
+     *
+     * Every other tappable or aired list already carries the seat chip: `paintNominate`,
+     * `paintLynchVote`, the vote receipt, the TV's nominee board, the casting lamps. This one
+     * did not, and it is the list where you pick who to have a PRIVATE conversation with — so
+     * on a table with two players called Sam it offered two identical buttons and no way to
+     * tell which one you were about to open a channel to. Photographed at N=8 in
+     * `progress/r5/05-phone-debrief.png`; duplicate names are a locked rule, not an accident.
+     *
+     * ⚠️ `party-warm` W35e could not catch this: it asserts three `seatChip(` CALL SITES exist
+     * in the source, and all three did. A fourth list that never called it was invisible to a
+     * source grep. `loop-ui-play` L1 counts rendered chips against tappable rows instead.
+     */
     return `<button type="button" data-link="${esc(p.id)}" ${block ? 'disabled aria-disabled="true"' : ''}>
-          ${esc(p.name || p.id)}${MARK[block] || ''}
+          ${seatChip(c, p.id)}<span>${esc(p.name || p.id)}${MARK[block] || ''}</span>
         </button>`;
   }).join('')}</div>
     </div>`;

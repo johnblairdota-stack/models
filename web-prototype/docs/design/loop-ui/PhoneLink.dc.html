@@ -1,0 +1,88 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; }
+    a { color: #f5a14a; } a:hover { color: #ffbe7d; }
+  </style>
+</helmet>
+
+<!-- ═══════ F14 · THE LINK LIST CARRIES THE SEAT, LIKE EVERY OTHER LIST ═══════
+     Photographed today (progress/r5/05-phone-debrief.png): two buttons, both reading SAM, with
+     nothing to tell them apart. `party-phone.js:1756` builds each link button as the bare name;
+     `paintNominate` (1492), `paintLynchVote` (1555) and the vote receipt (1522) all call
+     `seatChip`. So the ONE list where you choose who to have a private conversation with is the
+     one list that cannot distinguish two players with the same name — and D6/S1 exists because
+     duplicate names are a LOCKED product rule, not an accident to design around.
+
+     `party-warm` W35e cannot see this: it asserts three `seatChip(` call sites exist in the
+     source, and they do. A fourth list that never calls it is invisible to that test. The gate
+     that catches it has to count rendered chips against tappable rows. -->
+
+<div style="width: 390px; height: 844px; background: #0c0a08; color: #f3ece3; padding: 16px 16px 24px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px;">
+
+  <div style="display: flex; justify-content: space-between; font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: #8a7d70;">
+    <span>Zeta</span><span>Debrief · John</span>
+  </div>
+
+  <div>
+    <h1 style="margin: 0; font-size: 28px; letter-spacing: .04em; line-height: 1.2;">Debrief.</h1>
+    <p style="margin: 8px 0 0; font-size: 14px; line-height: 1.45; color: #8a7d70;">Talk. Tap READY when you have said your piece — a majority ends the Debrief.</p>
+  </div>
+
+  <div style="padding: 14px; border-radius: 12px; background: #12100c; border: 1px solid rgba(159,242,200,.22);">
+    <p style="margin: 0 0 12px; font-size: 14px; line-height: 1.45; color: #8a7d70;">Reach out to one person. The room sees who — not what.</p>
+
+    <!-- Same chip as the nominate list, the vote list and the receipt: the player's own accent
+         carrying their seat number. Two Sams stop being one button typed twice. -->
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;">
+      <sc-for list="{{people}}" as="p" hint-placeholder-count="7">
+        <button type="button" style="display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 12px 14px; text-align: left; border-radius: 8px; border: 1px solid rgba(245,161,74,.2); background: #161310; color: #f3ece3; font: inherit; font-size: 17px; font-weight: 700;">
+          <span style="flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 26px; padding: 0 6px; border-radius: 13px; background: {{p.accent}}; color: #161310; font-weight: 900; font-size: 14px;">{{p.seat}}</span>
+          <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{p.name}}</span>
+        </button>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="margin-top: auto;">
+    <div style="height: 8px; border-radius: 4px; background: #12100c; overflow: hidden;">
+      <div style="height: 100%; width: 80%; background: #f5a14a;"></div>
+    </div>
+    <button type="button" style="margin-top: 14px; width: 100%; min-height: 60px; border: 0; border-radius: 8px; background: #a8c66c; color: #141210; font: inherit; font-size: 18px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;">Ready ✓</button>
+    <p style="margin: 10px 0 0; font-size: 14px; color: #8a7d70;">4 of 5 ready · 1 more ends it</p>
+  </div>
+
+  <div style="display: flex; align-items: center; gap: 14px; padding: 14px; border-radius: 12px; background: #161310; border: 1px solid rgba(245,161,74,.25);">
+    <div style="width: 34px; height: 44px; border-radius: 4px; background: repeating-linear-gradient(135deg, #3a2614 0 5px, #2a1c0e 5px 10px); border: 1px solid rgba(245,161,74,.4);"></div>
+    <div>
+      <div style="font-size: 18px; font-weight: 800;">Your card</div>
+      <div style="margin-top: 3px; font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: #8a7d70;">Hold to read</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const roster = [
+      { name: 'Ellie', seat: '2', accent: '#e8d5a3' },
+      { name: 'Sam', seat: '3', accent: '#ff7a59' },
+      { name: 'Sam', seat: '4', accent: '#f0ebe3' },
+      { name: 'Bo', seat: '5', accent: '#c47a4a' },
+      { name: 'Mary-Kate 3', seat: '6', accent: '#9ad7c2' },
+      { name: 'Alexandria', seat: '7', accent: '#7fb3e8' },
+      { name: 'Jo', seat: '8', accent: '#e5c04a' },
+    ];
+    return { people: roster };
+  }
+}
+</script>
+</body>
+</html>

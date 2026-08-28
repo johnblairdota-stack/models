@@ -1,0 +1,100 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; }
+    a { color: #f5a14a; } a:hover { color: #ffbe7d; }
+  </style>
+</helmet>
+
+<!-- ═══════ F5 · THE ROLE-CARD WINDOW USES THE WHOLE TELEVISION ═══════
+     Photographed today (progress/r5/01-tv-casting-cards.png): the strapline, the kicker, the
+     headline, eight lamps, the bake bar and two unrelated grey hints are all packed into the
+     TOP 45% of the screen, and the bottom ~500px is empty black. The board was built to fix an
+     empty ballroom and it fixed the ballroom; the SCREEN is still mostly empty.
+
+     Nothing is added to fill it — the same five elements are laid out to the size the room is
+     actually sitting at. The lamps grow into the middle of the screen (they are the shape of
+     the room, and the one element in the loop that is already right), and the bake bar becomes
+     full-width, because during this window it is the only thing on the television that moves
+     and the only honest answer to "what are we waiting for". -->
+
+<div style="width: 1600px; height: 900px; position: relative; background: #0c0a08; color: #f3ece3; overflow: hidden;">
+  <div style="position: absolute; inset: 0; background:
+      radial-gradient(1100px 620px at 50% 30%, rgba(245,161,74,.10), transparent 64%),
+      linear-gradient(180deg, #171310 0%, #0e0b09 62%, #0a0806 100%);"></div>
+
+  <div style="position: absolute; left: 28px; top: 18px; display: flex; align-items: center; gap: 10px; font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: #f5a14a; font-weight: 700;">
+    <span style="width: 9px; height: 9px; border-radius: 50%; background: #ff8a7a;"></span> Prime Time · on air
+  </div>
+  <div style="position: absolute; right: 28px; top: 16px; font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: #8a7d70;">Episode 1 · Casting</div>
+
+  <!-- The kicker and the headline, once. The show strapline is NOT here: it wrapped to two
+       lines directly above this kicker and the two competed. It belongs on the lobby, where
+       there is nothing to compete with. -->
+  <div style="position: absolute; left: 0; right: 0; top: 96px; text-align: center;">
+    <div style="font-size: 13px; letter-spacing: .3em; text-transform: uppercase; font-weight: 700; color: #f5a14a;">Read your card</div>
+    <div style="margin-top: 14px; font-size: 68px; font-weight: 800; line-height: 1;">Nobody says a word yet.</div>
+  </div>
+
+  <!-- Eight lamps at the middle of the screen, not stacked under the headline. 176px wide
+       instead of 132 and centred vertically in the space the old layout left empty. -->
+  <div style="position: absolute; left: 40px; right: 40px; top: 300px; display: flex; gap: 16px;">
+    <sc-for list="{{seats}}" as="s" hint-placeholder-count="8">
+      <div style="flex-grow: 1; padding: 26px 12px 22px; border-radius: 14px; background: rgba(0,0,0,.55); border: 1px solid {{s.edge}}; display: flex; flex-direction: column; align-items: center; gap: 14px; opacity: {{s.fade}};">
+        <div style="width: 52px; height: 52px; border-radius: 50%; background: {{s.accent}}; color: #141210; font-weight: 900; font-size: 24px; display: flex; align-items: center; justify-content: center;">{{s.seat}}</div>
+        <div style="font-size: 22px; font-weight: 800; line-height: 1.1; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">{{s.name}}</div>
+        <div style="font-size: 11px; letter-spacing: .22em; text-transform: uppercase; font-weight: 700; color: {{s.tint}};">{{s.state}}</div>
+      </div>
+    </sc-for>
+  </div>
+
+  <!-- ═══════ THE BAKE BAR IS THE FOOT, AND IT IS FULL WIDTH ═══════
+       It is 520px today, under a 12px label, below the fold of attention — on the one screen
+       where it is the only thing anybody can act on the answer to. No ballot can exist until
+       this reaches 100%, so this bar IS the beat. -->
+  <div style="position: absolute; left: 40px; right: 40px; bottom: 96px;">
+    <div style="display: flex; align-items: baseline; justify-content: space-between;">
+      <div style="font-size: 14px; letter-spacing: .26em; text-transform: uppercase; font-weight: 700; color: #f5a14a;">Warming the mansion</div>
+      <div style="font-size: 40px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums;">{{pct}}%</div>
+    </div>
+    <div style="margin-top: 14px; height: 14px; border-radius: 7px; background: #12100c; overflow: hidden;">
+      <div style="height: 100%; width: {{bar}}; background: #f5a14a;"></div>
+    </div>
+  </div>
+
+  <div style="position: absolute; left: 40px; right: 40px; bottom: 40px; font-size: 20px; color: #a89884;">
+    Two of you go in. One walks, one talks — the phones pick both.
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"pct":{"editor":"range","default":55,"min":0,"max":100,"unit":"%"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const pct = this.props.pct ?? 55;
+    const names = ['John', 'Ellie', 'Sam', 'Sam', 'Bo', 'Mary-Kate 3', 'Alexandria', 'Jo'];
+    const accents = ['#f5a14a', '#e8d5a3', '#ff7a59', '#f0ebe3', '#c47a4a', '#9ad7c2', '#7fb3e8', '#e5c04a'];
+    return {
+      pct, bar: `${pct}%`,
+      seats: names.map((name, i) => {
+        const sent = i < 3;
+        return {
+          name, seat: String(i + 1), accent: accents[i],
+          state: sent ? 'ballot in' : 'reading',
+          tint: sent ? '#9ff2c8' : '#8a7d70',
+          edge: sent ? '#9ff2c8' : 'rgba(245,161,74,.16)',
+          fade: sent ? '1' : '.58',
+        };
+      }),
+    };
+  }
+}
+</script>
+</body>
+</html>

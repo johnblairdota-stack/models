@@ -1727,8 +1727,15 @@ console.log('\nparty-warm — the lobby-warm night');
     /beat === 'reckoning'/.test(phoneSrc)
     && /padFx\('Reckoning\.'/.test(phoneSrc)
     && /\[0, 45, 55, 120\]/.test(phoneSrc));
-  t('W28i · TV empty standing says waiting on phones, not a silent skip',
-    /Waiting on phones — nominate/.test(hostSrc));
+  /*
+   * W28i moved with the round-2 hierarchy pass (W37b). The concern is unchanged — an empty
+   * Reckoning must not read as a silent skip — but the instruction no longer lives in the side
+   * board's empty state, because that state was reserving a fifth of the television to duplicate
+   * a sentence the kicker under the picture was already carrying. The kicker IS the instruction
+   * now, and it is the one the room could always read; this asserts it is still on the beat.
+   */
+  t('W28i · the Reckoning still tells the room to nominate — from the kicker, not an empty board',
+    /kicker: 'Nominate\. First tap stands\.', beat: 'reckoning'/.test(hostSrc));
   t('W28j · nominated players do not see themselves on the lynch ballot',
     /function paintLynchVote/.test(phoneSrc)
     && /n\.target !== me\.playerId/.test(phoneSrc));
@@ -3327,6 +3334,79 @@ console.log('\nparty-warm — the lobby-warm night');
     && !/cast-overlay/.test(hostSrc.slice(0, hostSrc.indexOf('function castStage')))
     && !/\.night\.on-talk \.cast-overlay/.test(skin)
     && !/\.night\.on-talk \.cast-strip/.test(skin));
+}
+
+// ---- W37 · THE HIERARCHY IS THE RIGHT WAY UP ----------------------------------------------
+//
+// From the round-2 critic pass (`docs/design/loop-ui-critique.md`), whose thesis was one defect
+// repeated on every beat: **the furniture is big and the live state is small.** On four of the
+// eight beats the sentence that says what ENDS the beat was 12px grey at the bottom edge of a
+// 1080p screen, while a nameplate naming NOBODY sat above it at 36-56px.
+//
+// Each of these locks one of the four cuts. They are source assertions and they know it: the
+// claim "12px is unreadable from a sofa" is not a thing a regex can hold. What a regex CAN hold
+// is that the plate is gated on a real person, that the count exists as its own element, and
+// that the duplicated sentences are gone — and those are the changes.
+{
+  const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
+  const phoneSrc = await readFile(new URL('../src/views/party-phone.js', import.meta.url), 'utf8');
+  const skin = await readFile(new URL('../src/party/night-skin.js', import.meta.url), 'utf8');
+
+  t('W37 · a nameplate with nobody to name is not drawn',
+    /const plate = who && whoId/.test(hostSrc)
+    && /nameplateHtml\(\{ name: who/.test(hostSrc));
+
+  // Control. The fallback WORDS may stay as call-site arguments — they are harmless once the
+  // plate is gated on `whoId`, and `standingLead() || 'Reckoning'` still feeds other copy. What
+  // must not come back is a plate drawn from `who` alone.
+  t('W37 control · the gate is the player id, not the word — a beat name can never reach a plate',
+    !/const plate = who\s*$/m.test(hostSrc)
+    && !/const plate = who\s*\?/.test(hostSrc));
+
+  t('W37a · the beat count is its own element, at its own size, beside the plate',
+    /function readyState/.test(hostSrc)
+    && /state: readyState\(\)/.test(hostSrc)
+    // the count is in the band and NOT also in the kicker — one fact, once
+    && !/kicker: readyKicker\(/.test(hostSrc)
+    && /class="beat-state/.test(hostSrc)
+    && /class="talk-band"/.test(hostSrc)
+    && /\.beat-n \{ font-size:clamp\(38px/.test(skin)
+    && /\.talk-kicker \{ margin:6px 0 0; text-align:left; color:var\(--night-soft\)/.test(skin)
+    && !/\.talk-kicker \{[^}]*font-size:12px/.test(skin));
+
+  // `readyState` reads the same wire field the kicker always did. It must stay a COUNT.
+  t('W37a control · the promoted count still names nobody',
+    /const r = client\.ready;/.test(hostSrc)
+    && !/readyState[\s\S]{0,400}joinedName/.test(hostSrc)
+    && !/readyState[\s\S]{0,400}\.name/.test(hostSrc));
+
+  t('W37b · an empty board collapses its column instead of reserving a fifth of the TV',
+    /if \(!rows\) return '';/.test(hostSrc)
+    && /if \(!body\) return '';/.test(hostSrc)
+    && !/Nobody has reached out yet\./.test(hostSrc)
+    && !/Waiting on phones — nominate\./.test(hostSrc));
+
+  t('W37c · the Execution says each of its facts exactly once',
+    /function executionSwing/.test(hostSrc)
+    && /verdict: executionSwing\(/.test(hostSrc)
+    && /kicker: 'Casting is next\.'/.test(hostSrc)
+    // the tell for the old defect: `kicker` and `verdict` fed the SAME builder
+    && !/kicker: executionLine\(/.test(hostSrc));
+
+  // Control. `executionLine` is still the whole sentence and still used — the phone and the
+  // event log want both facts in one string. Only the TV splits them.
+  t('W37c control · executionLine survives for the surfaces that want one sentence',
+    /function executionLine/.test(hostSrc));
+
+  t('W37d · every tappable list on the phone carries the seat, the link list included',
+    /data-link="\$\{esc\(p\.id\)\}"[^]{0,120}\$\{seatChip\(c, p\.id\)\}/.test(phoneSrc)
+    && /\.picks button \{[^}]*display:flex/.test(skin)
+    && /\.picks button \.seat-chip/.test(skin));
+
+  // Control for W37d, and the reason the old gate missed this: counting CALL SITES is not the
+  // same as covering every list. Four tappable/aired lists, four calls.
+  t('W37d control · four lists, four seatChip calls — nominate, lynch, receipt, link',
+    (phoneSrc.match(/seatChip\(c, /g) || []).length >= 4);
 }
 
 console.log(`\nparty-warm: ${pass} passed, ${fail} failed`);

@@ -1,0 +1,81 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; }
+    a { color: #f5a14a; } a:hover { color: #ffbe7d; }
+  </style>
+</helmet>
+
+<!-- ═══════ F4 · ONE FACT, ONCE ═══════
+     Photographed today (progress/talk/tv-execution.png): the sentence "THE VOTE IS IN." appears
+     THREE times on one screen — as the verdict plate's line at 36px, as the nameplate's context,
+     and again as the kicker at 12px — and "NO EVICTION" appears twice. Three elements, one fact,
+     three type sizes, and none of them says the thing the room came for.
+
+     The room came for two facts: WHO is out, and BY WHOSE HAND. The nominator's vote is assumed
+     for their nominee (a locked rule), so the swing is a real fact about a real person, and it
+     is the most dramatic thing in the beat. It gets the plate. Everything that was repeating
+     "the vote is in" is deleted — the beat's own name on the rail already says that. -->
+
+<div style="width: 1600px; height: 900px; position: relative; background: #0c0a08; color: #f3ece3; overflow: hidden;">
+
+  <div style="position: absolute; left: 28px; top: 18px; display: flex; align-items: center; gap: 10px; font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: #f5a14a; font-weight: 700;">
+    <span style="width: 9px; height: 9px; border-radius: 50%; background: #ff8a7a;"></span> Prime Time · on air
+  </div>
+  <div style="position: absolute; right: 28px; top: 16px; font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: #8a7d70;">Episode 1 · Execution</div>
+
+  <div style="position: absolute; left: 16px; right: 16px; top: 76px; bottom: 176px; border-radius: 4px; overflow: hidden; background: linear-gradient(180deg, #241c14 0%, #17110c 60%, #0e0a07 100%);">
+    <div style="position: absolute; left: 50%; top: 66%; transform: translate(-50%,-50%); width: 1180px; height: 300px; border-radius: 50%; background: radial-gradient(ellipse at center, rgba(120,52,40,.55), rgba(20,14,11,0) 68%);"></div>
+    <div style="position: absolute; left: 0; right: 0; bottom: 26px; text-align: center; font-size: 12px; letter-spacing: .22em; text-transform: uppercase; color: rgba(243,236,227,.28);">the nameplate goes dark on the circle</div>
+  </div>
+
+  <!-- ONE plate. The kicker states the outcome class, the line names the person, the sub names
+       the hand — and the tally under it is the arithmetic, which is the only other thing anyone
+       will argue about. Nothing here repeats anything else here. -->
+  <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 176px; padding: 0 28px; display: flex; align-items: center; gap: 40px; background: linear-gradient(0deg, rgba(0,0,0,.92) 0%, rgba(0,0,0,.6) 66%, rgba(0,0,0,0) 100%);">
+
+    <div style="border-left: 8px solid {{tint}}; padding-left: 22px;">
+      <div style="font-size: 12px; letter-spacing: .26em; text-transform: uppercase; font-weight: 800; color: {{tint}};">{{kicker}}</div>
+      <div style="margin-top: 6px; font-size: 64px; font-weight: 800; line-height: 1;">{{who}}</div>
+      <div style="margin-top: 8px; font-size: 24px; color: #a89884;">{{hand}}</div>
+    </div>
+
+    <div style="display: flex; gap: 12px; margin-left: auto;">
+      <sc-for list="{{tally}}" as="t" hint-placeholder-count="3">
+        <div style="min-width: 132px; padding: 14px 18px 12px; border-radius: 10px; background: rgba(0,0,0,.6); border: 1px solid rgba(245,161,74,.22);">
+          <div style="font-size: 11px; letter-spacing: .24em; text-transform: uppercase; font-weight: 700; color: #8a7d70;">{{t.k}}</div>
+          <div style="margin-top: 6px; font-size: 34px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; color: {{t.tint}};">{{t.v}}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"evicted":{"editor":"boolean","default":true}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const out = this.props.evicted ?? true;
+    return {
+      tint: out ? '#ff8a7a' : '#9ff2c8',
+      kicker: out ? 'Evicted' : 'No eviction',
+      who: out ? 'Mary-Kate 3 is out.' : 'Nobody cleared.',
+      hand: out ? 'John swings — he named her, so his vote was already hers.'
+        : 'No nominee reached the threshold. The circle keeps its eight.',
+      tally: [
+        { k: 'Votes', v: out ? '4' : '2', tint: '#f3ece3' },
+        { k: 'Threshold', v: '3', tint: '#f5a14a' },
+        { k: 'Abstained', v: '1', tint: '#8a7d70' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

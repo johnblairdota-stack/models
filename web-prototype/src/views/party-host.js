@@ -265,13 +265,28 @@ export default async function partyHost({ params }) {
     return parts.join('  ·  ');
   }
 
-  function readyKicker(u, fallback) {
+  /**
+   * 📊 **THE READY COUNT, AT THE SIZE A SOFA CAN READ IT.**
+   *
+   * This replaces `readyKicker`, which folded the count into a sentence that `talkStage` then
+   * printed in the 12px uppercase kicker — so the number saying how close the room is to ending
+   * the beat was the smallest ink on a 1080p television, three metres from anybody. Photographed
+   * at `progress/r5/04-tv-debrief.png`: `0 OF 5 READY · TALK. A MAJORITY TAPS READY TO MOVE ON.`
+   * flush against the bottom edge, under a 36px nameplate reading "The circle".
+   *
+   * Returning the count as DATA lets the band set it like the Vote's `tallyBoard` already does,
+   * which is the one place in the loop that got this right. It also makes L74's rule structural
+   * rather than incidental: the count was a kicker ARGUMENT that link activity could replace,
+   * and it is now its own element that nothing else competes for.
+   *
+   * ⚠️ **AND IT IS STILL A COUNT.** `FANOUT_KEYS.ready` carries `count` and `need` and no
+   * identities; nothing here adds any. `party-warm` W37a control.
+   */
+  function readyState() {
     const r = client.ready;
-    if (!r?.need) return fallback;
-    const left = Math.max(0, r.need - r.count);
-    return left
-      ? `${Math.min(r.count, r.need)} of ${r.need} ready · ${fallback}`
-      : `${Math.min(r.count, r.need)} of ${r.need} ready · wrapping up…`;
+    if (!r?.need) return null;
+    const count = Math.min(r.count, r.need);
+    return { n: count, of: `of ${r.need} ready`, done: count >= r.need };
   }
 
   function setBeat(beat) {
@@ -1002,7 +1017,11 @@ export default async function partyHost({ params }) {
        * passed the ready line as the thing to show WHEN THERE WAS NO LINK ACTIVITY — so the
        * instant anybody reached out, the beat's own end condition vanished from the television.
        * A play critic caught it: the count disappears exactly when the room is most engaged.
-       * The pairs moved to the side board, so the kicker is the ready line, always.
+       * The pairs moved to the side board, so the count stays put.
+       *
+       * ⚠️ **AND IT IS NO LONGER IN THE KICKER AT ALL** — see `readyState`. Printing it in both
+       * would have been the Execution's own defect in a second costume: one fact, twice, in two
+       * sizes. The band carries the number; the kicker carries the rule the number obeys.
        *
        * ⚠️ **AND THE LOWER THIRD NO LONGER NAMES THE RUNNER.** During Debrief it named whoever
        * went on the expedition — the biggest thing in the band, about the wrong beat, drowning
@@ -1010,7 +1029,8 @@ export default async function partyHost({ params }) {
        */
       body += talkStage({
         recap, names, lobby: client.lobby, runEnd: ui.runEnd, clock,
-        kicker: readyKicker(ui, 'Talk. A majority taps READY to move on.'), beat: 'debrief',
+        kicker: 'Talk. A majority taps READY to move on.', beat: 'debrief',
+        state: readyState(),
         who: 'The circle',
         whoSub: 'live · debrief',
         aside: pairBoard(client.links, names, client.lobby, ui.refusals),
@@ -1042,11 +1062,17 @@ export default async function partyHost({ params }) {
       const executed = client.lynchResult?.executed;
       body += talkStage({
         recap, names, lobby: client.lobby, runEnd: ui.runEnd, clock,
-        kicker: executionLine(client.lynchResult, names), beat: 'execution',
+        /*
+         * 🚫 **ONE FACT, ONCE.** `kicker` and `verdict` were the SAME `executionLine` string,
+         * and the nameplate under them said the name a third time. Now: the plate names the
+         * hand, the nameplate names who is out, and the kicker says what happens next — three
+         * elements, three different facts. `party-warm` W37c is the lock.
+         */
+        kicker: 'Casting is next.', beat: 'execution',
         who: executed ? joinedName(names, executed, 'A player') : 'Nobody',
-        whoSub: executed ? 'nameplate down' : 'no eviction',
+        whoSub: executed ? 'out' : 'no eviction',
         whoId: executed,
-        verdict: executionLine(client.lynchResult, names),
+        verdict: executionSwing(client.lynchResult, names),
         executed: !!executed,
         tally: client.lynchResult ? { votes: client.lynchVotes, result: client.lynchResult } : null,
       });
@@ -1469,7 +1495,7 @@ function castOverlay(votes, names, tiebreaks) {
 
 function talkStage({
   recap, names, lobby, runEnd, clock, kicker, beat,
-  who, whoSub, whoId, standing, tally, verdict, executed, aside, facts,
+  who, whoSub, whoId, standing, tally, verdict, executed, aside, facts, state,
 }) {
   const look = whoId ? seatLook(lobby, whoId) : null;
   const face = look ? robotFaceSvg(look.shell, look.accent, { size: 64, treatment: 'chip' }) : '';
@@ -1480,8 +1506,32 @@ function talkStage({
    */
   const seatNo = whoId ? (lobby?.seats || []).find((s) => s.playerId === whoId)?.seat : null;
   const sub = whoSub || `live · ${beat || 'debrief'}`;
-  const plate = who
+  /*
+   * 🚫 **A NAMEPLATE WITH NO PERSON IS NOT DRAWN.**
+   *
+   * `who` falls back to a WORD when nobody is resolved yet — `'The circle'` at Recap and
+   * Debrief, `'Reckoning'` before the first nomination, `'The ballot'` before the Vote opens —
+   * and that word was then set at 56px as the biggest thing on the television. A lower third
+   * exists to answer "who is this"; answering it with the name of the beat, which the rundown
+   * rail is already printing twice, is furniture where the room needed the state.
+   *
+   * `whoId` is the test rather than `who`, because `whoId` is only ever a real player id: the
+   * plate now appears the instant there IS somebody to name (a runner resolves, a nomination
+   * lands, an eviction is read out) and stays away the rest of the time. Nothing that named a
+   * real person before stops naming them.
+   */
+  const plate = who && whoId
     ? nameplateHtml({ name: who, sub: seatNo == null ? sub : `${sub} · seat ${seatNo + 1}`, face })
+    : '';
+  /*
+   * 📊 The count, at broadcast size — see `readyState`. Sits where the plate would, so a beat
+   * with nobody to name still has something in the band, and it is the thing that moves.
+   */
+  const stateBoard = state
+    ? `<div class="beat-state${state.done ? ' done' : ''}">
+        <div class="beat-n">${esc(String(state.n))}</div>
+        <div class="beat-of">${esc(state.of)}</div>
+      </div>`
     : '';
   const spectacle = verdict
     ? verdictPlateHtml({
@@ -1508,7 +1558,7 @@ function talkStage({
       <div class="talk-chrome-bot">
         ${spectacle}
         ${facts || ''}
-        ${plate}
+        <div class="talk-band">${stateBoard}${plate}</div>
         <p class="talk-kicker">${esc(kicker || 'Talk.')}</p>
       </div>
     </div>`;
@@ -1533,9 +1583,18 @@ function recapMini(recap, names, runEnd) {
 }
 
 /*
- * ⚠️ THE EMPTY STATE HAS TO KNOW WHICH BEAT IT IS ON. It read "Waiting on phones — nominate."
- * on the VOTE beat as well, where nominating is over and the instruction is impossible. A play
- * critic photographed a Vote screen telling the room to do something it could no longer do.
+ * ⚠️ THIS BOARD HAS NO EMPTY STATE ANY MORE, AND THAT RETIRED A BUG RATHER THAN HIDING IT.
+ *
+ * It used to print the Reckoning's instruction whenever it had no rows — including on the VOTE
+ * beat, where nominating is over and the instruction is impossible; a play critic photographed a
+ * Vote screen telling the room to do something it could no longer do. That was first fixed by
+ * gating the copy on `beat`.
+ *
+ * The copy is now gone outright: an empty board still reserved `.talk-side`, a fifth of the
+ * television, to say one grey sentence the kicker under the picture was already saying. It
+ * returns '' with no rows, the ballroom takes the width back, and a board that draws nothing
+ * when empty cannot mis-instruct on any beat. `beat` stays — it still selects the row styling,
+ * and the Vote and Execution still pass it. Gates: `link-merge` L94, `party-warm` W37b.
  */
 function nomBoard(standing, names, lobby, beat) {
   if (!standing) return '';
@@ -1553,8 +1612,22 @@ function nomBoard(standing, names, lobby, beat) {
       ${seatChip(lobby, n.target)}
     </div>`;
   }).join('');
-  const empty = beat === 'reckoning' ? 'Waiting on phones — nominate.' : 'Nobody was named.';
-  return `<div class="nom-board">${rows || `<p class="hint">${empty}</p>`}</div>`;
+  /*
+   * 🚫 **AN EMPTY BOARD IS NOT A BOARD — IT IS A COLUMN THE PICTURE COULD HAVE HAD.**
+   *
+   * `talkStage` reserves `.talk-side` (300px, ~19% of the television) whenever `side` is a
+   * non-empty string, and this used to return a `<div>` wrapping one grey sentence — so for the
+   * first half of every Reckoning the room looked at a picture cropped by a fifth to make room
+   * for one grey sentence asking the phones to nominate. Photographed at
+   * `progress/talk/tv-reckoning.png`.
+   *
+   * That sentence was a duplicate as well as a cost: the kicker under the picture already says
+   * `Nominate. First tap stands.` Returning '' collapses the column, the ballroom takes the
+   * width back, and the board appears the moment the first nomination gives it something to
+   * draw. `party-warm` W37b is the lock.
+   */
+  if (!rows) return '';
+  return `<div class="nom-board">${rows}</div>`;
 }
 
 /* =============================================================================================
@@ -1600,11 +1673,16 @@ function pairBoard(links, names, lobby, refusals) {
     </div>`).join('');
 
   const body = pairs + waiting + said;
+  // 🚫 Same rule as `nomBoard`: an empty Connections board cost the Debrief a fifth of the
+  // television for the first half of the beat, to say that nobody had reached out — which is
+  // exactly what an empty column already says. It draws when there is a connection to draw.
+  // `party-warm` W37b.
+  if (!body) return '';
   const full = (L.pairs || []).length >= MAX_PAIRS
     ? '<p class="hint">Two conversations · the room is full</p>' : '';
   return `<div class="nom-board pair-board">
     <div class="pair-board-k">Connections</div>
-    ${body || '<p class="hint">Nobody has reached out yet.</p>'}
+    ${body}
     ${full}
   </div>`;
 }
@@ -1635,6 +1713,30 @@ function executionLine(result, names) {
     ? 'the Showrunner'
     : joinedName(names, result.executioner, 'the nominator');
   return `${who} is out. ${swing} swings.`;
+}
+
+/**
+ * 🔪 **THE HAND, WITHOUT THE NAME — because the nameplate beside it is already the name.**
+ *
+ * `executionLine` says both facts in one sentence, and the Execution beat was printing that one
+ * sentence THREE TIMES: as the verdict plate's line, as the nameplate's context, and again as
+ * the 12px kicker, with `NO EVICTION` appearing twice on top of that. Photographed at
+ * `progress/talk/tv-execution.png` — three elements, one fact, three type sizes, and none of
+ * them saying the thing the room came for.
+ *
+ * The room came for two facts and they are now one each: the NAMEPLATE names who is out (with
+ * their seat and their face, so a table with two Sams can tell which), and this line names the
+ * hand. `executionLine` is untouched — the phone and the log still want the whole sentence.
+ */
+function executionSwing(result, names) {
+  if (!result) return '';
+  if (!result.executed) return 'Nobody reached the threshold.';
+  const swing = result.executioner === SHOWRUNNER
+    ? 'The Showrunner'
+    : joinedName(names, result.executioner, 'The nominator');
+  return result.executioner === SHOWRUNNER
+    ? 'The Showrunner swings.'
+    : `${swing} swings — they named them, so their vote was already cast.`;
 }
 
 /* =============================================================================================

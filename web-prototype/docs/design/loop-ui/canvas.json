@@ -4,12 +4,20 @@
     { "id": "phone", "name": "Phone" }
   ],
   "artboards": [
-    { "file": "Main.dc.html",        "page": "tv",    "x": 0,    "y": 0,    "w": 1600, "h": 900, "title": "Recap — the show says something" },
-    { "file": "Vote.dc.html",        "page": "tv",    "x": 1700, "y": 0,    "w": 1600, "h": 900, "title": "Vote — ballot progress" },
-    { "file": "Casting.dc.html",     "page": "tv",    "x": 0,    "y": 1000, "w": 1600, "h": 900, "title": "Casting — the blank 20 seconds" },
-    { "file": "Tags.dc.html",        "page": "tv",    "x": 1700, "y": 1000, "w": 1600, "h": 900, "title": "Name tags — near-field clamp" },
-    { "file": "PhoneReckon.dc.html", "page": "phone", "x": 0,    "y": 0,    "w": 390,  "h": 844, "title": "Phone — Reckoning, 8 players" },
-    { "file": "PhoneVote.dc.html",   "page": "phone", "x": 490,  "y": 0,    "w": 390,  "h": 844, "title": "Phone — Vote + receipt" }
+    { "file": "Main.dc.html",         "page": "tv",    "x": 0,    "y": 0,    "w": 1600, "h": 900, "title": "Recap — the show says something" },
+    { "file": "Vote.dc.html",         "page": "tv",    "x": 1700, "y": 0,    "w": 1600, "h": 900, "title": "Vote — ballot progress" },
+    { "file": "Casting.dc.html",      "page": "tv",    "x": 0,    "y": 1020, "w": 1600, "h": 900, "title": "Casting — the blank 20 seconds" },
+    { "file": "Tags.dc.html",         "page": "tv",    "x": 1700, "y": 1020, "w": 1600, "h": 900, "title": "Name tags — near-field clamp" },
+    { "file": "Debrief.dc.html",      "page": "tv",    "x": 0,    "y": 2040, "w": 1600, "h": 900, "title": "Debrief — F1/F2/F3, the count is the band" },
+    { "file": "Execution.dc.html",    "page": "tv",    "x": 1700, "y": 2040, "w": 1600, "h": 900, "title": "Execution — F4, one fact once" },
+    { "file": "CastingCards.dc.html", "page": "tv",    "x": 0,    "y": 3060, "w": 1600, "h": 900, "title": "Casting cards — F5, the whole screen" },
+    { "file": "Expedition.dc.html",   "page": "tv",    "x": 1700, "y": 3060, "w": 1600, "h": 900, "title": "Expedition — F6, a ribbon you can read" },
+    { "file": "PhoneReckon.dc.html",  "page": "phone", "x": 0,    "y": 0,    "w": 390,  "h": 844, "title": "Phone — Reckoning, 8 players" },
+    { "file": "PhoneVote.dc.html",    "page": "phone", "x": 490,  "y": 0,    "w": 390,  "h": 844, "title": "Phone — Vote + receipt" },
+    { "file": "PhoneLink.dc.html",    "page": "phone", "x": 980,  "y": 0,    "w": 390,  "h": 844, "title": "Phone — F14, the link list carries the seat" }
+  ],
+  "annotations": [
+    { "id": "round2-brief", "page": "tv", "x": 0, "y": 1960, "w": 620, "text": "Round 2 — from docs/design/loop-ui-critique.md\n\nThe thesis: the furniture is big and the live state is small. On four of eight beats the sentence that says what ENDS the beat is 12px grey at the bottom edge, while a nameplate naming nobody is 36px.\n\nThese four TV boards are the same fix four times: the band under the picture carries the count, not a name." }
   ],
   "launch": { "view": "canvas", "page": "tv" }
 }

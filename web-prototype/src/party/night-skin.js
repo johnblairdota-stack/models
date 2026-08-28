@@ -135,9 +135,13 @@ export function injectNightSkin() {
     .pair-actions { display:flex; gap:8px; margin-top:8px; }
     .pair-actions .btn { flex:1; padding:12px 10px; }
     .picks { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
-    .picks button { flex:1 1 40%; padding:12px 10px; border-radius:6px; font:inherit;
+    /* Flex + gap so the seat chip sits beside the name rather than running into it — the same
+       anatomy '.pick-list button' already uses for the nominate and vote lists. */
+    .picks button { flex:1 1 40%; display:flex; align-items:center; justify-content:center;
+      gap:9px; min-height:52px; padding:12px 10px; border-radius:6px; font:inherit;
       font-weight:700; letter-spacing:.06em; text-transform:uppercase; cursor:pointer;
       background:transparent; color:#e8dcc8; border:1px solid rgba(232,220,200,.28); }
+    .picks button .seat-chip { text-transform:none; letter-spacing:0; }
     .picks button:disabled { opacity:.35; cursor:not-allowed; }
     /* Fixed height and its own scroll: the log must never push the text field off a phone. */
     .whispers { max-height:34vh; min-height:64px; overflow-y:auto; margin:8px 0;
@@ -385,8 +389,24 @@ export function injectNightSkin() {
     ${SHOW_CHROME_CSS}
     .phone .talk-clock, .phone-clock { font-size:clamp(36px, 14vw, 64px); align-self:flex-start;
       text-shadow:none; margin:8px 0 12px; }
-    .talk-kicker { margin:4px 0 0; text-align:left; color:var(--night-dim); font-size:12px;
-      letter-spacing:.12em; text-transform:uppercase; }
+    /* 🔠 THE KICKER IS THE RULE OF THE BEAT, SO IT IS SET TO BE READ FROM A SOFA.
+       It was 12px uppercase letterspaced grey at the bottom edge of a 1080p screen — and on four
+       of the eight beats it carries the only sentence that says what ENDS the beat, which made
+       it the smallest ink on the television. Sentence case, in the secondary ink rather than the
+       dim one: still subordinate to the count beside it, still one line, now legible at three
+       metres. No backticks in this comment. */
+    .talk-kicker { margin:6px 0 0; text-align:left; color:var(--night-soft);
+      font-size:clamp(15px, 1.35vw, 20px); letter-spacing:.01em; line-height:1.25; }
+    /* The band under the picture: the count where the plate would be, the plate beside it when
+       there is somebody to name. On most beats exactly one of the two is present. */
+    .talk-band { display:flex; align-items:flex-end; gap:22px; }
+    .beat-state { display:flex; align-items:baseline; gap:10px; padding:2px 18px 2px 8px; }
+    .beat-n { font-size:clamp(38px, 4.6vw, 68px); font-weight:800; line-height:.92;
+      color:var(--night-accent); font-variant-numeric:tabular-nums;
+      text-shadow:0 3px 18px rgba(0,0,0,.95); }
+    .beat-state.done .beat-n { color:var(--night-live); }
+    .beat-of { font-size:clamp(14px, 1.5vw, 22px); font-weight:800; color:var(--night-dim);
+      text-shadow:0 2px 12px rgba(0,0,0,.9); }
     .nom-board { margin-top:0; display:flex; flex-direction:column; gap:6px; max-width:none; }
     .nom-row { display:grid; grid-template-columns:auto 1fr auto; gap:10px; align-items:center;
       padding:8px 10px; border-radius:6px; background:rgba(18,14,10,.82);

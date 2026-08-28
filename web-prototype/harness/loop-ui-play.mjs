@@ -166,10 +166,16 @@ try {
   await shot(tv, '01-tv-casting-cards');
   const lamps = await count(tv, '.cast-lamp');
   const castTxt = await text(tv);
+  /*
+   * ⚠️ **THE `n of m` FOOT IS GONE — the lamps are the count.** John cut the counter off the
+   * casting screen; a lamp lights when that player's ballot lands, which says the same thing
+   * per-player and without a number restating it. The bake bar is still the foot while the
+   * mansion compiles, and that is the branch this claim keeps: it is the only foot left.
+   */
   claim('S11 · the casting TV draws the room instead of an empty ballroom',
     lamps === PHONES && /Read your card/i.test(castTxt)
-      && (/of 8 have sent a ballot/i.test(castTxt) || /mansion|rooms|warming/i.test(castTxt)),
-    `${lamps} lamps · foot: ${(castTxt.match(/(of 8 have sent a ballot|[a-z ]*mansion[a-z ·%\d]*|dressing the rooms[ ·%\d]*)/i) || ['?'])[0].trim()}`);
+      && /mansion|rooms|warming/i.test(castTxt),
+    `${lamps} lamps · foot: ${(castTxt.match(/([a-z ]*mansion[a-z ·%\d]*|dressing the rooms[ ·%\d]*)/i) || ['?'])[0].trim()}`);
   claim('D8 · never two clocks on the casting screen', (await clocks()) <= 1, `${await clocks()} clock elements`);
 
   // Casting is PLAYED — the circle is seated here or every later shot is of an empty room.
