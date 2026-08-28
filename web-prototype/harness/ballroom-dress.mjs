@@ -628,5 +628,81 @@ const orderSrc = await read('src/world/ballroom-order.js');
     'at the centre line it would be half-buried in the wall');
 }
 
+/* =============================================================================================
+ * D6 · THE COLOUR ERRORS — MEASURED, AND NEITHER ONE IS WHAT IT LOOKS LIKE
+ * =============================================================================================
+ * Handoff D6 reports two things, both marked *"Suspected, not diagnosed."* Both were diagnosed
+ * by measuring the delivered frame, and neither survives it.
+ *
+ * ---------------------------------------------------------------------------------------------
+ * (a) *"Green/teal cast on the ceiling beams: the left beam reads olive, the right teal."*
+ * ---------------------------------------------------------------------------------------------
+ * 🚨 **THERE IS NO TEAL IN THE FRAME.** Sampled off the `up` station, every gilt patch is orange
+ * to yellow — teal would need blue above red and nothing comes close:
+ *
+ *     patch                       r     g     b     hue     sat
+ *     left beam, lower          162.6 108.6  41.9   33deg   74%
+ *     right beam, lower          26.0  10.3   2.2   20deg   91%
+ *     left beam, upper           37.3  28.9  11.2   41deg   70%
+ *     right beam, upper         140.6 136.3 103.6   53deg   26%   <- the one that reads olive
+ *     ceiling pan (reference)    93.0  67.2  47.0   26deg   50%
+ *
+ * The beam that reads olive measures a pale KHAKI, and it reads green because it sits against a
+ * strongly orange pan — simultaneous contrast, not a green pixel. It is desaturated because a
+ * warm additive ceiling wash blooms over it and pushes all three channels toward white; the same
+ * material two metres away is 74-91% saturated gold. So it is neither "a coloured practical
+ * bleeding" nor "a wrong key": one material, one mesh, different amounts of bloom on it.
+ *
+ * ⚠️ **AND THE LEVER IS A SOLVED PROBLEM, SO IT IS NOT TOUCHED HERE.** The only thing that would
+ * change it is the ceiling wash strength, and `beams-1` established that a patch needs
+ * `strength >= 0.24` merely to clear the grade's hard black point, shipping the one that works
+ * at 0.85. Trading a lit ceiling for a more saturated beam is a design decision, not a fix.
+ *
+ * ---------------------------------------------------------------------------------------------
+ * (b) *"Two different window treatments on one wall ... looks like a material misassignment on
+ * one bay."*
+ * ---------------------------------------------------------------------------------------------
+ * 🚨 **A PER-BAY MISASSIGNMENT IS STRUCTURALLY IMPOSSIBLE HERE.** Every bay is emitted by ONE
+ * `windowBay` call inside ONE loop over `winZ`, with ONE key set. Masked live at the `corner`
+ * station, both bays are covered by the same meshes and the room contains exactly one of each.
+ *
+ * What the report describes is BOTH treatments, present on BOTH bays, in different proportions:
+ * `lead: 'gilt'` is the thin gold glazing bar and `reveal/trim/stone: 'wintrim'` is the pale
+ * grey stone reveal, and which dominates depends on the angle. The centre bay additionally has
+ * the curtain across it (5819 px of `kit:drape` against 0 on the left) and 45% more of the
+ * additive window wash (26679 px against 18185).
+ * ============================================================================================= */
+{
+  const kit = await read('src/world/kit.js');
+
+  const wb = (orderSrc.match(/windowBay\(B, \{/g) || []).length;
+  t('B35 · the ballroom emits its window bays from exactly ONE call', wb === 1, `${wb} call(s)`);
+  t('B36 · ...inside one loop over winZ, so every bay gets the same keys',
+    /for \(const wz of winZ\)[\s\S]{0,900}?windowBay\(B, \{/.test(orderSrc));
+  t('B37 · and that key set names BOTH treatments the report calls two',
+    /keys: \{ reveal: 'wintrim', trim: 'wintrim', stone: 'wintrim', glass: 'glass', lead: 'gilt' \}/.test(orderSrc),
+    "lead -> gilt is the gold bar, wintrim -> stone is the pale grey reveal");
+
+  /*
+   * One key is one bucket is one mesh — that is `GeoBin.build`'s whole shape, and it is what
+   * makes a per-bay misassignment impossible rather than merely absent today.
+   */
+  t('B38 · GeoBin still builds exactly one mesh per key',
+    /for \(const \[key, arr\] of this\.bins\) \{[\s\S]{0,700}?const mesh = new THREE\.Mesh\(merged, mat\);/.test(kit),
+    'so "the same key" and "the same mesh" cannot come apart');
+  t('B39 · the ballroom routes the glazing to one bucket and the bars to another',
+    /glass: 'clere'/.test(roomSrc) && /wintrim: 'skirt'/.test(roomSrc) && /gilt: 'gilt'/.test(roomSrc),
+    'glass -> clere · lead -> gilt · reveal/trim/stone -> skirt');
+
+  /* --- CONTROLS ------------------------------------------------------------------------- */
+  t('B36c · CONTROL the room really does have several window bays, so "one call" means several',
+    /window: Math\.max\(2, Math\.round\(sp\.d \/ 1\.95\)\)/.test(roomSrc),
+    'one call, one key set, many bays');
+  t('B39c · CONTROL the remap table is real — it moves keys rather than passing them through',
+    /marbleTop: 'floormarble', marbleFloor: 'floormarble'/.test(roomSrc)
+    && /stone: 'skirt', wintrim: 'skirt'/.test(roomSrc),
+    'if it were identity, B39 would pass vacuously');
+}
+
 console.log(`\n  ${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
