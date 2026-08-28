@@ -26,6 +26,7 @@ import {
   nextPerspective, perspectiveEye, rigMapness, runPerspective, cleanCampose,
   cleanThrottle, followParams, followUrl, followViolations, isFollowBeat,
   CHASE_LATERAL, PLAN_YAW, isPlanLocked, lerpRig, lookYaw, smootherstep,
+  VIEW_MARGIN, BALLROOM_PERSPECTIVE, EXPEDITION_PERSPECTIVE, insideBallroom, stepBallroomView,
   chaseOrbitOffset as chaseOrbitOffsetLike,
 } from '../src/party/follow.js';
 import { readFile } from 'node:fs/promises';
@@ -538,6 +539,65 @@ console.log('\nparty-follow — the TV follow slot');
     t('F11g2 · and they solve to the same eye offset at a live yaw and pitch',
       Math.abs(a.x - b.x) < 1e-12 && Math.abs(a.y - b.y) < 1e-12 && Math.abs(a.z - b.z) < 1e-12,
       `(${a.x.toFixed(4)}, ${a.y.toFixed(4)}, ${a.z.toFixed(4)})`);
+  }
+
+  /* =============================================================================================
+   * 🚪 **F11i · THE THRESHOLD, DRIVEN — the expedition picks its own camera.**
+   *
+   * John: *"each expedition takes place outside the ball room where the hunter stalks them from
+   * the shadows. It's top down perspective… the ballroom remains how it is currently."* The
+   * switch is therefore the ballroom AABB, and the only interesting thing about it is the
+   * DOORWAY: a bare in/out test flips every time a body jitters across the line, and a 1.35 s
+   * crane restarting twice a second is worse than never craning. So this drives the real
+   * function across the boundary rather than grepping for it.
+   * ============================================================================================= */
+  {
+    const BR = { x0: -13, x1: 13, z0: -8, z1: 8 };
+    const at = (x, z) => ({ x, z });
+    t('F11i · deep inside the ballroom is the chase camera; deep outside is top-down',
+      stepBallroomView('top', at(0, 0), BR) === BALLROOM_PERSPECTIVE
+        && stepBallroomView('chase', at(0, 40), BR) === EXPEDITION_PERSPECTIVE);
+    t('F11i2 · the threshold is the mission\'s own ballroom test, so one predicate serves both',
+      insideBallroom(at(0, 0), BR) === true && insideBallroom(at(0, 40), BR) === false);
+
+    /*
+     * The doorway walk. Step across the boundary a millimetre at a time and count how many times
+     * the camera changes its mind: a correct hysteresis changes it ONCE.
+     */
+    let flips = 0, view = BALLROOM_PERSPECTIVE;
+    for (let z = 8 - VIEW_MARGIN - 0.4; z <= 8 + VIEW_MARGIN + 0.4; z += 0.001) {
+      const next = stepBallroomView(view, at(0, z), BR);
+      if (next !== view) flips++;
+      view = next;
+    }
+    t('F11i3 · walking out through the doorway flips the camera exactly once',
+      flips === 1 && view === EXPEDITION_PERSPECTIVE, `${flips} flip(s)`);
+
+    /*
+     * 🚨 THE CONTROL ARM, and it is the one that matters. Hover ON the line and jitter. Without
+     * hysteresis this is a camera changing its mind on every frame; with it, nothing happens.
+     */
+    let jitters = 0;
+    view = EXPEDITION_PERSPECTIVE;
+    for (let i = 0; i < 400; i++) {
+      const z = 8 + Math.sin(i * 1.7) * (VIEW_MARGIN * 0.9);   // never clears either margin
+      const next = stepBallroomView(view, at(0, z), BR);
+      if (next !== view) jitters++;
+      view = next;
+    }
+    t('F11i4 control · and a body jittering ON the line never flips it at all',
+      jitters === 0 && view === EXPEDITION_PERSPECTIVE, `${jitters} flip(s) in 400 samples`);
+    /*
+     * ⚠️ This assertion was written the wrong way round first and the gate caught it, which is
+     * the whole reason it drives the function instead of describing it. The margin is SYMMETRIC:
+     * a hair past the wall is not a crossing in EITHER direction. You must be a full 1.10 m out
+     * before the camera lifts, and a full 1.10 m back in before it comes down — which is what
+     * makes the dead band 2.20 m wide and why a doorway cannot strobe it.
+     */
+    t('F11i5 control · a hair past the wall is not a crossing, in either direction',
+      stepBallroomView('chase', at(0, 8 + VIEW_MARGIN * 0.5), BR) === BALLROOM_PERSPECTIVE
+        && stepBallroomView('top', at(0, 8 - VIEW_MARGIN * 0.5), BR) === EXPEDITION_PERSPECTIVE,
+      `dead band ${(VIEW_MARGIN * 2).toFixed(2)}m wide at the wall`);
   }
 
   t('F11e · a live run holds the chosen perspective, and a typed ?shot= still wins',

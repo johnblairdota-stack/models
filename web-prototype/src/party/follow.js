@@ -175,6 +175,51 @@ export const isPlanLocked = (name) =>
 export const RISE_SECONDS = 1.35;
 export const DROP_SECONDS = 1.10;
 
+/* =============================================================================================
+ * 🚪 **THE EXPEDITION CHOOSES ITS OWN CAMERA — the ballroom threshold is the switch.**
+ *
+ * John: *"each expedition takes place outside the ball room where the hunter stalks them from
+ * the shadows. It's top down perspective… the ballroom remains how it is currently with the
+ * players locked in the seat or the chase camera when you are exiting into the house. That
+ * means there is an exact transition phase for the camera."*
+ *
+ * So the perspective stops being a thing a developer presses and becomes a property of WHERE THE
+ * RUNNER IS. The predicate is the ballroom AABB the mission phase already uses for `done` — the
+ * same one, extracted, because a second copy of a room test is a thing that drifts.
+ *
+ * ⚠️ **HYSTERESIS, OR THE CAMERA STROBES IN THE DOORWAY.** A bare in/out test flips every time a
+ * body jitters across the line, and a 1.35 s crane restarting twice a second is worse than no
+ * crane at all. Leaving needs the runner outside the box GROWN by `VIEW_MARGIN`; returning needs
+ * them inside it SHRUNK by the same. One signed margin does both, so the two halves cannot be
+ * given different values by accident.
+ * ============================================================================================= */
+export const VIEW_MARGIN = 1.10;
+export const EXPEDITION_PERSPECTIVE = 'top';
+export const BALLROOM_PERSPECTIVE = 'chase';
+
+/**
+ * Is this point inside the ballroom rectangle? A POSITIVE margin shrinks the box (you must be
+ * well in), a NEGATIVE one grows it (you must be well out). Y is ignored, as it is everywhere
+ * else this house tests rooms.
+ */
+export function insideBallroom(pos, room, margin = 0) {
+  if (!pos || !room) return false;
+  return pos.x > room.x0 + margin && pos.x < room.x1 - margin
+    && pos.z > room.z0 + margin && pos.z < room.z1 - margin;
+}
+
+/**
+ * Which perspective the night wants, given where the body is. Pure, and deliberately ignorant of
+ * cranes and pins: it answers only "ballroom or house", and the bed decides what that costs.
+ */
+export function stepBallroomView(current, pos, room, margin = VIEW_MARGIN) {
+  if (!room) return current;
+  if (current === EXPEDITION_PERSPECTIVE) {
+    return insideBallroom(pos, room, margin) ? BALLROOM_PERSPECTIVE : current;
+  }
+  return insideBallroom(pos, room, -margin) ? current : EXPEDITION_PERSPECTIVE;
+}
+
 /**
  * Where each perspective puts the eye, as an offset from the runner, and how it frames them.
  *

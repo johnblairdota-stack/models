@@ -8,8 +8,9 @@ import { CONTACT_PHASE, SWING_DUR } from './sledge.js';
 import {
   CAM_LIFT, CAM_MIN_DIST, CAM_SWING, CHASE_EYE_Y_MAX, CHASE_HEIGHT, CHASE_LOOK_Y,
   CUT_SHOTS, DROP_SECONDS, PERSPECTIVES, PERSPECTIVE_RIG, PLAN_YAW, RISE_SECONDS, SHOT_NAMES,
-  chaseOrbitOffset, isOverhead, isPlanLocked, lerpRig, liveRunShot, lookYaw,
-  perspectiveEye, rigMapness, runPerspective, smootherstep, stepLookOrbit, stickCamMove, stickMag,
+  BALLROOM_PERSPECTIVE, chaseOrbitOffset, isOverhead, isPlanLocked, lerpRig, liveRunShot, lookYaw,
+  perspectiveEye, rigMapness, runPerspective, smootherstep, stepBallroomView, stepLookOrbit,
+  stickCamMove, stickMag,
 } from '../party/follow.js';
 import { bleedCoolPos, bleedKeyAngle, facingPortal } from '../lighting/door-bleed.js';
 import { HOME_ROOM, MISSION_ROOM, PLAN_OPTS } from '../party/mansion.js';
@@ -1246,8 +1247,20 @@ export async function buildFollowBed(engine, opts = {}) {
      * Once a phone drives, the schedule never runs again that night.
      */
     driven: false,
-    /** The held perspective: chase / wide / iso / top. A `shot` cue picks it; nothing else does. */
+    /** The held perspective: chase / wide / iso / top. The ballroom threshold picks it; `P` pins. */
     perspective: 'chase',
+    /**
+     * 🚪 What the LOOP last decided, and whether a human has overridden it.
+     *
+     * Two authorities write `perspective` now and they need a rule rather than a race. The
+     * threshold writes it on a crossing; the dev `P` key writes it and raises `pinned`, which
+     * mutes the loop until the runner next crosses the ballroom line — at which point the game
+     * takes its camera back. That keeps `P` usable as the ceiling-art inspection tool
+     * `docs/handoff/ballroom-next.md` documents without letting it strand the show in a
+     * perspective the expedition did not ask for.
+     */
+    loopView: BALLROOM_PERSPECTIVE,
+    pinned: false,
     /** What the rig was last applied for, so a CHANGE is what starts a crane. */
     appliedRig: null,
     /* 🎬 The crane between two rigs. `from` is whatever was on screen when the change landed —
@@ -1739,6 +1752,19 @@ export async function buildFollowBed(engine, opts = {}) {
      * actually looking at. Starting from `PERSPECTIVE_RIG[appliedRig]` would snap the boom back
      * down to a rig nobody has seen for half a second and then re-lift it.
      * ========================================================================================= */
+    /* 🚪 The threshold decides the camera. See `perf.loopView` for who wins when a human has
+     * pressed `P`, and `stepBallroomView` for the hysteresis that stops a doorway strobing it. */
+    if (mode === 'run' && ballroom) {
+      const loopWant = stepBallroomView(perf.loopView, runner.pos, ballroom);
+      if (loopWant !== perf.loopView) {
+        perf.loopView = loopWant;
+        perf.pinned = false;               // a crossing is the loop taking its camera back
+        perf.perspective = loopWant;
+      } else if (!perf.pinned) {
+        perf.perspective = loopWant;
+      }
+    }
+
     const want = runPerspective(mode, opts.pinShot, perf.perspective);
     if (want && want !== perf.appliedRig) {
       perf.craneFrom = perf.liveRig ?? PERSPECTIVE_RIG[perf.appliedRig] ?? PERSPECTIVE_RIG.chase;
@@ -1987,6 +2013,10 @@ export async function buildFollowBed(engine, opts = {}) {
         // Put the runner back on its feet in the ballroom — the pair is sent in from the circle.
         runner.pos.set(start.x, room.floorY ?? 0, start.z);
         runner.vel.set(0, 0, 0);
+        // The pair is sent in from the circle, so the night starts on the ballroom's own camera
+        // and any pin from a previous episode's inspection is dropped with it.
+        perf.loopView = BALLROOM_PERSPECTIVE;
+        perf.pinned = false;
         armMission(c.episode ?? 1);
         return;
       }
@@ -2000,7 +2030,7 @@ export async function buildFollowBed(engine, opts = {}) {
          * (or John, on the dev key) deciding how the game is viewed, and it holds until they
          * change it again. So a perspective is accepted during a run and a director's shot is not.
          */
-        if (PERSPECTIVES.includes(c.shot)) { perf.perspective = c.shot; return; }
+        if (PERSPECTIVES.includes(c.shot)) { perf.perspective = c.shot; perf.pinned = true; return; }
         if (liveRunShot(mode, opts.pinShot) === 'chase') return;
         operator.shot = c.shot;
         operator.until = 5.5;

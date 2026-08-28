@@ -1892,8 +1892,20 @@ console.log('\nparty-warm — the lobby-warm night');
     /liveRunShot\(mode, opts\.pinShot\) === 'chase'\) return/.test(bedSrc)
     && /lockShot: want/.test(bedSrc)
     && /const want = runPerspective\(mode, opts\.pinShot, perf\.perspective\)/.test(bedSrc)
-    && /if \(PERSPECTIVES\.includes\(c\.shot\)\) \{ perf\.perspective = c\.shot; return; \}/.test(bedSrc)
+    && /if \(PERSPECTIVES\.includes\(c\.shot\)\) \{ perf\.perspective = c\.shot; perf\.pinned = true; return; \}/.test(bedSrc)
     && /until = 1e9/.test(bedSrc));
+  /*
+   * 🚪 **AND THE EXPEDITION NOW PICKS ITS OWN CAMERA, WITH `P` AS AN OVERRIDE THAT EXPIRES.**
+   * John: *"each expedition takes place outside the ball room… it's top down perspective."* So
+   * two authorities write `perf.perspective` and they need a rule rather than a race: the
+   * ballroom threshold writes it on a crossing and clears any pin, the dev key writes it and
+   * raises one. That keeps `P` usable for inspecting ceiling art in play (`ballroom-next.md`)
+   * without letting it strand the show in a perspective the expedition never asked for.
+   */
+  t('W26h3 · the ballroom threshold owns the camera, and a crossing takes it back from `P`',
+    /const loopWant = stepBallroomView\(perf\.loopView, runner\.pos, ballroom\);/.test(bedSrc)
+    && /perf\.pinned = false;\s+\/\/ a crossing is the loop taking its camera back/.test(bedSrc)
+    && /\} else if \(!perf\.pinned\) \{/.test(bedSrc));
   t('W26h2 control · and a director shot can still never be held on a run unless it was TYPED',
     ['shoulder', 'lead', 'doorway'].every((s) => runPerspective('run', null, s) === 'chase')
       && runPerspective('run', 'shoulder', null) === 'shoulder',
