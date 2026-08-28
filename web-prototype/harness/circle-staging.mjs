@@ -93,8 +93,14 @@ const CAST = [
 const MEASURE = () => {
   const eng = window.__rrr?.engine;
   if (!eng) return { error: 'no engine' };
-  const THREE = window.__rrr.THREE;
   const cam = eng.camera;
+  /*
+   * ⚠️ **THERE IS NO `THREE` ON THE PAGE HANDLE** — `engine.js` exposes engine/settle/ready and
+   * a few methods, and nothing else. Rather than importing the module (a second copy of THREE
+   * in the page is its own class of bug), take a real `Vector3` off an object that already has
+   * one and clone it: every Object3D's `.position` is one, with every method this needs.
+   */
+  const V = () => cam.position.clone();
   const canvas = eng.renderer.domElement;
   const CW = canvas.clientWidth || canvas.width;
   const CH = canvas.clientHeight || canvas.height;
@@ -104,8 +110,8 @@ const MEASURE = () => {
   if (!tags.length) return { tagCount: 0 };
 
   cam.updateMatrixWorld(true);
-  const v = new THREE.Vector3();
-  const s = new THREE.Vector3();
+  const v = V();
+  const s = V();
   const out = [];
   for (const g of tags) {
     g.updateWorldMatrix(true, false);
@@ -117,8 +123,8 @@ const MEASURE = () => {
     // space — a sprite always faces the camera, so its screen extent is its world extent
     // measured on the camera's right/up axes.
     const p = v.clone().project(cam);
-    const right = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 0).multiplyScalar(s.x * 0.5);
-    const up = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 1).multiplyScalar(s.y * 0.5);
+    const right = V().setFromMatrixColumn(cam.matrixWorld, 0).multiplyScalar(s.x * 0.5);
+    const up = V().setFromMatrixColumn(cam.matrixWorld, 1).multiplyScalar(s.y * 0.5);
     const pr = v.clone().add(right).project(cam);
     const pu = v.clone().add(up).project(cam);
     const cx = (p.x * 0.5 + 0.5) * CW;
