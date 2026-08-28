@@ -1045,6 +1045,13 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
           r.body.root.visible = true;
           parkSit(r);
         }
+        /*
+         * ⚠️ `parkSit` above puts EVERY chair back on the seated idle, and Reckoning -> Vote is
+         * a beat change with the same nominations still standing — so without this the accuser
+         * silently sat back down halfway through their own accusation. Only the HELD poses come
+         * back (never the one-shots), so the circle does not re-gasp on every beat.
+         */
+        stage.reapply();
       }
     },
 
@@ -1068,6 +1075,9 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
         r.body.root.visible = true;
         parkSit(r);
       }
+      // Same reason as `setTalk`: this sweep re-idles the circle, and a live accusation has to
+      // survive it. Nominations are normally empty by here, in which case this does nothing.
+      stage.reapply();
     },
 
     /**
@@ -1132,6 +1142,19 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
 
     /** Harness hook: how many streams are flying, and how lit they are. */
     streamReport: () => stream.report(),
+
+    /**
+     * Harness hook: what the accusation stage believes. `keys` is the live nominations, `pending`
+     * the un-fired beats, `performing` the chairs currently holding a pose, `skinned` the plates
+     * wearing the accused ink. A drive probe reads this to prove the circle is performing rather
+     * than merely flagged — and that nothing is still performing once the list empties.
+     */
+    accusationReport: () => ({
+      keys: stage.keys(),
+      pending: stage.pending(),
+      performing: stage.performing(),
+      skinned: [...nominatedIds],
+    }),
 
     /** Harness snapshot — logical sit flags, pelvis, clip names. */
     sitReport() {

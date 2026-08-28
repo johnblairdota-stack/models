@@ -1556,6 +1556,13 @@ export function cloneMeshAvatar(source, opts = {}) {
       return walk.getEffectiveWeight() > 0.5 ? 'walk' : 'idle';
     },
     get seated() { return pose === 'sit'; },
+    /**
+     * The performance on top of the seat, or null. Deliberately NOT folded into `clip`:
+     * `assertSeatedPose` reads that to ask whether the seat's resting pose is a sanctioned sit
+     * clip, and a capture taken mid-reaction would fail that check for the right pose for the
+     * wrong reason. The two questions stay separate.
+     */
+    get seatedAction() { return reactName; },
     get swing() { return null; },
     get propMounted() { return false; },
     mountProp() { return false; },
@@ -1661,11 +1668,38 @@ export function cloneMeshAvatar(source, opts = {}) {
             if (next <= 0.02) sitClipName = sitIdle.getClip().name;
           }
         }
+        if (react) {
+          const dur = Math.max(0.05, react.getClip().duration);
+          // A once-through clip is done when the mixer clamps it (paused, at the last frame).
+          // `hold` never ends on its own: it is released by the next playSeated / playSit.
+          if (!reactHold && (react.paused || react.time >= dur - 0.02)) reactOut = true;
+          const step = dt / reactFade;
+          reactAmt = reactOut ? Math.max(0, reactAmt - step) : Math.min(1, reactAmt + step);
+          react.setEffectiveWeight(reactAmt);
+          sitIdle.setEffectiveWeight(1 - reactAmt);
+          if (reactOut && reactAmt <= 0) {
+            clearReaction();
+            sitIdle.setEffectiveWeight(1);
+          }
+        }
         mixer.update(dt);
         // Clip writes a ~0.18 m sideways hips.x. Pin X to bind so both twins sit
         // on the cushion centre; leave Y/Z to Idle_M (the sit drop and hip-back).
-        if (hips && hipsRest) hips.position.x = hipsRest.x;
-        applyLean();
+        if (hips && hipsRest) {
+          hips.position.x = hipsRest.x;
+          /*
+           * The reaction's own hips anchor, corrected onto Idle_M's, scaled by the crossfade.
+           * The mixer writes a weighted blend of the two clips' hips, so a correction weighted
+           * the same way lands the pelvis exactly where the sit attach expects it at BOTH ends
+           * of the fade. A constant, not a per-frame pin: pinning would flatten the lean-back
+           * and the stand-up into a robot vibrating in its chair.
+           */
+          if (reactAnchor && reactAmt > 0) {
+            hips.position.y += reactAnchor.y * reactAmt;
+            hips.position.z += reactAnchor.z * reactAmt;
+          }
+        }
+        applyLean(1 - reactAmt);
         return;
       }
       const speed = state.speed ?? 0;
