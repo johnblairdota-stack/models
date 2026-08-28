@@ -194,7 +194,7 @@ export function injectNightSkin() {
        With a live camera in the frame that split is backwards: the first drive photographed a
        1024x215 letterbox strip with the runner four storeys of type below it. The hero is now a
        strapline under the picture, and the picture takes the height. */
-    .run-stage { display:flex; flex-direction:column; gap:2px; min-height:0; position:relative; }
+    .run-stage { display:flex; flex-direction:column; gap:2px; min-height:0; }
     /* 📺 **THE PICTURE TAKES WHAT IS LEFT OVER — IT DOES NOT TAKE 90% AND LET THE REST FALL OFF.**
        The run beat stacks a 'TV_FRAME_PCT'vh frame plus the hero line plus the facts line plus
        the reaction strip inside a 'night-main' that hides its overflow. Those four do not fit in
@@ -220,33 +220,21 @@ export function injectNightSkin() {
     .run-stage .pair-hero br { display:none; }
     .run-stage .run-facts { text-align:center; color:var(--night-dim); font-size:12px;
       letter-spacing:.16em; text-transform:uppercase; margin-top:2px; }
-    /* 👏 REACTIONS FLOAT UP ONTO THE PICTURE.
-       John, live on DUSK: they last 3-4x longer than the old 2.6s pop, they RISE rather than
-       stick, and a second tap spawns another chip on a slightly offset path. The camera layer
-       is z-index 5 over .run-frame; .on-picture (set by the host when the overlay is
-       registered to that rect) lifts the chips to z-index 6 so they actually ride the shot.
-       Without .on-picture the strip still overlays .run-stage so layout harnesses that
-       never run the host still see chips on the screen rather than under the fold.
-       --react-hold is written from REACT_HOLD_MS so the CSS duration cannot drift from
-       the clock that ages them off. */
-    .react-strip { position:absolute; inset:0; pointer-events:none; overflow:hidden;
-      z-index:4; min-height:0; padding:0; }
-    .react-strip.on-picture { position:fixed; inset:auto; z-index:6; }
-    .react-chip { position:absolute; left:var(--seat-x, 50%); bottom:14%;
-      display:flex; flex-direction:column; align-items:center; gap:3px;
-      transform: translateX(calc(-50% + var(--ox, 0px))) translateY(var(--oy, 0px));
-      animation: react-float-up var(--react-hold, 10s) ease-out forwards;
-      will-change: transform, opacity; }
+    /* 👏 THE REACTION STRIP — the people who are not in the mansion, along the bottom.
+       John, live on DUSK: they last ~4x longer than the old 2.6s pop (REACT_HOLD_MS), they
+       RISE (react-float, 56px) rather than the 8px night-rise pop, and a second tap is a new
+       chip with --dx so stacked taps do not ride the same path. night-rise is UNTOUCHED —
+       seats still use it. */
+    .react-strip { display:flex; justify-content:center; align-items:flex-start; gap:18px;
+      min-height:78px; padding:6px 12px 0; }
+    .react-chip { display:flex; flex-direction:column; align-items:center; gap:3px;
+      --dx:0px; transform: translateX(var(--dx));
+      animation: react-float 1.15s ease-out; }
     .react-chip .react-who { font-size:11px; letter-spacing:.08em; color:var(--night-soft);
-      max-width:96px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-      text-shadow: 0 1px 2px #0c0a08, 0 0 6px #0c0a08; }
-    @keyframes react-float-up {
-      0%   { opacity:0; transform: translateX(calc(-50% + var(--ox, 0px)))
-        translateY(calc(var(--oy, 0px) + 28px)); }
-      8%   { opacity:1; }
-      72%  { opacity:1; }
-      100% { opacity:0; transform: translateX(calc(-50% + var(--ox, 0px)))
-        translateY(calc(var(--oy, 0px) - 240px)); }
+      max-width:96px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    @keyframes react-float {
+      from { opacity:0; transform: translateX(var(--dx)) translateY(56px); }
+      to { opacity:1; transform: translateX(var(--dx)); }
     }
     /* 🏷️ THE BADGE MOVES; THE FACE NEVER DOES.
        John's partner asked for "slightly animated", and slightly is the whole spec — about one
@@ -275,13 +263,8 @@ export function injectNightSkin() {
        destroyed the information, the motion was carrying the information, which would have been
        the wrong design. Gate: 'party-warm' W43b. */
     @media (prefers-reduced-motion: reduce) {
-      .bot-badge, .run-face, .fl-rec, .look-stage.connecting .bot-face {
+      .bot-badge, .run-face, .fl-rec, .react-chip, .look-stage.connecting .bot-face {
         animation: none !important; }
-      .react-chip {
-        animation: none !important;
-        opacity: 1;
-        transform: translateX(calc(-50% + var(--ox, 0px))) translateY(calc(var(--oy, 0px) - 96px));
-      }
     }
     /* 📺 THE 90% FRAME ONLY FITS IF THE CHROME AROUND IT GETS OUT OF THE WAY, AND THAT IS THE
        HALF OF "less chrome" THAT IS EASY TO FORGET. A 90vh picture leaves ten per cent of a

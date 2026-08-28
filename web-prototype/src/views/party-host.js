@@ -19,7 +19,7 @@ import {
   DEFAULT_LOOK, SHOW_LINE, SHOW_TITLE, cleanLook, codeBugHtml, countdownHtml, nameplateHtml,
   paintLook, recBugHtml, robotFaceSvg, rundownRailHtml, titlePlateHtml, verdictPlateHtml,
 } from '../party/look.js';
-import { REACT_HOLD_MS, REACT_MOOD, onAir, spawnOffset } from '../party/react.js';
+import { REACT_MOOD, onAir } from '../party/react.js';
 import { mergePublicNames, publicName } from '../party/cast-ui.js';
 import { cueViolations, nextPerspective, warmLabel, warmPct, warmUrl } from '../party/follow.js';
 import {
@@ -668,7 +668,6 @@ export default async function partyHost({ params }) {
     frame?.classList.toggle('live', follow.live && runMode);
     // The lobby only becomes a scrim once there is a rendered frame to be a scrim over.
     document.body.classList.toggle('rrr-warming', !runMode && follow.live);
-    placeReactOverlay();
   }
 
   function followLoop() {
@@ -1004,74 +1003,47 @@ export default async function partyHost({ params }) {
   /* @audio-cue-builder:end */
 
   /**
-   * 👏 THE REACTION OVERLAY, patched in place over the run picture.
+   * 👏 THE REACTION STRIP, patched in place along the bottom of the run.
    *
-   * `onAir()` decides what is still up — newest first, capped, and EVERY event is its own chip
-   * so a spam tap spawns another rather than replacing. The rebuild is keyed on `{from, at}`
-   * so an unchanged overlay is not re-written four times a second (that would restart every
-   * rise). The camera layer sits at z-index 5 over `.run-frame`; this overlay is placed onto
-   * that same rect at z-index 6 so the faces actually float ON the picture, not under it.
+   * `onAir()` decides what is still up — newest first, capped, every tap its own chip so spam
+   * stacks. Keyed on `{from, at}` so an unchanged strip is not rewritten four times a second
+   * (that would restart every rise) and a second tap from the same seat is a new node, not a
+   * face-swap. `--dx` is a small spawn offset from the timestamp so stacked taps do not ride
+   * the same path. Gate: `react-pad` R8 / `party-warm` W45.
    */
-  function placeReactOverlay() {
-    const mount = root.querySelector('[data-react-strip]');
-    if (!mount) return;
-    const frame = root.querySelector('.run-frame');
-    const on = ui.beat === 'expedition' && !!frame;
-    mount.classList.toggle('on-picture', on);
-    if (!on) return;
-    const r = frame.getBoundingClientRect();
-    mount.style.left = `${r.left}px`;
-    mount.style.top = `${r.top}px`;
-    mount.style.width = `${r.width}px`;
-    mount.style.height = `${r.height}px`;
-  }
-
   function paintReactStrip() {
     const mount = root.querySelector('[data-react-strip]');
     if (!mount) return;
-    placeReactOverlay();
     const live = onAir(client.reacts || [], Date.now());
     const eventKey = (e) => `${e.from}:${e.at}`;
     const key = live.map((e) => `${eventKey(e)}:${e.r}`).join(',');
     if (key === ui.reactKey) return;
     ui.reactKey = key;
-    mount.style.setProperty('--react-hold', `${REACT_HOLD_MS}ms`);
     const names = mergePublicNames(client.lobby, client.links?.pairs);
-    const want = new Set(live.map(eventKey));
+    const seatOf = (id) => (client.lobby?.seats || []).find((s) => s.playerId === id)?.seat ?? 99;
+    /* Newest first; seat is the tie-break so equal timestamps still have a stable order. */
+    const rows = [...live].sort((a, b) => (b.at - a.at) || (seatOf(a.from) - seatOf(b.from)));
+    const want = new Set(rows.map(eventKey));
 
-    /*
-     * 👉 **ADD AND REMOVE ONE CHIP — NEVER REBUILD THE ROW.** Assigning `innerHTML` would
-     * destroy mid-rise chips every time ANY of them changed. Keyed on the EVENT (`from`+`at`),
-     * never the player: a second tap from the same seat is a new node with a spawn offset, not
-     * a face-swap on the chip that is already floating. Gate: `react-pad` R8 / `party-warm` W45.
-     */
     for (const el of [...mount.children]) {
       if (!want.has(el.dataset.rk)) el.remove();
     }
-    const already = new Map();
-    for (const el of mount.children) {
-      const from = el.dataset.rk?.split(':')[0];
-      if (from) already.set(from, (already.get(from) || 0) + 1);
-    }
-    const born = [...live].sort((a, b) => a.at - b.at);
-    for (const e of born) {
+    let prev = null;
+    for (const e of rows) {
       const rk = eventKey(e);
-      if ([...mount.children].some((c) => c.dataset.rk === rk)) continue;
-      const look = seatLook(client.lobby, e.from) || DEFAULT_LOOK;
-      const mood = REACT_MOOD[e.r] || 'idle';
-      const n = already.get(e.from) || 0;
-      already.set(e.from, n + 1);
-      const { ox, oy } = spawnOffset(n);
-      const seat = (client.lobby?.seats || []).find((s) => s.playerId === e.from)?.seat ?? 3;
-      const el = document.createElement('div');
-      el.className = 'react-chip';
-      el.dataset.rk = rk;
-      el.style.setProperty('--ox', `${ox}px`);
-      el.style.setProperty('--oy', `${oy}px`);
-      el.style.setProperty('--seat-x', `${12 + Math.max(0, Math.min(7, seat)) * (76 / 7)}%`);
-      el.innerHTML = `${robotFaceSvg(look.shell, look.accent, { size: 56, mood })}
-        <span class="react-who">${esc(joinedName(names, e.from, 'Someone'))}</span>`;
-      mount.appendChild(el);
+      let el = [...mount.children].find((c) => c.dataset.rk === rk);
+      if (!el) {
+        const look = seatLook(client.lobby, e.from) || DEFAULT_LOOK;
+        const mood = REACT_MOOD[e.r] || 'idle';
+        el = document.createElement('div');
+        el.className = 'react-chip';
+        el.dataset.rk = rk;
+        el.style.setProperty('--dx', `${((e.at % 11) - 5) * 12}px`);
+        el.innerHTML = `${robotFaceSvg(look.shell, look.accent, { size: 56, mood })}
+          <span class="react-who">${esc(joinedName(names, e.from, 'Someone'))}</span>`;
+        if (prev) prev.after(el); else mount.prepend(el);
+      }
+      prev = el;
     }
   }
 
@@ -1782,8 +1754,7 @@ function runStage({ names, lobby, runnerId, guideId, cameras, alarms, followLive
       <div class="run-facts">Cameras ${cams?.unlocked ?? '—'} / ${cams?.needed ?? '—'} · alarms ${alarms ?? 0}</div>
       <!-- 👏 Filled by paintReactStrip on the 250 ms tick, NOT by paint(). A reaction expires by
            wall clock, and repainting the run frame four times a second to age it out would
-           remount the follow camera's canvas mid-chase. Empty mount, patched in place, then
-           lifted onto the run-frame rect so the chips float over the picture. -->
+           remount the follow camera's canvas mid-chase. Empty mount, patched in place. -->
       <div class="react-strip" data-react-strip aria-live="off"></div>
     </div>`;
 }

@@ -28,7 +28,7 @@
 
 import {
   REACTIONS, REACT_BEATS, REACT_COOLDOWN_MS, REACT_HOLD_MS, REACT_MAX_ON_AIR, REACT_MOOD,
-  cleanReaction, isReactBeat, onAir, reactCheck, spawnOffset,
+  cleanReaction, isReactBeat, onAir, reactCheck,
 } from '../src/party/react.js';
 import { fanoutViolations, FANOUT_KEYS } from '../net/party/local.mjs';
 import { robotFaceSvg } from '../src/party/look.js';
@@ -83,10 +83,9 @@ const OK = { reaction: 'CLAP', beat: 'expedition', alive: true, lastAt: null, no
    * John, live on DUSK: emotes are SPAMMABLE. The number is a debounce so one physical tap
    * cannot fire twice, not a budget that ignores the next tap while the first is still on air.
    */
-  t('R6c · the cooldown is a debounce · a second tap while the first is still on air is allowed',
-    REACT_COOLDOWN_MS >= 80 && REACT_COOLDOWN_MS <= 400
-    && REACT_COOLDOWN_MS * 4 < REACT_HOLD_MS
-    && reactCheck({ ...OK, lastAt: at, now: at + Math.min(REACT_HOLD_MS / 2, 400) }).ok === true,
+  t('R6c · the cooldown is 180ms so they are spammable · a second tap while the first is still on air is allowed',
+    REACT_COOLDOWN_MS === 180
+    && reactCheck({ ...OK, lastAt: at, now: at + REACT_HOLD_MS / 2 }).ok === true,
     `${REACT_COOLDOWN_MS}ms debounce · hold ${REACT_HOLD_MS}ms`);
 }
 
@@ -99,8 +98,8 @@ const OK = { reaction: 'CLAP', beat: 'expedition', alive: true, lastAt: null, no
     onAir([ev('p1', 'CLAP', REACT_HOLD_MS - 1)], now).length === 1
       && onAir([ev('p1', 'CLAP', REACT_HOLD_MS)], now).length === 0,
     `${REACT_HOLD_MS}ms`);
-  t('R7b · and it lasts 3–4× the old 2.6s pop',
-    REACT_HOLD_MS >= 7800 && REACT_HOLD_MS <= 12000,
+  t('R7b · and it lasts 10000ms · ~4× the old 2.6s pop',
+    REACT_HOLD_MS === 10000,
     `${(REACT_HOLD_MS / 2600).toFixed(2)}×`);
 
   /*
@@ -113,18 +112,12 @@ const OK = { reaction: 'CLAP', beat: 'expedition', alive: true, lastAt: null, no
     air.length === 3
     && air.filter((e) => e.from === 'p1').length === 2
     && air[0].from === 'p2' && air[1].r === 'BOO' && air[2].r === 'CLAP');
-  t('R8b · each extra tap from the same player starts on a different path',
-    spawnOffset(0).ox !== spawnOffset(1).ox
-    && spawnOffset(1).ox !== spawnOffset(2).ox
-    && spawnOffset(0).oy !== spawnOffset(1).oy);
-  t('R8c · and the lanes are wider than the face, so spam is not a smear on the first chip',
-    Math.abs(spawnOffset(1).ox - spawnOffset(0).ox) >= 56
-    && Math.abs(spawnOffset(2).ox - spawnOffset(0).ox) >= 24);
 
-  // `events` is newest-LAST, the order the client appends in — so p11 is the most recent here.
+  // `events` is newest-LAST, the order the client appends in — so p19 is the most recent here.
   const crowd = Array.from({ length: 20 }, (_, i) => ev(`p${i}`, 'CLAP', (19 - i) * 10));
-  t('R9 · the overlay is capped, newest first · a full table cannot bury the run picture',
-    onAir(crowd, now).length === REACT_MAX_ON_AIR && onAir(crowd, now)[0].from === 'p19',
+  t('R9 · the strip is capped at 16, newest first · a full table cannot bury the run picture',
+    REACT_MAX_ON_AIR === 16
+    && onAir(crowd, now).length === REACT_MAX_ON_AIR && onAir(crowd, now)[0].from === 'p19',
     `${REACT_MAX_ON_AIR} slots`);
   t('R9b · an empty or stale list is empty, not a crash',
     onAir([], now).length === 0 && onAir([ev('p1', 'CLAP', 90_000)], now).length === 0);
@@ -190,20 +183,24 @@ const OK = { reaction: 'CLAP', beat: 'expedition', alive: true, lastAt: null, no
    * The strip is patched on the clock tick, never by paint(). A full repaint four times a second
    * to age a face out would remount the follow camera's canvas in the middle of the chase.
    */
-  t('R42 · the TV patches the overlay in place on the tick, and never repaints the run frame for it',
+  t('R42 · the TV patches the strip in place on the tick, and never repaints the run frame for it',
     /data-react-strip/.test(hostSrc) && /function paintReactStrip/.test(hostSrc)
       && /paintReactStrip\(\);/.test(hostSrc) && /ui\.reactKey/.test(hostSrc));
-  t('R42b · chips are keyed per EVENT (from+at), never reused by player · spam does not replace',
+  t('R42b · chips are keyed per EVENT (from+at), never reused by player · spam stacks',
     /e\.from\}:\$\{e\.at/.test(hostSrc)
     && !/dataset\.rk === e\.from/.test(hostSrc)
-    && /--ox/.test(hostSrc) && /spawnOffset\(/.test(hostSrc));
+    && /--dx/.test(hostSrc)
+    && /\(\(e\.at % 11\) - 5\) \* 12/.test(hostSrc)
+    && /b\.at - a\.at/.test(hostSrc));
 
   const skinSrc = await readFile(new URL('../src/party/night-skin.js', import.meta.url), 'utf8');
-  t('R43 · chips float up onto the picture over the hold, they do not pop 8px and stick',
-    /@keyframes react-float-up/.test(skinSrc)
-    && /animation:\s*react-float-up var\(--react-hold/.test(skinSrc)
+  t('R43 · chips rise with react-float (56px), they do not pop 8px via night-rise',
+    /@keyframes react-float \{/.test(skinSrc)
+    && /animation:\s*react-float 1\.15s ease-out/.test(skinSrc)
+    && /translateY\(56px\)/.test(skinSrc)
+    && /--dx:0px/.test(skinSrc)
     && !/\.react-chip \{[^}]*animation:\s*night-rise/.test(skinSrc)
-    && /- 240px/.test(skinSrc));
+    && /@keyframes night-rise/.test(skinSrc));
 }
 
 // ---------------------------------------------------------------- R50 · the faces

@@ -3389,22 +3389,23 @@ console.log('\nparty-warm — the lobby-warm night');
     'height stays a max, shrink stays enabled');
 
   /*
-   * THE OVERLAY IS PATCHED PER EVENT. It used to assign `innerHTML` for the whole row, which
+   * THE STRIP IS PATCHED PER EVENT. It used to assign `innerHTML` for the whole row, which
    * destroys and recreates every chip whenever any one of them changes — several times a
    * second during a run — restarting every rise. It then keyed on the PLAYER, which swallowed
-   * spam: a second clap from the same seat reused the node. Keyed on `{from, at}` now, with a
-   * spawn offset so stacked taps do not ride the same path.
+   * spam: a second clap from the same seat reused the node. Keyed on `{from, at}` now, newest
+   * first, with --dx so stacked taps do not ride the same path.
    */
   const host = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
   // `\r?\n`, for the same reason W17a-pre carries it: a Windows checkout writes `}\r\n`.
   const painter = host.match(/function paintReactStrip\(\)[\s\S]*?\r?\n {2}\}\r?\n/)?.[0] ?? '';
   t('W45-pre · the strip painter was extracted', painter.length > 400, `${painter.length} chars`);
-  t('W45 · one arrival is one chip keyed on the EVENT, not the player · spam does not reuse a node',
+  t('W45 · one arrival is one chip keyed on the EVENT, not the player · spam stacks with --dx',
     !/mount\.innerHTML\s*=/.test(painter)
       && /dataset\.rk = rk/.test(painter)
       && !/dataset\.rk === e\.from/.test(painter)
-      && /--ox/.test(painter)
-      && /spawnOffset\(/.test(painter)
+      && /--dx/.test(painter)
+      && /\(\(e\.at % 11\) - 5\) \* 12/.test(painter)
+      && /b\.at - a\.at/.test(painter)
       && /el\.remove\(\)/.test(painter));
 
   /*

@@ -45,7 +45,7 @@ export const REACT_COOLDOWN_MS = 180;
  * Hold is ~3.8× the old 2600 ms pop — John: last 3–4× longer, and FLOAT UP, not stick.
  */
 export const REACT_HOLD_MS = 10000;
-export const REACT_MAX_ON_AIR = 12;
+export const REACT_MAX_ON_AIR = 16;
 
 /** The face each reaction wears — the `mood` names in `look.js`. */
 export const REACT_MOOD = { CLAP: 'clap', BOO: 'boo', SUS: 'sus', SHOCK: 'shock' };
@@ -92,17 +92,4 @@ export function onAir(events, now) {
     if (out.length >= REACT_MAX_ON_AIR) break;
   }
   return out;
-}
-
-/**
- * Horizontal / vertical jitter so a second tap from the same player does not ride the first
- * chip's exact path up the picture. `n` is how many of that player's chips are already on
- * air (0 = first tap). Deterministic: a strip rebuild must not jump a chip that is mid-rise.
- */
-export function spawnOffset(n) {
-  const i = Math.max(0, n | 0);
-  // Wider than the 56 px face so a second tap is a new lane, not a smear on the first.
-  const ox = (i % 2 === 0 ? 1 : -1) * (44 + Math.floor(i / 2) * 38);
-  const oy = (i * 17) % 48;
-  return { ox, oy };
 }
