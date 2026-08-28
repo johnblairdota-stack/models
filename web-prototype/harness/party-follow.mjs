@@ -461,8 +461,53 @@ console.log('\nparty-follow — the TV follow slot');
    */
   t('F11d2 · and the key light moves over the runner, because a point light 9 m up never arrives',
     /const lampMap = rigMapness\(perf\.liveRig\);/.test(bed)
-      && /camLight\.distance = mix\(3\.5, up \* 1\.5\);/.test(bed)
-      && /camLight\.intensity = mix\(1\.4, 6\.0 \+ up \* 0\.9\);/.test(bed));
+      && /camLight\.distance = mix\(3\.5, POOL_DIST\);/.test(bed)
+      && /camLight\.intensity = mix\(1\.4, POOL_I\);/.test(bed));
+
+  /* =============================================================================================
+   * 🌑 **F11h · THE DARK THE HUNTER STANDS IN.** John: the expedition is *"where the hunter
+   * stalks them from the shadows"* and *"the player can't see the hunter coming."*
+   *
+   * The lamp's reach is the concealment, because three's `decay 2` with a finite `distance` is
+   * WINDOWED — past `distance` a point light contributes exactly zero. But shrinking it alone
+   * does nothing: the per-space rig's key spot lights the room whether or not the runner's lamp
+   * reaches, so the duck on the key is the load-bearing half and this asserts both.
+   * ============================================================================================= */
+  {
+    const num = (re) => Number((bed.match(re) || [])[1]);
+    const poolDist = num(/const POOL_DIST = ([\d.]+);/);
+    const poolI = num(/const POOL_I = ([\d.]+);/);
+    const keyDuck = num(/const OVERHEAD_KEY_DUCK = ([\d.]+);/);
+    const fillDuck = num(/const OVERHEAD_FILL_DUCK = ([\d.]+);/);
+    const lampUp = num(/const POOL_UP = ([\d.]+);/);  // read, never restated — see F11h's note
+    const HUNTER_AT = 8.0;                           // the range the concealment is claimed at
+    const poolRadius = Math.sqrt(Math.max(0, poolDist * poolDist - lampUp * lampUp));
+    t('F11h · the runner\'s pool cannot reach a hunter at 8 m — the falloff is windowed, not dim',
+      Number.isFinite(poolDist) && Number.isFinite(lampUp) && poolDist < HUNTER_AT && poolRadius > 3.5,
+      `reach ${poolDist}m from ${lampUp}m up · lit floor radius ${poolRadius.toFixed(2)}m · hunter at ${HUNTER_AT}m`);
+    t('F11h2 · and the room key is DUCKED with it, or the lamp\'s reach would not matter at all',
+      keyDuck > 0.5 && keyDuck < 1 && fillDuck > 0 && fillDuck < 1
+        && /key\.intensity = KEY_I0 \* \(1 - OVERHEAD_KEY_DUCK \* lampMap\);/.test(bed)
+        && /fill\.intensity = FILL_I0 \* \(1 - OVERHEAD_FILL_DUCK \* lampMap\);/.test(bed),
+      `key ×${(1 - keyDuck).toFixed(2)} · fill ×${(1 - fillDuck).toFixed(2)} at top`);
+    t('F11h3 control · every one of them is a scaling by mapness, so the ground rigs are untouched',
+      rigMapness(PERSPECTIVE_RIG.chase) === 0 && Number.isFinite(poolI) && poolI > 1.4,
+      `at chase: key ×1, fill ×1, pool 3.5m/1.4 — the shipped numbers exactly`);
+    /*
+     * 🎯 **AND THE FRAME ITSELF IS THE OUTER LOCK.** Measured while building: at `top` the lit
+     * floor stops at ~5.7 m, but the PICTURE stops sooner than 8 m in the short axis anyway —
+     * so a hunter at that range is off-camera before it is unlit, and the two limits do not
+     * depend on each other. That is worth an assertion rather than a note, because widening the
+     * FOV or lowering the rig would quietly hand the shared screen a hunter it should not have.
+     */
+    const rig = PERSPECTIVE_RIG.top;
+    const halfShort = rig.height * Math.tan((rig.fov / 2) * Math.PI / 180);
+    const halfLong = halfShort * (16 / 9);
+    t('F11h4 · the top-down frame does not even REACH 8 m in its short axis',
+      halfShort < HUNTER_AT && halfShort > poolRadius * 0.6,
+      `ground half-frame ${halfShort.toFixed(2)}m short / ${halfLong.toFixed(2)}m long`
+        + ` · lit to ${poolRadius.toFixed(2)}m`);
+  }
   t('F11d3 · the handheld and the lag fade out as the view becomes a map, and are UNTOUCHED on the ground',
     rigMapness(PERSPECTIVE_RIG.chase) === 0
       && rigMapness(PERSPECTIVE_RIG.top) === 1

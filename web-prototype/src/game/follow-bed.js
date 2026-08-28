@@ -91,6 +91,70 @@ const EYE_CEIL_MARGIN = 1.1;
  */
 const LID_LIFT_H = 3.2;
 
+/* =============================================================================================
+ * 🌑 **THE DARK THE HUNTER STANDS IN — and why the runner's lamp alone cannot make it.**
+ *
+ * John: the expedition is *"where the hunter stalks them from the shadows"* and *"the player
+ * can't see the hunter coming."* From nine metres up with the roof off that is a lighting
+ * problem, and the shipped numbers were tuned for the opposite goal: the overhead lamp got a
+ * 13.5 m reach because the first top-down came back almost black and had to be made judgeable.
+ * A 13.5 m pool lights a hunter at 8 m perfectly.
+ *
+ * 🚨 **AND SHRINKING THE LAMP IS NOT ENOUGH ON ITS OWN.** The per-space rig's key is a
+ * `SpotLight(0xffdcb4, 150, 34)` that lights the whole room independently of `camLight`, so
+ * whatever the runner's lamp does, the room stays lit. Ducking the key is the change that
+ * decides whether any of this works; the pool is what puts the light back where the player is.
+ * The hemisphere `fill` is ducked too, more gently, because it is the term that keeps the
+ * geometry readable at all and taking it to zero would make the frame unplayable rather than
+ * tense.
+ *
+ * ⚠️ Ducked, never zeroed, and never on the ground rigs: all three scale with `rigMapness`, so
+ * at the chase rig they are exactly the shipped values and this cannot regress the show's
+ * existing look.
+ */
+const OVERHEAD_KEY_DUCK = 0.75;    // 150 -> 37.5 at `top`
+const OVERHEAD_FILL_DUCK = 0.55;   // 4.60 -> 2.07 at `top`
+/**
+ * A three.js point light with `decay 2` and a finite `distance` is WINDOWED: past `distance` it
+ * contributes exactly zero, so this number is the concealment. The lamp hangs 4.2 m over the
+ * runner, so a 6.5 m reach is a lit floor radius of sqrt(6.5² − 4.2²) ≈ 4.96 m and a hunter at
+ * 8 m receives nothing from it at all.
+ *
+ * Intensity has to climb to pay for it: three's windowed falloff at the runner's feet goes from
+ * (1 − 4.2/13.5)² = 0.475 to (1 − 4.2/6.5)² = 0.125, so holding the pool as bright means roughly
+ * ×3.8. 54 is that, rounded — and it is a starting value settled against the luma probe, not an
+ * algebraic result.
+ */
+const POOL_DIST = 6.5;
+/**
+ * How high over the runner the lamp hangs. A constant rather than the old `min(4.2, height*0.55)`
+ * because the pool is now the light source and its SHAPE matters: lower is a tighter, more
+ * directional puddle with a faster edge, which is what makes the dark beyond it read as dark
+ * rather than as underexposure. 3.2 m gives a lit floor radius of √(6.5² − 3.2²) ≈ 5.66 m.
+ */
+const POOL_UP = 3.2;
+/**
+ * ⚠️ **THIS IS 120 AND NOT 54, AND THE FIRST NUMBER WAS WRONG FOR AN INSTRUCTIVE REASON.**
+ *
+ * 54 was solved to hold the pool at the brightness the SHIPPED overhead lamp gave — and the
+ * shipped lamp was never the light. The room's key spot was, at 150 through a 34 m cone. So
+ * ducking the key by three quarters and matching the old lamp produced a frame whose mean luma
+ * still passed D2 (14.7 of 255) while the floor around the player was at 5.5: technically lit,
+ * unreadable in practice, and lit mostly by a window across the room rather than by anything
+ * the runner carries.
+ *
+ * Solved instead against three's own windowed falloff — `(1/d²)·(1 − (d/D)⁴)²` — for a pool
+ * that is unmistakably the source: at d = 3.2, D = 6.5 the attenuation is 0.0865, so 85 puts
+ * ~7.4 at the runner's feet against the ~0.78 the shipped overhead delivered — an order of
+ * magnitude, which is what it takes for a lamp to BE the light rather than to garnish one.
+ *
+ * Bench: at 120 the pool clipped (runner patch 168 of 255, max 239, with a bloom bar across the
+ * frame). 85 is that backed off below the clip. It is a look number and therefore John's dial,
+ * not a derived constant — the derived part is only that it must be ~100×, not ~1×, the value
+ * it replaced.
+ */
+const POOL_I = 85;
+
 /** Clear width / clear height the route filter demands. See `room.js` L822 — a route through an
  *  opening the body cannot fit is the exact failure `minW` was written to prevent. */
 const ROUTE_MIN_W = 0.90;
@@ -1110,6 +1174,22 @@ export async function buildFollowBed(engine, opts = {}) {
   const cool = new THREE.PointLight(0xa8ccf4, 46, 10, 2);
   scene.add(warmA, warmB, cool);
   const fill = new THREE.HemisphereLight(0x6f7d96, 0x3a2a1c, 4.60);
+  /*
+   * The two base intensities, captured once so the overhead duck is a pure scaling of the
+   * shipped value rather than a second set of numbers that could drift from it.
+   *
+   * ⚠️ **AND `key` REALLY IS A CONSTANT ALL NIGHT, WHICH IS A PRE-EXISTING BUG THIS SLICE ONLY
+   * DECLINES TO INHERIT.** `followRig`'s `read()` fills `want.key.i` from each space's own
+   * `lights.key.intensity`, and `apply()` lerps positions and the hemisphere ground colour and
+   * NEVER writes `L.key.intensity` — so every room's authored key brightness is dead and the
+   * spot sits at its constructed 150 from boot to teardown. Capturing the base here is correct
+   * either way; the day the per-room intensity is wired up, `KEY_I0` becomes `want.key.i` and
+   * the duck below still means the same thing. Not fixed here: it is a lighting slice, not this
+   * one, and quietly turning six rooms' key lights on inside a camera change is how a look
+   * regression arrives with nobody's name on it.
+   */
+  const KEY_I0 = key.intensity;
+  const FILL_I0 = fill.intensity;
   scene.add(fill);
 
   /**
@@ -1729,18 +1809,24 @@ export async function buildFollowBed(engine, opts = {}) {
     const lampMap = rigMapness(perf.liveRig);
     {
       // Where each recipe wants the lamp, then one crossfade over both.
-      const up = perf.liveRig?.height ?? PERSPECTIVE_RIG.chase.height;
       const overX = runner.pos.x;
-      const overY = (runner.pos.y ?? 0) + Math.min(4.2, up * 0.55);
+      const overY = (runner.pos.y ?? 0) + POOL_UP;
       const overZ = runner.pos.z;
       const groundX = engine.camera.position.x;
       const groundY = engine.camera.position.y - 0.18;
       const groundZ = engine.camera.position.z;
       const mix = (a, b) => a + (b - a) * lampMap;
       camLight.position.set(mix(groundX, overX), mix(groundY, overY), mix(groundZ, overZ));
-      camLight.distance = mix(3.5, up * 1.5);
-      camLight.intensity = mix(1.4, 6.0 + up * 0.9);
+      camLight.distance = mix(3.5, POOL_DIST);
+      camLight.intensity = mix(1.4, POOL_I);
     }
+
+    /* 🌑 The room goes dark around the pool. See `OVERHEAD_KEY_DUCK` — the key spot is the light
+     * that actually decides whether a hunter at 8 m is visible, because it does not care where
+     * the runner's lamp is. Both are pure scalings of the base value by `mapness`, so the chase
+     * rig is untouched and there is no state to get out of step. */
+    key.intensity = KEY_I0 * (1 - OVERHEAD_KEY_DUCK * lampMap);
+    fill.intensity = FILL_I0 * (1 - OVERHEAD_FILL_DUCK * lampMap);
 
     engine.camera.getWorldDirection(_dir);
     const space = room.spaceAt(runner.pos) ?? room.spaceAt(engine.camera.position);
