@@ -1848,6 +1848,8 @@ console.log('\nparty-warm — the lobby-warm night');
     && /name: 'orbit'/.test(introSrc)
     && /name: 'across'/.test(introSrc)
     && /name: 'pair'/.test(introSrc)
+    && /name: 'wide'/.test(introSrc)
+    && /name: 'push'/.test(introSrc)
     && /function talkFrame/.test(introSrc)
     && /if \(talk\)/.test(introSrc));
   t('W31c · casting intros keep the snap-to-new-robot path; talk does not steal it',
@@ -2371,10 +2373,13 @@ console.log('\nparty-warm — the lobby-warm night');
     && rugSpanForSeats(2.4) >= 2.4
     && /rugScaleForSeats/.test(introSrc)
     && /scaleBallroomRug/.test(introSrc));
-  t('W33e · talk camera walks the outside arc at human speed, lookAt centre',
+  t('W33e · talk camera walks the outside arc at human speed, looking at robots not empty parquet',
     /function walkCamOnRing/.test(introSrc)
     && /CAM_WALK = 1\.35/.test(introSrc)
-    && /look\.set\(cx, LOOK_Y, cz\)/.test(introSrc)
+    && /WIDE_Y = 2\.28/.test(introSrc)
+    && /posOf\(a\)/.test(introSrc)
+    && /name: 'push'/.test(introSrc)
+    && !/look\.set\(cx, LOOK_Y, cz\)/.test(introSrc)
     && /RING_OUT/.test(introSrc));
   t('W33f · a red billboard bang sits above the name tag for standing nominees',
     /attachNomineeBang/.test(introSrc)
@@ -2425,6 +2430,35 @@ console.log('\nparty-warm — the lobby-warm night');
     && /playAttack\(dur/.test(meshSrc)
     && /GRIP_MOUNT/.test(meshSrc)
     && !/god-view|setLid\(false\)/.test(introSrc.slice(introSrc.indexOf('function fillExecuteEye'))));
+  /*
+   * John, room DUSK, closed mid-debrief: chairs AND robots gone, then the empty-room
+   * lobby dolly. Two holes: a talk intros with a drifted id-list disposed the bed,
+   * and idle with intro=null flipped mode to warm. Sit was latched once and never
+   * retried on follow `ready`.
+   */
+  t('W33p · a second talk intros during debrief does not dispose the circle',
+    /have === ids \|\| c\.talk/.test(bedSrc)
+    && /A TALK SIT NEVER DISPOSES/.test(bedSrc)
+    && /if\s*\(\s*!c\.talk\s*\)\s*intro\?\.dispose\(\)/.test(bedSrc)
+    && /intro\.releaseRun/.test(bedSrc)
+    && /intro\.setTalk/.test(bedSrc));
+  t('W33q · talk plates look at robot bodies, never the empty rug centre',
+    /WIDE_Y = 2\.28/.test(introSrc)
+    && /name: 'wide'/.test(introSrc)
+    && /name: 'push'/.test(introSrc)
+    && /posOf\(a\)/.test(introSrc)
+    && /posOf\(far\)/.test(introSrc)
+    && !/look\.set\(cx, LOOK_Y, cz\)/.test(introSrc));
+  t('W33r · idle with no intro rebuilds the seated circle, it does not fall into warm',
+    /IDLE IS "SIT THE RUNNER BACK DOWN"/.test(bedSrc)
+    && /introCast\.length/.test(bedSrc)
+    && /talk: true/.test(bedSrc)
+    && /mode = intro \? 'intros' : 'warm'/.test(bedSrc));
+  t('W33s · the TV retries sit on follow ready, same shape as cueRun',
+    /function shouldSit/.test(hostSrc)
+    && /cueSitDown\(\{ retry: true \}\)/.test(hostSrc)
+    && /if \(show === 'expedition'\) ui\.sitCued = false/.test(hostSrc)
+    && /talk:\s*true/.test(hostSrc));
 }
 
 // ---- W34 · NO DOORWAY INTO VOID, AND NOTHING OCCUPIES THE APERTURE --------------------------

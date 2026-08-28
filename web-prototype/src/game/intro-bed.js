@@ -75,25 +75,40 @@ const LANE = 0.92;
 const LOOK_Y = 1.08;
 const EYE_Y = 1.92;
 /**
- * 🎬 **TALK / DEBRIEF SHOTS — a cameraman walking the outside of the ring.**
+ * 🎬 **TALK / DEBRIEF SHOTS — a cameraman walking the OUTSIDE of the ring.**
  *
- * Eye stays on an outside arc (constant-ish radius = chair r + RING_OUT), lookAt the
- * circle centre, and shot-to-shot motion walks the arc at human speed — never a
- * cartesian lerp through the chairs, never a drone zoom that collapses the ring.
+ * #39 had distinct plates that looked AT ROBOTS (pair / orbit / wide / push / across).
+ * #42 kept the outside-arc walk (`walkCamOnRing`) but flattened every plate onto the empty
+ * rug centre — and `radius*0.85` shoved the eye into the short wall, so after one cycle
+ * the picture was the lobby dolly. Restore the five pictures; keep #42's motion rule:
+ * eye stays on an outside arc, never a cartesian lerp through the chairs.
+ *
+ * Look-at is bodies (or a pair), never warmStep's "9m ahead off the centreline."
  */
+const WIDE_Y = 2.28;
 const TALK_SHOTS = [
-  { name: 'pair', dur: 8.5, span: 0.62 },
-  { name: 'orbit', dur: 14.0, span: 1.45 },
-  { name: 'across', dur: 11.0, span: 1.20 },
+  { name: 'pair', dur: 9.5, span: 0.55 },
+  { name: 'orbit', dur: 13.0, span: 1.55 },
+  { name: 'wide', dur: 11.0, span: 1.85 },
+  { name: 'push', dur: 9.0, span: 0.28 },
+  { name: 'across', dur: 12.0, span: 0.90 },
 ];
 
 const TALK_CYCLE = TALK_SHOTS.reduce((s, x) => s + x.dur, 0);
 /** Metres / second around the ring — a person with a camera, not a drone. */
 const CAM_WALK = 1.35;
 
-/** Extra metres past the chairs — always outside, never ringside. */
-function ringOut(radius) {
-  return Math.max(RING_OUT, radius * 0.85);
+/**
+ * Extra metres past the chairs. Desired is RING_OUT; an 8-seat ring (~5 m) plus that
+ * does not fit the ballroom's short half (~7.7 m), so we shrink the standoff rather
+ * than clamp the lens onto the skirting and stare at empty parquet.
+ */
+function ringOut(radius, space) {
+  const want = RING_OUT;
+  if (!space) return want;
+  const short = Math.min(space.x1 - space.x0, space.z1 - space.z0) / 2;
+  const maxOut = Math.max(1.15, short - 0.90 - radius);
+  return Math.min(want, maxOut);
 }
 
 /** Keep a ringside eye inside the ballroom, just off the skirting. */
@@ -107,7 +122,7 @@ function clampInSpace(v, space, pad = 0.85) {
 /**
  * One debrief plate. Eye and look are written into the caller's vectors so the step
  * loop does not allocate. Always from OUTSIDE the ring — the chairs read as a circle.
- * Look is the circle centre; the eye walks an outside azimuth.
+ * Look is robots (a pair, a body, the opposite visor), never the empty rug centre.
  */
 function talkFrame(robots, clock, cx, cz, radius, space, eye, look) {
   const n = Math.max(1, robots.length);
@@ -121,20 +136,58 @@ function talkFrame(robots, clock, cx, cz, radius, space, eye, look) {
   const shot = TALK_SHOTS[idx];
   const u = THREE.MathUtils.clamp(t / shot.dur, 0, 1);
   const focus = (wraps * TALK_SHOTS.length + idx) % n;
-  const out = ringOut(radius);
+  const a = robots[focus];
+  const b = robots[(focus + 1) % n] || a;
+  const far = robots[(focus + Math.max(1, Math.floor(n / 2))) % n] || a;
+  const out = ringOut(radius, space);
   const r = radius + out;
   /*
    * Continuous azimuth: each shot walks `span` radians along the same outside
-   * circle, then the next shot picks up. wrap * 2π/n keeps the path rotating
-   * around the group instead of looping one arc forever.
+   * circle, then the next shot picks up. wrap keeps the path rotating around
+   * the group instead of looping one arc forever.
    */
   let walked = wraps * 1.15;
   for (let i = 0; i < idx; i++) walked += TALK_SHOTS[i].span;
   walked += shot.span * u;
   const ang = walked + focus * ((Math.PI * 2) / n) * 0.08;
   const bob = Math.sin(clock * 0.21) * 0.07;
-  eye.set(cx + Math.sin(ang) * r, EYE_Y + bob, cz + Math.cos(ang) * r);
-  look.set(cx, LOOK_Y, cz);
+  const posOf = (bot) => bot?.body?.pos || { x: cx, z: cz };
+  const ax = posOf(a).x, az = posOf(a).z;
+  const bx = posOf(b).x, bz = posOf(b).z;
+  const fx = posOf(far).x, fz = posOf(far).z;
+
+  if (shot.name === 'pair') {
+    /* Two-shot on neighbours: eye opposite them on the outside arc so we see faces. */
+    const mx = (ax + bx) * 0.5, mz = (az + bz) * 0.5;
+    const pang = Math.atan2(mx - cx, mz - cz) + Math.PI;
+    eye.set(cx + Math.sin(pang) * r, EYE_Y + Math.sin(u * Math.PI) * 0.06, cz + Math.cos(pang) * r);
+    look.set(mx * 0.88 + cx * 0.12, 1.18, mz * 0.88 + cz * 0.12);
+  } else if (shot.name === 'orbit') {
+    eye.set(cx + Math.sin(ang) * r, EYE_Y + bob, cz + Math.cos(ang) * r);
+    look.set(
+      ax * 0.22 + bx * 0.22 + fx * 0.16 + cx * 0.40,
+      1.16,
+      az * 0.22 + bz * 0.22 + fz * 0.16 + cz * 0.40,
+    );
+  } else if (shot.name === 'wide') {
+    /* Higher, and a longer walk along the outside arc — still looking at the seated ring. */
+    eye.set(cx + Math.sin(ang) * r, WIDE_Y + Math.sin(clock * 0.15) * 0.05, cz + Math.cos(ang) * r);
+    look.set(
+      ax * 0.28 + bx * 0.24 + fx * 0.18 + cx * 0.30,
+      1.12,
+      az * 0.28 + bz * 0.24 + fz * 0.18 + cz * 0.30,
+    );
+  } else if (shot.name === 'push') {
+    const pang = Math.atan2(ax - cx, az - cz);
+    const pushR = THREE.MathUtils.lerp(r, radius + 1.25, u);
+    eye.set(cx + Math.sin(pang) * pushR, EYE_Y - u * 0.08, cz + Math.cos(pang) * pushR);
+    look.set(ax, 1.16, az);
+  } else {
+    /* Across: look at the robot opposite. Their face, because they look inward. */
+    const pang = Math.atan2(ax - cx, az - cz);
+    eye.set(cx + Math.sin(pang) * r, EYE_Y + bob * 0.4, cz + Math.cos(pang) * r);
+    look.set(fx * 0.78 + ax * 0.22, 1.18, fz * 0.78 + az * 0.22);
+  }
   clampInSpace(eye, space);
   return { index: focus, shot: shot.name, ang, r };
 }
@@ -846,7 +899,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       body.root.visible = false;
     }
 
-    const out = ringOut(radius);
+    const out = ringOut(radius, space);
     const eye = new THREE.Vector3(cx + ux * (radius + out) + tx * 1.15, EYE_Y, cz + uz * (radius + out) + tz * 1.15);
     clampInSpace(eye, space);
 
@@ -884,7 +937,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
   const fov0 = engine.camera.fov;
   engine.camera.fov = talking ? TALK_FOV : INTRO_FOV;
   engine.camera.updateProjectionMatrix();
-  engine.camera.position.copy(robots[0]?.eye ?? new THREE.Vector3(cx, EYE_Y, cz + radius + ringOut(radius)));
+  engine.camera.position.copy(robots[0]?.eye ?? new THREE.Vector3(cx, EYE_Y, cz + radius + ringOut(radius, space)));
   const _lookLive = new THREE.Vector3(cx, LOOK_Y, cz);
 
   function steerTo(body, x, z, dt, run) {
@@ -977,7 +1030,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
         r.body.pos.z * 0.65 + cz * 0.35,
       );
     }
-    const out = ringOut(radius);
+    const out = ringOut(radius, space);
     const sway = Math.sin(hold * 0.55) * 0.35;
     _eye.set(
       cx + r.ux * (radius + out) + r.tx * (1.05 + sway),
@@ -1049,7 +1102,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     const llen = Math.hypot(lx, lz) || 1;
     const ux = lx / llen, uz = lz / llen;
     const tx = -uz, tz = ux;
-    const out = ringOut(radius);
+    const out = ringOut(radius, space);
     _eye.set(
       cx + ux * (radius + out) + tx * 1.15,
       EYE_Y,

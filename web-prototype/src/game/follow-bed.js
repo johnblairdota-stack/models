@@ -2023,11 +2023,23 @@ export async function buildFollowBed(engine, opts = {}) {
     cue(c) {
       if (!c || typeof c !== 'object') return;
       if (c.kind === 'idle') {
-        mode = intro ? 'intros' : 'warm';
+        /*
+         * 🪑 **IDLE IS "SIT THE RUNNER BACK DOWN", NEVER "DUMP THE CIRCLE".**
+         * A missing intro used to flip mode to `warm` and run the empty-architecture
+         * dolly (`warmStep`) over a ballroom with no chairs — John's DUSK close-mid-debrief.
+         * If the bed is gone, rebuild it from the last cast with talk:true. Warm is lobby-only.
+         */
         runner.root.visible = false;
         intro?.setExecute?.('', '');
         intro?.releaseRun?.();
         intro?.setTalk?.(true);
+        if (!intro && introCast.length) {
+          intro = buildIntroBed(engine, {
+            room, cast: introCast, materials: botMats, avatar, reelSight: reelToSight,
+            talk: true,
+          });
+        }
+        mode = intro ? 'intros' : 'warm';
         return;
       }
       if (c.kind === 'noms') {
@@ -2047,11 +2059,18 @@ export async function buildFollowBed(engine, opts = {}) {
         if (!introCast.length) return;
         const ids = introCast.map((s) => String(s.id)).join('\0');
         const have = intro?.castIds?.()?.join('\0');
-        if (intro && have === ids) {
+        if (intro && (have === ids || c.talk)) {
+          /*
+           * ⚠️ **A TALK SIT NEVER DISPOSES.** Recap / debrief / reckon / vote / execution
+           * send a second `intros` with talk:true. An id-list mismatch used to
+           * `intro.dispose()` — chairs AND robots gone, then idle/warm painted the empty
+           * room. Reuse the bed: releaseRun + setTalk + parkSit. Rebuild only if intro
+           * is null (the branch below). Casting walk-in (no talk) may still rebuild.
+           */
           intro.releaseRun?.();
           intro.setTalk?.(!!c.talk);
         } else {
-          intro?.dispose();
+          if (!c.talk) intro?.dispose();
           intro = buildIntroBed(engine, {
             room, cast: introCast, materials: botMats, avatar, reelSight: reelToSight,
             talk: !!c.talk,

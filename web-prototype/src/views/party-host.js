@@ -799,6 +799,12 @@ export default async function partyHost({ params }) {
         ui.cuedRunner = null;
         cueRun(runnerId, players());
       }
+      /*
+       * 🪑 Same shape as cueRun: sitCued can latch before the iframe is listening, then
+       * never fire again — idle with intro=null becomes the empty warm dolly for the
+       * rest of debrief. Retry whenever this beat should be the seated circle.
+       */
+      if (shouldSit()) cueSitDown({ retry: true });
       return;
     }
     if (m.intros === 'done') {
@@ -876,8 +882,14 @@ export default async function partyHost({ params }) {
     }
   });
 
-  function cueSitDown() {
-    if (ui.sitCued) return;
+  function shouldSit() {
+    const show = ui.beat;
+    return show === 'recap' || isTalkBeat(show) || (show === 'casting' && ui.introsDone);
+  }
+
+  function cueSitDown({ retry = false } = {}) {
+    if (!shouldSit()) return;
+    if (ui.sitCued && !retry) return;
     const cast = introCast();
     if (!cast.length) return;
     if (ui.cuedRunner) {
@@ -1660,7 +1672,7 @@ export default async function partyHost({ params }) {
     }
     // Walk-in owns CASTING until it finishes; then Recap / Debrief / later Casting
     // keep the seated-circle talk director on the same chairs.
-    if (onStage || onRecap || (show === 'casting' && ui.introsDone)) cueSitDown();
+    if (shouldSit()) cueSitDown();
     if (show === 'expedition') ui.sitCued = false;
     cueNominees();
     cueExecute();
