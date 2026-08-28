@@ -193,6 +193,30 @@ export class FixtureBin {
       if (list.length > 1) for (const g of list) g.dispose();
       geo.computeBoundingSphere();
       const m = new THREE.Mesh(geo, mat);
+      /*
+       * 🚨 **ONE NaN ANYWHERE IN A BUCKET DELETES THE WHOLE BUCKET FROM THE FRAME, SILENTLY.**
+       * `mergeGeometries` is happy to merge a geometry carrying NaN positions;
+       * `computeBoundingSphere` then yields radius NaN, and three's frustum test against a NaN
+       * sphere is FALSE — so the merged mesh is culled every frame, in every view, with no
+       * error, no warning and nothing missing from the scene graph. For the `glow` bucket that
+       * is every candle halo, every sconce wash, every window pool and the cove in one go: the
+       * room simply loses its light layer and looks like a build problem.
+       *
+       * This is not hypothetical. `ballroomFixtures` reads `P.deckLen` for the musicians'
+       * gallery wash; a plan that omits it makes two patches NaN, and the ENTIRE glow bucket
+       * disappears. `ballroomPlan` always sets it, so the live game is fine — but the failure
+       * costs an afternoon to find precisely because nothing says anything.
+       *
+       * So say something, and keep drawing: an unculled bucket is a frame cost, a culled one is
+       * an invisible defect. `harness/ballroom-dress.mjs` uses exactly this NaN case as the
+       * control on its "the chandeliers reach the frame" assertions.
+       */
+      const bs = geo.boundingSphere;
+      if (!bs || !Number.isFinite(bs.radius) || !Number.isFinite(bs.center.x)
+        || !Number.isFinite(bs.center.y) || !Number.isFinite(bs.center.z)) {
+        console.warn(`[fixture-merge] fixture:${name} has a non-finite bounding sphere — something fed it a NaN transform. Frustum culling is OFF for it so it still draws, but find the NaN.`);
+        m.frustumCulled = false;
+      }
       m.name = `fixture:${name}`;
       m.renderOrder = order;
       meshes.push(m);

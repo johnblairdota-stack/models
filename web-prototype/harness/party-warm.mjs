@@ -863,7 +863,17 @@ console.log('\nparty-warm — the lobby-warm night');
     && spaceKind({ id: 'study_w', order: 'study' }) === 'study'
     && spaceKind({ id: 'c0.3' }) === null
     && byAuth('grand-piano').every((p) => p.spaceId === 'ballroom')
-    && byAuth('chandelier').length === 2 && byAuth('chandelier').every((p) => p.spaceId === 'ballroom')
+    /*
+     * 🔄 **THIS LINE USED TO REQUIRE TWO CHANDELIERS IN THE BALLROOM. JOHN REVERSED IT**
+     * (2026-08-28): *"there are two placed chandeliers that are lower seen in wide. Delete them
+     * from the ballroom spawn. the other two are part of the asset."* The catalog GLB hangs at
+     * `liftY 2.85` in a 9.60 m room, at eye level, unlit — while `lighting/ballroom-rig.js` hangs
+     * the asset's own LIT fixtures at ~7.3 m in the same room. The prop is rehomed to the gallery
+     * rather than deleted, because W14n below still requires all 24 smash ids to be placed.
+     * The assertion is kept and inverted rather than dropped: the ballroom is the room it must
+     * never be in, and that is now the thing under lock.
+     */
+    && byAuth('chandelier').length >= 1 && byAuth('chandelier').every((p) => p.spaceId !== 'ballroom')
     && ['wingback', 'settee', 'chaise', 'ottoman'].every((id) => byAuth(id).every((p) => p.spaceId === 'study_w'))
     && byAuth('armor').length >= 1 && byAuth('armor').every((p) => p.spaceId === 'service')
     && byAuth('table-round').every((p) => p.spaceId === 'chapel')

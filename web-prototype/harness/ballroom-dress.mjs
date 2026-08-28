@@ -188,5 +188,183 @@ const orderSrc = await read('src/world/ballroom-order.js');
     'party-follow.js runs envIntensity 3.20');
 }
 
+/* =============================================================================================
+ * D2 · THE CHANDELIERS REACH THE FRAME AS HOT GEOMETRY
+ * =============================================================================================
+ * 🚨 **THE HANDOFF'S D2 IS NOT REPRODUCIBLE, AND THE THING JOHN IS LOOKING AT IS D4's OBJECT.**
+ * `docs/handoff/ballroom-next.md` D2 says *"not one chandelier in the room is lit ... something
+ * between the merge/harvest path and the frame is eating them"*, citing the `wide`, `mirror` and
+ * `up` stations. Measured in the live room instead of read:
+ *
+ *   · Every merged bucket is DRAWN. `onAfterRender` counters on `fixture:brass/wax/crystal/
+ *     emissive/flame/glow` all tick once per frame. Nothing is culled, nothing is eaten.
+ *   · The hot geometry is HOT. Masked and read off the delivered frame 4.2 m from the middle
+ *     fixture: `fixture:flame` mean **225.5**, `fixture:emissive` mean **224.4**, against a whole
+ *     frame mean of **57.5**. The candles are the brightest thing in the room by a factor of four.
+ *   · Photographed: `progress/luma/d2.rig-chandelier.png` — lit candles, warm halos, gilt corona.
+ *
+ * What IS unlit is the OTHER chandelier. The ballroom carries two independent sources and only
+ * one is the rig's: `furn-layout.js` also hangs the catalog GLB `rrr_prop_chandelier_v1.glb` at
+ * `liftY 2.85`. That prop is a static mesh with modelled candles and NO flames, and at 2.85 m in
+ * a 9.6 m room it is the one at eye level — the huge foreground fixture at `wide`, and both of
+ * the low ones at `mirror`. The rig's hang with their coronas at ~7.3 m. So the fixture the
+ * defect describes is the fixture handoff D4 asks to delete, and D4 is D2's fix.
+ *
+ * The two claims D2 rests on are both true and both harmless: `intensity: 0` is the POINT LIGHT
+ * count, which `ballroom-rig.js` defends at length as a deliberate zero; and `setLit` has no
+ * call site because `chandelier.js` defaults `state.lit = 1`, so nothing needs to call it.
+ *
+ * Nothing here is therefore a fix. It is a NET, because the failure the handoff imagined is one
+ * frame-cull away from being real — see the NaN control below.
+ * ============================================================================================= */
+{
+  const { ballroomPlan } = await import('../src/world/ballroom-order.js');
+  const { ballroomFixtures } = await import('../src/lighting/ballroom-rig.js');
+  const { FixtureBin } = await import('../src/lighting/fixture-merge.js');
+  const THREE = await import('three');
+
+  const plan = ballroomPlan({ x0: 0.15, x1: 27.35, z0: 38.6, z1: 53.9, h: 9.6 });
+  const fx = ballroomFixtures({ plan, points: 3, rng: () => 0.5 });
+  const byName = new Map(fx.meshes.map((m) => [m.name, m]));
+  const tris = (m) => (m ? Math.round((m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3) : 0);
+  const finite = (m) => {
+    const b = m?.geometry?.boundingSphere;
+    return !!b && Number.isFinite(b.radius) && Number.isFinite(b.center.x) && Number.isFinite(b.center.y) && Number.isFinite(b.center.z);
+  };
+
+  /* The three buckets that carry every hot thing in the room. `emissive` is the candle cores,
+   * `flame` the additive envelopes, `glow` the halos and washes. Lose any one and the room stops
+   * being a lit venue. */
+  for (const name of ['fixture:emissive', 'fixture:flame', 'fixture:glow']) {
+    t(`B10 · ${name} is built and carries geometry`, tris(byName.get(name)) > 0,
+      `${tris(byName.get(name))} tris`);
+    t(`B11 · ${name} has a FINITE bounding sphere, so three can never cull it away`,
+      finite(byName.get(name)),
+      byName.get(name)?.geometry?.boundingSphere ? `r=${byName.get(name).geometry.boundingSphere.radius.toFixed(1)}` : 'no sphere');
+  }
+  t('B12 · the candles emit — the emissive bucket carries HDR vertex colours above 1.0',
+    (() => {
+      const c = byName.get('fixture:emissive')?.geometry?.attributes?.color;
+      if (!c) return false;
+      let mx = 0;
+      for (let i = 0; i < c.count; i++) mx = Math.max(mx, c.getX(i), c.getY(i), c.getZ(i));
+      return mx > 1.0;
+    })(), 'delivered mean 225.5 against a frame mean of 57.5');
+
+  /* --- CONTROLS ------------------------------------------------------------------------ */
+  /*
+   * 🚨 **THE NaN CONTROL IS A REAL FAILURE, HIT WHILE WRITING THIS GATE, NOT AN IMAGINED ONE.**
+   * `ballroomFixtures` reads `P.deckLen` for the musicians' gallery wash. A plan without it makes
+   * two glow patches NaN; `mergeGeometries` accepts them, `computeBoundingSphere` returns NaN,
+   * and three's frustum test against a NaN sphere is FALSE — so the ENTIRE glow bucket is culled
+   * every frame with no error and nothing missing from the scene graph. That is exactly the
+   * "something between the merge and the frame is eating them" the handoff feared, and it is one
+   * missing plan field away at all times. `fixture-merge.js` now warns and disables culling; this
+   * asserts the detector still detects.
+   */
+  /* three dumps the whole offending BufferGeometry to console.error for a NaN radius, and
+   * `fixture-merge` then warns. Both are the POINT of this control, and both would bury the
+   * gate's own output in CI, so they are captured rather than printed. */
+  const realErr = console.error, realWarn = console.warn;
+  let noise = 0;
+  console.error = () => { noise++; }; console.warn = () => { noise++; };
+  const lame = ballroomFixtures({ plan: { ...plan, deckLen: undefined }, points: 0, rng: () => 0.5 });
+  console.error = realErr; console.warn = realWarn;
+  const lameGlow = lame.meshes.find((m) => m.name === 'fixture:glow');
+  t('B11c0 · CONTROL ...and it is NOISY about it rather than silent', noise >= 2,
+    `${noise} console messages raised`);
+  t('B11c · CONTROL a plan missing deckLen really does produce a non-finite glow bucket',
+    !!lameGlow && !finite(lameGlow), 'the silent room-wide cull B11 exists to catch');
+  t('B11c2 · CONTROL ...and fixture-merge turns that from silent into loud + still drawn',
+    !!lameGlow && lameGlow.frustumCulled === false,
+    'frustumCulled off, console warning raised');
+
+  /*
+   * The routing control. `FixtureBin` decides "flame" from ADDITIVE blending alone, so if that
+   * discriminator ever inverts, every candle envelope silently becomes opaque geometry.
+   */
+  const mk = (blending) => {
+    const g = new THREE.BoxGeometry(1, 1, 1);
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0xffffff, blending }));
+    const grp = new THREE.Group(); grp.add(m); return grp;
+  };
+  const addBin = new FixtureBin().harvest(mk(THREE.AdditiveBlending));
+  const normBin = new FixtureBin().harvest(mk(THREE.NormalBlending));
+  t('B13 · an additive basic material is bucketed as flame', addBin.flame.length === 1 && addBin.emissive.length === 0);
+  t('B13c · CONTROL a normally-blended one is NOT — the discriminator is blending, not name',
+    normBin.flame.length === 0 && normBin.emissive.length === 1);
+}
+
+/* =============================================================================================
+ * D4 · THE CATALOG CHANDELIER IS NOT PART OF THE BALLROOM'S DRESS
+ * =============================================================================================
+ * John: *"there are two placed chandeliers that are lower seen in wide. Delete them from the
+ * ballroom spawn. the other two are part of the asset."* Confirmed in the live room: the catalog
+ * prop `r0.ballroom.chandelier.*` sits at world y **2.85** on the room centre line, +/- 4.28 m in
+ * z, i.e. at eye level under a 9.6 m ceiling, while the rig's fixtures hang at ~7.3 m.
+ *
+ * ⚠️ **THE ROW STAYS IN THE LAYOUT WITH AN EMPTY `rooms`, IT IS NOT DELETED.** `pickSpaces`
+ * reads `assign.rooms` for every recipe in `FURN_LINE`; removing the key would throw on a
+ * missing binding rather than place nothing. An empty list places nothing, keeps the prop
+ * available to other rooms as the handoff asks, and keeps the reason next to the decision.
+ * ============================================================================================= */
+{
+  const layout = await read('src/game/furn-layout.js');
+  const m = layout.match(/\n\s*chandelier:\s*\{ rooms: \[([^\]]*)\], avoid: \[([^\]]*)\]/);
+  t('B14 · the catalog chandelier binding is still readable', !!m,
+    m ? `rooms: [${m[1]}] avoid: [${m[2]}]` : 'PATTERN NOT FOUND');
+  t('B15 · the ballroom is not among its rooms', !!m && !/ballroom/.test(m[1]), m ? `rooms: [${m[1]}]` : '');
+  t('B15b · ...and the ballroom is explicitly AVOIDED, which the leftover pass also reads',
+    !!m && /'ballroom'/.test(m[2]), m ? `avoid: [${m[2]}]` : '');
+  t('B15d · it is rehomed rather than orphaned — party-warm W14n needs all 24 smash ids placed',
+    !!m && m[1].trim().length > 0, m ? `rooms: [${m[1]}]` : '');
+  t('B15c · CONTROL the check can see a ballroom binding when there is one — the piano still has one',
+    /'grand-piano':\s*\{ rooms: \[[^\]]*'ballroom'/.test(layout),
+    'so B15 is not passing because the regex matches nothing');
+  t('B16 · the prop stays in the catalog for other rooms to use',
+    /id: 'chandelier', file: 'rrr_prop_chandelier_v1\.glb'/.test(await read('src/game/furn-catalog.js')));
+
+  /* =========================================================================================
+   * 🚨 **B17 IS BEHAVIOURAL, AND IT IS HERE BECAUSE B15 ALONE WAS NOT ENOUGH.** Unbinding the
+   * chandelier from the ballroom made B15 pass while a chandelier was STILL hanging at 2.85 m in
+   * the live room, under the id `r0.ballroom.chandelier.fb`. `catalogPlacements` has a leftover
+   * pass for props whose preferred room is missing from a generated house, and it deliberately
+   * ignores `assign.rooms` — so unbinding the prop simply routed it down there and it was
+   * re-placed in the very room it had been removed from. A source-grep gate would have shipped
+   * that. This one runs the planner.
+   * ========================================================================================= */
+  const { catalogPlacements } = await import('../src/game/furn-layout.js');
+  const spaces = [
+    { id: 'r0.ballroom', roomType: 'ballroom', x0: 0.15, x1: 27.35, z0: 38.6, z1: 53.9 },
+    { id: 'r0.study', roomType: 'study', x0: 0, x1: 9, z0: 0, z1: 9 },
+    { id: 'r0.gallery', roomType: 'gallery', x0: 0, x1: 18, z0: 12, z1: 21 },
+  ];
+  const placed = catalogPlacements(spaces, []);
+  const chand = placed.filter((q) => q.catalogId === 'chandelier');
+  t('B17 · the planner puts no catalog chandelier in the ballroom',
+    chand.every((q) => q.spaceId !== 'r0.ballroom'),
+    chand.length ? chand.map((q) => `${q.id}@${q.spaceId}`).join(', ') : 'none placed at all');
+  t('B17b · ...and it still places one somewhere, so the smashable is reachable',
+    chand.length >= 1, `${chand.length} placed`);
+
+  /*
+   * 🚨 **B17d IS THE ONE THAT CAUGHT THE REAL BUG.** A house with NO gallery sends the prop to
+   * the leftover pass, which ignores `rooms` by design. Without `avoid` it landed straight back
+   * in the ballroom while every binding-shaped assertion above stayed green.
+   */
+  const noGallery = catalogPlacements(spaces.filter((q) => q.roomType !== 'gallery'), []);
+  const chand2 = noGallery.filter((q) => q.catalogId === 'chandelier');
+  t('B17d · a house with no gallery still keeps it out of the ballroom (the leftover pass)',
+    chand2.every((q) => q.spaceId !== 'r0.ballroom'),
+    chand2.length ? chand2.map((q) => `${q.id}@${q.spaceId}`).join(', ') : 'none placed');
+  t('B17c · CONTROL the planner is doing real work — it places other props in the ballroom',
+    placed.some((q) => q.spaceId === 'r0.ballroom' && q.catalogId !== 'chandelier'),
+    `${placed.length} placements total, ${placed.filter((q) => q.spaceId === 'r0.ballroom').length} in the ballroom`);
+  t('B17c2 · CONTROL both passes read `avoid`, not just the preference pass',
+    /if \(seen\.has\(s\.id\) \|\| avoid\.has\(spaceKind\(s\)\)\) continue;/.test(layout)
+    && /!avoid\.has\(spaceKind\(s\)\)\)/.test(layout),
+    'pickSpaces and the leftover pass');
+}
+
 console.log(`\n  ${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
