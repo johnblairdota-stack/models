@@ -281,16 +281,19 @@ export const ACCUSE = Object.freeze({
   /** Reactors are staggered so the circle gasps as a ripple, not as a chorus line. */
   GASP_STAGGER: 0.22,
   SETTLE: 2.00,
-  /** Total run of the staging — nothing is scheduled past this. */
-  RUN: 2.00,
+  /** Cross-fade handed to `playSeated`. One beat must not snap into the next. */
   FADE: 0.25,
 });
 
 /**
- * Clip names, from the seated GLB. `chair-seats.js` `SEATED_REACTION_CLIPS` is the allow-list of
- * what is actually usable; where it exists it FILTERS the choices below, and where it does not
- * exist yet the full list stands. Either way a clip the body cannot play just makes
- * `avatar.playSeated` return false and that beat is a no-op — never a throw, never a T-pose.
+ * Clip names, all of them already inside `friendly_all38.glb` and all of them on `chair-seats.js`
+ * `SEATED_REACTION_CLIPS` — which is the allow-list `playSeated` enforces, and which FILTERS the
+ * two-way choices below rather than being trusted blind. A clip that is not there just makes
+ * `playSeated` return false and that beat is a no-op — never a throw, never a T-pose.
+ *
+ * The stand is the M transition, not F: `chair-seats.js` measures M ending 0.35 m inward of the
+ * seated hips against F's *"roughly over the root"*, and a robot that stands up without leaving
+ * the chair is a robot standing inside its own seat (see the seat-lock note above).
  */
 export const ACCUSE_CLIPS = Object.freeze({
   stand: 'Sit_to_Stand_Transition_M',
@@ -991,9 +994,10 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     },
     play: (seatIndex, clip, hold) => {
       const av = robots[seatIndex]?.body?.avatar;
-      // 🛡️ `playSeated` lands on the same avatar object as `playSit`, in a parallel branch. Until
-      // it does — and on a unit4h body, which has no Meshy clip set at all — this returns false
-      // and the beat is skipped, which is exactly today's behaviour plus the red `!`.
+      // 🛡️ `playSeated` lands on the same avatar object as `playSit`, from a parallel branch.
+      // Until it does — and forever on a unit4h fallback body, which has no Meshy clip set at
+      // all, and on any seat whose Meshy fetch failed — this returns false and the beat is
+      // skipped. That degrade is exactly today's behaviour: the red `!` and nothing else.
       if (typeof av?.playSeated !== 'function') return false;
       /*
        * Already holding this pose: `reapply` re-issues held poses after a `parkSit` sweep, and

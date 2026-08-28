@@ -101,6 +101,24 @@ Every bug above that has a gate name beside it is locked in. `.github/workflows/
 the full `gates:party` chain on every push and PR. **A playtest finding is not finished until it is
 a gate** — five agents' findings were lost in August because they lived in transcripts.
 
+**The TV can now make a sound, and sound leaks differently from pixels.** An audio cue may only
+be a function of state already painted on the current beat's HTML — never a pre-reveal internal,
+never anything on `FOLLOW_FORBIDDEN`. Sound leaks through **timing and magnitude**, not just
+content: a sting whose pitch tracked the real margin would tell the whole room something the
+board does not, with nothing wrong on screen for a screenshot review to catch. `showCueViolations`
+is to audio what `cueViolations` is to the follow iframe, and the voice is deliberately a **finite
+table with no continuous parameter**, so there is nothing to ride. Gate: `party-audio`.
+
+**The server does not author claims** (2026-08-28). `playEpisode` wrote `seat.cover ?? 'contestant'`
+onto every living player, outside the `if (scaffold)` block, so on every live episode every phone
+got a `players[].claim` column reading `contestant` except for one informing role name — the
+Glitched. `party-isolation` I3b was supposed to guard that field and was circular: it accepted the
+server's own `player.claim_set` as proof the owner had published. I3b now asserts provenance
+against the DRIVER's record, I3c replays the reproduction as a live-night room, and `leak: 5` is
+the control. A claim is a player verb (`roles.js` L82) and until it exists the number of claims on
+the wire is zero. New too: **I1c** — `project`'s `unrowed` list is no longer thrown away, so a
+field with no matrix row is a red line instead of a silent drop (`leak: 6` is its control).
+
 Known unguarded: **smash-target visibility.** Nothing asserts a mission target is visible or
 reachable, so "the painting was behind the furniture" can silently come back. This is the last
 live-found bug class with no regression net.

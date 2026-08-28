@@ -10,6 +10,7 @@
  * structurally incapable of putting a role, a hunter or the guide's map on the shared screen.
  * `docs/slices/task-d13-tv-follow.md`.
  */
+import { initAudio, playEviction, playNameLanded } from '../audio/audio.js';
 import { PartyNightClient, defaultWsUrl, makeCode, tokenKey } from '../party/night-client.js';
 import { recapFromEvents } from '../party/recap.js';
 import { injectNightSkin, markPartyReady, playerName } from '../party/night-skin.js';
@@ -42,6 +43,37 @@ const INTROS_DONE_MS = 12000;
  */
 const REFUSAL_HOLD_MS = 6000;
 
+/**
+ * 🔇 **HOW AN INSTRUMENTED RUN STAYS SILENT, AND WHY IT IS THREE CHECKS AND NOT ONE.**
+ *
+ * `src/audio/audio.js`'s whole capture story upstream is one line in `views/game.js`:
+ * `if (!engine.capture) armPlayOverlay(...)`, so `initAudio` is simply never called during a
+ * screenshot or a perf run. **The TV had no equivalent, because it had no `capture` flag at
+ * all** — `?view=party.host` has never read one. Roughly two dozen Playwright drivers open this
+ * exact page for real (`harness/party-follow-drive.mjs`, `_playcrit_prime.mjs`, `jellie-play.mjs`,
+ * the `_overnight_*` family …) and would each have started making noise on a CI box the day the
+ * first cue landed.
+ *
+ *   1. `?capture=1`   — the project-wide convention, `src/main.js:6`. Anything that already sets
+ *                       it for the survival game gets the same silence here.
+ *   2. `navigator.webdriver` — **the one that covers the drivers that exist today.** Not one of
+ *                       the party drivers passes `capture`; every one of them is Playwright, and
+ *                       Playwright's Chromium leaves `navigator.webdriver` true. So the existing
+ *                       harness fleet is silent with ZERO edits to files this slice does not own,
+ *                       which matters because six agents are in this tree at once.
+ *   3. `?audio=0`     — the manual mute, for a human running a live room next to a sleeping baby.
+ *
+ * And `?audio=1` is the deliberate override, so a FUTURE audio driver can drive the real page
+ * with sound on and measure it. Without that escape hatch check 2 would make the cues
+ * permanently unmeasurable from a browser, which is how a gate goes blind.
+ */
+export function audioSilenced(params, nav) {
+  if (params.get('audio') === '1') return false;      // explicit opt-IN wins, for an audio driver
+  if (params.has('capture')) return true;
+  if (params.get('audio') === '0') return true;
+  return nav?.webdriver === true;
+}
+
 export default async function partyHost({ params }) {
   injectNightSkin();
   markPartyReady();
@@ -60,6 +92,9 @@ export default async function partyHost({ params }) {
     u.searchParams.set('room', code);
     history.replaceState({}, '', u);
   }
+
+  /** See `audioSilenced`. Read once: a driver cannot grow a gesture halfway through a night. */
+  const audioSilent = audioSilenced(params, typeof navigator === 'undefined' ? null : navigator);
 
   const joinPath = `${location.origin}/?view=party.phone&room=${encodeURIComponent(code)}`;
   const wsPort = +(params.get('wsPort') || 5181);
@@ -719,6 +754,76 @@ export default async function partyHost({ params }) {
     if (sendCue({ kind: 'pair', pairs })) ui.pairKey = key;
   }
 
+  /* @audio-cue-builder:start — everything between these two sentinels is read as source text
+   * by `harness/party-audio.mjs` (A7) and scanned for forbidden identifiers. Keep the audio
+   * wiring INSIDE it and keep everything else OUT: the scanner is what makes the leak rule a
+   * gate rather than a paragraph. */
+
+  /**
+   * 📺 **THE SHOW'S TWO SOUNDS — and the timing half of the leak rule, enforced by WHERE this
+   * is called from rather than by a comment asking nicely.**
+   *
+   * `paint()` calls this AFTER `root.innerHTML = ...`, next to `cueNominees()` and `cuePairs()`.
+   * That ordering is the R2 clause made physical: a cue cannot precede the pixels it describes,
+   * because the pixels are already written by the time this function has a stack frame. A sting
+   * fired from `onMessage` the instant the server resolved a ballot would land one paint before
+   * the verdict plate — early to the whole room, and invisible to a screenshot review, because
+   * by the time any shutter opens the plate is up too.
+   *
+   * Both payloads are checked at `audio.js`'s door by `showCueViolations` and refused if they
+   * carry anything but the closed allowlist. This end passes only:
+   *   `standing`  how many nomination rows were ALREADY on the board — a count of things the
+   *               screen is printing, never an id. `client.noms` itself never crosses.
+   *   `executed`  a BOOLEAN. Who went out is on the plate in letters a foot high; the synth
+   *               does not need the seat to make a noise about it.
+   * No margin, no tally, no `lynchVotes`, no alignment. See the leak rule in `src/audio/audio.js`.
+   */
+  const audioSeen = { standing: 0, evict: '' };
+
+  function fireShowAudio(show, episode) {
+    if (audioSilent) return;
+    /*
+     * Fires on the EDGE, once per name. `paint()` runs on every websocket message — several a
+     * second during a live Reckoning — so an unkeyed call would machine-gun the room. Same
+     * argument as `cueNominees`'s `nomsKey` one function up, and the same reason `cuePairs` is
+     * keyed too.
+     *
+     * The count passed is the count BEFORE this name, i.e. the rows the board was already
+     * printing, which makes each successive tap the next step of `NAME_VOICES`. Two names
+     * landing inside one paint deliberately make ONE sound: the board gained rows once.
+     */
+    if (show === 'reckoning') {
+      const rows = client.noms?.length ?? 0;
+      if (rows > audioSeen.standing) {
+        playNameLanded({ kind: 'name', beat: 'reckoning', standing: audioSeen.standing });
+      }
+      audioSeen.standing = rows;
+    } else if (show !== 'vote') {
+      // The nominee rows survive into the Vote, so the counter must too — resetting there would
+      // re-tap every name if a paint ever walked back. Anywhere else is a fresh episode.
+      audioSeen.standing = 0;
+    }
+    /*
+     * ⚠️ **AND IT WAITS FOR `lynchResult`, WHICH IS THE SAME CONDITION THE PLATE WAITS FOR.**
+     * The Execution beat is reachable with no result on the wire — a TV reconnecting mid-beat,
+     * or the beat landing a tick before the result does; `executionLine`'s header records that
+     * being photographed. During that window the screen says "Counting the ballot." and this
+     * says nothing, because there is nothing painted to be the sound of.
+     */
+    if (show === 'execution' && client.lynchResult) {
+      const out = !!client.lynchResult.executed;
+      const key = `${episode}|${out}`;
+      if (key !== audioSeen.evict) {
+        audioSeen.evict = key;
+        playEviction({ kind: 'evict', beat: 'execution', executed: out });
+      }
+    } else if (show !== 'execution') {
+      audioSeen.evict = '';
+    }
+  }
+
+  /* @audio-cue-builder:end */
+
   /**
    * 👏 THE REACTION STRIP, patched in place along the bottom of the run.
    *
@@ -805,6 +910,24 @@ export default async function partyHost({ params }) {
   }
 
   function startNight() {
+    /*
+     * 🔊 **THE ONLY PLACE THE SHOW'S AUDIO CONTEXT MAY BE CREATED, AND IT IS NOT A STYLE
+     * CHOICE.** Chrome's autoplay policy wants a real user gesture on a real top-level
+     * document, and `#go` -> here (wired at the bottom of `paint()`) is a synchronous click
+     * handler on one — the same shape `views/game.js`'s `armPlayOverlay` already relies on, and
+     * its comment already explains.
+     *
+     * ⚠️ **NOT IN THE FOLLOW IFRAME.** The frame carries `allow="autoplay"` and is same-origin,
+     * but it never receives a gesture of its own, and whether a browser honours top-frame
+     * activation through a child's feature policy is browser behaviour nobody on this slice
+     * could confirm from source. The host page is a document we KNOW was clicked. D13 already
+     * says the iframe is a renderer with no channel; giving it the loudspeaker as well would be
+     * arguing with that for no gain.
+     *
+     * `initAudio` reads `engine?.capture` and nothing else — the TV has no WebGL engine and
+     * needs none. See `audioSilenced` for what makes `capture` true here.
+     */
+    initAudio({ capture: audioSilent });
     client.send({ t: 'start' });
     client.send({ t: 'casting' });
     ui.beat = 'casting';
@@ -1275,6 +1398,8 @@ export default async function partyHost({ params }) {
     if (show === 'expedition') ui.sitCued = false;
     cueNominees();
     cuePairs();
+    // 🔊 AFTER `root.innerHTML`, ALWAYS. See `fireShowAudio` — the ordering is the rule.
+    fireShowAudio(show, episode);
     mountFollow();
     placeFollow();
     startClockTick();

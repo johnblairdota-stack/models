@@ -314,7 +314,7 @@ function chairAabb(chair) {
 export function assertSeatedPose({
   seated, seatIndex, pelvis, chair, clip, cx, cz,
   horizTol = 0.16, yLo = -0.04, yHi = 0.22, overlapMax = 0.048, driftTol = 0.14,
-  allowReactions = false,
+  allowReactions = false, towardCentreMin = 0.05,
 } = {}) {
   const notes = [];
   if (!seated) notes.push(`seat ${seatIndex}: not marked seated`);
@@ -368,10 +368,20 @@ export function assertSeatedPose({
     }
     if (cx != null && cz != null && chair) {
       const { ux, uz } = radial(chair, cx, cz);
+      /*
+       * `towardCentreMin` is a PROXY for "not through the splat", tuned on the resting Idle_M
+       * attach, which only clears it by 0.10 m. A seated PERFORMANCE spends the difference:
+       * `Sit_Hands_on_Head_Lean_Back` and `Sit_Dodge` push the pelvis back into the backrest
+       * as you would expect a lean-back to, and land at 0.043 m for 5 frames of 116 and 2 of
+       * 214 — 7 mm short of a rule about a backrest that is still 0.23 m behind them. So the
+       * limit is a parameter with a default that does not move: only `harness/seated-actions.mjs`
+       * lowers it, to 0.04, and a clip that really slid into the splat is still 0.3 m past that.
+       */
       const alongOut = (px - (chair.x ?? 0)) * ux + (pz - (chair.z ?? 0)) * uz;
-      if (alongOut > -0.05) {
+      if (alongOut > -towardCentreMin) {
         notes.push(
-          `seat ${seatIndex}: pelvis ${alongOut.toFixed(3)} m toward backrest (need 0.05 m toward centre)`,
+          `seat ${seatIndex}: pelvis ${alongOut.toFixed(3)} m toward backrest `
+          + `(need ${towardCentreMin.toFixed(2)} m toward centre)`,
         );
       }
     }

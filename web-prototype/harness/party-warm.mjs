@@ -2546,9 +2546,16 @@ console.log('\nparty-warm — the lobby-warm night');
    * `step` is the talk beats and `holdStep` is the run, and a stream frozen mid-expedition would
    * be a line of static glyphs hanging in the ballroom.
    */
+  /*
+   * ⚠️ The window was 160 characters and that made it a spelling test. The accusation stage
+   * added `stage.step(dt)` and a comment at the top of `holdStep`, which pushed `stream.step`
+   * past it — the stream was still being stepped on the very next line. The claim is "the
+   * stream is stepped inside holdStep", not "it is the first thing in it", so the window is
+   * wide enough to survive a neighbour being added and still far too tight to jump a function.
+   */
   t('W36a · and it is STEPPED from both bed loops, not merely built',
     (bedSrc.match(/stream\.step\(dt, engine\.camera\);/g) || []).length === 2
-      && /holdStep\(dt, t\) \{[\s\S]{0,160}?stream\.step/.test(bedSrc));
+      && /holdStep\(dt, t\) \{[\s\S]{0,600}?stream\.step/.test(bedSrc));
 
   /*
    * 🔒 THE PRIVACY CONTROL, AND IT IS THE MOST IMPORTANT ASSERTION IN THIS BLOCK.
@@ -3498,9 +3505,22 @@ console.log('\nparty-warm — the lobby-warm night');
   // Control. A merged pair is ONE name over TWO robots: it has no single seat, so it gets no tab
   // rather than a tab naming the wrong half. And the tab joins the idempotence key, or a robot
   // coming back from a pair would keep the tabless plate for the rest of the night.
+  /*
+   * ⚠️ **THIS ASSERTED A CALL-SITE SPELLING AND THE CALL SITES LEGITIMATELY MOVED.** The
+   * accusation stage collapsed the two `setNameTagLabel` sites into one `repaintTags()`, because
+   * `setPairs` and `setNominees` write the SAME sprites and two writers racing one plate is its
+   * own bug. The third argument is now a `skin` variable rather than a literal `null`, so the old
+   * regex could not match code that behaves identically.
+   *
+   * What the control actually protects is unchanged and is what it now asserts: a merged pair
+   * gets `null` for the tab (a seat number on a shared two-robot plate names the wrong half of it
+   * half the time), and an unpaired robot's tab is rebuilt FROM `r.seat` on every repaint rather
+   * than remembered — which is what makes unpairing restore it.
+   */
   t('W38d control · a merged pair wears no seat tab, and unpairing restores the one it had',
-    /setNameTagLabel\(r\.tag, merged, \{ ink: LINK_INK, chrome: LINK_CHROME \}, null\)/.test(bedSrc)
-    && /setNameTagLabel\(r\.tag, r\.seat\.name, null, \{ seat: r\.seat\.seat, accent: r\.seat\.accent \}\)/.test(bedSrc)
+    /if \(merged\) \{ setNameTagLabel\(r\.tag, merged, \{ ink: LINK_INK, chrome: LINK_CHROME \}, null\); continue; \}/.test(bedSrc)
+    && /const tab = \{ seat: r\.seat\.seat, accent: r\.seat\.accent \};/.test(bedSrc)
+    && /setNameTagLabel\(r\.tag, r\.seat\.name, skin, tab\)/.test(bedSrc)
     && /sprite\.userData\.tagTab === tabKey/.test(plateSrc));
 }
 

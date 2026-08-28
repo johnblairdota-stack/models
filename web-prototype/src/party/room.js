@@ -110,6 +110,26 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     worldTick: 0,
   };
 
+  /**
+   * ⚠️ **`state.players` IS THE BROADCAST ROW, SO A FACT THAT IS NOT FOR THE WIRE DOES NOT GO ON
+   * IT** — and `applyTake` returns one that is not.
+   *
+   * `fullFor` spreads these rows into `base.players` wholesale, so every key here is offered to
+   * the entitlement matrix, and `taken: true` (`taken.js` L69) has no row. Deny-by-default was
+   * therefore deleting it from every frame in silence — no leak, but no error either, and the
+   * same silence a genuinely secret field would have got. Found by `party-isolation` I1c the hour
+   * it was written, which is the argument for I1c.
+   *
+   * The take is already fully described by two rowed fields the room does publish — `alive:false`
+   * and `plate: FACE_DOWN` — plus `player.taken` / `player.sealed` in the log, which is what the
+   * Reunion reads. Nothing anywhere reads `state.players[].taken`. So it stays where it belongs:
+   * on `applyTake`'s return, which `party-taken` asserts, and off the row that gets projected.
+   */
+  const landTake = (victim, player) => {
+    const { taken, ...row } = player;
+    Object.assign(victim, row);
+  };
+
   const record = (e) => {
     const stored = log.append(e);
     if (emit) {
@@ -141,9 +161,11 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
        * No `you` means no role, which is the correct thing to tell a chair nobody is sitting in.
        */
     } else {
-      // Host/TV is a spectator. `playEpisode` writes covers into `players[].claim` so the
-      // Reunion has a finalClaim; that field is phones-only. Strip it here too so a later
-      // matrix-row mistake cannot put covers on the TV frame.
+      // Host/TV is a spectator. `players[].claim` is a `phones` row, and it is stripped HERE as
+      // well so a later matrix-row mistake cannot put a published nameplate on the shared screen
+      // — DevTools on the host tab is not a nameplate. Belt and braces on purpose: the value
+      // this used to carry was the Glitched's cover (see `playEpisode`), and the row was the only
+      // thing standing between it and the television.
       base.players = base.players.map((p) => {
         const { claim, ...row } = p;
         return row;
@@ -264,12 +286,24 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
        */
       base.flyover = { hunter: seen, jam: feed.jammed, marks };
     }
-    // ---- the four injected leaks. `harness/party-isolation.mjs` I9 requires each to turn
-    // exactly one named assertion red; a control that stops failing means the gate is blind.
+    // ---- the injected leaks. `harness/party-isolation.mjs` I9 requires each to turn exactly the
+    // named set of assertions red; a control that stops failing means the gate is blind.
     // Leaks 1 and 3 are VALUE and ORDER leaks: they pass through the filter untouched, because
     // the key is rowed and the audience is satisfied. Those are the ones a matrix cannot catch,
     // and they are I3's and I4b's whole reason for existing.
+    // Leak 5 lives in `playEpisode` rather than here, because the bug it reproduces was stateful:
+    // it wrote `state.players[].claim` and a PUBLIC event, not a field on one frame.
     if (leak === 1) base.you = { ...(base.you || {}), role: deal.seats[0].role, alignment: deal.seats[0].alignment };
+    /*
+     * 🚨 LEAK 6 IS THE ONE THAT NEVER REACHES A FRAME, AND THAT IS THE POINT OF IT.
+     *
+     * `castSeed` has no matrix row, on purpose (`cast.js`'s header) — so `project` drops it and
+     * pushes the path onto `unrowed`, and every socket's transcript is byte-identical to a clean
+     * run. I1 walks what a socket ACTUALLY GOT, so I1 cannot see this: an unrowed field announces
+     * itself as a silence. `unrowedSeen` below is what turns that silence into a red line, and
+     * this is the control that proves it can go red.
+     */
+    if (leak === 6) base.castSeed = castSeed;
     if (leak === 3) base.players = base.players.slice().sort((a, b) => {
       const al = (id) => deal.seats.find((s) => s.id === id).alignment;
       return al(a.id).localeCompare(al(b.id));
@@ -277,13 +311,35 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     return base;
   }
 
+  /**
+   * 📋 **EVERY FIELD THE MATRIX HAD NO ROW FOR — KEPT, BECAUSE `project` DROPS THEM IN SILENCE.**
+   *
+   * Deny-by-default is right and it is quiet. An unrowed path is deleted before it reaches a
+   * socket, and `party-isolation` walks what a socket ACTUALLY GOT — so I1 is structurally unable
+   * to see one. `project` has returned `unrowed` since it was written (`entitle.js` L211) and
+   * every caller in this file threw it away, which meant a field added six months from now would
+   * announce itself as an absence rather than as an error. That is the exact failure mode
+   * `entitle.js`'s header says deny-by-default exists to prevent, half-built.
+   *
+   * PATHS ONLY, NEVER VALUES, AND A `Set` — this is a schema record about a room, it is not a
+   * frame, it never goes near `send`, and it must not grow with the length of the night.
+   */
+  const unrowedSeen = new Set();
+
+  /** Project for one socket and bank whatever the matrix had no row for. */
+  function projectFor(sock) {
+    const ctx = {
+      playerId: sock.playerId, alignment: sock.alignment, isTV: sock.isTV,
+      seatRole: sock.seatRole, ownerId: sock.playerId,
+    };
+    const { frame, unrowed } = project(fullFor(sock), ctx);
+    for (const p of unrowed) unrowedSeen.add(p);
+    return frame;
+  }
+
   function broadcast() {
     for (const sock of sockets) {
-      const ctx = {
-        playerId: sock.playerId, alignment: sock.alignment, isTV: sock.isTV,
-        seatRole: sock.seatRole, ownerId: sock.playerId,
-      };
-      const { frame } = project(fullFor(sock), ctx);
+      const frame = projectFor(sock);
       // 🚨 Leaks 2 and 4 attach AFTER the projection, because that is the shape a real leak
       // takes: nobody edits the matrix to allow a leak, they attach a field downstream of it.
       // (An earlier draft injected both upstream and deny-by-default silently swallowed them —
@@ -332,7 +388,7 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
           state.takenThisEpisode || [],
         );
         const { player, events } = applyTake(victim);
-        Object.assign(victim, player);
+        landTake(victim, player);
         record(makeEvent('player.executed', VIS.PUBLIC, { id: victim.id, seat: victim.seat, executioner: swinger }));
         for (const e of events.filter((e) => e.type !== 'player.taken')) record(makeEvent(e.type, e.vis, e.data));
       }
@@ -506,26 +562,75 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       const r = resolveContact({ mode: MODE.PARTY, occupiedSockets: 0 });
       if (r.outcome === 'taken') {
         const { player, events } = applyTake(victim);
-        Object.assign(victim, player);
+        landTake(victim, player);
         takenThisEpisode.push(victim.id);
         for (const e of events) record(makeEvent(e.type, e.vis, e.data));
       }
     }
 
-    // Claims are published from a phone at any time; the stub sets one per episode so the roll
-    // call has a `finalClaim` to put beside the truth.
-    for (const p of state.players.filter((x) => x.alive)) {
-      /*
-       * ⚠️ `state.players` IS THE CAPACITY AND `deal.seats` MAY NOT BE. Once `dealRoles` re-deals
-       * for the phones that actually joined, chairs 3..8 exist as players and hold no card — so
-       * this lookup can miss, and it used to throw right here in the middle of an episode.
-       * A chair nobody sat in publishes nothing rather than publishing a default nameplate.
-       */
-      const seat = deal.seats.find((s) => s.id === p.id);
-      if (!seat) continue;
-      const claim = seat.cover ?? 'contestant';
-      p.claim = claim;
-      record(makeEvent('player.claim_set', VIS.PUBLIC, { id: p.id, claim }));
+    /*
+     * ---------------------------------------------------------------------------------------
+     * 🚨 **THE SERVER DOES NOT AUTHOR CLAIMS — AND WHEN IT DID, IT NAMED THE GLITCHED TO EVERY
+     *    PHONE IN THE ROOM, ON EVERY LIVE EPISODE.**
+     * ---------------------------------------------------------------------------------------
+     * What stood here called itself a stub and was on the live wire. For every living player it
+     * wrote a nameplate the player had never said out loud:
+     *
+     *     const claim = seat.cover ?? 'contestant';
+     *     p.claim = claim;
+     *     record(makeEvent('player.claim_set', VIS.PUBLIC, { id: p.id, claim }));
+     *
+     * `cast.js` L196-201 sets `seat.cover` on EXACTLY ONE seat — `if (seat.role !== 'glitched')
+     * continue;`. So that loop published a column reading `contestant` for everybody and one
+     * informing role name for one player, and `players[].claim` is a `phones` row
+     * (`entitle.js` L103). Every phone could read the Glitched straight off its own screen:
+     *
+     *     castSeed  5 · glitched p2 → p2=cameraOp,    every other row contestant
+     *     castSeed 17 · glitched p5 → p5=cameraOp
+     *     castSeed 42 · glitched p3 → p3=focusPuller
+     *
+     * `roles.js` L19-24 is what that costs: without the Glitched *"the Camera Op and the Focus
+     * Puller are oracles and the game solves itself."* Naming them also hands the room a second
+     * player confirmed GOOD by inference, and `players[].alignment` is the matrix's loudest
+     * absence — *"NO ROW. Nobody, ever, pre-REUNION."* `GUARANTEED[5]` and `[6]` both contain
+     * `glitched` (`cast.js` L98-99), so at five and six players it fired every single game.
+     *
+     * ⚠️ **IT WAS NEVER BEHIND `scaffold`.** The `if (scaffold)` block above opens at the miss/
+     * alarm stubs and closes before the take; this loop sat outside it, so `scaffold: false` —
+     * the flag whose own comment reads LIVE NIGHT PASSES `scaffold: false` — did not turn it
+     * off. The word "stub" in the comment, in `log.js`'s filter and in the matrix row was doing
+     * all the reassuring while the code ran on the real night.
+     *
+     * A claim is something a PLAYER does — the Method Actor's nameplate, `roles.js` L82 — and
+     * until that verb exists the honest number of claims on any wire is zero. So:
+     *
+     *   · `players[].claim` STAYS in the frame, as `null`. I7 asserts that no survivor's frame
+     *     changes shape, and a field that appears the moment somebody publishes would change it;
+     *     present-and-null says the same thing without announcing anything by its presence.
+     *   · `players[].claim` KEEPS its `phones` row. The row is right; what was wrong was who
+     *     wrote the value.
+     *   · `reunion.js`'s `finalClaim` now reads `null` for everybody, which is the truth —
+     *     nobody claimed anything — rather than a cover its holder never uttered. `rollCall`
+     *     already names the cover under `believedTheyWere`, from the SEALED deal, so the Reunion
+     *     loses nothing it is entitled to.
+     *
+     * Gates: `party-isolation` I3b (provenance — a claim the driver did not publish is a leak,
+     * asserted against the DRIVER'S record and never against the server's own event) and I3c
+     * (the three seeds above, replayed as a live-night room). Control: `leak: 5` restores exactly
+     * the loop that was here, and both go red.
+     */
+    if (leak === 5) {
+      for (const p of state.players.filter((x) => x.alive)) {
+        // ⚠️ `state.players` IS THE CAPACITY AND `deal.seats` MAY NOT BE — once `dealRoles`
+        // re-deals for the phones that actually joined, chairs 3..8 exist as players and hold
+        // no card, and this lookup used to throw mid-episode. Kept so the control reproduces
+        // the shipped loop exactly rather than a tidied-up version of it.
+        const seat = deal.seats.find((s) => s.id === p.id);
+        if (!seat) continue;
+        const claim = seat.cover ?? 'contestant';
+        p.claim = claim;
+        record(makeEvent('player.claim_set', VIS.PUBLIC, { id: p.id, claim }));
+      }
     }
 
     setPhase('RECAP');
@@ -555,7 +660,7 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
         const victim = state.players.find((p) => p.id === result.executed);
         const swinger = executioner({ living, nominations: state.nominations }, result.executed, takenThisEpisode);
         const { player, events } = applyTake(victim);
-        Object.assign(victim, player);
+        landTake(victim, player);
         record(makeEvent('player.executed', VIS.PUBLIC, { id: victim.id, seat: victim.seat, executioner: swinger }));
         for (const e of events.filter((e) => e.type !== 'player.taken')) record(makeEvent(e.type, e.vis, e.data));
       }
@@ -815,13 +920,14 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     syncOne(socketId) {
       const sock = sockets.find((s) => s.id === socketId);
       if (!sock) return;
-      const ctx = {
-        playerId: sock.playerId, alignment: sock.alignment, isTV: sock.isTV,
-        seatRole: sock.seatRole, ownerId: sock.playerId,
-      };
-      const { frame } = project(fullFor(sock), ctx);
-      send(sock.id, frame);
+      send(sock.id, projectFor(sock));
     },
+    /**
+     * Field paths this room built that the entitlement matrix had no row for. Empty on a healthy
+     * room. Belongs to the gate — `party-isolation` I1c — and to nobody else: it is the only way
+     * a silently-dropped field can be seen from outside `project`. See `unrowedSeen`.
+     */
+    unrowed: () => [...unrowedSeen],
     /** Ground truth. Belongs to the gate and the Reunion. Never to a socket. */
     truth: () => ({
       seats: deal.seats.map((s) => ({ ...s })),
