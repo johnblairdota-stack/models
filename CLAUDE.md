@@ -89,6 +89,10 @@ decision, not a refactor.
   air during the run.
 - **Name tags float above the head, billboard to the TV camera, black-outlined white text**, and
   must stay legible at low quality and distance. Red `!` over a nominee, above the tag.
+  ⚠️ The legibility half of this rule is **currently broken and measured** — see the tag-census
+  note above. Any fix trades against the "float above the head" half, so it needs John.
+  A seat tab was added beside the name (F12, John's call 2026-08-28); the NAME's treatment,
+  stroke and colours are untouched.
 - **Sledge grip is bench-locked**: `GRIP_SHIPPED` 2.37 rad, haft 0.205, guards 13.3 cm off wrist /
   31.0 cm up shaft / 89.8°. Bench is `?view=char.grip` / `harness/_grip_shot.mjs`. The product
   hammer must match the bench — this was got wrong twice.
@@ -118,6 +122,17 @@ against the DRIVER's record, I3c replays the reproduction as a live-night room, 
 the control. A claim is a player verb (`roles.js` L82) and until it exists the number of claims on
 the wire is zero. New too: **I1c** — `project`'s `unrowed` list is no longer thrown away, so a
 field with no matrix row is a red line instead of a silent drop (`leak: 6` is its control).
+
+**Known RED, with an instrument and no fix: the name tags bury each other** (2026-08-28).
+`harness/tag-census.mjs` T7 fails on the shipped arm — 97% of one name hidden under a nearer one,
+and only **4-6 of 8 names readable with room to spare at every camera position on the ring**.
+Nothing is culled, cropped, occluded or shrunk: all 8 plates are in frame at all 82 measured
+positions and the applied scale tracks the clamp to 0.001. It is packing — eight plates are
+1238px laid end to end against 861px of arc between the outermost anchors, and past 8 m both
+plates pin at `TAG_FAR_K` so apparent size goes as 1/d and the nearer one wins outright. **That
+file is deliberately NOT in `gates:party`**, because a red gate in the chain reddens every push;
+it is a finding with a measurement behind it. The fix moves where the tag floats relative to the
+head, which is inside the locked tag rule below — **John's call, not a refactor.**
 
 Known unguarded: **smash-target visibility.** Nothing asserts a mission target is visible or
 reachable, so "the painting was behind the furniture" can silently come back. This is the last

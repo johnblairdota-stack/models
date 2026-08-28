@@ -105,6 +105,7 @@ All referenced scripts exist — 28 of them as of 2026-08-28, the four newest be
 | Border doorways opening into void | `ee9f161` | `party-warm.mjs:2157` — `voidOpen===0 && outsideOpen===0` across 24 seeds | ✅ locked |
 | Props clipping into doorway apertures | `ee9f161` | `party-warm.mjs:2163` (+ `W34e` control) | ✅ locked |
 | **Smash target hidden behind furniture** | — | **none** | 🚨 **unguarded — "I couldn't see the painting" can come straight back** |
+| **Eight name tags bury each other — 97% of one name** | — | `tag-census.mjs` T7, **red on the shipped arm and out of the CI chain on purpose** | 🚨 **measured, unfixed — the fix is inside a locked rule and needs John** |
 | sitLock TDZ crash on walk-in | `105b77d` | `_sit_in_chair.mjs:195`, `party-warm.mjs:2105` | ⚠️ locked by **string-index grep on source order**, not runtime. Renaming an identifier passes the gate and reintroduces the TDZ. |
 | Missing nominate window after Debrief | `e94b308` | `party-night.mjs:639-644` | ✅ locked |
 
