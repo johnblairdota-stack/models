@@ -236,6 +236,7 @@ export default async function partyHost({ params }) {
      *  on the step rather than four times a second — see `startClockTick`. */
     reunionKey: '',
     nomsKey: '',
+    execKey: '',
     /** Refusals still on air. Transient — an event, not a fact. See REFUSAL_HOLD_MS. */
     refusals: [],
     /** Last pair set pushed into the mansion, so a links fanout on every tap does not churn it. */
@@ -895,6 +896,22 @@ export default async function partyHost({ params }) {
     const key = `${show}|${standing.map((n) => n.target).join(',')}`;
     if (key === ui.nomsKey) return;
     if (sendCue({ kind: 'noms', standing })) ui.nomsKey = key;
+  }
+
+  /**
+   * 🔨 Execution staging. The rule is already `executioner()` — first nominator of the
+   * executed player, or the Showrunner if that nominator was taken. This cue is what
+   * makes that robot STAND, WALK and SWING instead of the circle sitting down and the
+   * plate cutting. Empty on every other beat so a leftover walk cannot leak into Verdict.
+   */
+  function cueExecute() {
+    const show = ui.beat;
+    const live = show === 'execution' && client.lynchResult?.executed;
+    const executioner = live ? String(client.lynchResult.executioner || '') : '';
+    const target = live ? String(client.lynchResult.executed || '') : '';
+    const key = `${show}|${executioner}>${target}`;
+    if (key === ui.execKey) return;
+    if (sendCue({ kind: 'execute', executioner, target })) ui.execKey = key;
   }
 
   /**
@@ -1664,6 +1681,7 @@ export default async function partyHost({ params }) {
     if (onStage || onRecap || (show === 'casting' && ui.introsDone)) cueSitDown();
     if (show === 'expedition') ui.sitCued = false;
     cueNominees();
+    cueExecute();
     cuePairs();
     // 🔊 AFTER `root.innerHTML`, ALWAYS. See `fireShowAudio` — the ordering is the rule.
     fireShowAudio(show, episode);

@@ -26,7 +26,7 @@
 
 import { readFile } from 'node:fs/promises';
 import {
-  CUE_CAST_KEYS, CUE_KEYS, CUE_KINDS, CUE_NOM_KEYS, FOLLOW_FORBIDDEN, FOLLOW_INSTRUMENTS,
+  CUE_CAST_KEYS, CUE_KEYS, CUE_KINDS, CUE_NOM_KEYS, CUE_EXECUTE_KEYS, FOLLOW_FORBIDDEN, FOLLOW_INSTRUMENTS,
   FOLLOW_KEYS, FOLLOW_VIEW,
   IDENTITY_SECRETS, INTRO_FOV, INTRO_FRAME_PCT, MISSION_PHASES, MOVE_KEYS, RING_OUT, SPATIAL_WORDS,
   STICK_DEADZONE, STICK_RELEASE, STICK_TURN, TALK_FOV, TV_FRAME_PCT,
@@ -176,6 +176,8 @@ console.log('\nparty-warm — the lobby-warm night');
     { kind: 'noms', standing: [{ nominator: 'p1', target: 'p2' }] },
     // 🍮 The merged pair. Name only — the words are pushed to two sockets and are not a cue.
     { kind: 'pair', pairs: [{ a: 'p1', b: 'p2', name: 'JELLIE' }] },
+    // 🔨 The nominator swings. Public ids; SHOWRUNNER is the taken-nominator sentinel.
+    { kind: 'execute', executioner: 'p1', target: 'p2' },
   ];
   let clean = 0;
   for (const cue of GOOD) {
@@ -237,6 +239,14 @@ console.log('\nparty-warm — the lobby-warm night');
     && CUE_KEYS.noms.includes('standing')
     && CUE_NOM_KEYS.every((k) => FANOUT_KEYS.nomRow.includes(k))
     && cueViolations({ kind: 'noms', standing: [{ nominator: 'p1', target: 'p2', role: 'PLANT' }] }).length > 0);
+  t('W3j · execute is a closed public cue — nominator swings, no role, no ninth body',
+    cueViolations({ kind: 'execute', executioner: 'p1', target: 'p2' }).length === 0
+    && cueViolations({ kind: 'execute', executioner: 'SHOWRUNNER', target: 'p2' }).length === 0
+    && cueViolations({ kind: 'execute', executioner: '', target: '' }).length === 0
+    && CUE_EXECUTE_KEYS.includes('executioner') && CUE_EXECUTE_KEYS.includes('target')
+    && FANOUT_KEYS.lynchResult.includes('executioner')
+    && FANOUT_KEYS.lynchResult.includes('executed')
+    && cueViolations({ kind: 'execute', executioner: 'p1', target: 'p2', role: 'PLANT' }).length > 0);
 }
 
 // ---- W4 · the pad and the world report -------------------------------------------------------
@@ -2394,6 +2404,26 @@ console.log('\nparty-warm — the lobby-warm night');
   t('W33j · sitLock pins the model so gait offset cannot unseat the clip',
     /if \(this\.sitLock\) \{[\s\S]*?this\.model\.position\.set\(0, 0, 0\)/.test(playerSrc)
     && /sitIdle = sitIdleM \|\| sitIdleF/.test(await readFile(new URL('../src/characters/mesh-avatar.js', import.meta.url), 'utf8')));
+  /*
+   * John, room DUSK: two accusers clipped then it cut. The nominator already swings in
+   * `executioner()`; Execution was sending an empty `noms` cue and sitting everyone down.
+   * W33k is the picture: that nominator stands, walks the inner ring, swings the existing
+   * sledge. Showrunner is a hold on the accused, not a ninth robot. Grip lock untouched.
+   */
+  const meshSrc = await readFile(new URL('../src/characters/mesh-avatar.js', import.meta.url), 'utf8');
+  t('W33k · Execution stages the nominator — stand, walk, sledge — or a Showrunner hold',
+    /function cueExecute/.test(hostSrc)
+    && /kind === 'execute'/.test(bedSrc)
+    && /setExecute\(/.test(introSrc)
+    && /function planExecute/.test(introSrc)
+    && /playLoco/.test(introSrc)
+    && /dropChair/.test(introSrc)
+    && /fillExecuteEye/.test(introSrc)
+    && /SHOWRUNNER/.test(introSrc)
+    && /mountProp\(obj/.test(meshSrc)
+    && /playAttack\(dur/.test(meshSrc)
+    && /GRIP_MOUNT/.test(meshSrc)
+    && !/god-view|setLid\(false\)/.test(introSrc.slice(introSrc.indexOf('function fillExecuteEye'))));
 }
 
 // ---- W34 · NO DOORWAY INTO VOID, AND NOTHING OCCUPIES THE APERTURE --------------------------

@@ -39,9 +39,13 @@
 import {
   ACCUSE, ACCUSE_CLIPS, createAccusationStage, nomKey, nomRows,
   planAccusation, reactorSeats, settleClip, gaspClip, pickAllowed,
+  planExecute, EXECUTE,
 } from '../src/game/intro-bed.js';
 import { SEATED_REACTION_CLIPS, SEATED_CLIPS_LEAVE_CHAIR, SIT_CLIP_ALLOW } from '../src/game/chair-seats.js';
 import { NOM_INK, NOM_CHROME, INK } from '../src/characters/chest-nameplate.js';
+import { executioner, SHOWRUNNER } from '../src/party/vote.js';
+import { WEAPON_RANGE } from '../src/game/rules.js';
+import { SWING_DUR } from '../src/game/sledge.js';
 
 let pass = 0, fail = 0;
 const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' · ' + d : ''}`); } else { fail++; console.log(`  FAIL ${n}${d ? ' · ' + d : ''}`); } return c; };
@@ -387,6 +391,53 @@ console.log('\naccusation-stage · the circle performs the accusation\n');
   const extra = [...used].filter((k) => !CUE_NOM_KEYS.includes(k));
   t('A12 · the staging reads only `nominator` and `target` — nothing private, no wire change',
     extra.length === 0, extra.length ? `also read: ${extra.join(',')}` : [...used].join(','));
+}
+
+/* ── E0–E6 · EXECUTION IS THE NOMINATOR WALKING, NOT A SIT-AND-CUT ─────────────────────────── */
+{
+  /*
+   * John, room DUSK, 8 seats, bots piled the lynch onto Fox: whoever FIRST nominated Fox
+   * should get up, walk at them, and hit them with the sledge. `executioner()` already
+   * returns that nominator. These assert the TV plan matches the rule, that the Showrunner
+   * sentinel does not invent a ninth body, and that an empty cue is off — so Execution
+   * cannot silently go back to sitting everyone down and cutting.
+   */
+  const state = { living: ['p1', 'p2', 'p3'], nominations: [{ nominator: 'p2', target: 'p5' }] };
+  t('E0 · the first nominator of the executed player is who `executioner()` names',
+    executioner(state, 'p5') === 'p2');
+  const walk = planExecute({ executionerId: executioner(state, 'p5'), targetId: 'p5' });
+  t('E1 · and that same id is the actor the TV walks — stand, approach, sledge',
+    walk.actor === 'p2' && walk.target === 'p5' && walk.walk === true && walk.showrunner === false,
+    JSON.stringify(walk));
+  const taken = planExecute({
+    executionerId: executioner(state, 'p5', ['p2']),
+    targetId: 'p5',
+  });
+  t('E2 · a nominator taken this episode is the Showrunner — no ninth robot, no walk',
+    executioner(state, 'p5', ['p2']) === SHOWRUNNER
+    && taken.actor === null && taken.walk === false && taken.showrunner === true
+    && taken.target === 'p5',
+    JSON.stringify(taken));
+  t('E3 · nobody executed is nobody walking',
+    planExecute({ executionerId: '', targetId: '' }).walk === false
+    && planExecute({}).actor === null && planExecute({}).target === null);
+  t('E4 · the rise fits inside the authored stand clip, and the strike is a hammer length',
+    EXECUTE.RISE_DUR > 0.8 && EXECUTE.RISE_DUR < 6
+    && EXECUTE.STRIKE <= WEAPON_RANGE.sledge
+    && EXECUTE.WALK_TIMEOUT > EXECUTE.RISE_DUR
+    && SWING_DUR > 0.4);
+  const { CUE_KEYS, CUE_KINDS, CUE_EXECUTE_KEYS, cueViolations } = await import('../src/party/follow.js');
+  t('E5 · the execute cue is closed, public, and refuses a role',
+    CUE_KINDS.includes('execute')
+    && CUE_EXECUTE_KEYS.every((k) => CUE_KEYS.execute.includes(k))
+    && cueViolations({ kind: 'execute', executioner: 'p2', target: 'p5' }).length === 0
+    && cueViolations({ kind: 'execute', executioner: SHOWRUNNER, target: 'p5' }).length === 0
+    && cueViolations({ kind: 'execute', executioner: 'p2', target: 'p5', role: 'PLANT' }).length > 0);
+  t('E6 · a second accuser is not the swinger — only the nominator of the executed player',
+    executioner({
+      living: ['p1', 'p2', 'p3'],
+      nominations: [{ nominator: 'p1', target: 'p3' }, { nominator: 'p2', target: 'p5' }],
+    }, 'p5') === 'p2');
 }
 
 console.log(`\naccusation-stage: ${pass} passed, ${fail} failed`);

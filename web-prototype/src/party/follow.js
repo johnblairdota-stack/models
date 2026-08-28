@@ -638,7 +638,7 @@ export function warmUrl(opts = {}) {
  * `FOLLOW_FORBIDDEN` verbatim, and a violation THROWS at both ends rather than being dropped.
  *
  * The reasoning is `follow.js`'s own, one channel over. The follow view still has no socket; it
- * still cannot read the room. What it can now be TOLD is exactly these six shapes and nothing
+ * still cannot read the room. What it can now be TOLD is exactly these seven shapes and nothing
  * else, and the words that may never appear in any of them are the same words that may never
  * appear in a URL or on the public side-channel.
  *
@@ -646,7 +646,7 @@ export function warmUrl(opts = {}) {
  * wire: `id`, `seat`, `name`, `shell`, `accent` are precisely `FANOUT_KEYS.lobbySeat`'s public
  * fields, already fanned out to every socket in the room by a decision that predates this slice.
  */
-export const CUE_KINDS = ['intros', 'run', 'move', 'shot', 'idle', 'noms', 'pair'];
+export const CUE_KINDS = ['intros', 'run', 'move', 'shot', 'idle', 'noms', 'pair', 'execute'];
 
 /** Per-kind closed allow-lists. A key not listed for its kind is a violation, not a pass. */
 export const CUE_KEYS = {
@@ -659,6 +659,10 @@ export const CUE_KEYS = {
   /* 🍮 Who is one name now. PUBLIC — the room watching a pair form is the point. There is no
      text key here and there must never be one: the words go to two sockets and are not a cue. */
   pair: ['kind', 'pairs'],
+  /* 🔨 Who swings, and on whom. PUBLIC ids already on `FANOUT_KEYS.lynchResult`
+     (`executioner`, `executed`). `target` is that executed id; `SHOWRUNNER` is the
+     sentinel when the nominator was taken this episode — there is no ninth body. */
+  execute: ['kind', 'executioner', 'target'],
 };
 
 /** What one seat may contribute to an `intros` cue. `FANOUT_KEYS.lobbySeat`'s public subset. */
@@ -667,6 +671,8 @@ export const CUE_CAST_KEYS = ['id', 'seat', 'name', 'shell', 'accent'];
 export const CUE_NOM_KEYS = ['nominator', 'target'];
 /** One merged pair: the two seats and what they are called now. Never what they said. */
 export const CUE_PAIR_KEYS = ['a', 'b', 'name'];
+/** Public lynch pair — `executioner` is already on the result; `target` is `executed`. */
+export const CUE_EXECUTE_KEYS = ['executioner', 'target'];
 
 function scanKeys(obj, allowed, path, bad, forbidden = FOLLOW_FORBIDDEN) {
   if (!obj || typeof obj !== 'object') { bad.push(`${path}:<not an object>`); return; }
@@ -697,6 +703,12 @@ export function cueViolations(cue) {
     const pairs = cue.pairs;
     if (!Array.isArray(pairs)) bad.push('cue.pair.pairs:<not an array>');
     else pairs.forEach((p, i) => scanKeys(p, CUE_PAIR_KEYS, `cue.pair.pairs[${i}]`, bad));
+  }
+  if (kind === 'execute') {
+    for (const k of CUE_EXECUTE_KEYS) {
+      if (cue[k] == null) continue;
+      if (typeof cue[k] !== 'string') bad.push(`cue.execute.${k}:<not a string>`);
+    }
   }
   if (kind === 'shot' && cue.shot != null && !SHOT_NAMES.includes(cue.shot)) {
     bad.push(`cue.shot.shot=${cue.shot}`);

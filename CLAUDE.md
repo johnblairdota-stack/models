@@ -139,6 +139,13 @@ decision, not a refactor.
 - **Sledge grip is bench-locked**: `GRIP_SHIPPED` 2.37 rad, haft 0.205, guards 13.3 cm off wrist /
   31.0 cm up shaft / 89.8°. Bench is `?view=char.grip` / `harness/_grip_shot.mjs`. The product
   hammer must match the bench — this was got wrong twice.
+- **Execution: the nominator walks and swings.** `vote.js` `executioner()` already returns the
+  first nominator of the executed player (or `SHOWRUNNER` if that nominator was taken). The TV
+  used to empty the `noms` cue and sit-and-cut. It now stands that robot, drops only their chair
+  collider, unlocks at the stand-mark, walks the inner ring, and swings the existing sledge
+  (clone `mountProp` / `playAttack`, grip lock untouched). Showrunner has no ninth body — the
+  camera holds on the accused from outside the ring. Gate: `accusation-stage` E0–E6, `party-warm`
+  W3j / W33k.
 - **TV visual direction is B — "Rundown Rail"**: the night's schedule across the top, shrinking to
   a 22px ribbon during the Expedition.
 

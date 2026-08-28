@@ -13,6 +13,8 @@ import {
   SEATED_REACTION_CLIPS,
 } from './chair-seats.js';
 import { NOM_INK, NOM_CHROME } from '../characters/chest-nameplate.js';
+import { SHOWRUNNER } from '../party/vote.js';
+import { SWING_DUR } from './sledge.js';
 
 /**
  * 🎬 **THE INTROS — the joined cast walking to their chairs in the ballroom, one at a time.**
@@ -269,8 +271,23 @@ function parkSit(r) {
  * chair, which is exactly the picture wanted, reached without any body ever asking `room.collide`
  * a question about a chair it is standing inside. That same header calls `hold: true` on this
  * clip *"parks a standing robot in front of a chair"* as a caveat; for the accuser it is the
- * feature. If walking out of the circle is ever wanted on top of this, THAT needs the chair
- * collider dropped for that body first — a separate, bigger change with the crouch bug in it.
+ * feature.
+ *
+ * 🔨 **EXECUTION IS THE WALK THAT COMMENT NAMED.** John, room DUSK: the first nominator of
+ * the executed player gets up, walks at them, and hits them with the sledge. That is this
+ * file's `setExecute`. It does the three things the paragraph above said a walk would need,
+ * and only to the swinger, and only for this beat:
+ *
+ *   1. drop THAT body's chair collider (`chairBoxes[seat]` out of `space.colliders`)
+ *   2. copy `pos` onto the stand-mark `at` (`STAND_IN`) WHILE sitLock is still on
+ *   3. `playLoco()` so the seated clip is gone, THEN `sitLock = false`
+ *
+ * Everyone else stays on Idle_M / `SIT_IN`. The hammer is the body's existing `SledgeRig`
+ * plus the clone's now-wired `mountProp` / `playAttack` — not a second rig. The Showrunner
+ * sentinel has no chair; the camera holds on the accused and nobody is invented.
+ *
+ * If the walk has not arrived by `EXECUTE.WALK_TIMEOUT` the swinger swings from the
+ * stand-mark anyway — a held blow is still a picture, a sit-and-cut is not.
  * ═════════════════════════════════════════════════════════════════════════════════════════════ */
 
 /** Beat times, seconds from the moment a NEW nomination lands. */
@@ -413,6 +430,35 @@ export function planAccusation({ nominatorSeat = null, accusedSeat = null, seatC
   }
   beats.sort((a, b) => a.at - b.at);
   return beats;
+}
+
+/**
+ * 🔨 **WHO ACTS ON EXECUTION.** Pure, THREE-free, public ids only. The RULE is already
+ * `vote.js` `executioner()` — first nominator of the executed player, or `SHOWRUNNER` if
+ * that nominator was taken. This is the staging plan the TV plays: walk if there is a
+ * body, hold on the accused if there is not. Empty ids are off.
+ */
+export const EXECUTE = Object.freeze({
+  /** Sit_to_Stand_Transition_M is ~6.2 s authored; fit it into this so the walk starts. */
+  RISE_DUR: 1.65,
+  /** Metres from the accused's sit-root to stop and swing. Inside `WEAPON_RANGE.sledge`. */
+  STRIKE: 1.15,
+  /** If the inner-ring walk has not arrived, swing from the stand-mark anyway. */
+  WALK_TIMEOUT: 8.0,
+  FACE: 0.28,
+});
+
+export function planExecute({ executionerId = '', targetId = '' } = {}) {
+  const executioner = String(executionerId || '');
+  const target = String(targetId || '');
+  const showrunner = executioner === SHOWRUNNER;
+  const actor = (!executioner || showrunner) ? null : executioner;
+  return {
+    actor,
+    target: target || null,
+    walk: !!(actor && target && actor !== target),
+    showrunner,
+  };
 }
 
 /** `nominator>target`, the identity of one accusation. A second accuser is a second beat. */
@@ -860,6 +906,11 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     }
     body.root.visible = true;
 
+    if (exec.phase !== 'off' && exec.swinger === r) {
+      driveExecute(r, dt, t);
+      return;
+    }
+
     const goal = r.cleared ? r.at : r.via;
     const dx = goal.x - body.pos.x, dz = goal.z - body.pos.z;
     const d = Math.hypot(dx, dz);
@@ -934,6 +985,191 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       cz + r.uz * (radius + out) + r.tz * (1.05 + sway),
     );
     clampInSpace(_eye, space);
+  }
+
+  /*
+   * 🔨 Execution staging. See `planExecute` / the seat-lock header: the swinger's chair
+   * collider drops, they leave the sit clip at the stand-mark, then they walk the inner
+   * ring. Idempotent on the same public pair — paint re-sends the cue every snapshot.
+   */
+  const exec = {
+    key: '',
+    phase: 'off',
+    t: 0,
+    swinger: null,
+    victim: null,
+    strike: null,
+    walked: false,
+    swung: false,
+    swingAt: 0,
+    victimSettled: false,
+    chairDropped: false,
+    showrunner: false,
+  };
+
+  function robotById(id) {
+    if (!id || id === SHOWRUNNER) return null;
+    return robots.find((r) => String(r.seat.id) === String(id)) || null;
+  }
+
+  function dropChair(i) {
+    const box = chairBoxes[i];
+    if (!box || !space?.colliders) return;
+    const idx = space.colliders.indexOf(box);
+    if (idx >= 0) space.colliders.splice(idx, 1);
+    exec.chairDropped = true;
+  }
+
+  function restoreChair(i) {
+    const box = chairBoxes[i];
+    if (!box || !space?.colliders) return;
+    if (!space.colliders.includes(box)) space.colliders.push(box);
+    exec.chairDropped = false;
+  }
+
+  function strikeMark(swinger, victim) {
+    const tx = victim.sitAt.x, tz = victim.sitAt.z;
+    const sx = swinger.at.x, sz = swinger.at.z;
+    const dx = tx - sx, dz = tz - sz;
+    const d = Math.hypot(dx, dz) || 1;
+    if (d <= EXECUTE.STRIKE + ARRIVE) return swinger.at.clone();
+    const k = 1 - EXECUTE.STRIKE / d;
+    return new THREE.Vector3(sx + dx * k, swinger.at.y, sz + dz * k);
+  }
+
+  function fillExecuteEye() {
+    const a = exec.swinger;
+    const b = exec.victim;
+    const px = a ? a.body.pos.x : (b?.body.pos.x ?? cx);
+    const pz = a ? a.body.pos.z : (b?.body.pos.z ?? cz);
+    const qx = b ? b.body.pos.x : px;
+    const qz = b ? b.body.pos.z : pz;
+    _look.set((px + qx) * 0.5, LOOK_Y + 0.12, (pz + qz) * 0.5);
+    const lx = _look.x - cx, lz = _look.z - cz;
+    const llen = Math.hypot(lx, lz) || 1;
+    const ux = lx / llen, uz = lz / llen;
+    const tx = -uz, tz = ux;
+    const out = ringOut(radius);
+    _eye.set(
+      cx + ux * (radius + out) + tx * 1.15,
+      EYE_Y,
+      cz + uz * (radius + out) + tz * 1.15,
+    );
+    clampInSpace(_eye, space);
+  }
+
+  function driveExecute(r, dt, t) {
+    const body = r.body;
+    if (exec.phase === 'rise') {
+      body.sitLock = true;
+      body.pos.copy(r.sitAt);
+      body.facing = r.face;
+      body.aimYaw = r.face;
+      body.update(dt, t, { move: { x: 0, y: 0 }, run: false, aimYaw: r.face, aimPitch: 0 });
+      return;
+    }
+    const faceVictim = () => {
+      if (!exec.victim) return r.face;
+      return Math.atan2(
+        exec.victim.body.pos.x - body.pos.x,
+        exec.victim.body.pos.z - body.pos.z,
+      );
+    };
+    if (exec.phase === 'walk') {
+      const gx = exec.strike?.x ?? r.at.x;
+      const gz = exec.strike?.z ?? r.at.z;
+      const d = Math.hypot(gx - body.pos.x, gz - body.pos.z);
+      if (d <= ARRIVE) {
+        exec.walked = true;
+        const want = faceVictim();
+        const turn = Math.atan2(Math.sin(want - body.aimYaw), Math.cos(want - body.aimYaw));
+        body.aimYaw += turn * (1 - Math.exp(-8.0 * dt));
+        body.facing = body.aimYaw;
+        body.update(dt, t, { move: { x: 0, y: 0 }, run: false, aimYaw: body.aimYaw, aimPitch: 0 });
+        return;
+      }
+      steerTo(body, gx, gz, dt, false);
+      return;
+    }
+    if (exec.phase === 'swing' || exec.phase === 'hold') {
+      const want = faceVictim();
+      const turn = Math.atan2(Math.sin(want - body.aimYaw), Math.cos(want - body.aimYaw));
+      body.aimYaw += turn * (1 - Math.exp(-8.0 * dt));
+      body.facing = body.aimYaw;
+      body.update(dt, t, { move: { x: 0, y: 0 }, run: false, aimYaw: body.aimYaw, aimPitch: 0 });
+    }
+  }
+
+  function beginWalk() {
+    const r = exec.swinger;
+    if (!r) {
+      exec.phase = 'hold';
+      return;
+    }
+    r.body.pos.copy(r.at);
+    r.body.sitLock = true;
+    r.body.avatar?.playLoco?.();
+    r.body.sitLock = false;
+    r.seated = false;
+    r.arrived = true;
+    r.cleared = true;
+    dropChair(r.seatIndex);
+    if (!exec.strike) exec.strike = r.at.clone();
+    exec.phase = 'walk';
+  }
+
+  function beginSwing(t) {
+    exec.phase = 'swing';
+    exec.swingAt = exec.t;
+    exec.swung = true;
+    const body = exec.swinger?.body;
+    if (!body?.sledge) return;
+    body.sledge.owned = true;
+    body.sledge.equip();
+    body.sledge.swing(t);
+  }
+
+  function stepExecute(dt, t) {
+    if (exec.phase === 'off') return;
+    exec.t += dt;
+    if (exec.victim && exec.t >= ACCUSE.SETTLE && !exec.victimSettled) {
+      exec.victimSettled = true;
+      const held = settleClip(exec.victim.seatIndex);
+      if (held) exec.victim.body.avatar?.playSeated?.(held, { hold: true, fade: ACCUSE.FADE });
+    }
+    if (exec.phase === 'rise' && exec.t >= EXECUTE.RISE_DUR) beginWalk();
+    if (exec.phase === 'walk') {
+      const waited = exec.t - EXECUTE.RISE_DUR;
+      if (exec.walked && waited >= EXECUTE.FACE) beginSwing(t);
+      else if (waited >= EXECUTE.WALK_TIMEOUT) beginSwing(t);
+    }
+    if (exec.phase === 'swing' && exec.t >= exec.swingAt + SWING_DUR + 0.12) {
+      exec.phase = 'hold';
+    }
+  }
+
+  function clearExecute() {
+    if (exec.swinger) {
+      exec.swinger.body.avatar?.unmountProp?.();
+      exec.swinger.body.sledge?.forget?.();
+      restoreChair(exec.swinger.seatIndex);
+      parkSit(exec.swinger);
+    }
+    if (exec.victim && exec.victim !== exec.swinger) {
+      setNomineeBang(exec.victim.bang, false);
+      parkSit(exec.victim);
+    }
+    exec.key = '';
+    exec.phase = 'off';
+    exec.t = 0;
+    exec.swinger = null;
+    exec.victim = null;
+    exec.strike = null;
+    exec.walked = false;
+    exec.swung = false;
+    exec.swingAt = 0;
+    exec.victimSettled = false;
+    exec.showrunner = false;
   }
 
   /*
@@ -1046,6 +1282,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       if (talking) {
         for (const r of robots) {
           if (heldRunner != null && String(r.seat.id) === String(heldRunner)) continue;
+          if (exec.phase !== 'off' && exec.swinger === r) continue;
           r.body.root.visible = true;
           parkSit(r);
         }
@@ -1068,7 +1305,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       for (const r of robots) {
         const mine = heldRunner != null && String(r.seat.id) === String(heldRunner);
         r.body.root.visible = !mine;
-        if (!mine) parkSit(r);
+        if (!mine && !(exec.phase !== 'off' && exec.swinger === r)) parkSit(r);
       }
     },
 
@@ -1077,6 +1314,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       heldRunner = null;
       for (const r of robots) {
         r.body.root.visible = true;
+        if (exec.phase !== 'off' && exec.swinger === r) continue;
         parkSit(r);
       }
       // Same reason as `setTalk`: this sweep re-idles the circle, and a live accusation has to
@@ -1106,6 +1344,52 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       const ids = new Set((standing || []).map((n) => String(n?.target ?? n)));
       for (const r of robots) setNomineeBang(r.bang, ids.has(String(r.seat.id)));
       stage.set(standing);
+    },
+
+    /**
+     * 🔨 **Execution: the nominator walks and swings.** Public ids from `lynchResult`.
+     * Empty / missing clears: the swinger sits, the chair collider returns, the
+     * sledge is forgotten so the next beat is not a robot with a hammer in its lap.
+     *
+     * ⚠️ **CALLED REPEATEDLY WITH THE SAME PAIR** — keyed, like `setNominees`.
+     * `SHOWRUNNER` has no body: the accused is the picture and the camera holds.
+     */
+    setExecute(executionerId, targetId) {
+      const eid = String(executionerId || '');
+      const tid = String(targetId || '');
+      const key = `${eid}>${tid}`;
+      if (!eid || !tid) {
+        if (exec.phase !== 'off') clearExecute();
+        return planExecute({ executionerId: eid, targetId: tid });
+      }
+      if (key === exec.key) return planExecute({ executionerId: eid, targetId: tid });
+      if (exec.phase !== 'off') clearExecute();
+      const plan = planExecute({ executionerId: eid, targetId: tid });
+      exec.key = key;
+      exec.swinger = robotById(eid);
+      exec.victim = robotById(tid);
+      exec.showrunner = plan.showrunner;
+      exec.phase = 'rise';
+      exec.t = 0;
+      exec.walked = false;
+      exec.swung = false;
+      exec.swingAt = 0;
+      exec.victimSettled = false;
+      exec.strike = (exec.swinger && exec.victim)
+        ? strikeMark(exec.swinger, exec.victim)
+        : (exec.swinger ? exec.swinger.at.clone() : null);
+      if (exec.swinger) {
+        exec.swinger.body.avatar?.playSeated?.(ACCUSE_CLIPS.stand, {
+          hold: true, fade: ACCUSE.FADE, fit: EXECUTE.RISE_DUR,
+        });
+      }
+      if (exec.victim) {
+        setNomineeBang(exec.victim.bang, true);
+        exec.victim.body.avatar?.playSeated?.(ACCUSE_CLIPS.flinch, {
+          hold: false, fade: ACCUSE.FADE,
+        });
+      }
+      return plan;
     },
 
     /**
@@ -1160,6 +1444,19 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       skinned: [...nominatedIds],
     }),
 
+    /** Harness hook: who is walking, whether they have swung, which phase. */
+    executionReport: () => ({
+      phase: exec.phase,
+      key: exec.key,
+      walked: exec.walked,
+      swung: exec.swung,
+      showrunner: exec.showrunner,
+      actor: exec.swinger ? String(exec.swinger.seat.id) : null,
+      target: exec.victim ? String(exec.victim.seat.id) : null,
+      sitLock: exec.swinger ? !!exec.swinger.body.sitLock : null,
+      seated: exec.swinger ? !!exec.swinger.seated : null,
+    }),
+
     /** Harness snapshot — logical sit flags, pelvis, clip names. */
     sitReport() {
       return robots.map((r) => {
@@ -1199,6 +1496,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       // The accusation's stagger runs on the frame clock like everything else here. A
       // `setTimeout` would keep firing into a disposed bed and would drift against a hidden tab.
       stage.step(dt);
+      stepExecute(dt, t);
       for (const r of robots) driveOne(r, dt, t);
       stream.step(dt, engine.camera);
     },
@@ -1206,6 +1504,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     step(dt, t) {
       clock += dt;
       stage.step(dt);
+      stepExecute(dt, t);
       for (const r of robots) driveOne(r, dt, t);
       stream.step(dt, engine.camera);
 
@@ -1213,9 +1512,19 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
        * 🎥 THE CAMERA STANDS OUTSIDE THE RING looking in. #39 sat inside (faces, not chair
        * backs); the playtest asked for the opposite — chairs as a readable circle, robots
        * smaller. Talk beats sweep; a live walk-in still snaps to the arriving robot.
+       * Execution cranes onto the pair from the same outside arc — never a cut, never a lid.
        */
       const useTalk = talking || done;
-      if (useTalk) {
+      if (exec.phase !== 'off') {
+        fillExecuteEye();
+        reelSight?.(_eye, _look);
+        walkCamOnRing(engine.camera, _lookLive, _eye, _look, cx, cz, dt);
+        engine.camera.up.set(0, 1, 0);
+        engine.camera.lookAt(_lookLive);
+        engine.camera.rotateZ(Math.sin(t * 0.47) * 0.008);
+        if (exec.swinger) focusI = exec.swinger.seatIndex;
+        else if (exec.victim) focusI = exec.victim.seatIndex;
+      } else if (useTalk) {
         const shot = fillTalkEye();
         reelSight?.(_eye, _look);
         walkCamOnRing(engine.camera, _lookLive, _eye, _look, cx, cz, dt);

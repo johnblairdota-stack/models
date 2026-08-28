@@ -2025,12 +2025,17 @@ export async function buildFollowBed(engine, opts = {}) {
       if (c.kind === 'idle') {
         mode = intro ? 'intros' : 'warm';
         runner.root.visible = false;
+        intro?.setExecute?.('', '');
         intro?.releaseRun?.();
         intro?.setTalk?.(true);
         return;
       }
       if (c.kind === 'noms') {
         intro?.setNominees?.(c.standing || []);
+        return;
+      }
+      if (c.kind === 'execute') {
+        intro?.setExecute?.(c.executioner, c.target);
         return;
       }
       if (c.kind === 'pair') {
@@ -2053,6 +2058,7 @@ export async function buildFollowBed(engine, opts = {}) {
           });
         }
         intro?.setNominees?.([]);
+        intro?.setExecute?.('', '');
         mode = 'intros';
         runner.root.visible = false;
         return;

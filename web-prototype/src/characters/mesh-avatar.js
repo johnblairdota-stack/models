@@ -1408,8 +1408,10 @@ export async function createMeshAvatar(opts = {}) {
  * copies the skeleton and the scene graph; the GLB's geometries stay SHARED with the source,
  * which is why `intro-bed.js` must not dispose them (see that file's `dispose`).
  *
- * Intros only need idle + walk. Attack / prop / limb collapse stay on the runner's original.
- * Materials are cloned before tinting so a red seat cannot recolour the runner.
+ * Intros need idle + walk + sit. Execution reuses the SAME `mountInHand` / `SWINGS` /
+ * `GRIP_MOUNT` the runner already has — completing the clone's avatar API, not a second
+ * hammer. Limb collapse stays on the original. Materials are cloned before tinting so a
+ * red seat cannot recolour the runner.
  *
  * @param {object} source  a `createMeshAvatar()` result
  * @param {object} [opts]
@@ -1451,12 +1453,30 @@ export function cloneMeshAvatar(source, opts = {}) {
     a.play();
   }
 
-  const hips = (() => {
-    let found = null;
-    rig.traverse((o) => { if (o.isBone && o.name === 'Hips') found = o; });
-    return found;
-  })();
+  const bones = {};
+  rig.traverse((o) => { if (o.isBone) bones[o.name] = o; });
+  const hips = bones.Hips || null;
   const hipsRest = hips ? hips.position.clone() : null;
+  const CLONE_H = 1.7;
+
+  /*
+   * 🔨 **THE RUNNER'S SWING, ON THE TWIN — not a second rig.** `SWINGS` and `mountInHand`
+   * are the product hammer. Execution needs a seated clone to pick that hammer up; stubbing
+   * `mountProp` / `playAttack` here is what made the lynch a sit-and-cut.
+   */
+  const swingActions = {};
+  let activeSwing = SWINGS[0];
+  let mounted = null;
+  let mountScaleK = 1;
+  let mountGrip = { ...GRIP_MOUNT };
+  for (const w of SWINGS) {
+    const src = source.actions?.[w.clip];
+    if (!src) continue;
+    const a = mixer.clipAction(src.getClip());
+    a.enabled = true;
+    a.setEffectiveWeight(0);
+    swingActions[w.clip] = a;
+  }
   const leanBones = [];
   rig.traverse((o) => {
     if (o.isBone && SIT_LEAN_BONES.includes(o.name)) leanBones.push(o);
@@ -1639,6 +1659,9 @@ export function cloneMeshAvatar(source, opts = {}) {
     cloned: true,
     get clip() {
       if (pose === 'sit') return sitClipName || (sitIdle?.getClip?.().name ?? 'sit');
+      if (activeSwing && swingActions[activeSwing.clip]?.getEffectiveWeight() > 0.5) {
+        return activeSwing.clip;
+      }
       return walk.getEffectiveWeight() > 0.5 ? 'walk' : 'idle';
     },
     get seated() { return pose === 'sit'; },
@@ -1649,12 +1672,92 @@ export function cloneMeshAvatar(source, opts = {}) {
      * wrong reason. The two questions stay separate.
      */
     get seatedAction() { return reactName; },
-    get swing() { return null; },
-    get propMounted() { return false; },
-    mountProp() { return false; },
-    unmountProp() {},
-    playAttack() {},
+    get swing() { return activeSwing; },
+    get propMounted() { return !!mounted; },
+    /**
+     * Same primitive as the runner. Completing the clone API — not a second hammer,
+     * and not a restale of `GRIP_SHIPPED`.
+     */
+    mountProp(obj, { hand = 'RightHand' } = {}) {
+      const b = bones[hand];
+      if (!b || !obj) return false;
+      const g = gripFromUrl();
+      const placed = mountInHand(obj, { bone: b, height: CLONE_H, ...g });
+      if (!placed) return false;
+      mountScaleK = placed.k;
+      mountGrip = {
+        roll: placed.roll, tilt: placed.tilt, yaw: placed.yaw,
+        palm: placed.palm, reach: placed.reach, depth: placed.depth,
+        alongHaft: placed.alongHaft,
+      };
+      mounted = obj;
+      return true;
+    },
+    unmountProp() {
+      if (mounted) { mounted.removeFromParent(); mounted = null; }
+    },
+    setGrip(roll, alongHaft, extra = {}) {
+      if (!mounted) return false;
+      const g = {
+        ...GRIP_MOUNT,
+        ...mountGrip,
+        roll: roll ?? urlNum('grip', activeSwing.grip),
+        alongHaft: alongHaft ?? mountGrip.alongHaft ?? GRIP_MOUNT.alongHaft,
+        ...extra,
+      };
+      applyGripLocal(mounted, { k: mountScaleK, height: CLONE_H, ...g });
+      mounted.updateWorldMatrix(true, true);
+      mountGrip = g;
+      return true;
+    },
+    /**
+     * Start the swing. Clones pin `SWINGS[0]` (`Attack`) unless a pick is passed —
+     * `Heavy_Hammer_Swing` is a floor chop that ends bent double, which is the wrong
+     * picture for a seated lynch. The runner's original still rolls the set.
+     */
+    playAttack(dur, pickIndex) {
+      const names = SWINGS.filter((w) => swingActions[w.clip]);
+      if (!names.length) return;
+      const forced = urlNum('swingpick', -1);
+      const pick = Number.isFinite(pickIndex) ? pickIndex
+        : (forced >= 0 ? forced : 0);
+      activeSwing = names[Math.max(0, Math.min(names.length - 1, pick | 0))] || names[0];
+      this.setGrip(urlNum('grip', activeSwing.grip));
+      const a = swingActions[activeSwing.clip];
+      if (!a) return;
+      a.reset();
+      a.setLoop(THREE.LoopOnce, 1);
+      a.clampWhenFinished = true;
+      a.enabled = true;
+      const clipDur = a.getClip().duration;
+      a.setEffectiveTimeScale(dur > 0 ? clipDur / dur : 1);
+      a.setEffectiveWeight(1);
+      idle.setEffectiveWeight(0);
+      walk.setEffectiveWeight(0);
+      a.play();
+    },
     setLimbVisible() {},
+    /**
+     * Leave the chair clip and become a walking body. Execution calls this AFTER the
+     * stand transition and AFTER `body.pos` has been copied to the stand-mark, so
+     * unlocking `sitLock` cannot reintroduce the crouch-in-front-of-seat bug.
+     */
+    playLoco() {
+      unfixHips();
+      clearReaction();
+      pose = 'loco';
+      sitClipName = null;
+      sitIdle = null;
+      for (const a of [sitIdleM, sitIdleF, sitDown]) {
+        if (!a) continue;
+        a.setEffectiveWeight(0);
+      }
+      idle.setEffectiveWeight(1);
+      walk.setEffectiveWeight(0);
+      if (hips && hipsRest) hips.position.copy(hipsRest);
+      publishPose();
+      return true;
+    },
     /**
      * Loop a seated idle. Every seat uses Chair_Sit_Idle_M (F tucks 0.56 m and
      * reads as sunk/through-back). Hips X is pinned to bind after the mixer so
@@ -1703,7 +1806,7 @@ export function cloneMeshAvatar(source, opts = {}) {
      * without saying WHAT. `friendly_all38.glb` shipped 13 seated clips and exactly one of
      * them was ever given a `clipAction`; this is that call, not an asset problem.
      *
-     *   playSeated(name, { hold = false, fade = 0.25 }) -> boolean
+     *   playSeated(name, { hold = false, fade = 0.25, fit = 0 }) -> boolean
      *
      *   hold: false  play once, then crossfade home to the seated idle over `fade` seconds
      *   hold: true   stay in it — looping if the clip closes its own loop, otherwise clamped
@@ -1719,7 +1822,7 @@ export function cloneMeshAvatar(source, opts = {}) {
      * cushion. `reactAnchor` is the one-off correction (evidence and the full table are in
      * `chair-seats.js` `seatedAnchorDelta`); `update` applies it scaled by the crossfade.
      */
-    playSeated(clipName, { hold = false, fade = 0.25 } = {}) {
+    playSeated(clipName, { hold = false, fade = 0.25, fit = 0 } = {}) {
       if (pose !== 'sit' || !sitIdle) return false;
       const name = String(clipName ?? '');
       if (!seatedReactionAllowed(name)) return false;
@@ -1738,7 +1841,8 @@ export function cloneMeshAvatar(source, opts = {}) {
       react.clampWhenFinished = true;
       const looping = reactHold && entry.loops;
       react.setLoop(looping ? THREE.LoopRepeat : THREE.LoopOnce, looping ? Infinity : 1);
-      react.setEffectiveTimeScale(1);
+      const authored = Math.max(0.05, react.getClip().duration);
+      react.setEffectiveTimeScale(fit > 0 ? authored / fit : 1);
       react.setEffectiveWeight(0);
       react.play();
       publishPose();
@@ -1807,6 +1911,15 @@ export function cloneMeshAvatar(source, opts = {}) {
       }
       const speed = state.speed ?? 0;
       const runAt = state.runAt ?? 2.6;
+      const swinging = !!state.swinging;
+      const swingClip = activeSwing?.clip;
+      const swingAct = swinging && swingClip ? swingActions[swingClip] : null;
+      if (swingAct && swingAct.getEffectiveWeight() > 0.05) {
+        mixer.update(dt);
+        if (hips && hipsRest) { hips.position.x = hipsRest.x; hips.position.z = hipsRest.z; }
+        return;
+      }
+      for (const a of Object.values(swingActions)) a.setEffectiveWeight(0);
       const still = speed < runAt * 0.10;
       const target = still ? 0 : 1;
       const w = walk.getEffectiveWeight();
