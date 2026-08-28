@@ -600,7 +600,24 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
   function foldVerdict() {
     const align = Object.fromEntries(deal.seats.map((s) => [s.id, s.alignment]));
     const w = foldWin(log.all(), { count, alignmentOf: (id) => align[id] });
-    state.outcome = w.outcome === OUTCOME.RENEWED && state.episode >= EPISODE_CAP ? OUTCOME.CANCELLED : w.outcome;
+    /*
+     * 🚨 **`airingEpisode`, NOT `episode` — AND THIS IS THE SECOND HALF OF THE DOUBLE-BUMP BUG.**
+     *
+     * The two callers reach this line at different moments in the episode. Offline, `playEpisode`
+     * folds and THEN does `state.episode += 1`, so `state.episode` is the episode that just aired.
+     * Live, `playEpisode` has already returned — bump included — before the Verdict beat starts,
+     * so `state.episode` is the episode being SET UP. Comparing that to `EPISODE_CAP` ended a live
+     * season one episode early: `party-night` N17n drove a real room and it stopped after four of
+     * five, while `win-machine` W10c drove the offline one and it stopped after five. Two machines
+     * disagreeing while both had a gate calling them correct is precisely what `episode-order`
+     * exists for, one layer up.
+     *
+     * `state.airingEpisode` is the episode ON THE AIR and is set by both paths at the top of the
+     * episode, so it means the same thing in both. Offline it is identical to `state.episode`
+     * here, so nothing about the gates' existing behaviour moves.
+     */
+    const aired = state.airingEpisode ?? state.episode;
+    state.outcome = w.outcome === OUTCOME.RENEWED && aired >= EPISODE_CAP ? OUTCOME.CANCELLED : w.outcome;
     /*
      * 🚨 `fed` IS SEALED AND MUST STAY SEALED. `win.checked` is VIS.SEALED and carries it;
      * `verdict.aired` is VIS.PUBLIC and does not. `rrr-social-round.md` §4: the feed gauge is a
@@ -623,7 +640,7 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     return {
       outcome: state.outcome, rule: w.rule,
       camerasLit: w.camerasLit, need: WIN_TARGETS[count]?.cameraTarget ?? null,
-      episode: state.episode,
+      episode: aired,
     };
   }
 

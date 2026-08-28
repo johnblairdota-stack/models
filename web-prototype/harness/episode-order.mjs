@@ -113,6 +113,39 @@ const NOT_AFTER_RUN = [PHASE.CASTING, PHASE.EXPEDITION];
     seen.includes('RECKONING') && seen.includes('VOTE') && seen.includes('VERDICT'), seen.join('/'));
 }
 
+// ---------------------------------------------------------------- E6 · both machines count alike
+/* =================================================================================================
+ * 🔢 **HOW MANY EPISODES A SEASON LASTS — and the two machines had different answers.**
+ *
+ * E2 above compares the two descriptions of ONE episode. This compares their answer to the
+ * question one layer up, which they were free to disagree about until 2026-08-28 and did:
+ * `foldVerdict` measured `EPISODE_CAP` against `state.episode`, and `playEpisode` bumps that
+ * before the LIVE verdict beat is reached but after the OFFLINE one. A real room stopped after
+ * four of five episodes; the offline machine stopped after five. Both had a green gate.
+ *
+ * The fix was `state.airingEpisode` — the episode ON THE AIR, set by both paths at the top of the
+ * episode, so it means the same thing in both. This asserts the property rather than the fix: a
+ * season that decides nothing runs exactly `EPISODE_CAP` episodes, counted the way a viewer would.
+ * The live half is `party-night` N17n, which drives a real socket room to the same number.
+ * ================================================================================================= */
+{
+  const quiet = createRoom({ count: 8, castSeed: 77, worldSeed: 7, send: () => {}, emit: () => {} });
+  quiet.start();
+  let aired = 0;
+  for (let i = 0; i < EPISODE_CAP + 4; i++) {
+    if (quiet.outcome() && quiet.outcome() !== 'RENEWED') break;
+    quiet.playEpisode({ scaffold: false, hunterRoom: 'cellar' });
+    aired++;
+  }
+  t('E6 · a season that decides nothing airs exactly EPISODE_CAP episodes and then stops',
+    aired === EPISODE_CAP && quiet.outcome() === 'CANCELLED',
+    `${aired} aired, cap ${EPISODE_CAP}, ended ${quiet.outcome()}`);
+  t('E6b · and the aired number is what the verdict reports — not the one being set up',
+    quiet.log.all().filter((e) => e.type === 'verdict.aired').length === EPISODE_CAP
+      && quiet.state.airingEpisode === EPISODE_CAP,
+    `airing ${quiet.state.airingEpisode}, episode ${quiet.state.episode}`);
+}
+
 // ---------------------------------------------------------------- E5 · the decision still fits the window
 /*
  * Keeping the premiere vote cost 105s, and this is the assertion that said it was affordable.

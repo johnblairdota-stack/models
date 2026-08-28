@@ -18,7 +18,7 @@ import {
   LATE_DEBRIEF_MS, EMPTY_RECKONING_EXTEND_CAP,
   remainingMs, formatRemain, normalizeCodeDisplay, normalizeCodeWire,
 } from '../src/party/night-client.js';
-import { PHASE, SECONDS } from '../src/party/phases.js';
+import { PHASE, SECONDS, EPISODE_CAP } from '../src/party/phases.js';
 import { missionFor, MISSION_PAINTING, MISSION_TABLE } from '../src/party/mission.js';
 import { RUN_END, CASTING_BACKSTOP_MS, readyNeeded } from '../src/party/show.js';
 import { CAST_BACKSTOP_MS } from '../src/party/ballot.js';
@@ -784,6 +784,87 @@ t('N13c · a refresh resumes the server show beat, not casting',
 
   for (const c of [tvx, p1x, p2x]) c.close();
   srvx.close();
+}
+
+/* ===============================================================================================
+ * 🏁 **N17n · A REAL ROOM RUNS OUT OF EPISODES AND STOPS.**
+ *
+ * `win-machine` W10 drives the same property offline; this is the live wire, because the two are
+ * different machines and `episode-order` exists because they once disagreed. Nobody nominates and
+ * nobody dies, so no rule fires all night — the season ends the only other way it can, on
+ * `EPISODE_CAP`, which `foldVerdict` enforces and nothing else does.
+ *
+ * ⚠️ **THE LOOP IS BOUNDED AND THE BOUND IS PART OF THE ASSERTION.** A gate for "it terminates"
+ * that loops until it terminates is a gate that hangs CI instead of failing it. It gets
+ * `EPISODE_CAP + 3` episodes and then reports where it actually got to.
+ * =============================================================================================== */
+{
+  const PORTC = PORT + 3;
+  const srvc = startServer({ port: PORTC, count: 8, castSeed: 31, worldSeed: 31, code: 'nc' });
+  await sleep(80);
+  const basec = `ws://localhost:${PORTC}/?room=nc`;
+  const tvc = await open(`${basec}&host=1`);
+  const phonesc = [];
+  for (let i = 0; i < 4; i++) phonesc.push(await open(basec));
+  await sleep(80);
+  tvc.send({ t: 'start' });
+  tvc.send({ t: 'casting' });
+  await sleep(80);
+  const roomc = srvc.rooms.get('nc');
+
+  const ids = phonesc.map((p) => p.welcome.playerId);
+  let episodes = 0;
+  for (let i = 0; i < EPISODE_CAP + 3 && roomc.show !== 'reunion'; i++) {
+    // A legal ballot from every phone: runner and guide rotate so the lockout never blocks one.
+    phonesc.forEach((p, k) => p.send({
+      t: 'ballot', runner: ids[(k + i) % ids.length], guide: ids[(k + i + 1) % ids.length],
+    }));
+    await sleep(60);
+    tvc.send({ t: 'episode', opts: {} });
+    await sleep(160);
+    /*
+     * ⚠️ **THE RUN HAS TO BE ENDED, AND FORGETTING THAT COST THIS GATE ITS FIRST DRAFT.**
+     * `progressShow` walks the AFTER-run chain; `nextShowBeat('expedition')` is null, so calling
+     * it on the expedition is a no-op that returns the same beat. The first version looped twelve
+     * times on 'expedition' doing nothing and reported eight episodes past a cap of five. In a
+     * real room the mission ending (or the backstop clock) does this — here the TV says so, the
+     * same way N17 does.
+     */
+    tvc.send({
+      t: 'world',
+      runner: { room: 'r0.ballroom', x: 0, z: 0 },
+      hunter: { room: 'r1.gallery', x: 1, z: 1 },
+      mission: { phase: 'done', room: 'r0.ballroom' },
+    });
+    await sleep(60);
+    episodes++;
+    // Skip the holds the way every other gate in this file does. Nobody nominates, so the
+    // Reckoning extends its cap and walks with an empty box; nobody dies all night.
+    for (let g = 0; g < 12 && roomc.show !== 'casting' && roomc.show !== 'reunion'; g++) {
+      progressShow(roomc);
+      await sleep(20);
+    }
+  }
+
+  t('N17n · a live night that decides nothing still ends — at the cap, as CANCELLED',
+    roomc.show === 'reunion' && roomc.game.outcome() === OUTCOME.CANCELLED
+      && last(tvc, 'season')?.status === OUTCOME.CANCELLED
+      // ⚠️ EXACTLY the cap, not "at most". `episodes <= CAP + 1` was the first draft and it
+      // passed while a live season was ending after FOUR of five — see foldVerdict's header.
+      && episodes === EPISODE_CAP,
+    JSON.stringify({ show: roomc.show, outcome: roomc.game.outcome(), episodes,
+      cap: EPISODE_CAP, episode: roomc.game.state.episode }));
+
+  t('N17n2 · and nobody died on the way there — the cap is what ended it, not a rule',
+    roomc.game.state.players.every((p) => p.alive !== false)
+      && roomc.game.log.all().filter((e) => e.type === 'win.checked').at(-1)?.data?.rule == null,
+    JSON.stringify({
+      dead: roomc.game.state.players.filter((p) => p.alive === false).map((p) => p.id),
+      rule: roomc.game.log.all().filter((e) => e.type === 'win.checked').at(-1)?.data?.rule,
+    }));
+
+  for (const c of [tvc, ...phonesc]) c.close();
+  srvc.close();
 }
 
 /* ===============================================================================================

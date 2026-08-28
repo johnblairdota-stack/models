@@ -2,6 +2,12 @@
 
 Audited against `main` @ `5752c22` (PR #49), 2026-08-25. **Updated after two fixes landed** —
 see §3 and §2, and the two patches that go with this document.
+
+> ✅ **UPDATED 2026-08-28 — §2's two worst rows are closed.** Verdict is on the wire and the
+> Reunion has a caller, a beat, and two screens. The sentence this document was best known for —
+> *"Nothing ever ends a session"* — is no longer true, and `harness/win-machine.mjs` W10 plus
+> `harness/party-night.mjs` N17n now assert it in both machines. The rows below are rewritten in
+> place; the old text is quoted where the argument still matters.
 Method: read the phase machines, the wire, and every gate in `gates:party`. Nothing inferred from
 filenames or from chat transcripts.
 
@@ -18,11 +24,20 @@ the result is three live definitions plus one dead one:
 |---|---|---|---|
 | 1 | `src/game/run.js:52` | EXPLORE, WINDDOWN, DETONATION, RESULTS | Survival mode. Untouched, correctly. |
 | 2 | `src/party/phases.js:17` | PREMIERE, CASTING, EXPEDITION, RECAP, DEBRIEF, RECKONING, VOTE, EXECUTION, VERDICT, REUNION | **Design intent.** Data only — durations, `EPISODE_ORDER`, `orderFor`. No transitions. |
-| 3 | `src/party/show.js:16` | lobby, casting, expedition, recap, debrief, reckoning, vote, execution | **The wire.** What actually runs. Driven by `net/party/local.mjs:204` `progressShow`. |
+| 3 | `src/party/show.js:16` | lobby, casting, expedition, recap, debrief, reckoning, vote, execution, **verdict**, **reunion** | **The wire.** What actually runs. Driven by `net/party/local.mjs` `progressShow`. |
 | 4 | `src/party/room.js:34` | LOBBY, CASTING, EXPEDITION, DEBRIEF, VERDICT | **Dead.** Imported nowhere. `setPhase` (room.js:299) validates nothing. Delete it. |
 
-**#2 and #3 disagree, and #3 wins at runtime.** That is the single most important fact about this
-codebase right now.
+~~**#2 and #3 disagree, and #3 wins at runtime.**~~ **They agree, as of 2026-08-28.**
+`harness/episode-order.mjs` `WIRE_MISSING` is empty and E2 compares the two with no exclusion list
+between them — the day that gate was written its header carried a standing instruction to delete
+`VERDICT` from that list, and it has been carried out. #4 is still dead and still wants deleting.
+
+⚠️ **They also disagreed about how many episodes a SEASON lasts, which is one layer above what E2
+compares.** `foldVerdict` measured `EPISODE_CAP` against `state.episode`, and `playEpisode` bumps
+that *before* the live Verdict beat is reached but *after* the offline one — so a real room
+stopped after four of five episodes while the offline machine stopped after five, and both had a
+green gate. Fixed by measuring `state.airingEpisode`, the episode ON THE AIR, which both paths set
+at the top of the episode. Gates: `episode-order` E6/E6b, `party-night` N17n.
 
 ## 2. Beat by beat
 
@@ -35,8 +50,8 @@ codebase right now.
 | Reckoning | live | 45s + 15s/nom, cap 90 (`phases.js:61`); empty re-arms 3× then walks | ok |
 | Vote | live | 25s or `result.closed` (`local.mjs:295`) | ok |
 | Execution | live | 20s | ok |
-| **Verdict** | **not on the wire** | — | `AFTER_RUN_NEXT.execution = 'casting'` (`show.js:121`). Exists in `phases.js`, on the TV rundown rail as a label, and inside the offline `playEpisode` (`room.js:563`). `show.js:22` admits it: *"the wire has not grown it yet."* **Staged, not broken — but the rail shows a beat that never lights.** |
-| **Reunion** | **stub** | — | `src/party/reunion.js:165` is a pure log-query function with no caller outside `harness/reunion-truth.mjs`. No phase, no beat, no view. **Nothing ever ends a session.** |
+| **Verdict** | **live** | 15s (`VERDICT_HOLD_MS` from `SECONDS[PHASE.VERDICT]`) | ✅ **Fixed 2026-08-28.** `AFTER_RUN_NEXT` is `execution → verdict → casting`; `enterVerdictLive` airs status / cameras / episode. The rail chip lit with no change to `rundownRailHtml` — `live` was already `SHOW_BEATS.includes(id)`. The fold was **extracted** out of `playEpisode` rather than copied, so both machines fold one win. `foldWin` returns `fed` and it does not reach the plate: gate `party-night` N17h0b. |
+| **Reunion** | **live** | session end — nothing follows it | ✅ **Fixed 2026-08-28.** `progressShow`'s walk back to Casting is now conditional on the fold: RENEWED plays on, anything else enters the Reunion. **This is the first conditional edge in the whole wire.** `reunion.js` has a caller (`room.reunionSpecial()`), a fanout (`t:'reveal'`), a TV screen that turns the plates one at a time, and a phone sheet that puts your own card face-up. Gates: N17h/N17h2 (the terminal edge), N17j (the other side), N17m–N17m3 (the reveal, including that nothing named anyone else's side before it). |
 | Premiere | unused | — | Referenced only in budget math (`phases.js:32`) |
 
 ## 3. The premiere — RESOLVED, the other way round
@@ -133,17 +148,37 @@ truth in the repo.** The canvas itself is at
 Both verified to fail when reverted. Full suite after: **`npm run build` clean, 24 gates, 822
 assertions, 0 failures.**
 
+**Then, 2026-08-28 — the night got an ending:**
+
+2a. ✅ **Verdict on the wire**, with the fold extracted rather than copied.
+2b. ✅ **The Reunion**, and with it the first conditional edge in the whole wire.
+2c. ✅ **SKIP TO REUNION** — the first emitter rule W6 has ever had.
+2d. ✅ **The season-length disagreement** between the two machines, found by driving a live room
+    to the cap and watching it stop one episode early. See §1.
+
 **Still open, cheapest first:**
 
 3. **Commit the redesign pack.** It is not in the repo *and not on John's PC either* — see §6.
    Only the design canvas survives. This is the one item that is losing information every day.
 4. **A smash-target visibility gate** — the last live-found bug class with no regression net.
    "I couldn't see the painting, it was behind the furniture" can come straight back.
-5. **Decide Verdict.** Grow the wire to it, or drop it from `RUNDOWN_BEATS`. Either is fine;
-   advertising a beat that never lights is not. `episode-order`'s `WIRE_MISSING` names it so the
-   choice stays visible.
-6. **Reunion** — the designed payoff for D5, and the reason the event log schema was shaped the
-   way it was. Currently a function with no caller, and the reason nothing ends a session.
+5. ✅ ~~**Decide Verdict.**~~ **Done 2026-08-28** — the wire grew to it. `WIRE_MISSING` is empty.
+6. ✅ ~~**Reunion**~~ **Done 2026-08-28** — it has a caller, a beat, a reveal fanout with a closed
+   schema, a TV screen and a phone sheet. A session ends; `win-machine` W10/W10c and `party-night`
+   N17n assert it in both machines.
+
+   **What is still staged inside it, and staged honestly:**
+   - **The Director's Cut has no footage.** `decisiveEpisode` returns a bare
+     `{episode, because, atSeq}` pointer and the beat prints exactly that, saying the footage is
+     not cut yet. Replay is its own slice.
+   - **The award gap.** The design lists eight; `reunion.js` computes six. The two uncomputed —
+     The Klutz and The Liar in the Ear — need events nothing writes yet.
+   - **The chat beat is empty** until something posts `chat.posted`. `chatUnmixed` is wired and
+     will fill in the day it does.
+   - **`COMPOSITION[n].cameras` and `WIN_TARGETS[n].cameraTarget` disagree** — 3 against 4 at
+     eight players, and both files call theirs "how many must be unlocked to win". The Verdict
+     plate reports the fold's number because the plate is a report on the fold. **Which one is
+     the objective is a design call for John, not a refactor.**
 7. **Delete the dead `room.js:34` `PHASES`** — five stale phases, imported nowhere, beside a
    `setPhase` that validates nothing.
 
