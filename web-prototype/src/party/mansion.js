@@ -150,13 +150,26 @@ function connected(plan, ai, bi) {
  * arriving exactly where this header said the region check could not see it.
  *
  * So the second check asks the question of `generatedTables` — the rows and portals the builder
- * actually emits — instead of the plan's regions. It is the same shape of check one stage later,
- * it is still pure, and it costs one extra table build (~1.7 ms) per candidate: `generatedTables`
- * returns its own `plan`, so `planPasses` runs on that rather than building a second one, and
- * `pickPlanSeed` memoises, which it did not before. Measured over 256 world seeds: **13 first
- * candidates rejected (5%), never more than 3 tries to land, none unsatisfiable** — and none of
- * them in 0..23, so W6c's "24/24 clean on the first candidate" is untouched by construction
- * rather than by luck.
+ * actually emits — instead of the plan's regions. It is the same shape of check one stage later
+ * and it is still pure: `generatedTables` returns its own `plan`, so `planPasses` runs on that
+ * rather than building a second one, and `pickPlanSeed` memoises, which it did not before.
+ * Measured: **0.81 -> 1.98 ms per uncached world seed, 0 ms cached.** Over 256 world seeds
+ * **13 first candidates are refused (5%), never more than 3 tries to land, none unsatisfiable.**
+ *
+ * 🚨 **AND ONE OF THE THIRTEEN IS ws17, WHICH IS INSIDE EVERY GATE'S OWN 0..23 SWEEP.** Seed 17
+ * is not a sealed chapel — it is a **sealed BALLROOM**, the room the night starts in, spawns in,
+ * and has to walk back to. `r0.ballroom`'s only interior portal is to `c3.2`, a 27.2 x 1.7 m
+ * corridor rect with **no other portal of its own**: it is a rect of region `c3` that shares no
+ * wall run with `c3.0`/`c3.1` 7.3 m away, so genplan's internal-joint loop never joins them and
+ * the gallery's door lands on `c3.0` instead. Under the old check `pickPlanSeed(17)` returned
+ * seed 17 and that house shipped — a night where nobody can leave the ballroom. It now returns
+ * seed 18 on the second candidate.
+ *
+ * ⚠️ **THAT MOVES A NUMBER TWO `party-warm` ASSERTIONS PRINT**, and it is the guard firing, not a
+ * regression: `W6d2` (L340) and `W14c` (L741) both count `picked.tries === 1` over ws 0..23 and
+ * read `sameSeed === 24` / `firstTry === 24`. The honest values are **23/24**, because ws17's
+ * first candidate is refused for cause. Nothing else about them changes — every pick is still
+ * `ok` (never the fallback) and `W14b`'s corner ballroom is still 24/24.
  *
  * If all `PLAN_TRIES` candidates fail, take candidate 0 and report it. A playable-but-wrong house
  * beats a throw on the biggest screen in the room; `ok:false` is how the caller can say so.

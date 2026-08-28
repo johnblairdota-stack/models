@@ -45,7 +45,7 @@ import {
 import {
   HOME_ROOM, MISSION_ROOM, PLAN_OPTS, PLAN_TRIES,
   coverageRoomOf, homeIsCorner, pickPlanSeed, planFor, planOptsFor, planPasses, planRegions,
-  planRoomLabels, roomLabel, spaceLabel,
+  planRoomLabels, planSeedString, roomLabel, spaceLabel, tablesPass,
 } from '../src/party/mansion.js';
 import { lockedSeatCount, seatCircleRadius, rugSpanForSeats, SIT_IDLE_CLIPS, SIT_CLIP_ALLOW } from '../src/game/chair-seats.js';
 import {
@@ -59,6 +59,20 @@ import {
   portalFacesPlayable, uHitsAnyOpening, MIN_LANDING_SPAN,
 } from '../src/game/portal-clearance.js';
 import { generatedTables } from '../src/world/genplan.js';
+
+function skippedForCause(ws) {
+  const base = Number(planSeedString(ws)) | 0;
+  const picked = pickPlanSeed(ws);
+  if (!picked.ok) return { ok: false, why: `ws${ws}: no candidate passed at all` };
+  for (let i = 0; i < (picked.tries - 1); i++) {
+    const tables = generatedTables(String(base + i), PLAN_OPTS);
+    if (planPasses(tables.plan) && tablesPass(tables)) {
+      return { ok: false, why: `ws${ws}: skipped candidate ${base + i}, which PASSES — that is luck, not cause` };
+    }
+  }
+  return { ok: true, why: `ws${ws}: ${picked.tries - 1} skipped, all refused for cause` };
+}
+
 import {
   AFTER_RUN_BEATS, DEBRIEF_HOLD_MS, RECAP_BACKSTOP_MS, RECAP_HOLD_MS, SHOW_BEATS,
   RUNDOWN_BEATS, holdMsFor, missionEndsRun, nextShowBeat, railDrainPct, recapAfterMs,
@@ -308,6 +322,29 @@ console.log('\nparty-warm — the lobby-warm night');
   t('W6b · the seed is stringified identically on both sides',
     planOptsFor(7).seed === '7' && planOptsFor('7').seed === '7' && planOptsFor(null).seed === '0');
 
+  /*
+   * ⚠️ **W6d2 AND W14c USED TO PIN THE COUNT 24, AND THAT WAS THE WRONG SURFACE.**
+   *
+   * Both asked `tries === 1` on all 24 seeds and read a bare `24/24`. The sentence they carry is
+   * "accepted on their merits, not by fallback" / "not by retry luck" — and a count cannot say
+   * that. A retry is only luck if the candidate it skipped was FINE; a retry that steps over a
+   * genuinely broken house is the picker working. When `tablesPass` landed and started refusing
+   * ws17 — whose ballroom's only portal opens into a 27.2x1.7 m corridor with no onward portal,
+   * so the runner spawns in the ballroom and cannot leave — both went red for the picker doing
+   * exactly its job, and the tempting fix was to write 23.
+   *
+   * That is the `episode-order` lesson again (`CLAUDE.md`): assert that the machines AGREE, never
+   * a fixed answer, or the gate has to be edited every time the world legitimately changes and
+   * nobody can tell an edit-for-cause from an edit-to-green. So these now assert the INVARIANT —
+   * every seed lands an `ok` pick and never the fallback, and every candidate skipped on the way
+   * was refused by `planPasses`/`tablesPass` rather than passed over. A picker that started
+   * skipping good houses goes red; a world that grows one more broken seed does not.
+   */
+  const causeAudit = [];
+  for (let ws = 0; ws < 24; ws++) causeAudit.push(skippedForCause(ws));
+  const causeBad = causeAudit.filter((r) => !r.ok);
+  const retried = causeAudit.filter((r) => !/: 0 skipped/.test(r.why));
+
   let allOk = true, worst = 0, sameSeed = 0;
   for (let ws = 0; ws < 24; ws++) {
     const picked = pickPlanSeed(ws);
@@ -337,7 +374,12 @@ console.log('\nparty-warm — the lobby-warm night');
   t('W6d control · the check really does reject a house without the mission rooms in it',
     rejected > 0, `${rejected}/24 three-room plans refused — this is why PLAN_OPTS.rooms is 6`);
   t('W6d2 · and the six-room plans it accepts are accepted on their merits, not by fallback',
-    pickPlanSeed(0).ok && sameSeed === 24, `${sameSeed}/24 clean on the first candidate`);
+    allOk && causeBad.length === 0,
+    `24/24 landed an ok pick, never the fallback; ${retried.length} needed a retry and every `
+    + `candidate skipped was refused for cause${causeBad.length ? ` — ${causeBad[0].why}` : ''}`);
+  t('W6d3 control · a candidate that PASSES is never skipped — this is what "not by luck" means',
+    skippedForCause(17).ok && /refused for cause/.test(skippedForCause(17).why),
+    `ws17 is the live case: ${skippedForCause(17).why}`);
   t('W6e · the pick is deterministic — the TV and the phone derive the same house',
     pickPlanSeed(11).seed === pickPlanSeed(11).seed && pickPlanSeed(11).seed === pickPlanSeed('11').seed);
 
@@ -737,8 +779,10 @@ console.log('\nparty-warm — the lobby-warm night');
   }
   t('W14b · every world seed 0..23 puts the ballroom in an env corner',
     corners === 24, `${corners}/24`);
+  const cornerCause = Array.from({ length: 24 }, (_, ws) => skippedForCause(ws)).filter((r) => !r.ok);
   t('W14c · and homeCorner does that on the first candidate, not by retry luck',
-    firstTry === 24, `${firstTry}/24 first-try`);
+    corners === 24 && cornerCause.length === 0,
+    `${firstTry}/24 first-try; the rest retried past candidates refused for cause, not skipped`);
 
   let rejectedCorner = 0;
   for (let s = 0; s < 48; s++) {

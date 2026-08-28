@@ -1252,8 +1252,9 @@ try {
       ? 'window.__rrrFollow.anchorControl is not on the page — AB2d has no control and cannot be '
         + 'shown to still work; wire it in views/party-follow.js (see this block)'
       : `pelvis travelled ${(ctlDrift ?? 0).toFixed(2)} m in sim +${ctlSim}s,`
-        + ` ceiling ${STAND_TRAVEL_MAX_M} m — ${((ctlRate ?? 0)).toFixed(4)} m per frame against`
-        + ' the 0.3588 m the anchor of Sit_to_Stand_Transition_M predicts;'
+        + ` ceiling ${STAND_TRAVEL_MAX_M} m — ${((ctlRate ?? 0)).toFixed(4)} m per frame averaged`
+        + ' over the whole sample, and the anchor only starts adding its 0.3588 m per frame once'
+        + ' the clip clamps at 6.17 s, so this is ~18 loaded frames of the 83;'
         + ` the fixed arm managed ${(nomDrift).toFixed(2)} m in sim +${AT_HELD}s`);
 
   await writeFile(path.join(SHOTDIR, 'accusation.json'), JSON.stringify({
@@ -1362,8 +1363,89 @@ try {
  *   simply half the size of the near side, by the same clamp that keeps the name tags readable.
  *   The lever, if he wants it flatter, is `TAG_FAR_K` — and AB6 will follow it.
  *
+ * ---------------------------------------------------------------------------------------------
+ * 📋 RUN 6 — 2026-08-28, same branch, later the same day. **AB2d IS FIXED AND HAS A CONTROL.**
+ * ---------------------------------------------------------------------------------------------
+ * BEFORE (this file, unchanged, on the shipped `mesh-avatar.js`): **14 ok · 4 fail.**
+ *
+ *   FAIL AB2d · pelvis travelled 20.80 m from its chair, ceiling 1 m (the stand clip travels
+ *               0.44 m); at +1.2/3/12s: 0.006/0.375/20.804
+ *
+ * ROOT CAUSE, confirmed by measurement rather than by reading. `PropertyMixer.apply()` (three
+ * 0.180.0) only calls `binding.setValue` when the mixed value CHANGED since the previous frame.
+ * A bare-node probe — one 2 s clip, `LoopOnce` + `clampWhenFinished`, a sentinel written into
+ * `bone.position.y` before every `mixer.update` — counted **20 writes and then none**, from the
+ * frame after the clamp onward, with an external `+=` climbing by its increment every frame after
+ * that. So the anchor correction was not "self-limiting while the mixer overwrites"; the mixer
+ * stops overwriting, by design, the moment a clamped pose goes still.
+ *
+ * The arithmetic closes on this file's own numbers: `Sit_to_Stand_Transition_M` clamps at 6.17 s
+ * and its `seatedAnchorDelta` is 35.88 raw units = 0.3588 m per frame; +6.17 s to +12.09 s is ~61
+ * frames at that run's 0.096 s/frame = ~22 m predicted, 20.80 m measured.
+ *
+ * THE FIX (`mesh-avatar.js`): the correction is un-applied before `mixer.update()` and re-applied
+ * after it, so the pelvis carries exactly one correction whether or not the mixer wrote. The two
+ * `+=` lines are untouched — `seated-actions` A8f reads them literally and is still green (29/29).
+ *
+ * AFTER: **18 ok · 1 fail**, and the one red is AB3b.
+ *
+ *   ok AB2d     · pelvis travelled 0.43 m from its chair, ceiling 1 m (the stand clip travels
+ *                 0.44 m); at +1.2/3/12s: 0.008/0.378/0.431
+ *   ok AB2d-ctl · pelvis travelled 6.45 m in sim +8.03s, ceiling 1 m
+ *   ok AB2c     · "Sit_to_Stand_Transition_M" via sitReport.seatedAction
+ *   ok AB3c     · +3s "Sitting_Answering_Questions" → +12s "Sitting_Answering_Questions"
+ *
+ * ⚠️ **AB2b's NUMBER MOVED AND THAT IS THE FIX SHOWING, NOT A REGRESSION.** The hips rise read
+ * +0.450 m before and +0.252 m after. `chair-seats.js` measures the stand clip at **+0.251 m**
+ * off the GLB. The old number was the drift adding itself to the rise.
+ *
+ * 🚦 AB2d-ctl. `SEAT_ANCHOR_CONTROL.integrate` puts the accumulation back for one extra
+ * accusation at the end of the run: **6.45 m in 8.03 s of show, against the same 1.0 m ceiling**
+ * — 0.078 m per frame averaged over 83 frames, which is ~18 post-clamp frames carrying 0.3588 m
+ * each. Then the knob goes off, the bed is cleared, and the accuser's pelvis is **0.01 m** from
+ * where it started the run, so the arm leaves nothing behind for the next one.
+ *
+ * ---------------------------------------------------------------------------------------------
+ * 🎭 AB3b IS A CASTING QUESTION, NOT A WIRING ONE — MEASURED, NOT ASSUMED
+ * ---------------------------------------------------------------------------------------------
+ * The settle is NOT being released: AB3c now names `Sitting_Answering_Questions` at BOTH +3 s and
+ * +12 s, and a bare-node replication of `cloneMeshAvatar`'s seated pipeline on the real GLB (a
+ * fresh rig and mixer per candidate — a shared one carries the previous clip's pose, for exactly
+ * the PropertyMixer reason above) reproduces the live spine to three decimals: 0.0259 m at +3 s
+ * against the live 0.026, 0.0204 m at +12 s against the live 0.022, with `reactAmt` and the
+ * action's weight both 1.00 and the clip's time advancing the whole way.
+ *
+ * So the pose is on the body at full weight and it is simply quiet. Over 12 s of hold, spine
+ * displacement from the seated idle, on the real rig, all eleven allowed clips minus the three
+ * that leave the chair:
+ *
+ *   Sitting_Answering_Questions  0.014 / 0.058 / 0.171 m   UNDER the 0.05 bar on 46 of 120 frames
+ *   Sit_on_Chair_Arms_Crossed    0.074 / 0.088 / 0.099 m   0/120   (clamps; needed the fix above)
+ *   Sit_Cross_Legged             0.176 / 0.190 / 0.203 m   0/120
+ *   Sit_Dodge                    0.124 / 0.294 / 0.346 m   0/120
+ *   Sit_Hands_on_Head_Lean_Back  0.028 / 0.236 / 0.493 m  16/120
+ *   Sit_Finger_Wag_No            0.020 / 0.128 / 0.176 m  21/120
+ *   Sit_Shout_Hands_on_Mouth     0.027 / 0.064 / 0.116 m  37/120
+ *   Sitting_Clap                 0.024 / 0.048 / 0.064 m  69/120
+ *
+ * ⚠️ `ACCUSE_CLIPS.settle` is a TWO-ENTRY list picked by the accused's seat parity, so only the
+ * ODD seats get `Sitting_Answering_Questions`; the even seats get `Sit_on_Chair_Arms_Crossed`,
+ * which holds at 0.074–0.099 m and never dips under the bar — but which CLAMPS, so before the fix
+ * above it was the same runaway (33 m in the same 12 s window). Half the table was quietly
+ * getting the drift instead of a hold. **Which clip the settle should be is John's call and is
+ * deliberately not changed here.** `Sit_Cross_Legged` is the loudest stable hold in the set.
+ *
+ * ⚠️ AND `SPINE_FLOOR_M` STAYS AT 0.05. Lowering it so a signal this close to the noise floor
+ * goes green would be moving the gate to fit the build.
+ *
  * ⚠️ NOT WIRED INTO `gates:party` BY THIS BRANCH — `package.json` belongs to another agent this
  * round, and `seated-actions.mjs` carries the same note. Add all three accusation gates to the
- * chain when merging. This one costs a mansion bake plus ~12 s of show time; at the swiftshader
- * ratios measured here (0.03x) that is 8–11 minutes of wall clock.
+ * chain when merging. This one costs a mansion bake plus ~20 s of show time (12 for the beat, 8
+ * for AB2d-ctl); at the swiftshader ratios measured here (0.045x) that is 13–16 minutes of wall
+ * clock.
+ *
+ * ⚠️ **AND IT CANNOT SHARE A VITE WITH SOMEBODY WHO IS EDITING `src/`.** Run 6's first attempt
+ * died on `Execution context was destroyed` — vite's HMR reloaded the page under the probe when a
+ * parallel agent saved `mansion.js`. Nothing is wrong with the gate; on a shared tree, start vite
+ * with `server.hmr: false` and `server.watch.ignored` first and this file will reuse that port.
  * ============================================================================================ */
