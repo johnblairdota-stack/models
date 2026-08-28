@@ -366,5 +366,90 @@ const orderSrc = await read('src/world/ballroom-order.js');
     'pickSpaces and the leftover pass');
 }
 
+/* =============================================================================================
+ * D3 · THE MARBLE BORDER DOES NOT OUT-SHOUT THE FLOOR IT RINGS
+ * =============================================================================================
+ * Handoff D3, and it is OUR defect rather than the asset's: the port carried the shared
+ * `marbleChequer` across unchanged, and under the night grade *"the white tiles run near-clipping
+ * while the parquet sits mid-tone, so a hard black-and-white band rings the entire room at the
+ * wall base and drags the eye straight off the players in the middle."*
+ *
+ * 🚨 **THE MEAN CANNOT SEE THIS DEFECT AND NEARLY BURIED IT.** Half the surface is Nero
+ * Marquina at 0.070 albedo, so the band's MEAN measured 0.72 / 0.63 / 0.80 against the parquet —
+ * comfortably darker, apparently fine — while its white tiles were the brightest thing in the
+ * frame. `ballroom-luma.mjs` compares the p90 for this probe instead, and that is where the
+ * defect is:
+ *
+ *     station   white tile p90   parquet p90   before  ->  after
+ *     floor          167.0          159.6       1.05       0.83
+ *     mirror         127.1          144.6       0.88       0.67
+ *     arch           150.3          120.8       1.24       0.94
+ *
+ * ⚠️ **AND UNLIKE D1, THERE IS NO AUTHORED PROXY FOR THIS ONE — DO NOT INVENT ONE.** D1's
+ * plate/wall ratio could be gated on `silver x colour x (1 - metalness)` because that quantity
+ * was checked against the delivered pixels at three stations and tracked them. It does NOT work
+ * here: the border's authored luminance is 0.581 against the parquet oak's 0.424, i.e. still
+ * *brighter on paper*, while delivering 0.83-0.94 — because the parquet is a large lit field and
+ * the border sits in shadow at the wall base. Any gate on authored albedo alone would be
+ * asserting a relationship that is false. So this gate locks the INPUTS the measurement settled
+ * on, and `ballroom-luma.mjs --probe chequer` stays the authority on the outcome.
+ * ============================================================================================= */
+{
+  /* The shared defaults, read from source rather than copied, so the controls below are the
+   * values this project actually ships and cannot drift from them. */
+  const base = localSrc.match(/const MARBLE_BASE = \{[\s\S]*?groundA: \[([\d.]+), ([\d.]+), ([\d.]+)\], veinA: \[([\d.]+), ([\d.]+), ([\d.]+)\],\r?\n\s*groundB: \[[\d., ]+\], veinB: \[([\d.]+), ([\d.]+), ([\d.]+)\]/);
+  t('B18 · MARBLE_BASE still states the shared Carrara, which is the control', !!base,
+    base ? `groundA ${base.slice(1, 4).join('/')} veinB ${base.slice(7, 10).join('/')}` : 'PATTERN NOT FOUND');
+
+  const ball = roomSrc.match(/chequer: L\.estateMarbleChequer \? L\.estateMarbleChequer\(\{\r?\n\s*groundA: \[([\d.]+), ([\d.]+), ([\d.]+)\], veinA: \[[\d., ]+\],\r?\n\s*veinB: \[([\d.]+), ([\d.]+), ([\d.]+)\],\r?\n\s*wear: ([\d.]+), dust: ([\d.]+), size: (\d+),/);
+  t('B19 · the ballroom bakes its OWN chequer rather than taking the shared singleton', !!ball,
+    ball ? `groundA ${ball.slice(1, 4).join('/')} veinB ${ball.slice(4, 7).join('/')} wear ${ball[7]} dust ${ball[8]}` : 'PATTERN NOT FOUND');
+
+  /*
+   * 🚨 **A SEPARATE BAKE IS NOT COSMETIC — `views/room-ballroom.js` IS PINNED.** `marbleChequer`
+   * is a module-level singleton in `materials-local.js` and the showcase draws its floor with it,
+   * under a pixel-diff gate and a darkest-decile grade gate running 7.7 against a ceiling of 8.0.
+   * Mutating the shared entry to fix the game would have moved the showcase's floor.
+   */
+  t('B19b · ...and the shared singleton is left alone, because the showcase view is pinned',
+    /marbleChequer: \(\) => estateMarbleChequer\(\),/.test(localSrc)
+    && /\}\) : mats\.marbleChequer,/.test(roomSrc)
+    && !/chequer: mats\.marbleChequer,/.test(roomSrc),
+    'materials-local keeps its default; room.js reaches it only as a fallback');
+
+  if (base && ball) {
+    const lumOf = (a) => 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2];
+    const baseGround = lumOf(base.slice(1, 4).map(Number));
+    const ballGround = lumOf(ball.slice(1, 4).map(Number));
+    const baseVeinB = lumOf(base.slice(7, 10).map(Number));
+    const ballVeinB = lumOf(ball.slice(4, 7).map(Number));
+
+    t('B20 · the white tile is darkened well below the showcase Carrara',
+      ballGround <= baseGround * 0.75,
+      `${ballGround.toFixed(3)} against ${baseGround.toFixed(3)} (${(ballGround / baseGround).toFixed(2)}x) · delivered p90 0.83 / 0.67 / 0.94`);
+    t('B20c · CONTROL the shared Carrara fails B20 — it is the value that shipped the band',
+      !(baseGround <= baseGround * 0.75), `${baseGround.toFixed(3)}`);
+
+    /*
+     * 🚨 **`veinB` IS THE SMEARED DIRT, AND THE HANDOFF NAMES THE WRONG KNOB.** D3 blames
+     * `wear: 0.45` for the splotchy mottle on the black tiles. Read the shader: `uWear` drives
+     * `traffic`, which is spent on ROUGHNESS (`rough += traffic * 0.115`) and on 2.8% of albedo.
+     * It cannot make a blotch. `veinB` can — near-WHITE veining at 0.880 over a 0.070 ground is
+     * a 12:1 contrast that stops resolving as veins at TV distance and averages into grey smears.
+     */
+    t('B21 · the dark tile\'s veining is brought down out of smear territory',
+      ballVeinB <= baseVeinB * 0.55,
+      `veinB luma ${ballVeinB.toFixed(3)} against ${baseVeinB.toFixed(3)}`);
+    t('B21c · CONTROL the shipped veinB fails B21', !(baseVeinB <= baseVeinB * 0.55));
+    t('B21n · the shader still spends uWear on roughness, so blaming it for a blotch stays wrong',
+      /rough\s*\+=\s*traffic \* 0\.115/.test(localSrc) && /col\s*\*=\s*1\.0 - traffic \* 0\.028/.test(localSrc),
+      'the note in room.js depends on this');
+
+    t('B22 · wear and dust are both cut, as the handoff asks',
+      Number(ball[7]) < 0.45 && Number(ball[8]) < 0.6,
+      `wear ${ball[7]} (was 0.45) · dust ${ball[8]} (was 0.6)`);
+  }
+}
+
 console.log(`\n  ${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

@@ -92,12 +92,32 @@ const PROBE_SPEC = {
     subject: 'pier-mirrors', reference: 'kit:wall',
     want: 'ratio <= 1.00 — a dead mirror is not brighter than its own wall',
     stations: ['arch', 'wide', 'mirror'],
+    /* A plate is a TALL surface with wall to its left and right, so "beside it" is along a row. */
+    narrow: 'rows',
   },
   chequer: {
     why: 'D3 · the marble border against the parquet it rings',
     subject: 'kit:floormarble', reference: 'kit:floor',
-    want: 'ratio <= 1.00 — the border must not be the brightest surface in the room',
-    stations: ['floor', 'wide', 'arch'],
+    want: 'p90 ratio <= 1.00 — the WHITE tiles must sit under the lit parquet',
+    /*
+     * ⚠️ **`radius`, NOT `rows`, AND `wide` IS NOT A STATION FOR THIS.** The border is a
+     * HORIZONTAL band: the parquet it must be compared against is above and below it in the
+     * frame, not left and right, so same-row narrowing found ZERO reference pixels at `arch` and
+     * reported a surface it had just successfully masked as unmeasurable. `wide` is dropped
+     * because the band delivers ~107 px there in total — too few to mean anything, and the
+     * erosion correctly ate all of them.
+     */
+    narrow: 'radius',
+    stations: ['floor', 'mirror', 'arch'],
+    /*
+     * 🚨 **THE MEAN IS THE WRONG STATISTIC FOR A CHEQUER, AND IT HID THE DEFECT COMPLETELY.**
+     * Half of this surface is Nero Marquina at 0.070 albedo, so the black tiles drag the mean
+     * under the parquet's and the border scores 0.72 / 0.63 / 0.80 — "comfortably darker than
+     * the floor" — while the WHITE tiles are the brightest thing in the room and the band reads
+     * as a hard black-and-white ring at every wall base. The defect lives in the upper mode of a
+     * bimodal population, so the upper decile is what gets compared.
+     */
+    stat: 'p90',
   },
 };
 
@@ -197,8 +217,8 @@ window.__luma = (() => {
 `;
 
 /** All the pixel arithmetic, done in-page where the PNGs can be decoded for free. */
-async function measure(page, beauty, subjMask, refMask, near, erode) {
-  return page.evaluate(async ([b, s, r, near, erode]) => {
+async function measure(page, beauty, subjMask, refMask, near, erode, narrow) {
+  return page.evaluate(async ([b, s, r, near, erode, narrow]) => {
     const load = async (d) => {
       const img = await createImageBitmap(await (await fetch(d)).blob());
       const c = new OffscreenCanvas(img.width, img.height);
@@ -265,12 +285,43 @@ async function measure(page, beauty, subjMask, refMask, near, erode) {
         else { if (x < sp[0]) sp[0] = x; if (x > sp[1]) sp[1] = x; }
       }
     }
+    /* Separable box dilation — a Chebyshev neighbourhood of `near`, in two O(W*H) passes. */
+    const dilate = (bits, w, h, r) => {
+      const tmp = new Uint8Array(bits.length);
+      for (let y = 0; y < h; y++) {
+        let cnt = 0;
+        for (let x = 0; x <= r && x < w; x++) if (bits[y * w + x]) cnt++;
+        for (let x = 0; x < w; x++) {
+          tmp[y * w + x] = cnt > 0 ? 1 : 0;
+          const o = x - r, i2 = x + r + 1;
+          if (o >= 0 && bits[y * w + o]) cnt--;
+          if (i2 < w && bits[y * w + i2]) cnt++;
+        }
+      }
+      const out = new Uint8Array(bits.length);
+      for (let x = 0; x < w; x++) {
+        let cnt = 0;
+        for (let y = 0; y <= r && y < h; y++) if (tmp[y * w + x]) cnt++;
+        for (let y = 0; y < h; y++) {
+          out[y * w + x] = cnt > 0 ? 1 : 0;
+          const o = y - r, i2 = y + r + 1;
+          if (o >= 0 && tmp[o * w + x]) cnt--;
+          if (i2 < h && tmp[i2 * w + x]) cnt++;
+        }
+      }
+      return out;
+    };
     const ref = [];
-    for (const [y, sp] of rowSpan) {
-      const lo = Math.max(0, sp[0] - near), hi = Math.min(B.w, sp[1] + near);
-      for (let x = lo; x < hi; x++) {
-        const p = y * B.w + x;
-        if (rb[p]) ref.push(lum(B.d, p * 4));
+    if (narrow === 'radius') {
+      const near2d = dilate(sb, B.w, B.h, near);
+      for (let p = 0; p < rb.length; p++) if (rb[p] && near2d[p]) ref.push(lum(B.d, p * 4));
+    } else {
+      for (const [y, sp] of rowSpan) {
+        const lo = Math.max(0, sp[0] - near), hi = Math.min(B.w, sp[1] + near);
+        for (let x = lo; x < hi; x++) {
+          const p = y * B.w + x;
+          if (rb[p]) ref.push(lum(B.d, p * 4));
+        }
       }
     }
     const stat = (a) => {
@@ -280,7 +331,7 @@ async function measure(page, beauty, subjMask, refMask, near, erode) {
         med: srt[srt.length >> 1], p90: srt[Math.floor(srt.length * 0.9)] };
     };
     return { subject: stat(subj), reference: stat(ref), diag };
-  }, [beauty, subjMask, refMask, near, erode]);
+  }, [beauty, subjMask, refMask, near, erode, narrow]);
 }
 
 const png = async (p) => 'data:image/png;base64,' + (await p.screenshot()).toString('base64');
@@ -335,7 +386,7 @@ try {
         const rMask = await png(p);
         await p.evaluate(() => window.__luma.restore());
         await sleep(200);
-        const m = await measure(p, beauty, sMask, rMask, NEAR_PX, ERODE);
+        const m = await measure(p, beauty, sMask, rMask, NEAR_PX, ERODE, spec.narrow ?? 'rows');
         await writeFile(path.join(OUT, `${key}.${stId}.beauty.png`), Buffer.from(beauty.split(',')[1], 'base64'));
         await writeFile(path.join(OUT, `${key}.${stId}.subject.png`), Buffer.from(sMask.split(',')[1], 'base64'));
         await p.close();
@@ -347,9 +398,15 @@ try {
           lines.push({ key, stId, ratio: null });
           continue;
         }
-        const ratio = S.mean / R.mean;
-        say(`    ${stId.padEnd(7)} subject mean ${S.mean.toFixed(1)} (n=${S.n})  ·  reference mean ${R.mean.toFixed(1)} (n=${R.n})  ·  ratio ${ratio.toFixed(2)}${ratio > 1.0 ? '   <-- brighter than its neighbour' : ''}`);
-        lines.push({ key, stId, subject: S, reference: R, ratio });
+        /* `stat` picks which part of the distribution the probe is actually about — see the
+         * chequer probe's note on why a mean cannot see a black-and-white band. */
+        const K = spec.stat ?? 'mean';
+        const ratio = S[K] / R[K];
+        /* Under ~500 delivered pixels a surface is a sliver and its mean is noise; say so rather
+         * than quoting a number to two decimal places. */
+        const thin = S.n < 500 || R.n < 500 ? '   [THIN — treat as indicative only]' : '';
+        say(`    ${stId.padEnd(7)} subject ${K} ${S[K].toFixed(1)} (n=${S.n}, mean ${S.mean.toFixed(1)})  ·  reference ${K} ${R[K].toFixed(1)} (n=${R.n}, mean ${R.mean.toFixed(1)})  ·  ratio ${ratio.toFixed(2)}${ratio > 1.0 ? '   <-- brighter than its neighbour' : ''}${thin}`);
+        lines.push({ key, stId, stat: K, subject: S, reference: R, ratio });
       }
     }
     await writeFile(path.join(OUT, 'luma.json'), JSON.stringify(lines, null, 2));

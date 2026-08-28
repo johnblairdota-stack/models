@@ -4174,7 +4174,56 @@ async function loadEstateSurfaces(L) {
          * a matched bar at 36.2. See the note at the `floor:` line in `binMaterials` for the sweep.
          * `wear: 0.6` and the doubled `oakDark` come with it — they were swept together.
          */
-        chequer: mats.marbleChequer,
+        /**
+         * 🆕 **THE MARBLE BORDER, DARKENED FOR THE NIGHT GRADE** (`ballroom-defects-1`).
+         * `docs/handoff/ballroom-next.md` D3, and it is OUR defect rather than the asset's: the
+         * port carried `mats.marbleChequer` across unchanged and *"the white tiles run near-
+         * clipping while the parquet sits mid-tone, so a hard black-and-white band rings the
+         * entire room at the wall base and drags the eye straight off the players in the middle."*
+         * The material is not wrong — Carrara against Nero Marquina is correct, and it works in
+         * the showcase because daylight lifts EVERYTHING. Under the night grade nothing else in
+         * the room competes with it.
+         *
+         * 🚨 **A SEPARATE BAKE, NEVER A MUTATION OF `mats.marbleChequer`.** That entry is a
+         * module-level singleton in `materials-local.js` and `views/room-ballroom.js` — the
+         * PINNED showcase, with a pixel-diff gate and a darkest-decile grade gate at 7.7 of 8.0
+         * — draws its floor with it. A distinct options object is a distinct bake key, so the
+         * showcase keeps the material it was graded on.
+         *
+         * ⚠️ **THE NUMBERS COME OFF THE UPPER DECILE, BECAUSE THE MEAN CANNOT SEE THIS DEFECT.**
+         * Half this surface is Nero Marquina at 0.070 albedo, so the band's MEAN sits under the
+         * parquet's at every station (0.72 / 0.63 / 0.80) and looks healthy while the white
+         * tiles are the brightest thing in the frame. Measured with `ballroom-luma.mjs` on the
+         * p90 instead — the white tiles — against the parquet's own p90:
+         *
+         *     station   white tile   parquet p90   ratio
+         *     floor        167.0        159.6      1.05
+         *     mirror       127.1        144.6      0.88
+         *     arch         150.3        120.8      1.24
+         *
+         * `groundA`/`veinA` are the Carrara, scaled to 0.65 of the showcase's. 0.72 was measured
+         * first and left `arch` at 1.01 — level with the parquet rather than under it, and too
+         * close to call a fix; the second step buys the margin. `room.js` already
+         * makes this argument one bucket along for the study floor — *"Carrara is a grey stone
+         * with white in it"* — and lands that one at 0.255 against the showcase's 0.395, so 0.65
+         * here is mild by the same file's own standard.
+         *
+         * 🚨 **`veinB` IS THE "SMEARED DIRT", NOT `wear` — THE HANDOFF NAMES THE WRONG KNOB.**
+         * D3 attributes the splotchy mottle on the black tiles to `wear: 0.45`. Read the shader:
+         * `uWear` drives `traffic`, which is spent on ROUGHNESS (`rough += traffic * 0.115`) and
+         * on 2.8% of albedo. It cannot make a blotch. What can is `veinB` — near-WHITE veining
+         * at 0.880 over a 0.070 ground, a 12:1 contrast that at TV distance stops resolving as
+         * veins and averages into grey smears — helped by `dust: 0.6`, which mixes the tile 42%
+         * toward a 0.40 grey wherever it banks. Nero Marquina does have white veining; it does
+         * not have it at twelve times the ground. So `veinB` comes down hard and `dust` with it.
+         * `wear` is cut anyway, as asked: it costs nothing and quiets the specular sparkle the
+         * band throws under a moving camera.
+         */
+        chequer: L.estateMarbleChequer ? L.estateMarbleChequer({
+          groundA: [0.587, 0.581, 0.568], veinA: [0.263, 0.257, 0.247],
+          veinB: [0.420, 0.412, 0.396],
+          wear: 0.30, dust: 0.35, size: 1024,
+        }) : mats.marbleChequer,
         floor: L.parquetMat({
           oak: [0.600, 0.392, 0.216], oakDark: [0.280, 0.168, 0.092], wear: 0.6, size: 1024,
         }),
