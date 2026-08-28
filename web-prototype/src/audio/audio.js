@@ -1833,7 +1833,7 @@ export function playFurnBreak(material = 'wood', opts = null) {
  *   MAGNITUDE a cue parameter that is a CONTINUOUS function of a game value is a data channel.
  *             A bed whose intensity tracked true vote alignment, or a sting whose pitch rode
  *             the real margin, would broadcast an internal to the whole room with nothing
- *             wrong on screen. This is the same defect class as `src/party/log.js:56` blocking
+ *             wrong on screen. This is the same defect class as `src/party/log.js:69` blocking
  *             `player.claim_set` from the TV: the host tab is not a nameplate, and neither is
  *             the host tab's loudspeaker.
  *
@@ -2000,7 +2000,7 @@ export function showCueVoice(cue) {
  *
  * ⚠️ **KEY NAMES ONLY, NEVER VALUES.** `showCueViolations` builds its strings out of key names
  * and a beat, and nothing here adds an operand. Printing the offending VALUE into the host
- * tab's console would recreate `log.js:56`'s bug — DevTools on the TV reading a secret — while
+ * tab's console would recreate `log.js:69`'s bug — DevTools on the TV reading a secret — while
  * looking like diagnostics.
  */
 function refuseShowCue(kind, bad) {

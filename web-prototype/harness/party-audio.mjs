@@ -21,7 +21,7 @@
  *                real margin, would broadcast an internal to eight people at once — including the
  *                Glitched — with nothing wrong on screen.
  *
- * The precedent is `src/party/log.js:56`, which blocks `player.claim_set` from the TV
+ * The precedent is `src/party/log.js:69`, which blocks `player.claim_set` from the TV
  * specifically because DevTools on the host tab would read every cover. The host tab's
  * loudspeaker is the same tab.
  *
@@ -227,7 +227,7 @@ console.log('\nparty-audio — the show cues and the leak rule');
     warned.length === PROBES.length * 2 + 4
       && warned.every((w) => w.startsWith('[audio] show cue refused'))
       && !warned.some((w) => /Glitched|evil|0\.87|440/.test(w)),
-    `${warned.length} warns · printing the offending VALUE would recreate log.js:56's bug`);
+    `${warned.length} warns · printing the offending VALUE would recreate log.js:69's bug`);
   t('A5b · and the headline one on its own, named, so a diff never quietly deletes it',
     showCueViolations({ ...EVICT_OK, margin: 5 }).length > 0
       && showCueVoice({ ...EVICT_OK, margin: 5 }) === null,

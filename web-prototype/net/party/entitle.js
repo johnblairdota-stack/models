@@ -100,7 +100,7 @@ export const MATRIX = [
   ['players[].accent',         'all'],   // lobby cosmetic. Public. Not a role.
   // 'players[].hunter'                  NO ROW. Cosmetics are not a hole for a later secret.
   // 'players[].deal'                    NO ROW. Ditto.
-  ['players[].claim',          'phones'], // published nameplates. Never the TV — the stub writes covers here.
+  ['players[].claim',          'phones'], // published nameplates. Never the TV — see log.js `player.claim_set`.
   ['players[].plate',          'all'],   // undeclared/drafting/published/face-down. Never the role.
   // 'players[].alignment'               NO ROW. Nobody, ever, pre-REUNION.
   // 'players[].role'                    NO ROW. Ditto.
