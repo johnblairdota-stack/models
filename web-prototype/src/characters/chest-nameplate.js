@@ -383,6 +383,19 @@ export function attachHeadNameTag(player, name, tab = null) {
   sprite.renderOrder = 8;
   sprite.userData.ownedTex = tex;
   sprite.userData.billboard = true;
+  /*
+   * ⚠️ **THE ATTACH HAS TO RECORD WHAT IT PAINTED, OR THE IDEMPOTENCE CHECK IS BLIND.**
+   * `setNameTagLabel` returns early when label + skin + tab already match — that early return is
+   * what stops the per-tap `links` fanout repainting eight canvases several times a second. It
+   * reads `userData.tagLabel`, which the attach never set, so the FIRST `setPairs` of every
+   * night repainted every tag in the circle for no change at all. It also left the tags
+   * anonymous to any instrument reading the scene: `harness/circle-staging.mjs` printed eight
+   * rows of `?`.
+   */
+  sprite.userData.tagLabel = label;
+  sprite.userData.tagSkin = '';
+  sprite.userData.tagTab = Number.isFinite(Number(tab?.seat)) && tab?.seat != null
+    ? `${tab.seat}:${tab.accent || ''}` : '';
 
   const y = headTagY(player);
   sprite.position.set(0, y, 0);

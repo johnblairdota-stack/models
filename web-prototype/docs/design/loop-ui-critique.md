@@ -146,6 +146,12 @@ deserves. **This is the fix pattern for F1 everywhere else.**
 *Evidence: `progress/r5/04-tv-debrief.png` and `08-tv-reckoning-named.png` — 8 phones, casting
 played, circle really seated. These are the only frames in this pass with the cast in them.*
 
+> ⚠️ **MEASURED 2026-08-28 BY `harness/circle-staging.mjs`, AND TWO OF THESE THREE WERE WRONG.**
+> F11's collision is confirmed and worse than it looked. F11's scale claim was overstated. **F13
+> is simply false and is withdrawn.** See the measured block after F13. The three bullets below
+> are left as written — they are what an impression from two screenshots produced, and the point
+> of keeping them is that two of them did not survive contact with a number.
+
 - **F11 · the name tags collide, and they scale the wrong way round.** In `08` the tag `JOHN`
   completely covers `JO`; one `SAM` is clipped to `SA` by the other `SAM`; `ELLIE` overlaps `BO`'s
   row. And because the tags are perspective-scaled, the two players nearest the camera get 30px
@@ -161,6 +167,32 @@ played, circle really seated. These are the only frames in this pass with the ca
   sweeping, keeping the group centred."* In both frames the nearest robot is cropped by the bottom
   edge, a chair back occupies the foreground, and the rug is the largest object in shot. In `08`
   the circle sits right-of-centre with dead wall on the left.
+
+#### Measured — `progress/circle/staging.json`, 8 seats, 1600×900
+
+```
+ring centre 34.15, 23.97 · radius 4.58–4.63 m
+camera      33.01, 1.92, 33.13 · 9.23 m from centre
+```
+
+| claim | measured | verdict |
+|---|---|---|
+| F11 tags collide | **5 overlapping pairs; worst buries 73% of the smaller tag**, second 59% | **confirmed, worse than it read** |
+| F11 scale inverted | 29.4px → 58.2px = **1.98×** | **overstated** — real, but under 2×, not the ~3× claimed |
+| F13 camera inside the ring | camera **9.23 m** from centre, ring reaches **4.63 m** | **FALSE — withdrawn** |
+
+**F13 was an impression and it was wrong.** The camera is outside the chair circle by a factor
+of two; the locked rule is being obeyed. What the frames actually show is a camera that is
+outside but **LOW** — `y = 1.92 m`, roughly seated eye height — which crops the nearest robot at
+the bottom edge and puts the rug at the centre of the composition. That is a framing observation
+with no rule behind it, and it is not what "the camera is inside the circle" claimed.
+
+This is the failure mode `rrr-critique` names in its own text: a critic ranked one complaint
+first for six consecutive rounds and measurement showed the real defect was somewhere else. The
+same rule caught it here — *a measured claim outranks an impression, including your own.*
+
+**So the only live finding in this cluster is the collision**, and it now has a number to beat:
+zero overlapping pairs, from a worst case of 73%.
 
 ### Verdict — **not on the wire**
 The rail draws a `VERDICT` label that never lights (`SHOW_BEATS` has no `verdict`;
@@ -207,6 +239,7 @@ episode, all night.
 | 5 | **F7** talk frame has no slate | Recap + any cold start | medium |
 | 6 | **F5** casting card window is 55% empty | Casting | medium |
 | 7 | **F6** ribbon rail is a hairline | Expedition | medium |
+| — | **F13** camera inside the chair ring | — | **withdrawn — measured false** |
 | 8 | **F9/F10** phone type scale + stale hero | phone, several | small |
 
 **F1, F2, F3 and F4 are one change**, not four: a shared "what is happening and what ends it"

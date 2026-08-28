@@ -15,6 +15,16 @@
  *   F13  the ballroom camera sits INSIDE the chair circle. The locked rule is *"outside the
  *        chair circle, sweeping, keeping the group centred"*.
  *
+ * ⚠️ **F13 WAS FALSE AND THIS FILE IS WHAT KILLED IT.** First run: the camera is 9.23 m from the
+ * ring centre and the ring reaches 4.63 m — outside, by a factor of two, rule obeyed. What the
+ * photographs actually showed is a camera that is outside but LOW (y = 1.92 m, seated eye
+ * height), cropping the nearest robot and centring the rug. C3 is kept as the standing guard on
+ * the rule rather than deleted with the finding: it passes today and it is what notices if the
+ * sweep ever wanders inside. F11's scale half was overstated too — see C5.
+ *
+ * The collision is the one that survived, and badly: five overlapping pairs, the worst burying
+ * 73% of the smaller tag.
+ *
  * ⚠️ **THIS IS A MEASUREMENT, NOT A CRITIQUE, AND THAT IS DELIBERATE.** `rrr-critique` is the
  * project's art-director protocol and its decisive moves are a blind comparison against a
  * piece's BAR ART and `measure.mjs`/`overlay.mjs` silhouette landmarks. Neither applies here:
@@ -263,6 +273,13 @@ try {
   t('C4 · no two tags overlap', pairs.length === 0,
     pairs.length ? `${pairs.length} pairs, worst ${pairs[0].buried}% buried (${pairs[0].a}/${pairs[0].b})` : 'clear');
 
+  /*
+   * ⚠️ **C5 IS THE ONE THAT CORRECTED THE CRITIC.** The finding claimed the near tags were about
+   * three times the far ones — read off a screenshot, by eye, from the TEXT rather than the tag.
+   * Measured it is 1.98x, which passes on a knife edge. The spread is real and it is milder than
+   * it looked, and this threshold is deliberately left where it is: at 1.98 a regression of any
+   * size trips it, which is the right sensitivity for something that was nearly a false finding.
+   */
   const hs = shown.map((g) => g.h);
   const spread = Math.max(...hs) / Math.max(1e-6, Math.min(...hs));
   t('C5 · nearest and furthest tags are within 2x of each other',
