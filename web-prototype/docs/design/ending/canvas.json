@@ -1,0 +1,41 @@
+{
+  "pages": [
+    { "id": "tv", "name": "TV" },
+    { "id": "phone", "name": "Phone" }
+  ],
+  "artboards": [
+    { "file": "Wiring.dc.html",       "page": "tv",    "x": 0,    "y": 0,    "w": 1600, "h": 1000, "title": "The slice — what gets wired" },
+    { "file": "Main.dc.html",         "page": "tv",    "x": 1720, "y": 0,    "w": 1600, "h": 900,  "title": "Verdict — 15s, and the precision it demands" },
+    { "file": "RollCall.dc.html",     "page": "tv",    "x": 0,    "y": 1140, "w": 1600, "h": 900,  "title": "Reunion 1 — roll call" },
+    { "file": "Awards.dc.html",       "page": "tv",    "x": 1720, "y": 1140, "w": 1600, "h": 900,  "title": "Reunion 3 — the awards" },
+    { "file": "PhoneVerdict.dc.html", "page": "phone", "x": 0,    "y": 0,    "w": 390,  "h": 844,  "title": "Phone — Verdict" },
+    { "file": "PhoneReunion.dc.html", "page": "phone", "x": 490,  "y": 0,    "w": 390,  "h": 844,  "title": "Phone — Reunion" }
+  ],
+  "annotations": [
+    {
+      "id": "why-cheap",
+      "x": 0,
+      "y": -170,
+      "w": 760,
+      "page": "tv",
+      "text": "Almost none of this is new logic.\n\nreunion.js computes all four beats and win.js folds the outcome — both fully exercised by harness/reunion-truth.mjs and harness/win-machine.mjs, both with zero product callers. Unwired, not untested.\n\nWhat is missing is a beat name, a branch, and these screens."
+    },
+    {
+      "id": "the-trap",
+      "x": 1720,
+      "y": -170,
+      "w": 760,
+      "page": "tv",
+      "text": "The one number this screen must never show: the feed count.\n\nfoldWin returns `fed`, and rrr-social-round §4 keeps it back — \"the gauge is a deliberately lossy proxy, and evil losing a partner looks exactly like evil winning\". A build that spreads the fold result into the payload leaks it by accident."
+    },
+    {
+      "id": "phone-note",
+      "x": 0,
+      "y": -150,
+      "w": 700,
+      "page": "phone",
+      "text": "The Verdict pad has nothing to press — the announcement belongs to the TV, and a pad that competed with it would split the room at the one moment the night is being summarised.\n\nThe Reunion sheet is where the role card goes face-up and stays there. It is the single moment entitle.js's \"NO ROW. Nobody, ever, pre-REUNION\" is allowed to bend."
+    }
+  ],
+  "launch": { "view": "canvas", "page": "tv" }
+}
