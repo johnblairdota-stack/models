@@ -87,14 +87,18 @@ import { FramedBin } from './gallery-order.js';
  *     one extra scene render per plate, at build time, into a 576x1024 target — and the game
  *     still has no budget for that pass. `estate-3` concluded from that that the game should
  *     take no plates at all, which left the mirror wall as flat boiserie.
- *     🚨 **AND A REFLECTIONLESS PLATE IS WORSE IN THE GAME THAN THE SHOWCASE MAKES IT LOOK:
- *     `views/game.js` NEVER SETS `scene.environment`** — measured, not read — so the showcase's
- *     `foxedMirrorMat` (metalness 1.0, roughness 0.055) has literally no specular source in the
- *     playable house and renders BLACK, not "dim". The showcase can afford that material
- *     because every plate it owns is fed either a cube probe or a planar target.
- *     So the game takes the plate as a **dielectric**: `room.js` scales the baked metalness map
- *     down and tints the silvering to the wall's own value, which is what a dead mirror in a
- *     shut-up house is anyway. The gilt surround and cresting are what say "pier glass"; the
+ *     🚨 **THIS PARAGRAPH USED TO SAY `views/game.js` NEVER SETS `scene.environment` — "measured,
+ *     not read" — AND IT WAS FALSE.** It does. `views/game.js` and `views/party-follow.js` both
+ *     build through `_studio.js` `estate()`, which sets `scene.environment` unconditionally and
+ *     runs `scene.environmentIntensity` at 3.20; the live page reports `{hasEnv: true,
+ *     intensity: 3.2}`. So a metalness-1.0 plate would NOT have rendered black here, and the
+ *     claim that it would was the documented premise of a material decision in `room.js`.
+ *     Corrected 2026-08-28 (`ballroom-defects-1`), in both files at once, because a false
+ *     premise repeated in two places is how it survived three rounds.
+ *     The game still takes the plate as a **dielectric**: `room.js` scales the baked metalness
+ *     map down and tints the silvering to the wall's own DELIVERED value (see the long note
+ *     there, and `harness/ballroom-luma.mjs`), which is what a dead mirror in a shut-up house is
+ *     anyway — but that is now a look decision rather than a workaround for a black rectangle. The gilt surround and cresting are what say "pier glass"; the
  *     glass says "old". `parts.mirrors` + `mirrorPlates` are both opt-in, so the showcase's
  *     call is unchanged.
  *   · **THE VESTIBULE AND THE DEPOT.** The first is a `?cam=`-conditioned five-band material

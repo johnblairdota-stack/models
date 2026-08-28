@@ -250,6 +250,8 @@ export async function buildTestRoom(engine, o = {}) {
    */
   const BALL = !!(PORT && ESTATE?.ballroom);
   const ballMod = BALL ? await tryImport(() => import('../world/ballroom-order.js')) : null;
+  // `skirtProfile` / `extrudeProfile` for the ballroom's gilt skirting — see `skirtMould`.
+  const kitMod = BALL ? await tryImport(() => import('../world/kit.js')) : null;
   /**
    * 🆕 **`?ballfix=0` — THE PERMANENT ABLATION FOR `ballroom-fix-1`'S TWO CHANGES**, and it is
    * one flag for both because they were measured as one round.
@@ -2250,6 +2252,22 @@ export async function buildTestRoom(engine, o = {}) {
         if (key === 'ceiling') (sp._lid ??= []).push({ key, mesh: m, took: false });
       }
     };
+    /**
+     * 🆕 **THE SAME BIN, BUT FOR A PROFILE RATHER THAN A BOX.** `put` can only emit an
+     * axis-aligned box, which is why this room's skirting was a flush grey slab. `GeoBin.add`
+     * has always taken arbitrary geometry — the kit's own mouldings go in that way — so a
+     * moulded run needs an emitter, not a new bin. `bin.add` CLONES, so the source geometry is
+     * disposed here; in the no-kit fallback the mesh owns it and must not be.
+     */
+    const putGeo = (key, geo, m, uv) => {
+      if (bin) { bin.add(key, geo, m, uv); geo.dispose?.(); }
+      else {
+        const mesh = new THREE.Mesh(geo, mats[key] ?? mats.wall);
+        if (m) mesh.applyMatrix4(m);
+        mesh.castShadow = true; mesh.receiveShadow = true;
+        sp.root.add(mesh);
+      }
+    };
     // Returns the box so a caller that may have to REMOVE it later can keep the reference —
     // see `dropCollider`. Every existing caller ignores the return value.
     const solid = (w, h, d, x, y, z) => {
@@ -2304,9 +2322,39 @@ export async function buildTestRoom(engine, o = {}) {
        * showcase). Same machinery, two answers, and the only branch is inside `makeOrder`.
        */
       const cap = ord?.capFor(side, alongZ) ?? null;
+      /* =====================================================================================
+       * 🆕 **THE GILT SKIRTING, AND IT IS `buildWall`'s TO PLACE — NOT `wallRun`'s.**
+       *
+       * John: *"there is also a golden skirting that traces the edges of the room that we need
+       * to add. Its important that skirting doesn't block the arch way."* The constraint IS the
+       * problem. `wallRun` owns a moulded gilt skirting already, and this room turns it off
+       * (`skirtLower: false`) for two reasons that both still hold: it would double-draw and
+       * z-fight with the flush box below, and it is ONE CONTINUOUS EXTRUSION that openings do
+       * not cut — the dado did exactly that, crossed three doorways at 0.92 m, read as a
+       * barrier, and is why `dado: { end: false }` exists.
+       *
+       * `buildWall`'s sorted walk already emits this room's skirting PER SEGMENT, between the
+       * cuts, because it is the thing that knows where the openings are. So the segmentation is
+       * not rebuilt — the segments simply stop being flush grey boxes and start being the kit's
+       * own moulded profile in the gilt bucket. The arch gets its jambs for free, because the
+       * walk never had a segment there to begin with.
+       *
+       * ⚠️ **OPT-IN, AND OFF FOR EVERY OTHER ROOM.** `giltSkirt` is a property of the ORDER, so
+       * a room without one is byte-identical. The profile factory is passed in rather than
+       * imported: `kit.js` is a dynamic import here and `buildWall` has no business knowing
+       * about it.
+       * ===================================================================================== */
       buildWall(sp, {
         axis: alongZ ? 'z' : 'x', at: n, t, u0, u1, H, put, solid, tracked,
         skirtShrink: 0.999,
+        skirtMould: (ord?.giltSkirt && kitMod?.extrudeProfile && kitMod?.skirtProfile) ? {
+          key: 'gilt',
+          // +1 when the room lies on the +axis side of the wall centre line, which is the
+          // direction the moulding has to project. zmin/xmin sit BELOW the room, zmax/xmax above.
+          inward: (side === 'zmin' || side === 'xmin') ? 1 : -1,
+          geo: (len) => kitMod.extrudeProfile(kitMod.skirtProfile(0.34, 0.055), len),
+          put: putGeo,
+        } : null,
         // ⚠️ The order's own openings (the study's windows) are APPENDED to the connector cuts,
         // not merged into them: a window is a hole in this wall like any other, and it has to go
         // through the SAME sorted walk so its sill and its lintel land where the infill stops.
@@ -3258,6 +3306,13 @@ export async function buildTestRoom(engine, o = {}) {
 
     return {
       kind: 'ballroom', plan, base: null, solids,
+      /*
+       * 🆕 **THE ASSET'S GILT SKIRTING, SEGMENTED BY THE OPENING WALK.** See the long note at the
+       * `buildWall` call site. `skirtLower: false` stays exactly as it is below — this REPLACES
+       * the flush grey box `buildWall` was drawing, and turning `wallRun`'s continuous run back
+       * on as well is the double-draw this avoids.
+       */
+      giltSkirt: true,
       /**
        * ⚠️ **ALL FOUR WALLS CAP AT 4.80, AND ONLY THE WINDOW WALL'S BAND HAS HOLES IN IT.** The
        * band is the same boiserie with the top of each window in it, so it keeps the default
@@ -3438,10 +3493,39 @@ export async function buildTestRoom(engine, o = {}) {
       const b = alongZ ? solid(w, h, o.t, u, y, o.at) : solid(o.t, h, w, o.at, y, u);
       if (track) lintelOf.set(`${sp.id}|${track}`, { geo, box: b, space: sp });
     };
+    /**
+     * One skirting run, for ONE SOLID SEGMENT of this wall. The walk below calls it only where
+     * it has just emitted wall, so an opening never gets one — which is the whole reason the
+     * gilt moulding is placed here rather than in `wallRun`. See the note at the call site.
+     */
     const skirt = (w, u) => {
       const k = o.skirtShrink ?? 1.0;
-      if (alongZ) put('skirt', w * k, 0.34, o.t + 0.03, u, 0.17, o.at, 0.6);
-      else put('skirt', o.t * k, 0.34, w + 0.03, o.at, 0.17, u, 0.6);
+      const M = o.skirtMould;
+      if (!M) {
+        if (alongZ) put('skirt', w * k, 0.34, o.t + 0.03, u, 0.17, o.at, 0.6);
+        else put('skirt', o.t * k, 0.34, w + 0.03, o.at, 0.17, u, 0.6);
+        return;
+      }
+      /*
+       * `extrudeProfile` builds along +X with the profile's first coordinate on +Z (the
+       * projection) and its second on +Y (the height), so the run needs a BASIS rather than an
+       * Euler angle: local +X along the wall, local +Z into the room. Built as a basis, the
+       * handedness is right by construction on all four walls — with a rotation it is four sign
+       * conventions and three of them look plausible.
+       */
+      const len = w * k;
+      const inward = M.inward;
+      const ex = alongZ ? new THREE.Vector3(inward, 0, 0) : new THREE.Vector3(0, 0, -inward);
+      const ey = new THREE.Vector3(0, 1, 0);
+      const ez = alongZ ? new THREE.Vector3(0, 0, inward) : new THREE.Vector3(inward, 0, 0);
+      // the run starts at whichever end of the segment `ex` points away from
+      const forward = alongZ ? ex.x > 0 : ex.z > 0;
+      const uStart = forward ? u - len / 2 : u + len / 2;
+      // the room-side face of the wall, plus a hair so the moulding cannot z-fight the wall
+      const face = o.at + inward * (o.t / 2 + 0.001);
+      const m = new THREE.Matrix4().makeBasis(ex, ey, ez);
+      m.setPosition(alongZ ? uStart : face, 0, alongZ ? face : uStart);
+      M.put(M.key, M.geo(len), m);
     };
 
     /**
@@ -4196,7 +4280,60 @@ async function loadEstateSurfaces(L) {
          * a matched bar at 36.2. See the note at the `floor:` line in `binMaterials` for the sweep.
          * `wear: 0.6` and the doubled `oakDark` come with it — they were swept together.
          */
-        chequer: mats.marbleChequer,
+        /**
+         * 🆕 **THE MARBLE BORDER, DARKENED FOR THE NIGHT GRADE** (`ballroom-defects-1`).
+         * `docs/handoff/ballroom-next.md` D3, and it is OUR defect rather than the asset's: the
+         * port carried `mats.marbleChequer` across unchanged and *"the white tiles run near-
+         * clipping while the parquet sits mid-tone, so a hard black-and-white band rings the
+         * entire room at the wall base and drags the eye straight off the players in the middle."*
+         * The material is not wrong — Carrara against Nero Marquina is correct, and it works in
+         * the showcase because daylight lifts EVERYTHING. Under the night grade nothing else in
+         * the room competes with it.
+         *
+         * 🚨 **A SEPARATE BAKE, NEVER A MUTATION OF `mats.marbleChequer`.** That entry is a
+         * module-level singleton in `materials-local.js` and `views/room-ballroom.js` — the
+         * PINNED showcase, with a pixel-diff gate and a darkest-decile grade gate at 7.7 of 8.0
+         * — draws its floor with it. A distinct options object is a distinct bake key, so the
+         * showcase keeps the material it was graded on.
+         *
+         * ⚠️ **THE NUMBERS COME OFF THE UPPER DECILE, BECAUSE THE MEAN CANNOT SEE THIS DEFECT.**
+         * Half this surface is Nero Marquina at 0.070 albedo, so the band's MEAN sits under the
+         * parquet's at every station (0.72 / 0.63 / 0.80) and looks healthy while the white
+         * tiles are the brightest thing in the frame. Measured with `ballroom-luma.mjs` on the
+         * p90 instead — the white tiles — against the parquet's own p90:
+         *
+         *     station   white tile   parquet p90   before  ->  after
+         *     floor        167.0        159.6       1.05        0.79
+         *     mirror       127.1        144.6       0.88        0.64
+         *     arch         150.3        120.8       1.24        0.88
+         *     corner         —            —         1.01*       0.96   (* measured mid-fix)
+         *
+         * `groundA`/`veinA` are the Carrara, scaled to **0.60** of the showcase's, and it took
+         * three measured steps rather than one. 0.72 left `arch` at 1.01; 0.65 cleared `arch` but
+         * `corner` — the station where a window throws a hard pool onto the border — was still
+         * sitting at 1.01. 🚨 **THAT IS THE D1 MISTAKE'S EXACT SHAPE: a value derived at some of
+         * the stations and never checked at the rest.** `corner` is in the probe's station list
+         * now so the next person cannot repeat it. `room.js` already
+         * makes this argument one bucket along for the study floor — *"Carrara is a grey stone
+         * with white in it"* — and lands that one at 0.255 against the showcase's 0.395, so 0.65
+         * here is mild by the same file's own standard.
+         *
+         * 🚨 **`veinB` IS THE "SMEARED DIRT", NOT `wear` — THE HANDOFF NAMES THE WRONG KNOB.**
+         * D3 attributes the splotchy mottle on the black tiles to `wear: 0.45`. Read the shader:
+         * `uWear` drives `traffic`, which is spent on ROUGHNESS (`rough += traffic * 0.115`) and
+         * on 2.8% of albedo. It cannot make a blotch. What can is `veinB` — near-WHITE veining
+         * at 0.880 over a 0.070 ground, a 12:1 contrast that at TV distance stops resolving as
+         * veins and averages into grey smears — helped by `dust: 0.6`, which mixes the tile 42%
+         * toward a 0.40 grey wherever it banks. Nero Marquina does have white veining; it does
+         * not have it at twelve times the ground. So `veinB` comes down hard and `dust` with it.
+         * `wear` is cut anyway, as asked: it costs nothing and quiets the specular sparkle the
+         * band throws under a moving camera.
+         */
+        chequer: L.estateMarbleChequer ? L.estateMarbleChequer({
+          groundA: [0.540, 0.535, 0.523], veinA: [0.242, 0.236, 0.227],
+          veinB: [0.420, 0.412, 0.396],
+          wear: 0.30, dust: 0.35, size: 1024,
+        }) : mats.marbleChequer,
         floor: L.parquetMat({
           oak: [0.600, 0.392, 0.216], oakDark: [0.280, 0.168, 0.092], wear: 0.6, size: 1024,
         }),
@@ -4230,16 +4367,20 @@ async function loadEstateSurfaces(L) {
         drape: new THREE.MeshStandardMaterial({ color: 0xc02030, roughness: 0.86, metalness: 0 }),
         /**
          * 🆕 **THE PIER GLASS, AND IT IS A DIELECTRIC — MEASURED, NOT PREFERRED**
-         * (`ballroom-fix-1`, 2026-08-09).
+         * (`ballroom-fix-1`, 2026-08-09; re-derived `ballroom-defects-1`, 2026-08-28).
          *
-         * 🚨 **`views/game.js` NEVER ASSIGNS `scene.environment`.** Every showcase view does
-         * (`light-dark.js`, `light-shaft.js`, `prop-chandelier.js`, and `room-ballroom.js`
-         * additionally builds a `CubeCamera` probe per plate) and the playable house does not.
-         * So the showcase's `foxedMirrorMat` — metalness 1.0, roughness 0.055 out of
-         * `MIRROR_SURFACE` — has **no specular source at all** here: a metal with nothing to
-         * reflect returns black, and it would have shipped as a second black rectangle on the
-         * wall this round exists to un-blacken. That is why the plate is not simply the
-         * showcase's material re-used, which is what the other three buckets above are.
+         * 🚨 **THE PREMISE THIS MATERIAL WAS DOCUMENTED ON WAS FALSE, AND TWO FILES CARRIED IT.**
+         * This block used to open *"`views/game.js` NEVER ASSIGNS `scene.environment`" — measured,
+         * not read"*, and `world/ballroom-order.js` said the same. **It does.** `views/game.js`
+         * and `views/party-follow.js` both build through `_studio.js` `estate()`, which sets
+         * `scene.environment = buildEstateEnv(renderer)` unconditionally and runs
+         * `scene.environmentIntensity` at **3.20**. Verified by reading the call chain, and then
+         * live: `?view=party.follow` reports `{hasEnv: true, intensity: 3.2}`.
+         *
+         * So a metal here would NOT have rendered black, and the fear that produced the
+         * dielectric was unfounded. The dielectric is kept anyway — it is what a dead mirror in
+         * a shut-up house is, and re-metallising it is a look change nobody has asked for — but
+         * it is kept on its own merits rather than on a mechanism that does not exist.
          *
          * The clone keeps every baked map — the amalgam bloom, the lifted-tin pinholes, the
          * pouring drift, and the normal map struck from them, which is the whole reason to use
@@ -4247,29 +4388,70 @@ async function loadEstateSurfaces(L) {
          *   · `metalness` 0.26. It MULTIPLIES the baked metalness map, so the silvering keeps
          *     its variation and stops being a mirror; the bloomed and pitted areas, which the
          *     surface already drops toward dielectric, go fully diffuse.
-         *   · `color` 0xc1c5cc, and 🚨 **THE FIRST VALUE TRIED WAS 0x6e767e AND IT SHIPPED THE
-         *     DEFECT BACK.** Reasoning from "0.760 silver is three times this room's boiserie,
-         *     so tint it down hard" ignored the `1 - metalness` the diffuse term is multiplied
-         *     by as well. Measured at `ballroom.east`: the plate area read **93.4 mean luma as
-         *     bare wall and 26.5 with that glass in it** — four rectangles 3.5x DARKER than the
-         *     wall they were added to improve, on the wall this round exists to un-blacken.
-         *     Solved instead of guessed: the effective diffuse is `silver x color x (1 -
-         *     metalness)`, so matching the boiserie's ~0.30 linear needs `color` at ~0.53-0.60
-         *     linear, which is this hex. Cool rather than neutral because that is the one thing
-         *     a dead mirror still does — it is the coldest surface in a candlelit room.
-         *     ⚠️ The foxing then takes large patches BACK down (tarnish 0.150/0.128/0.100,
-         *     pinholes 0.030), so the plate lands a little under the wall in the mean and well
-         *     under it in the blooms, which is the mottle that makes it read as glass and not
-         *     as a panel of paint.
-         * `fox 0.92` (against the showcase's pier default 0.85 and its end plates' 0.52) buys
-         * back some of what a reflection was carrying: with nothing in the glass, the foxing IS
-         * the drawing. ⚠️ `size 512`, not 1024 — the plate subtends ~200 px at the station and
-         * a distinct bake key is what keeps this clone off the showcase's cached material.
+         *   · `color` **0xb0b4bd**, and it is measured at the stations the defect was reported
+         *     from. See below.
+         *
+         * ---------------------------------------------------------------------------------
+         * 🚨 **WHY THE OLD 0xc1c5cc WAS WRONG, AND IT IS NOT THE MISTAKE THE HANDOFF EXPECTED**
+         * ---------------------------------------------------------------------------------
+         * The arithmetic behind 0xc1c5cc was right — effective diffuse is `silver x color x
+         * (1 - metalness)`, and that lands ~0.30 linear against the boiserie's 0.330. What it
+         * could not know is what the pixel does. `harness/ballroom-luma.mjs` masks the plate and
+         * the ballroom's OWN wall and reads the delivered frame; as shipped, the plate was
+         * brighter than the wall behind it at **every** station, not just the far one:
+         *
+         *     station   plate   wall    ratio
+         *     arch       66.1   59.8    1.105
+         *     wide       57.1   53.5    1.067
+         *     mirror     51.0   47.4    1.076
+         *
+         * ⚠️ **THE HANDOFF'S DIAGNOSIS WAS "TUNED AT `ballroom.east`, DOES NOT SURVIVE THE OTHER
+         * WALL". THE MEASUREMENT SAYS IT NEVER SURVIVED ANYWHERE** — `mirror` IS that wall and
+         * it reads 1.076. The end wall is the worst of the three, not the only bad one.
+         *
+         * ⚠️ **AND IT IS DIFFUSE, NOT SPECULAR — WHICH IS THE OPPOSITE OF WHAT WAS EXPECTED.**
+         * "A 26%-metal roughness-0.055 plate under a 3.2x environment probe is floating on its
+         * specular" is the obvious reading and it is wrong. Swept live at `arch`, giving the
+         * material its own `envMap` (the only way `envMapIntensity` does anything at all — see
+         * `setEnvResponse` in `views/_studio.js`) and taking it from 3.20 down to 0.35 moved the
+         * plate 66.1 → 60.0, i.e. **9%**, while `color` alone moved it 66.1 → 49.5. The
+         * environment is not what is carrying this surface, so no env response is added: it
+         * would buy 9% and cost a second shader program for one material.
+         *
+         * 0xb0b4bd is the sweep's landing point — arch **0.909**, wide **0.847**:
+         *
+         *     colour      arch ratio   wide ratio
+         *     0xc1c5cc      1.105        1.067     as shipped
+         *     0xbabec6      1.022        0.975
+         *     0xb5b9c1      0.964        0.903
+         *     0xb0b4bd      0.909        0.847     <- this
+         *     0xa8adb6      0.827        0.764
+         *     0x6e767e      0.333        0.293     the 2026-08-09 failure, reproduced
+         *
+         * 🚨 **THE LAST ROW IS THE CONTROL, AND IT IS WHY THIS IS NOT A GUESS.** 0x6e767e is the
+         * value that shipped the defect back in the other direction; the note it left behind
+         * recorded *"93.4 mean luma as bare wall and 26.5 with that glass in it"*, a ratio of
+         * 0.28. The instrument re-measures it today at 0.333. It reproduces the historical
+         * failure, so its verdict on the fix is worth something. Under the wall by ~10% is a
+         * cold dead mirror; under it by 67% is a black rectangle, and the distance between the
+         * two is now numbered rather than remembered.
+         *
+         * `fox 1.30` (was 0.92; the showcase's pier default is 0.85). `uFox` scales the tarnish
+         * bloom and the lifted-tin pinholes, and `MIRROR_SURFACE` weights both by an `edge` term
+         * — so raising it grows the corroded margin INWARD from the rebate, which is large-scale
+         * structure the delivered frame can actually resolve.
+         *
+         * ⚠️ **`size` STAYS 512, AND THE HANDOFF'S SUGGESTION OF 1024 WOULD HAVE BOUGHT NOTHING
+         * — MEASURED.** The end plates deliver ~11.9k pixels each at `arch`, i.e. about **43-53
+         * px per metre** of plate. A 512 bake across a 1.70 m plate is **301 texels per metre**,
+         * already ~6x finer than the pixels it is resampled into; 1024 makes it 12x finer and
+         * changes no pixel. The foxing was never erased by the texture size — the screen is the
+         * limiter — which is why the mottle is bought with `fox` and not with resolution.
          */
         mirror: (() => {
-          const mm = L.foxedMirrorMat({ fox: 0.92, size: 512 }).clone();
+          const mm = L.foxedMirrorMat({ fox: 1.30, size: 512 }).clone();
           mm.metalness = 0.26;
-          mm.color = new THREE.Color(0xc1c5cc);
+          mm.color = new THREE.Color(0xb0b4bd);
           mm.name = 'ball-pier-glass';
           return mm;
         })(),

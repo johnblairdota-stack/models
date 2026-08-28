@@ -64,7 +64,34 @@ export const CATALOG_ROOM_ASSIGN = {
   fireplace:      { rooms: ['study'], note: 'against a wall, never a doorway' },
   gramophone:     { rooms: ['study'], note: 'parlour machine' },
   'grand-piano':  { rooms: ['ballroom'], note: 'John: ballroom' },
-  chandelier:     { rooms: ['ballroom'], note: 'John: ballroom, hanging — two on the long axis' },
+  /*
+   * 🚨 **NOT IN THE BALLROOM, AND THIS IS THE FIX FOR "NONE OF THE CHANDELIERS ARE LIT".**
+   * John: *"there are two placed chandeliers that are lower seen in wide. Delete them from the
+   * ballroom spawn. the other two are part of the asset."*
+   *
+   * There are two independent chandelier sources in that room and only one belongs to it.
+   * `lighting/ballroom-rig.js` hangs the ASSET's crystal fixtures off the order plan, with their
+   * coronas at ~7.3 m, lit — measured: their candle cores and flames deliver a mean luma of 225
+   * against a whole-frame mean of 57. This entry hung a CATALOG GLB as well, at `liftY 2.85` in a
+   * **9.6 m** room: a static mesh with modelled candles and no flames at all, floating at eye
+   * level right where the show's cameras look. It is the huge cold fixture in the `wide`
+   * photograph and both of the low ones at `mirror`, and it is why the room read as having no
+   * lit chandeliers when its real ones were burning six metres overhead.
+   *
+   * ⚠️ **IT IS REHOMED, NOT ORPHANED, AND THAT IS NOT TIDINESS.** The obvious edit is
+   * `rooms: []`, and it breaks a standing lock: `party-warm` W14n requires a full authored house
+   * to place **every one of the 24 smash ids**, so a catalog asset that spawns nowhere is a
+   * smashable nobody can ever smash. Nothing is wrong with this prop — `liftY 2.85` is a normal
+   * hang. It is wrong in a **9.60 m** room. The gallery is 5.60 m (`spaces.js` ROOMS), the
+   * grandest room in the house that is not the ballroom, and 2.85 m there is about half height:
+   * where a chandelier belongs.
+   *
+   * ⚠️ **`avoid` IS SEPARATE FROM `rooms` AND BOTH PASSES READ IT.** `rooms` is a preference the
+   * leftover pass is allowed to override when a generated house has no gallery; `avoid` is not.
+   * Without it, any house missing a gallery drops this prop straight back into the ballroom.
+   * Gates: `harness/ballroom-dress.mjs` B14-B17 (B17 runs the planner), `party-warm` W14m.
+   */
+  chandelier:     { rooms: ['gallery'], avoid: ['ballroom'], note: 'gallery is 5.60 m; the 9.6 m ballroom has the rig\'s own lit fixtures' },
   'rug-circle':   { rooms: ['ballroom'], note: 'thin floor; chair-ring centre' },
   torchiere:      { rooms: ['ballroom', 'gallery'], note: 'standing lamp, wall-inboard' },
   'card-table':   { rooms: ['ballroom', 'study'], note: 'side table, clear of the chair ring' },
@@ -283,9 +310,10 @@ const RECIPES = [
 function pickSpaces(spaces, assign, pick) {
   const found = [];
   const seen = new Set();
+  const avoid = new Set(assign.avoid ?? []);
   for (const kind of assign.rooms) {
     for (const s of roomsOfKind(spaces, kind)) {
-      if (seen.has(s.id)) continue;
+      if (seen.has(s.id) || avoid.has(spaceKind(s))) continue;
       seen.add(s.id);
       found.push(s);
     }
@@ -447,8 +475,21 @@ export function catalogPlacements(spaces = [], openings = []) {
     const spec = BY_ID.get(id);
     const assign = CATALOG_ROOM_ASSIGN[id];
     if (!spec || !assign) continue;
+    /*
+     * 🚨 **`avoid` IS HONOURED HERE TOO, AND FORGETTING IT IS HOW THE FIRST CUT OF THIS FIX
+     * FAILED.** This leftover pass exists so a prop whose preferred room is missing from a
+     * generated house still lands somewhere, so it deliberately ignores `rooms` — a preference.
+     * `avoid` is not a preference. Taking the catalog chandelier out of the ballroom made the
+     * main pass skip it, which sent it straight down here, and this pass put it back in the
+     * ballroom at 2.85 m: the exact defect the removal was for, with the gate above still green
+     * because the binding really had changed. A room a prop must never be in has to be excluded
+     * from BOTH passes or from neither.
+     * Gate: `harness/ballroom-dress.mjs` B17, which runs the planner instead of reading it.
+     */
+    if (!assign.rooms?.length) continue;
+    const avoid = new Set(assign.avoid ?? []);
     const recipe = RECIPES.find((r) => r.id === id) ?? { id, place: 'inboard', ox: 0, oz: 0, rotY: 0 };
-    const fallback = spaces.filter((s) => Math.min(s.x1 - s.x0, s.z1 - s.z0) >= 2.4);
+    const fallback = spaces.filter((s) => Math.min(s.x1 - s.x0, s.z1 - s.z0) >= 2.4 && !avoid.has(spaceKind(s)));
     for (const space of fallback) {
       for (const slot of candidatesFor({ ...recipe, place: recipe.place ?? 'wall', walls: WALLS_ALL, inset: 0.9 }, space, spec)) {
         const hit = accept(space, spec, slot, openings, out, recipe, keepOuts);
