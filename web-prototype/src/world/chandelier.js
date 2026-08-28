@@ -777,10 +777,36 @@ export function buildChandelier(o = {}) {
   upLight.castShadow = false;
   body.add(upLight);
 
-  // ceiling caustic
+  /*
+   * ---- ceiling caustic ---------------------------------------------------
+   * 🚨 **AT `caustic: 0` IT IS NOT HUNG AT ALL, AND THAT IS A BUG FIX RATHER THAN AN
+   * OPTIMISATION** (`ballroom-defects-1`, 2026-08-28).
+   *
+   * This decal is an ADDITIVE `ShaderMaterial` whose uniforms are `uColor / uStrength / uTime /
+   * uArms` — note there is no `uPow`. `lighting/fixture-merge.js` recognises a mergeable glow
+   * decal by exactly `uColor && uStrength && uPow`, so this one fails that test, is not a
+   * `MeshBasicMaterial` either, and falls through to the opaque `bucketFor` — which treats
+   * "standard, and not the brass or crystal the caller named" as WAX. So the merge path turned
+   * a 7.15 m additive quad into an opaque cream slab of candle wax, hung at y 9.03 directly
+   * under the ballroom's coffered ceiling, and it covered the middle of the ceiling in every
+   * overhead frame. That is handoff D5, *"a big blank square on the roof in the center of the
+   * room"* — not a missing boss, and not a missing beam: `cofferedCeiling` emits both, and they
+   * are all present the moment this slab is taken away.
+   *
+   * `ballroomFixtures` already asks for `caustic: 0`, i.e. *"draw nothing"*. Honouring that
+   * before the geometry exists is the difference between a switched-off decal and an opaque one,
+   * because `uStrength` lives in a material the merge path throws away.
+   *
+   * ⚠️ **THE SHOWCASES ARE UNAFFECTED AND THAT IS CHECKED, NOT ASSUMED.** `room-ballroom.js`
+   * (PINNED, pixel-diff gated) passes `caustic: 0.22`, `prop-chandelier.js` passes 0.85 and
+   * 0.35. Every one is above zero, so every one still gets its decal. At exactly zero the
+   * fragment shader returns `vec4(0,0,0,0)` under additive blending — nothing — so nothing that
+   * renders correctly can tell the difference.
+   */
   const caustic = causticDecal({ size: (o.causticSize ?? R * 6.5), arms, strength: o.caustic ?? 0.5 });
   caustic.position.y = -0.02;
-  root.add(caustic);
+  if ((o.caustic ?? 0.5) > 0) root.add(caustic);
+  else caustic.geometry.dispose();
 
   // ---- API ---------------------------------------------------------------
   const state = { lit: 1, detached: new Set(), shattered: new Set(), cut: false, t: 0 };

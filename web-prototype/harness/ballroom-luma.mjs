@@ -82,6 +82,7 @@ const STATIONS = {
   wide:   { eye: { u: 0.50, v: 0.92, y: 4.60 }, at: { u: 0.50, v: 0.10, y: 1.20 } },
   floor:  { eye: { u: 0.50, v: 0.62, y: 1.35 }, at: { u: 0.34, v: 0.14, y: 0.02 } },
   mirror: { eye: { u: 0.22, v: 0.50, y: 1.62 }, at: { u: 0.98, v: 0.50, y: 2.40 } },
+  up:     { eye: { u: 0.50, v: 0.50, y: 1.40 }, at: { u: 0.50, v: 0.50, y: 9.00 } },
 };
 
 /* A probe is a SUBJECT mesh name and a REFERENCE mesh name. Names rather than materials:
@@ -118,6 +119,18 @@ const PROBE_SPEC = {
      * bimodal population, so the upper decile is what gets compared.
      */
     stat: 'p90',
+  },
+  /*
+   * D5 · the ceiling. This one is here for its MASKS rather than its ratio: `up` shows a large
+   * blank pan in the middle of the frame where the coffer grid should cross, and the handoff
+   * guesses at a boss exclusion. `cofferedCeiling` demonstrably emits beams at the centre, so
+   * the question is where they land on screen, and a mask answers that directly.
+   */
+  coffers: {
+    why: 'D5 · the coffer beams against the pans they divide',
+    subject: 'kit:gilt', reference: 'kit:ceiling',
+    want: 'the mask is the point — see progress/luma/coffers.up.subject.png',
+    narrow: 'radius', stations: ['up'],
   },
 };
 

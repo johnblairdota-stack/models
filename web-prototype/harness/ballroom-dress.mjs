@@ -451,5 +451,102 @@ const orderSrc = await read('src/world/ballroom-order.js');
   }
 }
 
+/* =============================================================================================
+ * D5 · THE CENTRE OF THE CEILING IS COFFERED LIKE THE REST OF IT
+ * =============================================================================================
+ * John: *"there is also a big blank square on the roof in the center of the room."* Confirmed at
+ * the `up` station — a large flat cream panel with no beams crossing it, while every surrounding
+ * bay has the grid.
+ *
+ * 🚨 **IT WAS NEVER MISSING GEOMETRY, SO THE HANDOFF'S FIX WOULD HAVE FOUND NOTHING.** D5 guesses
+ * *"find why the centre bay has no beams (a rose/boss exclusion is the likely cause) and turn the
+ * boss on"*. `cofferedCeiling` is gated on `o.boss !== false` and the ballroom never passes it —
+ * so the bosses were already on. Recorded headless, the builder emits X-beams at cx +/- 1.78,
+ * 5.34, 8.89, 12.45, Z-beams at cz and cz +/- 3.25, 6.50, and 28 bosses. Projected into the `up`
+ * frame those land at screen x 57/319/581/843 and screen y 61/300/539, and the mask shows nothing
+ * at 319, 581 or the middle of 300.
+ *
+ * What was there instead was found by ablation, one merged bucket at a time. Hiding
+ * `fixture:wax` alone took the centre band from luma 225.0 to 138.5; every other bucket moved it
+ * by two or less. The chandelier's **ceiling caustic** is an additive `ShaderMaterial` whose
+ * uniforms are `uColor/uStrength/uTime/uArms` — no `uPow` — so `FixtureBin.isGlow` rejected it,
+ * it is not a `MeshBasicMaterial` either, and it fell through to `bucketFor`, whose rule is
+ * "not the brass or crystal the caller named, therefore WAX". A 7.15 m additive quad became an
+ * opaque cream slab of candle wax at y 9.03, directly under the coffer soffit at 9.24, one per
+ * chandelier. `ballroomFixtures` had asked for `caustic: 0` — but `uStrength` lives in the
+ * material the merge path discards.
+ * ============================================================================================= */
+{
+  const THREE = await import('three');
+  const { buildChandelier } = await import('../src/world/chandelier.js');
+  const { FixtureBin } = await import('../src/lighting/fixture-merge.js');
+  const { ballroomPlan } = await import('../src/world/ballroom-order.js');
+  const { ballroomFixtures } = await import('../src/lighting/ballroom-rig.js');
+  const chandSrc = await read('src/world/chandelier.js');
+
+  const hangs = (r) => { let f = false; r.traverse((o) => { if (o.name === 'caustic') f = true; }); return f; };
+  const off = buildChandelier({ merge: true, arms: 8, tiers: 2, radius: 1.10, chain: 1.5, caustic: 0, rng: () => 0.5 });
+  const on = buildChandelier({ merge: true, arms: 8, tiers: 2, radius: 1.10, chain: 1.5, caustic: 0.5, rng: () => 0.5 });
+  t('B23 · a chandelier asked for caustic 0 hangs no decal at all', !hangs(off.root));
+  t('B23c · CONTROL one asked for caustic 0.5 still hangs it', hangs(on.root),
+    'the showcases pass 0.22 / 0.85 / 0.35 and must be untouched');
+  t('B23c2 · CONTROL the PINNED showcase really does pass a non-zero caustic',
+    /caustic: 0\.22, causticSize/.test(await read('src/views/room-ballroom.js')),
+    'views/room-ballroom.js is pixel-diff gated');
+
+  /*
+   * The mechanism, asserted so the explanation above cannot quietly go stale: the caustic is
+   * NOT recognisable as a glow decal, and `glowPatch` is. If someone gives the caustic a `uPow`
+   * one day, B24 is the one that should be revisited.
+   */
+  const causticBlock = chandSrc.match(/function causticDecal[\s\S]*?\n\}/);
+  t('B24 · causticDecal still declares no uPow, which is why isGlow rejects it',
+    !!causticBlock && /uStrength:/.test(causticBlock[0]) && !/uPow/.test(causticBlock[0]));
+  t('B24c · CONTROL glowPatch DOES declare one, so the discriminator is real',
+    /uPow: \{ value: o\.pow \?\? 2\.4 \}/.test(await read('src/lighting/volumetric.js')));
+
+  /*
+   * 🚨 **THE CLASS, NOT JUST THE INSTANCE.** `bucketFor` is a catch-all, so ANY future
+   * transparent decal that is not recognised as a glow would be baked into the opaque bucket and
+   * hide whatever stands behind it. The harvest now drops it loudly instead.
+   */
+  const mk = (mat) => { const g = new THREE.BoxGeometry(1, 1, 1); const m = new THREE.Mesh(g, mat); const gr = new THREE.Group(); gr.add(m); return gr; };
+  const addShader = new THREE.ShaderMaterial({
+    uniforms: { uColor: { value: new THREE.Color(1, 1, 1) }, uStrength: { value: 0.5 } },
+    transparent: true, blending: THREE.AdditiveBlending,
+  });
+  const realErr2 = console.warn; let warned = 0; console.warn = () => { warned++; };
+  const dropped = new FixtureBin().harvest(mk(addShader));
+  console.warn = realErr2;
+  t('B25 · an additive decal with no uPow lands in NO opaque bucket',
+    dropped.wax.length === 0 && dropped.brass.length === 0 && dropped.emissive.length === 0
+    && dropped.flame.length === 0 && dropped.glow.length === 0,
+    `wax ${dropped.wax.length} · glow ${dropped.glow.length}`);
+  t('B25b · ...and it says so rather than vanishing quietly', warned >= 1, `${warned} warning(s)`);
+  const kept = new FixtureBin().harvest(mk(new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0 })));
+  t('B25c · CONTROL an ordinary opaque standard material still lands in wax',
+    kept.wax.length === 1, 'the guard rejects transparency, not everything');
+
+  /*
+   * And the outcome, on the real room: the merged wax bucket must not reach the ceiling. The
+   * caustic slab sat at y 9.03 under a soffit at 9.24; the topmost real wax is a candle on a
+   * chandelier corona at ~7.3.
+   */
+  const plan = ballroomPlan({ x0: 0.15, x1: 27.35, z0: 38.6, z1: 53.9, h: 9.6 });
+  const fx = ballroomFixtures({ plan, points: 3, rng: () => 0.5 });
+  const wax = fx.meshes.find((m) => m.name === 'fixture:wax');
+  wax?.geometry.computeBoundingBox();
+  const waxTop = wax ? wax.geometry.boundingBox.max.y : Infinity;
+  t('B26 · nothing in the merged wax bucket reaches the coffered ceiling',
+    waxTop < 8.0, `wax tops out at ${waxTop.toFixed(2)} m, soffit is at 9.24 (was 9.03)`);
+
+  /* The bosses were never off. Asserted so nobody spends a round turning them on. */
+  const kit = await read('src/world/kit.js');
+  const order = orderSrc;
+  t('B27 · every coffer still gets a boss — it was never the cause',
+    /if \(o\.boss !== false\) \{/.test(kit) && !/boss: false/.test(order),
+    'cofferedCeiling emits 28 of them in this room');
+}
+
 console.log(`\n  ${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

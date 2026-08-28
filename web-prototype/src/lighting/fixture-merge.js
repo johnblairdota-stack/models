@@ -163,6 +163,27 @@ export class FixtureBin {
         else this.emissive.push(g);
         return;
       }
+      /*
+       * 🚨 **AN ADDITIVE DECAL MUST NEVER FALL INTO AN OPAQUE BUCKET.** `bucketFor` is a
+       * catch-all: anything that is not the caller's brass or crystal is WAX. That is right for
+       * the standard materials it was written for and catastrophic for a transparent one — the
+       * chandelier's ceiling caustic is an additive `ShaderMaterial` with `uColor/uStrength/
+       * uTime/uArms` and NO `uPow`, so `isGlow` rejected it, `bucketFor` accepted it, and a
+       * 7.15 m additive quad was re-materialised as opaque candle wax stuck to the ballroom
+       * ceiling. It covered the middle of the coffered ceiling in every overhead frame and read
+       * as a missing bay (handoff D5) rather than as a decal, because nothing about it looked
+       * like a decal any more.
+       *
+       * There is no honest way to merge it here: the shared glow shader needs an `aParam` this
+       * material cannot supply, and inventing one would replace its scatter pattern with a
+       * radial blob. So it is DROPPED, loudly. Dropping an additive decal costs a highlight;
+       * baking one into the opaque bucket costs whatever it is standing in front of.
+       * Gate: `harness/ballroom-dress.mjs` B23-B25.
+       */
+      if (mat?.transparent || mat?.blending === THREE.AdditiveBlending) {
+        console.warn(`[fixture-merge] dropping "${o.name || mat?.type || 'unnamed'}" — a transparent/additive material has no opaque bucket, and baking it into one would hide whatever is behind it. Give it uColor/uStrength/uPow if it should merge as a glow decal.`);
+        return;
+      }
       this.bucketFor(mat, brassMat, crystalMat).push(normalise(o.geometry, o.matrixWorld));
     });
     return this;
