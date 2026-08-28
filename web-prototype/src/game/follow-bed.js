@@ -65,8 +65,12 @@ import { buildIntroBed, ballroomOf } from './intro-bed.js';
  * 🚨 **THE TV STILL NEVER GETS THE GUIDE'S VIEW**, and that has not moved an inch.
  * `party-loop.md`'s "Do not" list, first item. Three things are refused here structurally rather
  * than by convention, and `harness/party-follow-drive.mjs` D5 asserts all three from outside:
- *   · `room.setLid()` is never called. The ceilings stay on.
- *   · every shot's eye is clamped under the space's storey (`EYE_CEIL_MARGIN`).
+ *   · 🚨 **OUT OF DATE SINCE THE PERSPECTIVES SHIPPED, and narrowed rather than abandoned.**
+ *     `room.setLid()` IS called now, and the eye DOES rise above the storey — but only for the
+ *     two overhead rigs, and only over the rooms residency admits. The refusal that survives is
+ *     the one the rule was written for: the TV never sees the whole house at once, so it never
+ *     becomes the guide's map. `party-follow-drive` D5 asserts the narrowed form; `party-follow`
+ *     F11c2d asserts the scope. Ratified by John after `CRITIC-LEDGER` round 8 raised it.
  *   · there is no marker, no plan and no minimap in this file at all — and the hunter token has
  *     no mesh, so it cannot appear on the shared screen even by accident.
  *
@@ -734,7 +738,7 @@ class FollowOperator {
     const ex = this.eye.x - runner.pos.x;
     const ez = this.eye.z - runner.pos.z;
     const eDist = Math.hypot(ex, ez);
-    // From twelve metres up you cannot be inside the robot, and `top` sits deliberately close in
+    // From nine metres up you cannot be inside the robot, and `top` sits deliberately close in
     // plan. The floor is about the chase lens; applying it overhead would only shove the map.
     if (!isOverhead(this.shot) && eDist > 1e-4 && eDist < CAM_MIN_DIST) {
       const s = CAM_MIN_DIST / eDist;
@@ -1896,7 +1900,19 @@ export async function buildFollowBed(engine, opts = {}) {
     runner,
     /** What the overlay prints, and what the drive asserts on. Never a room name — §3.3.5. */
     readout: () => ({
-      shot: mode === 'run' ? operator.shot : mode,
+      /*
+       * 📺 **THE SLUG NAMES THE MOVE WHILE THE MOVE IS HAPPENING.**
+       *
+       * `CRANE` is a real television word for a camera going up, and putting it on the shot slug
+       * for 1.35 s is what tells the room the perspective change is a PRODUCTION CHOICE rather
+       * than the picture breaking. Without it the slug jumps CHASE -> TOP with a second and a
+       * half of unexplained movement between them, which is the read this whole slice exists to
+       * avoid. It disappears at the top, so the steady state is still the clean `TOP`.
+       */
+      shot: mode !== 'run' ? mode
+        : (perf.craneT < perf.craneDur
+          ? ((perf.craneTo?.height ?? 0) > (perf.craneFrom?.height ?? 0) ? 'crane' : 'drop')
+          : operator.shot),
       throttle: perf.driven
         ? (perf.run ? 'RUN' : (stickMag(perf.stick.x, perf.stick.y) > 0 ? 'WALK' : 'STILL'))
         : (perf.hesitateFor > 0 ? 'CREEP' : perf.throttle),

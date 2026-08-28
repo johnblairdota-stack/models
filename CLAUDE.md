@@ -60,11 +60,28 @@ delete it from that list.
 These were decided in playtest and cost real sessions to arrive at. Changing one is a design
 decision, not a refactor.
 
-- **D13 · The phone is a controller, never a viewport.** No 3D on the phone. The runner's chase
-  camera lives on the **TV**. Phone is two sticks: left = move (camera-relative to the TV cam),
-  right = look/orbit. A phone chase embed was built (#29) and **removed** (#30) because it loaded
-  slowly and did not work.
-- **Chase-only during the run** — no shoulder / lead / doorway cuts under the player's thumb.
+- **D13 · The phone is a controller, never a viewport.** No 3D on the phone. The runner's camera
+  lives on the **TV**. A phone chase embed was built (#29) and **removed** (#30) because it loaded
+  slowly and did not work. The pad has **two shapes**, and which one is live follows the camera:
+  on the ground it is two sticks (left = move, camera-relative; right = look/orbit); under the
+  plan-locked top-down the look stick is **not rendered** and the move stick is **absolute** —
+  screen direction is world direction — with RUN/SWING grown into the freed half. The phone is
+  told which via `you.view` (runner-audience). Gates: `party-warm` W26i–W26i4.
+- **The DIRECTOR may not cut during the run** — no shoulder / lead / doorway under the player's
+  thumb, because those invert a camera-relative stick. ⚠️ This bullet used to read *"chase-only
+  during the run"* and that became literally false when the four perspectives shipped; a
+  perspective is **held**, chosen by the game, and is not a cut. Gate: `party-warm` W26h/W26h2.
+- **The expedition chooses its own camera at the ballroom threshold.** Inside the ballroom the
+  show is on `chase`; outside it the show is `top`, and the change between them is a 1.35 s
+  **crane** (1.10 s coming back), not a cut. Hysteresis is a 2.20 m dead band at the wall so a
+  doorway cannot strobe it. The `?dev=1` **P** key still cycles all four rigs for inspecting
+  ceiling art, and the next crossing takes the camera back. Gates: `party-follow` F11i–F11i5,
+  `party-warm` W26h3.
+- **The TV may see over the walls of the runner's OWN rooms, and never the whole house.**
+  `party-loop.md`'s "Do not" #1 is narrowed, not repealed — no whole-house fit, no hunter mark,
+  no route line, no plan diagram. `setLid(on, ids)` is scoped to residency's set. Ratified by
+  John after `CRITIC-LEDGER` round 8 raised it. Gates: `party-follow` F11c2d,
+  `party-follow-drive` D5.
 - **Casting has no "Send them in" button.** Once runner and guide lock, the TV counts 3·2·1.
 - **Every episode runs the full order, premiere included** — episode 1 votes and evicts like any
   other. Decided 2026-08-25; `phases.js` `orderFor` carries the argument, the 105s it costs the

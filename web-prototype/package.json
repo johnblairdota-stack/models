@@ -42,7 +42,8 @@
     "drive:party-warm": "node harness/party-warm-drive.mjs",
     "drive:party-playtest": "node harness/party-playtest-drive.mjs",
     "gate:nametag": "node harness/nametag-legibility.mjs",
-    "gate:link-merge": "node harness/link-merge.mjs"
+    "gate:link-merge": "node harness/link-merge.mjs",
+    "gate:perspective-shots": "node harness/perspective-shots.mjs"
   },
   "dependencies": {
     "three": "^0.180.0",

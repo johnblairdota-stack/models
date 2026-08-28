@@ -600,6 +600,44 @@ console.log('\nparty-follow — the TV follow slot');
       `dead band ${(VIEW_MARGIN * 2).toFixed(2)}m wide at the wall`);
   }
 
+  /* =============================================================================================
+   * 🕹️ **F11j · UP ON THE PAD IS UP ON THE TV — the arithmetic, not the claim.**
+   *
+   * The whole handoff rests on one identity: the yaw the CAMERA is nailed to and the yaw the
+   * STICK is resolved against are the same number, so there is no frame — including mid-crane —
+   * where pushing forward walks somewhere other than up-screen. Three links, each asserted:
+   *
+   *   1. the plan-locked eye sits due +Z of the runner, so the lens' own yaw is `PLAN_YAW`
+   *   2. `PLAN_YAW` fed to `player.js`'s aim-relative `_stepGround` gives screen-up = world −Z
+   *      and screen-right = world +X — the guide map's orientation, so the two agree on "left"
+   *   3. and it does not depend on which way the body happens to be facing
+   * ============================================================================================= */
+  {
+    const off = perspectiveEye('top', PLAN_YAW);
+    // eye = runner + off, look = the runner's chest, so the lens direction is −off flattened.
+    const lens = lookYaw(-off.x, -off.z);
+    t('F11j · the plan-locked lens yaw IS PLAN_YAW, so the stick basis and the camera are one number',
+      Math.abs(lens - PLAN_YAW) < 1e-9 && Math.abs(off.x) < 1e-9 && off.z > 0,
+      `eye +${off.z.toFixed(2)}m on Z, ${off.y.toFixed(2)}m up · lensYaw ${lens.toFixed(6)}`);
+
+    // `player.js` `_stepGround`: want = (sin·mv.y − cos·mv.x, ·, cos·mv.y + sin·mv.x)
+    const walk = (yaw, mx, my) => ({
+      x: Math.sin(yaw) * my - Math.cos(yaw) * mx,
+      z: Math.cos(yaw) * my + Math.sin(yaw) * mx,
+    });
+    const up = walk(PLAN_YAW, 0, 1), right = walk(PLAN_YAW, 1, 0);
+    t('F11j2 · stick UP walks world −Z and stick RIGHT walks world +X — the guide map\'s own plan',
+      Math.abs(up.x) < 1e-9 && Math.abs(up.z + 1) < 1e-9
+        && Math.abs(right.x - 1) < 1e-9 && Math.abs(right.z) < 1e-9,
+      `up (${up.x.toFixed(2)}, ${up.z.toFixed(2)}) · right (${right.x.toFixed(2)}, ${right.z.toFixed(2)})`);
+
+    t('F11j3 control · and none of it moves when the body turns — the map translates, never spins',
+      [0, 1.1, -2.7, Math.PI].every((bodyFacing) => {
+        const e = perspectiveEye('top', PLAN_YAW, bodyFacing);   // pitch is REFUSED by an overhead rig
+        return Math.abs(e.x - off.x) < 1e-12 && Math.abs(e.z - off.z) < 1e-12;
+      }), 'four body headings, one eye');
+  }
+
   t('F11e · a live run holds the chosen perspective, and a typed ?shot= still wins',
     runPerspective('run', null, 'top') === 'top'
       && runPerspective('run', null, null) === 'chase'
