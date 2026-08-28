@@ -130,8 +130,19 @@ export const READY_COUNTDOWN_MS = 3000;
  */
 export const EMPTY_RECKONING_EXTEND_CAP = 3;
 
-/** Debrief and the lynching beats — ballroom is the picture, chase is off. Recap is not this. */
-export const TALK_BEATS = ['debrief', 'reckoning', 'vote', 'execution'];
+/**
+ * 🪑 **THE BEATS THE ROOM SPENDS IN ITS CHAIRS — ballroom is the picture, chase is off.**
+ * Recap is deliberately not one: it is the expedition's own board, and it keeps `recapFacts`.
+ *
+ * ⚠️ **THE NAME IS OLDER THAN THE LIST AND IT IS THE LIST THAT IS RIGHT.** This says nothing
+ * about whether the room may nominate, vote or tap READY — every one of those is gated by its own
+ * predicate (`isReadyBeat`, `applyNominate`, the ballot). `verdict` and `reunion` joined on
+ * 2026-08-28 because all three call sites are asking the same question and the answer is the same
+ * for both: is the seated circle the picture on the television (`onStage` in `party-host.js`), do
+ * the merged pair names still belong on the plates (`cuePairs`), and does the phone draw a
+ * seated sheet rather than a pad (`party-phone.js`). Nobody presses anything on either beat.
+ */
+export const TALK_BEATS = ['debrief', 'reckoning', 'vote', 'execution', 'verdict', 'reunion'];
 export const isTalkBeat = (beat) => TALK_BEATS.includes(String(beat || ''));
 
 /**

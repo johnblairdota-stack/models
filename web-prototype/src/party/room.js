@@ -24,7 +24,7 @@ import { hunterVisibleToGuide, ROOMS } from './coverage.js';
 import { applyTake, resolveContact, MODE, PLATE } from './taken.js';
 import { tallyCasting } from './ballot.js';
 import { tallyVote, executioner, nominate, reckoningClosed, canLynchVote, assumedLynchVotes, nominatorLockedChoice, NO_ONE } from './vote.js';
-import { foldWin, OUTCOME } from './win.js';
+import { foldWin, OUTCOME, WIN_TARGETS } from './win.js';
 import { PHASE, EPISODE_CAP } from './phases.js';
 import { cleanLook } from './look.js';
 import { STALE_MAX, intelFor } from './intel.js';
@@ -611,7 +611,19 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     record(makeEvent('verdict.aired', VIS.PUBLIC, {
       status: state.outcome, camerasLit: w.camerasLit, alarms: state.incident.alarms,
     }));
-    return { outcome: state.outcome, rule: w.rule, camerasLit: w.camerasLit, episode: state.episode };
+    /*
+     * 📷 **THE TARGET TRAVELS WITH THE COUNT, because the plate must not be able to disagree with
+     * the rule.** `state.cameras.needed` is `COMPOSITION[n].cameras` and the TV's run chrome
+     * counts against it; `foldWin` decides W2 against `WIN_TARGETS[n].cameraTarget`. **At eight
+     * players those are 3 and 4** — a real divergence, flagged to John rather than quietly picked,
+     * because which one is the objective is a design call. A Verdict plate is a report on THIS
+     * fold, so it reports the number this fold measured against and no other.
+     */
+    return {
+      outcome: state.outcome, rule: w.rule,
+      camerasLit: w.camerasLit, need: WIN_TARGETS[count]?.cameraTarget ?? null,
+      episode: state.episode,
+    };
   }
 
   return {

@@ -68,6 +68,21 @@ export class PartyNightClient {
     this.links = { pending: [], pairs: [], used: [] };
     /** Reaction taps, newest last. `onAir()` in react.js decides what is still on screen. */
     this.reacts = [];
+    /**
+     * 🏁 The Showrunner's aired verdict — `{status, camerasLit, need, episode}` and nothing else.
+     *
+     * 🚨 **THERE IS NO `fed` ON THIS AND THERE MUST NEVER BE ONE.** `foldWin` returns the feed
+     * count right beside `camerasLit`, and `rrr-social-round.md` §4 holds it back until the
+     * Reunion: the camera gauge is a deliberately lossy proxy, and evil losing a partner looks
+     * exactly like evil winning. The server does not send it (`FANOUT_KEYS.verdict`); this is
+     * the client half of the same promise, and `party-night` N17h0b is the control arm.
+     *
+     * It is NOT cleared on a beat change — the plate has to survive a TV refresh mid-Verdict —
+     * and the next episode's Verdict simply overwrites it.
+     */
+    this.verdict = null;
+    /** The season's final status, once the night is over. Null every episode that is RENEWED. */
+    this.season = null;
     /** Aired lynch ballots — empty until tallied. */
     /** What the server says I voted. Null until it answers. */
     this.myBallot = null;
@@ -162,6 +177,14 @@ export class PartyNightClient {
          * its own closure so nothing on the shared client object can leak them to another view.
          */
         if (m.t === 'links') this.links = { pending: m.pending || [], pairs: m.pairs || [], used: m.used || [] };
+        if (m.t === 'verdict') {
+          this.verdict = {
+            status: m.status, camerasLit: m.camerasLit | 0,
+            need: Number.isFinite(m.need) ? m.need | 0 : null,
+            episode: m.episode | 0,
+          };
+        }
+        if (m.t === 'season') this.season = m.status || null;
         if (m.t === 'lynch') {
           this.lynchVotes = m.votes || [];
           this.lynchResult = m.result || null;

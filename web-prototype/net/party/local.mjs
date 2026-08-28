@@ -744,10 +744,17 @@ function enterExecutionLive(room) {
 function enterVerdictLive(room) {
   const v = room.game.enterVerdict();
   setShow(room, 'verdict');
+  /*
+   * 🚨 FIELDS ARE PICKED, NEVER SPREAD. `enterVerdict()` returns `rule` beside these, and the
+   * rule names the reason the season ended — W3 is "evil fed the Hunter enough goods", which is
+   * the sealed feed count wearing a different hat. `FANOUT_KEYS.verdict` is the closed schema
+   * that makes a slip here a gate failure rather than a leak (`party-night` N17h0b).
+   */
   fanout(room, {
     t: 'verdict',
     status: v.outcome,
     camerasLit: v.camerasLit,
+    need: v.need,
     episode: v.episode,
   });
   scheduleShowProgress(room, holdMsFor('verdict'));
@@ -946,7 +953,7 @@ export const FANOUT_KEYS = {
    * a deduction the design spends the entire night denying it — so a later "we already have the
    * fold, just spread it" fails closed here instead of quietly ending the social game.
    */
-  verdict: ['t', 'status', 'camerasLit', 'episode'],
+  verdict: ['t', 'status', 'camerasLit', 'need', 'episode'],
   /*
    * 🎬 The season is over. One word, and it is the same word the Verdict plate just aired — the
    * Reunion's own reveals travel on their own payload, once the beat has actually started.

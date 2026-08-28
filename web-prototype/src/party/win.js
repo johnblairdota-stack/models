@@ -35,6 +35,26 @@ export const OUTCOME = {
   ABANDONED: 'ABANDONED',    // host skipped to the Reunion; no side wins
 };
 
+/**
+ * 🗣️ **THE FOUR OUTCOMES IN WORDS — one copy, because the TV and the phone say the same thing.**
+ *
+ * The Verdict plate and the phone's Verdict sheet both have to tell the room what the status
+ * MEANS, and they were written with a private copy each. Two tables that must agree and can
+ * drift is the exact shape `harness/episode-order.mjs` exists to punish one layer up, so this
+ * lives beside the machine that produces the statuses. No THREE, no DOM — the phone imports it.
+ *
+ * RENEWED is the interesting line and the reason the Verdict is a feedback loop at all: it tells
+ * the good side evil is still alive, and tells them nothing whatsoever about the person the room
+ * has just destroyed.
+ */
+export function outcomeLine(status) {
+  if (status === OUTCOME.RENEWED) return 'The season continues. Casting is next.';
+  if (status === OUTCOME.CANCELLED) return 'Production wins. The Reunion is next.';
+  if (status === OUTCOME.FINALE) return 'The cast wins. The Reunion is next.';
+  if (status === OUTCOME.ABANDONED) return 'The night was called. Nobody wins.';
+  return 'The Showrunner is deciding.';
+}
+
 /** The only place same-tick precedence is written down. */
 export const TICK_ORDER = ['W1', 'W3', 'W2', 'W4', 'W5'];
 

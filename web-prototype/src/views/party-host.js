@@ -23,6 +23,7 @@ import { mergePublicNames, publicName } from '../party/cast-ui.js';
 import { cueViolations, nextPerspective, warmLabel, warmPct, warmUrl } from '../party/follow.js';
 import { formatRemain, holdMsFor, isTalkBeat, nextShowBeat, remainingMs, rundownRibbon } from '../party/show.js';
 import { NO_ONE, SHOWRUNNER } from '../party/vote.js';
+import { outcomeLine } from '../party/win.js';
 import { describeCastTiebreaks, previewCastTiebreaks, shouldArmCastSend } from '../party/ballot.js';
 import { MAX_PAIRS } from '../party/link.js';
 
@@ -943,9 +944,16 @@ export default async function partyHost({ params }) {
     const hasPair = !!pair.runner;
     armSendCountdown(canLock, show);
     const sendLeft = sendCountdownLeft();
-    const onTalk = show === 'recap' || show === 'debrief' || show === 'reckoning'
-      || show === 'vote' || show === 'execution';
     const onStage = isTalkBeat(show);
+    /*
+     * ⚠️ **DERIVED, NOT RE-LISTED.** This was a hand-written copy of `TALK_BEATS` plus `recap`,
+     * and it is the list `onRun` reads to decide whether the chase picture is up — so the day
+     * Verdict joined the wire, a beat the copy had never heard of would have painted the
+     * expedition over the Showrunner (`hasPair` is still true at the Verdict). One table, one
+     * answer: `show.js` owns which beats are seated, and Recap is the one addition it does not
+     * cover, deliberately, because Recap keeps its own facts board.
+     */
+    const onTalk = show === 'recap' || onStage;
     const onRecap = show === 'recap';
     const onCastPicture = show === 'casting' && ui.introsSent;
     const onCircle = onStage || onRecap || onCastPicture;
@@ -1049,6 +1057,56 @@ export default async function partyHost({ params }) {
         verdict: executionLine(client.lynchResult, names),
         executed: !!executed,
         tally: client.lynchResult ? { votes: client.lynchVotes, result: client.lynchResult } : null,
+      });
+    } else if (show === 'verdict') {
+      /* =======================================================================================
+       * ⚖️ **THE SHOWRUNNER'S VERDICT — fifteen seconds, and the precision is the whole beat.**
+       *
+       * `rrr-social-round.md` §4 lists what airs and what is held back, and calls it *"the whole
+       * of P6"*. What airs: the status word, the camera count against the target the fold
+       * measured, the visible cause of the casualty, and the incident count as a bare number.
+       * What is held back until the Reunion: every alignment, every role, **the feed count**, and
+       * which incidents had an evil cause.
+       *
+       * 🚨 **THE ONLY VERDICT FACTS ON THIS SCREEN COME FROM `client.verdict`.** It would be very
+       * easy to reach into `frame` for a richer plate — `frame.cameras` is right there — and that
+       * is the leak: the frame is the RUNNING state, the verdict is the FOLD, and they disagree
+       * about what a camera target is (see `foldVerdict` in `src/party/room.js`). One source.
+       * ======================================================================================= */
+      const v = client.verdict;
+      const season = seasonCopy(v?.status);
+      const executed = client.lynchResult?.executed;
+      body += talkStage({
+        recap, names, lobby: client.lobby, runEnd: ui.runEnd, clock,
+        kicker: season.line, beat: 'verdict',
+        who: '',
+        verdict: v?.status || 'STANDING BY',
+        verdictKicker: 'THE SHOWRUNNER\'S VERDICT',
+        verdictSub: v ? `episode ${v.episode}` : '',
+        facts: verdictFacts(v, recap, names, executed),
+      });
+    } else if (show === 'reunion') {
+      /* =======================================================================================
+       * 🎬 **THE REUNION SPECIAL — the only thing that has ever ended a session.**
+       *
+       * This is the holding frame: the season's status, and the promise of the roll call. The
+       * four beats behind it (roll call, Director's Cut, awards, unmixed chat) all read
+       * `src/party/reunion.js`, which is fully computed and fully tested by
+       * `harness/reunion-truth.mjs` — and every one of them needs a payload that deliberately
+       * breaks `entitle.js`'s "NO ROW. Nobody, ever, pre-REUNION". That disclosure is its own
+       * step, and it is not on this screen yet.
+       *
+       * ⚠️ **NOTHING HERE MAY NAME AN ALIGNMENT OR A ROLE UNTIL THAT PAYLOAD EXISTS.** A screen
+       * that reveals a beat before the beat is the one risk the whole Reunion design has.
+       * ======================================================================================= */
+      const season = seasonCopy(client.season || client.verdict?.status);
+      body += talkStage({
+        recap, names, lobby: client.lobby, runEnd: ui.runEnd, clock: '',
+        kicker: 'The cast is back in its chairs.', beat: 'reunion',
+        who: '',
+        verdict: client.season || 'THE SEASON IS OVER',
+        verdictKicker: 'THE REUNION SPECIAL',
+        verdictSub: season.line,
       });
     } else if (show === 'casting') {
       const showingIntros = ui.introsSent && !ui.introsDone;
@@ -1399,6 +1457,7 @@ function standingLead(standing, names) {
 function talkStage({
   recap, names, lobby, runEnd, clock, kicker, beat,
   who, whoSub, whoId, standing, tally, verdict, executed, aside, facts,
+  verdictKicker, verdictSub,
 }) {
   const look = whoId ? seatLook(lobby, whoId) : null;
   const face = look ? robotFaceSvg(look.shell, look.accent, { size: 64, treatment: 'chip' }) : '';
@@ -1412,13 +1471,18 @@ function talkStage({
   const plate = who
     ? nameplateHtml({ name: who, sub: seatNo == null ? sub : `${sub} · seat ${seatNo + 1}`, face })
     : '';
+  /*
+   * The plate's words default to the EXECUTION beat's, because that is the only beat that had one
+   * when this was written. `verdictKicker` / `verdictSub` are how the Verdict and the Reunion say
+   * their own — passing neither leaves the execution call byte-for-byte what it always was.
+   */
   const spectacle = verdict
     ? verdictPlateHtml({
-      kicker: executed ? 'VERDICT READY' : 'NO EVICTION',
+      kicker: verdictKicker ?? (executed ? 'VERDICT READY' : 'NO EVICTION'),
       line: verdict,
-      sub: tally?.result
+      sub: verdictSub ?? (tally?.result
         ? `threshold ${tally.result.threshold ?? '—'} · abstained ${tally.result.abstained ?? 0}`
-        : '',
+        : ''),
     })
     : '';
   const side = `${aside || ''}${nomBoard(standing, names, lobby, beat)}${tally ? lynchBoard(tally.votes, tally.result, names) : ''}`;
@@ -1594,6 +1658,42 @@ function recapFacts(recap, names, runEnd) {
       <div class="fact"><div class="k">Camera</div><div class="v ${recap.cameraLit ? 'ok' : 'bad'}">${recap.cameraLit ? 'LIT' : 'STAYED DARK'}</div></div>
       <div class="fact"><div class="k">Runner</div><div class="v ${recap.taken?.length ? 'bad' : 'ok'}">${esc(taken)}</div></div>
       <div class="fact"><div class="k">Alarms</div><div class="v">${esc(String(recap.alarmCount ?? 0))}</div></div>
+    </div>`;
+}
+
+/* =============================================================================================
+ * ⚖️ THE VERDICT'S OWN WORDS AND ITS OWN FACTS.
+ *
+ * The words live in `src/party/win.js` beside the machine that produces the statuses, because the
+ * phone's Verdict sheet says the same sentence and a second copy here would be free to drift from
+ * it. This wrapper is the shape `talkStage` wants, and nothing more.
+ * ============================================================================================= */
+function seasonCopy(status) {
+  return { line: outcomeLine(status) };
+}
+
+/*
+ * 🚨 **WHAT AIRS, AND NOTHING ELSE.** Cameras against the target THE FOLD USED (see `foldVerdict`
+ * — the running state's `needed` and the win rule's `cameraTarget` are different numbers at eight
+ * players), the casualty by VISIBLE CAUSE ONLY, and the incident count with no attribution.
+ *
+ * ⚠️ There is no feed row here, there is no alignment here, and there is no `rule` here. The rule
+ * is a leak in a costume: W3 is "evil fed the Hunter enough goods", which is the sealed number
+ * spelled out in words. `party-night` N17h0b keeps it off the wire; this keeps it off the screen.
+ */
+function verdictFacts(v, recap, names, executed) {
+  const lit = v ? String(v.camerasLit) : '—';
+  const need = v?.need == null ? '' : ` of ${v.need}`;
+  const hit = v && v.need != null && v.camerasLit >= v.need;
+  const casualty = executed
+    ? `<div class="fact"><div class="k">Casualty</div><div class="v bad">${esc(joinedName(names, executed, 'A player'))} · EXECUTED</div></div>`
+    : (recap.taken?.length
+      ? `<div class="fact"><div class="k">Casualty</div><div class="v bad">${esc(recap.taken.map((t) => joinedName(names, t.id, 'The runner')).join(', '))} · TAKEN</div></div>`
+      : `<div class="fact"><div class="k">Casualty</div><div class="v ok">NOBODY</div></div>`);
+  return `<div class="recap talk-facts">
+      <div class="fact"><div class="k">Cameras</div><div class="v ${hit ? 'ok' : 'bad'}">${esc(lit + need)}</div></div>
+      ${casualty}
+      <div class="fact"><div class="k">Incidents</div><div class="v">${esc(String(recap.alarmCount ?? 0))}</div></div>
     </div>`;
 }
 

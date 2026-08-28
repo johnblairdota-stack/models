@@ -62,7 +62,7 @@ import { generatedTables } from '../src/world/genplan.js';
 import {
   AFTER_RUN_BEATS, DEBRIEF_HOLD_MS, RECAP_BACKSTOP_MS, RECAP_HOLD_MS, SHOW_BEATS,
   RUNDOWN_BEATS, holdMsFor, missionEndsRun, nextShowBeat, railDrainPct, recapAfterMs,
-  remainingMs, rundownRibbon, RUN_END,
+  remainingMs, rundownRibbon, RUN_END, isTalkBeat,
 } from '../src/party/show.js';
 import { missionFor, MISSION_TABLE } from '../src/party/mission.js';
 import { ROOMS, hunterVisibleToGuide } from '../src/party/coverage.js';
@@ -80,6 +80,7 @@ import { BALLROOM_POINTS } from '../src/lighting/ballroom-rig.js';
 import { leftoverRuns, barrierFillForEdge } from '../src/game/dig-policy.js';
 import { MATRIX } from '../net/party/entitle.js';
 import { FANOUT_KEYS, fanoutViolations } from '../net/party/local.mjs';
+import { OUTCOME, outcomeLine } from '../src/party/win.js';
 import { existsSync, openSync, readSync, closeSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -1625,8 +1626,19 @@ console.log('\nparty-warm — the lobby-warm night');
   t('W27d · CAUGHT is still reserved — hunter take is still the next slice',
     !/RUN_END\.CAUGHT/.test(localSrc));
   const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
-  t('W27e · debrief is not painted as a run, and the host canLock looks at this pair not last episode\'s',
-    /const onTalk = show === 'recap' \|\| show === 'debrief'/.test(hostSrc)
+  /*
+   * ⚠️ **REWRITTEN 2026-08-28 — this pinned a HAND-WRITTEN COPY of TALK_BEATS.** It asserted the
+   * literal text `const onTalk = show === 'recap' || show === 'debrief'`, which locked in the
+   * second table rather than the behaviour: `onRun` reads `onTalk`, and `hasPair` is still true at
+   * the Verdict, so the first beat the copy had never heard of would have painted the expedition
+   * over the Showrunner. It is derived now, and the assertion follows — plus the control that
+   * `show.js` really does class every seated beat as one, so "derived" is not derived from a lie.
+   */
+  t('W27e · the host derives its seated beats from TALK_BEATS, and canLock looks at this pair',
+    /const onTalk = show === 'recap' \|\| onStage;/.test(hostSrc)
+    && !/const onTalk = show === 'recap' \|\| show === 'debrief'/.test(hostSrc)
+    && ['debrief', 'reckoning', 'vote', 'execution', 'verdict', 'reunion'].every(isTalkBeat)
+    && !isTalkBeat('recap') && !isTalkBeat('expedition') && !isTalkBeat('casting')
     && /!pair\.runner/.test(hostSrc)
     && /show === 'debrief'/.test(hostSrc));
   t('W27f · episode 2+ smashes the chapel catalog table-round, not a invented GLB',
@@ -3299,6 +3311,76 @@ console.log('\nparty-warm — the lobby-warm night');
     /@media \(prefers-reduced-motion: reduce\)/.test(skin)
       && /\.bot-badge[\s\S]{0,160}animation: none !important/.test(skin),
     'badge · run-face · rec dot · react chip');
+}
+
+// ---- W47 · THE VERDICT AND THE REUNION REACH A SCREEN --------------------------------------
+//
+// The wire got the Verdict beat on 2026-08-28 (`party-night` N17h0, `episode-order` E2b). A beat
+// with no view is a black television for fifteen seconds, and a phone that goes blank because
+// `isTalkBeat` now claims a beat its sheet has never heard of. These are the screens.
+//
+// 🚨 **THE HALF THIS BLOCK EXISTS FOR IS WHAT IS *NOT* ON THEM.** `rrr-social-round.md` §4 holds
+// the feed count, every alignment and every role back until the Reunion — and `rule` is the same
+// leak in a costume, because W3 is "evil fed the Hunter enough goods" spelled out in words. The
+// server keeps them off the wire (`FANOUT_KEYS.verdict`); these keep them off the screen.
+{
+  const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
+  const phoneSrc = await readFile(new URL('../src/views/party-phone.js', import.meta.url), 'utf8');
+  const clientSrc = await readFile(new URL('../src/party/night-client.js', import.meta.url), 'utf8');
+
+  t('W47 · the TV has a Verdict branch and a Reunion branch, and neither is the chase',
+    /show === 'verdict'/.test(hostSrc) && /show === 'reunion'/.test(hostSrc)
+      && /verdictFacts\(/.test(hostSrc)
+      && isTalkBeat('verdict') && isTalkBeat('reunion'));
+
+  t('W47a · the phone draws both too — isTalkBeat now claims them, so a missing sheet is blank',
+    /beat === 'verdict'/.test(phoneSrc) && /beat === 'reunion'/.test(phoneSrc)
+      && /function paintVerdict/.test(phoneSrc) && /function paintReunion/.test(phoneSrc));
+
+  /*
+   * The sentence a status MEANS is one function in `win.js`, beside the machine that produces the
+   * statuses — because the TV and the phone both say it, and two copies that must agree and can
+   * drift is what `episode-order` exists to punish one layer up.
+   */
+  t('W47b · both screens read the outcome words from win.js — not a copy each',
+    /outcomeLine\(/.test(hostSrc) && /outcomeLine\(/.test(phoneSrc)
+      && !/'The season continues\. Casting is next\.'/.test(hostSrc)
+      && !/'The season continues\. Casting is next\.'/.test(phoneSrc)
+      && outcomeLine(OUTCOME.RENEWED).includes('continues')
+      && outcomeLine(OUTCOME.CANCELLED).includes('Production wins')
+      && outcomeLine(OUTCOME.FINALE).includes('cast wins')
+      && outcomeLine(OUTCOME.ABANDONED).includes('Nobody wins')
+      && outcomeLine(undefined).includes('deciding'),
+    Object.values(OUTCOME).map(outcomeLine).join(' | '));
+
+  /*
+   * ⚠️ These match CODE, not prose. A bare `/\bfed\b/` failed on this block's own explanation of
+   * why the feed count is withheld — a gate that forbids naming the thing it protects makes the
+   * next person delete the argument to get green. `.fed` / `fed:` is the read or the write.
+   */
+  t('W47c control · no feed count and no fold rule anywhere near either screen',
+    !/\.fed\b|\bfed\s*[:=]/.test(hostSrc) && !/\.fed\b|\bfed\s*[:=]/.test(phoneSrc)
+      && !/verdict\.rule|v\.rule/.test(hostSrc) && !/verdict\.rule|v\.rule/.test(phoneSrc)
+      && !/\.rule\b/.test(clientSrc)
+      && /THERE IS NO `fed` ON THIS/.test(clientSrc));
+
+  /*
+   * ⚠️ The camera count on the plate is measured against the target THE FOLD USED, not the one
+   * the running state carries. `COMPOSITION[8].cameras` is 3 and `WIN_TARGETS[8].cameraTarget`
+   * is 4 — a real divergence, flagged rather than quietly picked — so a plate that read
+   * `frame.cameras.needed` would print a target the rule never used.
+   */
+  t('W47d · the plate counts cameras against the fold\'s own target, carried on the wire',
+    FANOUT_KEYS.verdict.includes('need') && FANOUT_KEYS.verdict.includes('camerasLit')
+      && !FANOUT_KEYS.verdict.includes('fed') && !FANOUT_KEYS.verdict.includes('rule')
+      && /v\.need/.test(hostSrc) && /v\.need/.test(phoneSrc)
+      && !/frame\?\.cameras/.test(hostSrc.slice(hostSrc.indexOf("show === 'verdict'"),
+        hostSrc.indexOf("show === 'casting'"))),
+    FANOUT_KEYS.verdict.join(','));
+
+  t('W47e · and the Reunion sheet still reveals nothing — that payload is its own step',
+    /DO NOT PUT A ROLE OR AN ALIGNMENT ON THIS SHEET/.test(phoneSrc)
+      && /NOTHING HERE MAY NAME AN ALIGNMENT OR A ROLE/.test(hostSrc));
 }
 
 console.log(`\nparty-warm: ${pass} passed, ${fail} failed`);

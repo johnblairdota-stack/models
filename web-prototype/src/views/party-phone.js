@@ -24,6 +24,7 @@ import { missionFor } from '../party/mission.js';
 import { intelLine } from '../party/intel.js';
 import { STICK_DEADZONE, warmLabel } from '../party/follow.js';
 import { formatRemain, isTalkBeat, LATE_DEBRIEF_MS, remainingMs } from '../party/show.js';
+import { outcomeLine } from '../party/win.js';
 import { NO_ONE } from '../party/vote.js';
 
 export default async function partyPhone({ params }) {
@@ -629,6 +630,10 @@ export default async function partyPhone({ params }) {
          * The list you name the dead from must be the one that still contains them.
          */
         body += paintExecution(players, c);
+      } else if (beat === 'verdict') {
+        body += paintVerdict(me, c);
+      } else if (beat === 'reunion') {
+        body += paintReunion(me, c);
       }
     } else if (beat === 'lobby' || phase === 'LOBBY') {
       body += `<h1>${esc(myName)}</h1>
@@ -1597,6 +1602,54 @@ export default async function partyPhone({ params }) {
     const who = playerName(players, r.executed);
     html += `<p class="hint">${esc(who)} is out. The nameplate is face-down. Nothing about alignment.</p>`;
     return html;
+  }
+
+  /* ===========================================================================================
+   * ⚖️ **THE PHONE DOES ALMOST NOTHING FOR FIFTEEN SECONDS, AND THAT IS THE POINT.**
+   *
+   * The Verdict is the Showrunner's announcement on the TELEVISION. A pad that competed with it
+   * would split the room's attention at the one moment the night is being summarised — the same
+   * argument that took WORD FROM THE HOUSE off the runner's sheet. So: the status, the one line
+   * that says what happens next, whether this seat is still in the show, and nothing to press.
+   *
+   * 🚨 **NO ALIGNMENT, NO ROLE, NO FEED COUNT.** `alive` is already public (it is on every frame
+   * and the TV shows the nameplate go down), so saying it here leaks nothing. Everything else
+   * about what a player WAS is the Reunion's, and a sheet that said it a beat early would undo
+   * the beat the whole design is borrowing against.
+   * =========================================================================================== */
+  function paintVerdict(me, c) {
+    const v = c.verdict;
+    const status = v?.status || '…';
+    const line = v ? outcomeLine(v.status) : 'The Showrunner is deciding.';
+    const cams = v ? `${v.camerasLit}${v.need == null ? '' : ` of ${v.need}`} cameras lit.` : '';
+    let html = `<h1>${esc(status)}</h1>${phoneClock(c)}
+      <p class="hint">${esc(line)}${cams ? ` ${esc(cams)}` : ''}</p>`;
+    if (me && me.alive === false) {
+      html += `<p class="hint">You are out of the show. Your nameplate is face-down — and nobody
+        has been told what you were. You can still talk.</p>`;
+    }
+    html += `<p class="hint">Eyes on the TV. Nothing to press.</p>`;
+    return html;
+  }
+
+  /* ===========================================================================================
+   * 🎬 **THE REUNION — the holding sheet, until the reveal payload exists.**
+   *
+   * The finished screen is the personal half of the roll call: your own card face-up at last,
+   * what you claimed all night, how it ended, and any award. Every one of those needs a payload
+   * that deliberately breaks `entitle.js`'s "NO ROW. Nobody, ever, pre-REUNION", which is its own
+   * step. Until then this says the season is over and points at the television.
+   *
+   * ⚠️ **DO NOT PUT A ROLE OR AN ALIGNMENT ON THIS SHEET BEFORE THAT PAYLOAD LANDS.** The one
+   * risk the Reunion design has is a screen that renders the reveal a beat before the beat, and
+   * `role.card` — which this view already holds — carries the player's COVER, not their truth.
+   * =========================================================================================== */
+  function paintReunion(me, c) {
+    const status = c.season || c.verdict?.status || 'THE SEASON IS OVER';
+    return `<h1>${esc(status)}</h1>
+      <p class="hint">${esc(outcomeLine(c.season || c.verdict?.status))}</p>
+      <p class="hint">The Reunion is on the TV: the roll call, then the awards. Every nameplate
+        gets turned over.</p>`;
   }
 
   /**
