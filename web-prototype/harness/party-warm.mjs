@@ -2407,11 +2407,11 @@ console.log('\nparty-warm — the lobby-warm night');
   /*
    * John, room DUSK: two accusers clipped then it cut. The nominator already swings in
    * `executioner()`; Execution was sending an empty `noms` cue and sitting everyone down.
-   * W33k is the picture: that nominator stands, walks the inner ring, swings the existing
+   * W33o is the picture: that nominator stands, walks the inner ring, swings the existing
    * sledge. Showrunner is a hold on the accused, not a ninth robot. Grip lock untouched.
    */
   const meshSrc = await readFile(new URL('../src/characters/mesh-avatar.js', import.meta.url), 'utf8');
-  t('W33k · Execution stages the nominator — stand, walk, sledge — or a Showrunner hold',
+  t('W33o · Execution stages the nominator — stand, walk, sledge — or a Showrunner hold',
     /function cueExecute/.test(hostSrc)
     && /kind === 'execute'/.test(bedSrc)
     && /setExecute\(/.test(introSrc)

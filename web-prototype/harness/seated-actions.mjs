@@ -292,8 +292,8 @@ if (!g.error) {
 /* ── A8 · the rig side of the contract, read off the source (THREE cannot load here) ──── */
 {
   const src = readFileSync(AVATAR, 'utf8');
-  t('A8 · playSeated(clipName, { hold = false, fade = 0.25 }) is on the sit-capable rig',
-    /playSeated\(clipName, \{ hold = false, fade = 0\.25 \} = \{\}\) \{/.test(src));
+  t('A8 · playSeated(clipName, { hold, fade, fit }) is on the sit-capable rig',
+    /playSeated\(clipName, \{ hold = false, fade = 0\.25(?:, fit = 0)? \} = \{\}\) \{/.test(src));
   t('A8a · it is a no-op returning false when the avatar is not seated',
     /playSeated[\s\S]{0,220}?if \(pose !== 'sit' \|\| !sitIdle\) return false;/.test(src));
   t('A8b · nothing unlisted reaches mixer.clipAction',

@@ -145,7 +145,7 @@ decision, not a refactor.
   collider, unlocks at the stand-mark, walks the inner ring, and swings the existing sledge
   (clone `mountProp` / `playAttack`, grip lock untouched). Showrunner has no ninth body — the
   camera holds on the accused from outside the ring. Gate: `accusation-stage` E0–E6, `party-warm`
-  W3j / W33k.
+  W3j / W33o.
 - **TV visual direction is B — "Rundown Rail"**: the night's schedule across the top, shrinking to
   a 22px ribbon during the Expedition.
 
