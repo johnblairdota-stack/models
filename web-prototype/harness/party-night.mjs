@@ -14,7 +14,7 @@ import { qrMatrix } from '../src/party/qr.js';
 import {
   PartyNightClient,
   tokenKey, STUB_SHOW_PLAN, AFTER_RUN_BEATS, nextShowBeat, holdMsFor,
-  RECAP_HOLD_MS, DEBRIEF_HOLD_MS, RECKONING_HOLD_MS, VOTE_HOLD_MS, EXECUTION_HOLD_MS,
+  RECAP_HOLD_MS, DEBRIEF_HOLD_MS, RECKONING_HOLD_MS, VOTE_HOLD_MS, EXECUTION_HOLD_MS, VERDICT_HOLD_MS,
   LATE_DEBRIEF_MS, EMPTY_RECKONING_EXTEND_CAP,
   remainingMs, formatRemain, normalizeCodeDisplay, normalizeCodeWire,
 } from '../src/party/night-client.js';
@@ -26,6 +26,7 @@ import { ACCENTS, SHELLS, cleanLook } from '../src/party/look.js';
 import { applyCastLock, applyCastTap, ballotFromCast, CAST_BLOCK_WHY, castPrompt, castRowBlock, castRowMark, freshCast, mergePublicNames, nominationPlayers, publicName } from '../src/party/cast-ui.js';
 import { createRoom } from '../src/party/room.js';
 import { NO_ONE } from '../src/party/vote.js';
+import { OUTCOME } from '../src/party/win.js';
 
 const PORT = 5198;
 let pass = 0, fail = 0;
@@ -164,13 +165,23 @@ t('N1c3 · recap hold is 10s and debrief hold is 300s — the shooting schedule,
   RECAP_HOLD_MS === SECONDS[PHASE.RECAP] * 1000 && RECAP_HOLD_MS === 10000
     && DEBRIEF_HOLD_MS === SECONDS[PHASE.DEBRIEF] * 1000 && DEBRIEF_HOLD_MS === 300000
     && holdMsFor('recap') === RECAP_HOLD_MS && holdMsFor('debrief') === DEBRIEF_HOLD_MS);
-t('N1c4 · after a finished run the clock is Recap → Debrief → Reckoning → Vote → Execution → Casting',
-  AFTER_RUN_BEATS.join(',') === 'recap,debrief,reckoning,vote,execution,casting'
+/*
+ * ⚖️ **VERDICT JOINED THE CHAIN**, so this literal grew one beat — deliberately, and the literal
+ * is the point: agreement alone would stay green while somebody quietly reordered the night.
+ *
+ * `nextShowBeat('verdict')` is 'casting' because that is the DEFAULT edge. Whether the night
+ * actually walks there is `progressShow`'s call — it overrules the chain when the win fold says
+ * the season is over. A pure function cannot know that, and should not pretend to.
+ */
+t('N1c4 · after a finished run the clock is Recap → Debrief → Reckoning → Vote → Execution → Verdict → Casting',
+  AFTER_RUN_BEATS.join(',') === 'recap,debrief,reckoning,vote,execution,verdict,casting'
     && nextShowBeat('recap') === 'debrief' && nextShowBeat('debrief') === 'reckoning'
     && nextShowBeat('reckoning') === 'vote' && nextShowBeat('vote') === 'execution'
-    && nextShowBeat('execution') === 'casting' && nextShowBeat('expedition') == null
+    && nextShowBeat('execution') === 'verdict' && nextShowBeat('verdict') === 'casting'
+    && nextShowBeat('expedition') == null
     && holdMsFor('reckoning', 0) === RECKONING_HOLD_MS && holdMsFor('vote') === VOTE_HOLD_MS
     && holdMsFor('execution') === EXECUTION_HOLD_MS
+    && holdMsFor('verdict') === VERDICT_HOLD_MS && VERDICT_HOLD_MS === SECONDS[PHASE.VERDICT] * 1000
     && formatRemain(0) === '0s' && formatRemain(65000) === '1:05'
     && remainingMs(1000, 1000) === 0
     && remainingMs(null) === null && remainingMs('') === null);
@@ -587,23 +598,95 @@ t('N13c · a refresh resumes the server show beat, not casting',
   extra.close();
   phases.push(night.show);
 
-  const toCasting = progressShow(night);
+  /* =============================================================================================
+   * ⚖️ **N17h0 · THE VERDICT BEAT — the one that used to be a grey chip on the rail.**
+   *
+   * `episode-order` carried `WIRE_MISSING = [PHASE.VERDICT]` and the note "the day Verdict grows
+   * a wire beat, delete it from that list". This is that day, so this is the assertion that has
+   * to exist first: the beat is entered, it airs a status, and the phones are told.
+   *
+   * 🚨 **AND THE FEED COUNT IS NOT ON IT.** `foldWin` returns `fed` right beside `camerasLit`,
+   * and `rrr-social-round.md` §4 keeps it back until the Reunion — the gauge is a deliberately
+   * lossy proxy, and evil losing a partner looks exactly like evil winning. This is the control
+   * arm for that: a later "we already have the fold, just spread it" fails HERE.
+   * ============================================================================================= */
+  const toVerdict = progressShow(night);
   await sleep(40);
-  t('N17h · Execution → Casting for the next pair (episode already bumped by playEpisode)',
-    toCasting === 'casting' && night.show === 'casting'
-      && last(host, 'show')?.beat === 'casting'
-      && night.game.state.phase === 'CASTING'
-      && night.game.state.airingEpisode === before
-      && night.game.state.pair.runner == null && night.game.state.pair.guide == null,
-    JSON.stringify({
-      show: night.show, phase: night.game.state.phase,
-      airing: night.game.state.airingEpisode, episode: night.game.state.episode,
-      pair: night.game.state.pair,
-    }));
+  const airedVerdict = last(host, 'verdict');
+  t('N17h0 · Execution → Verdict, and the room is told the season\'s status',
+    toVerdict === 'verdict' && night.show === 'verdict'
+      && last(host, 'show')?.beat === 'verdict'
+      && night.game.state.phase === 'VERDICT'
+      && typeof airedVerdict?.status === 'string' && airedVerdict.status.length > 0
+      && Number.isFinite(airedVerdict?.camerasLit),
+    JSON.stringify(airedVerdict));
+  t('N17h0b control · the aired verdict carries no feed count — that is Reunion-only',
+    airedVerdict != null && !('fed' in airedVerdict) && !('rule' in airedVerdict)
+      && fanoutViolations(airedVerdict).length === 0,
+    Object.keys(airedVerdict || {}).join(','));
   phases.push(night.show);
-  t('N17i · the live beat order after a completed run is recap, debrief, reckoning, vote, execution, casting',
-    phases.join(',') === 'recap,debrief,reckoning,vote,execution,casting',
+
+  /* =============================================================================================
+   * 🏁 **N17h · THE NIGHT ENDS. This is the first conditional edge in the whole wire.**
+   *
+   * ⚠️ **THIS ASSERTION USED TO READ "Verdict → Casting" AND IT WAS WRITTEN BEFORE THE EDGE
+   * EXISTED.** Every step of the chain before it is unconditional — a beat finishes, the next one
+   * starts — so the gate walked to Casting because that is all `AFTER_RUN_NEXT` could ever do.
+   * `PRIME-TIME-STATE.md` §2: *"Nothing ever ends a session."* It does now, and this night is the
+   * proof: three phones ever sat down, `dealRoles` re-dealt for the two who were seated at start
+   * (p1 evil, p2 good), the Vote executed p2, and `foldWin` fires **W4** — the last good player is
+   * gone. So this table's Verdict has nowhere to go but the Reunion, and the assertion follows the
+   * machine rather than the other way round.
+   *
+   * The DEFAULT edge, RENEWED → Casting, is not lost with it: N17j below drives a clean four-hand
+   * table through the same walk and asserts it. Both sides of the branch are gated or neither is.
+   * ============================================================================================= */
+  const toReunion = progressShow(night);
+  await sleep(40);
+  const season = last(host, 'season');
+  t('N17h · a non-RENEWED Verdict ends the session — Reunion, not another Casting',
+    toReunion === 'reunion' && night.show === 'reunion'
+      && last(host, 'show')?.beat === 'reunion'
+      && season?.status === OUTCOME.CANCELLED
+      && night.game.outcome() === OUTCOME.CANCELLED,
+    JSON.stringify({ show: night.show, season, outcome: night.game.outcome() }));
+  t('N17h2 · the Reunion is the end of the clock, not another hold',
+    night.showUntil == null && night.showClock == null
+      && nextShowBeat('reunion') == null,
+    JSON.stringify({ until: night.showUntil, clock: night.showClock != null, next: nextShowBeat('reunion') }));
+  phases.push(night.show);
+  t('N17i · the live beat order after a completed run is recap, debrief, reckoning, vote, execution, verdict, reunion',
+    phases.join(',') === 'recap,debrief,reckoning,vote,execution,verdict,reunion',
     phases.join(','));
+}
+
+/* ===============================================================================================
+ * 🔁 **N17j · THE OTHER SIDE OF THE BRANCH — a night that is NOT over goes back to Casting.**
+ *
+ * N17h above only ever sees the terminal edge, because the socket night it rides on has two dealt
+ * seats and loses one of them. A branch gated on one side is a branch that can be deleted by
+ * accident, so this drives a full four-hand table nobody dies in: `foldWin` returns RENEWED, and
+ * the Verdict must hand straight back to Casting with the ballot box cleared for the next pair.
+ * =============================================================================================== */
+{
+  const renewed = showRoom();
+  const walked = [renewed.show];
+  for (let i = 0; i < 6 && walked.length < 8; i++) {
+    const to = progressShow(renewed);
+    if (!to || to === walked[walked.length - 1]) break;
+    walked.push(to);
+  }
+  t('N17j · a RENEWED Verdict hands back to Casting, and the walk is the same seven beats',
+    walked.join(',') === 'recap,debrief,reckoning,vote,execution,verdict,casting'
+      && renewed.game.outcome() === OUTCOME.RENEWED
+      && renewed.show === 'casting'
+      && renewed.game.state.phase === 'CASTING'
+      && renewed.game.state.pair.runner == null && renewed.game.state.pair.guide == null
+      && renewed.ballots.size === 0,
+    JSON.stringify({ walked: walked.join(','), outcome: renewed.game.outcome(), show: renewed.show }));
+  t('N17j2 · and the Verdict it passed through aired a status on the way',
+    renewed.game.log.all().some((e) => e.type === 'verdict.aired' && e.data?.status === OUTCOME.RENEWED),
+    JSON.stringify(renewed.game.log.all().filter((e) => e.type === 'verdict.aired').map((e) => e.data)));
 }
 
 function showRoom() {

@@ -1597,11 +1597,18 @@ console.log('\nparty-warm — the lobby-warm night');
 
 // ---- W27 — NIGHT LOOP: RECAP → DEBRIEF → CASTING, CHAPEL TABLE ON EP2 ----------------------
 {
-  t('W27 · debrief is a show beat — Recap is not the end of the night',
+  /*
+   * ⚠️ **INVERTED 2026-08-28 — `execution` no longer hands straight back to Casting.**
+   * The chain grew a seventh beat between them, so the assertion that used to pin
+   * `nextShowBeat('execution') === 'casting'` was pinning the ABSENCE of an ending. It now pins
+   * the walk through the Verdict, and `nextShowBeat('verdict')` is Casting only as the DEFAULT —
+   * `progressShow` overrules it on a finished season (`party-night` N17h / N17j gate both sides).
+   */
+  t('W27 · debrief is a show beat, and the run walks all the way to the Verdict',
     SHOW_BEATS.includes('debrief') && SHOW_BEATS.includes('reckoning')
-      && AFTER_RUN_BEATS.join(',') === 'recap,debrief,reckoning,vote,execution,casting'
+      && AFTER_RUN_BEATS.join(',') === 'recap,debrief,reckoning,vote,execution,verdict,casting'
       && nextShowBeat('recap') === 'debrief' && nextShowBeat('debrief') === 'reckoning'
-      && nextShowBeat('execution') === 'casting');
+      && nextShowBeat('execution') === 'verdict' && nextShowBeat('verdict') === 'casting');
   // Debrief 75s -> 300s on 2026-08-25: a CEILING now, ended by a majority tapping READY
   // (`party-night` N21). What the change cost the night budget is argued in `round-loop` R2.
   t('W27a · holds are the shooting-schedule seconds, not a silent second table',
@@ -2046,7 +2053,12 @@ console.log('\nparty-warm — the lobby-warm night');
       && RUNDOWN_BEATS[0] === 'lobby'
       && RUNDOWN_BEATS.includes('verdict')
       && !RUNDOWN_BEATS.includes('reunion')
-      && !SHOW_BEATS.includes('verdict'));
+      /* ⚠️ INVERTED 2026-08-28. This read `!SHOW_BEATS.includes('verdict')` and that was the
+         gate FOR the stub — the chip was grey because no beat lit it. Verdict is on the wire
+         now, so the rail lights it with no change to `rundownRailHtml` at all: `live` is
+         `SHOW_BEATS.includes(id)`. The Reunion stays OFF the rail on purpose — the rundown is
+         one EPISODE's schedule, and the Reunion is what happens when there are no more. */
+      && SHOW_BEATS.includes('verdict'));
 
   const lobby = rundownRailHtml({ beat: 'lobby' });
   const debrief = rundownRailHtml({ beat: 'debrief' });
@@ -2089,9 +2101,17 @@ console.log('\nparty-warm — the lobby-warm night');
     && /data-rail-drain/.test(hostSrc)
     && /ON AIR/.test(hostSrc));
 
-  t('W30f · guide map is still never on the TV, and verdict is a stub on the rail',
+  /*
+   * ⚠️ **INVERTED 2026-08-28 — the grey chip lights.** `stub` is the rail's word for "on the
+   * schedule, but nothing on the wire ever reaches it", and Verdict wore it from the day the rail
+   * shipped. It is now `next` from the lobby like every other beat ahead of the playhead. The
+   * control half of this — that NOTHING is a stub any more — is deliberately asserted too: if a
+   * future beat is drawn on the rail before it is wired, this fails and says so.
+   */
+  t('W30f · guide map is still never on the TV, and the verdict chip is no longer a stub',
     !/guideMapSvg/.test(hostSrc) && !/GUIDE_MAP/.test(hostSrc)
-      && lobby.includes('class="show-rail-seg stub" data-rail-seg="verdict"')
+      && lobby.includes('class="show-rail-seg next" data-rail-seg="verdict"')
+      && !lobby.includes('show-rail-seg stub')
       && debrief.includes('class="show-rail-seg on" data-rail-seg="debrief"'));
 
   t('W30g · rail CSS stays inside the shared chrome string — tokens, no hex, no backticks',

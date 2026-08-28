@@ -15,13 +15,23 @@ import { PHASE, SECONDS, reckoningSeconds, EPISODE_ORDER } from './phases.js';
 
 export const SHOW_BEATS = [
   'lobby', 'casting', 'expedition', 'recap', 'debrief',
-  'reckoning', 'vote', 'execution',
+  'reckoning', 'vote', 'execution', 'verdict',
+  /*
+   * 🎬 Session-end, not an episode beat. It is in SHOW_BEATS because `setShow` refuses anything
+   * that is not — but deliberately NOT in `RUNDOWN_BEATS`, which is derived from `EPISODE_ORDER`
+   * and describes one episode's shape. A rail that advertised the Reunion would be promising it
+   * every episode, when it happens once and only if the fold says the season is over.
+   */
+  'reunion',
 ];
 
 /**
- * The TV rundown — Lobby plus `phases.js` `EPISODE_ORDER`. Live SHOW beats light up;
- * Verdict sits on the rail as the designed closer even though the wire has not grown it yet.
- * Reunion is session-end, not an episode beat; leave it off until that product exists.
+ * The TV rundown — Lobby plus `phases.js` `EPISODE_ORDER`. Live SHOW beats light up.
+ *
+ * ✅ Verdict has grown its wire beat, so the rail's last chip is no longer a `stub`: nothing
+ * here changed to light it. `rundownRailHtml` reads `SHOW_BEATS.includes(id)`, so adding the
+ * beat above is what promoted the chip, which is exactly why the rail was built that way.
+ * Reunion is session-end, not an episode beat; it stays off this list and gets its own.
  */
 export const RUNDOWN_BEATS = ['lobby', ...EPISODE_ORDER.map((p) => String(p).toLowerCase())];
 
@@ -46,6 +56,16 @@ export const DEBRIEF_HOLD_MS = SECONDS[PHASE.DEBRIEF] * 1000;
 export const RECKONING_HOLD_MS = SECONDS[PHASE.RECKONING] * 1000;
 export const VOTE_HOLD_MS = SECONDS[PHASE.VOTE] * 1000;
 export const EXECUTION_HOLD_MS = SECONDS[PHASE.EXECUTION] * 1000;
+/**
+ * ⚠️ **THE BEAT DOES NOT WORK WITHOUT THIS CONSTANT, AND IT FAILS LOOKING FINE.**
+ *
+ * `holdMsFor` returns `null` for a beat it does not know. A verdict with no hold gets a
+ * non-finite wait, so `scheduleShowProgress` returns before arming its timer and the show stops
+ * there forever; `railDrainPct` also returns `null` on a non-finite `holdMs`, which renders a
+ * segment that is permanently full. The night would show a lit Verdict chip with a full bar and
+ * simply never advance — a stall that reads as a design choice.
+ */
+export const VERDICT_HOLD_MS = SECONDS[PHASE.VERDICT] * 1000;
 
 /**
  * Last slice of Debrief — phones wake and may name someone before Reckoning proper.
@@ -184,14 +204,20 @@ export const STUB_SHOW_PLAN = [
  * This chain was the shipped behaviour all along; `phases.js` `orderFor` was the half that
  * disagreed, and it was changed to match this one rather than the other way round.
  */
-export const AFTER_RUN_BEATS = ['recap', 'debrief', 'reckoning', 'vote', 'execution', 'casting'];
+export const AFTER_RUN_BEATS = ['recap', 'debrief', 'reckoning', 'vote', 'execution', 'verdict', 'casting'];
 
 const AFTER_RUN_NEXT = {
   recap: 'debrief',
   debrief: 'reckoning',
   reckoning: 'vote',
   vote: 'execution',
-  execution: 'casting',
+  execution: 'verdict',
+  /*
+   * Verdict walks to Casting, which is what `episode-order`'s E2 walk already expects (it stops
+   * on `casting`). It is only the DEFAULT: `progressShow` overrides it when the fold says the
+   * season is over, and that override is the first conditional edge in the whole wire.
+   */
+  verdict: 'casting',
 };
 
 export function isShowBeat(beat) {
@@ -209,6 +235,7 @@ export function holdMsFor(beat, noms = 0) {
   if (beat === 'reckoning') return reckoningSeconds(noms) * 1000;
   if (beat === 'vote') return VOTE_HOLD_MS;
   if (beat === 'execution') return EXECUTION_HOLD_MS;
+  if (beat === 'verdict') return VERDICT_HOLD_MS;
   return null;
 }
 

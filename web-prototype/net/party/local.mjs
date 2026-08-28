@@ -38,6 +38,7 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
 import { createRoom } from '../../src/party/room.js';
+import { OUTCOME } from '../../src/party/win.js';
 import { WARM_STAGES, moveViolations, warmPct, worldViolations } from '../../src/party/follow.js';
 import {
   isShowBeat, missionEndsRun, recapAfterMs, nextShowBeat, holdMsFor, remainingMs,
@@ -576,7 +577,27 @@ export function progressShow(room) {
     enterExecutionLive(room);
     return 'execution';
   }
+  if (next === 'verdict') {
+    enterVerdictLive(room);
+    return 'verdict';
+  }
   if (next === 'casting') {
+    /* =========================================================================================
+     * 🏁 **THE FIRST CONDITIONAL EDGE IN THE WHOLE WIRE — and the only thing that ever ends a
+     * session.**
+     *
+     * Every other step in this chain is unconditional: a beat finishes and the next one starts.
+     * `AFTER_RUN_NEXT.verdict` is 'casting' as the DEFAULT, and this is where the fold gets to
+     * overrule it. Until now nothing did — `PRIME-TIME-STATE.md` §2 put it flatly: "Nothing ever
+     * ends a session." `EPISODE_CAP` was a number in a table that no code enforced.
+     *
+     * RENEWED means play on. Anything else — FINALE, CANCELLED, ABANDONED — is the night over,
+     * and the Reunion is the payoff D5 says the whole silent-death design is borrowing against.
+     * ========================================================================================= */
+    if (room.game?.outcome?.() && room.game.outcome() !== OUTCOME.RENEWED) {
+      enterReunionLive(room);
+      return 'reunion';
+    }
     enterNextCasting(room);
     return 'casting';
   }
@@ -707,6 +728,40 @@ function enterExecutionLive(room) {
   setShow(room, 'execution');
   fanout(room, lynchPayload(room));
   scheduleShowProgress(room, holdMsFor('execution'));
+}
+
+/**
+ * ⚖️ **THE VERDICT BEAT.** Same shape as `enterExecutionLive` above: put the room in the beat,
+ * tell the phones, arm the hold.
+ *
+ * The fold itself is `room.game.enterVerdict()` and it lives in `src/party/room.js` on purpose —
+ * see `foldVerdict`'s block there. A second copy of the win rule in this file is exactly the
+ * drift `harness/episode-order.mjs` was written to catch.
+ *
+ * ⚠️ The payload PICKS fields off the fold and never spreads it. `foldWin` returns `fed`, and
+ * the feed count is the one number `rrr-social-round.md` §4 keeps back until the Reunion.
+ */
+function enterVerdictLive(room) {
+  const v = room.game.enterVerdict();
+  setShow(room, 'verdict');
+  fanout(room, {
+    t: 'verdict',
+    status: v.outcome,
+    camerasLit: v.camerasLit,
+    episode: v.episode,
+  });
+  scheduleShowProgress(room, holdMsFor('verdict'));
+}
+
+/**
+ * 🎬 **THE REUNION.** Session-end, so it has no `AFTER_RUN_NEXT` entry and no hold: it is the
+ * last thing that happens and nothing follows it. The clock is cleared rather than re-armed.
+ */
+function enterReunionLive(room) {
+  clearShowClock(room);
+  room.showUntil = null;
+  setShow(room, 'reunion');
+  fanout(room, { t: 'season', status: room.game.outcome() });
 }
 
 function enterNextCasting(room) {
@@ -879,6 +934,25 @@ export const FANOUT_KEYS = {
      aired at Execution and must not leak before it. Listed so the shape is still closed. */
   ballotOk: ['t', 'ok', 'choice', 'why'],
   /*
+   * ⚖️ **THE VERDICT, AND THE LIST IS SHORT BECAUSE OF WHAT IS NOT ON IT.**
+   *
+   * `rrr-social-round.md` §4 draws the line and calls the precision "the whole of P6": the
+   * status, the cameras and the episode are AIRED, attributed and permanent. Held back until the
+   * Reunion: every alignment and role, which incidents had an evil cause, chat authorship — and
+   * `fed`, the feed count, which `foldWin` returns right beside `camerasLit`.
+   *
+   * 🚨 That last one is why this row exists at all. The feed gauge is a deliberately lossy
+   * proxy: evil losing a partner looks exactly like evil winning. Airing it would hand the room
+   * a deduction the design spends the entire night denying it — so a later "we already have the
+   * fold, just spread it" fails closed here instead of quietly ending the social game.
+   */
+  verdict: ['t', 'status', 'camerasLit', 'episode'],
+  /*
+   * 🎬 The season is over. One word, and it is the same word the Verdict plate just aired — the
+   * Reunion's own reveals travel on their own payload, once the beat has actually started.
+   */
+  season: ['t', 'status'],
+  /*
    * 🍮 WHO IS PAIRED, AND WHAT THEY ARE CALLED NOW. Public by design — the room watching JOHN
    * reach out to ELLIE is the entire point, and both names are already on the television.
    *
@@ -928,6 +1002,10 @@ export function fanoutViolations(msg) {
     if (msg.result) extraKeys(msg.result, FANOUT_KEYS.lynchResult, 'lynch.result', bad);
   } else if (msg.t === 'warm') {
     extraKeys(msg, FANOUT_KEYS.warm, 'warm', bad);
+  } else if (msg.t === 'verdict') {
+    extraKeys(msg, FANOUT_KEYS.verdict, 'verdict', bad);
+  } else if (msg.t === 'season') {
+    extraKeys(msg, FANOUT_KEYS.season, 'season', bad);
   } else if (msg.t === 'ballotOk') {
     extraKeys(msg, FANOUT_KEYS.ballotOk, 'ballotOk', bad);
   } else if (msg.t === 'ready') {

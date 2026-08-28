@@ -11,6 +11,7 @@ export {
   SHOW_BEATS, AFTER_RUN_BEATS, TALK_BEATS, isShowBeat, isTalkBeat, recapAfterMs, nextShowBeat,
   holdMsFor, remainingMs, formatRemain,
   RECAP_HOLD_MS, DEBRIEF_HOLD_MS, RECKONING_HOLD_MS, VOTE_HOLD_MS, EXECUTION_HOLD_MS,
+  VERDICT_HOLD_MS,
   LATE_DEBRIEF_MS, EMPTY_RECKONING_EXTEND_CAP,
 } from './show.js';
 

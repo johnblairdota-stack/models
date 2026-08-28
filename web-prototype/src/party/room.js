@@ -574,17 +574,44 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     }
 
     // ---- the win machine, folded over the log we just wrote
-    const align = Object.fromEntries(deal.seats.map((s) => [s.id, s.alignment]));
-    const w = foldWin(log.all(), { count, alignmentOf: (id) => align[id] });
-    state.outcome = w.outcome === OUTCOME.RENEWED && state.episode >= EPISODE_CAP ? OUTCOME.CANCELLED : w.outcome;
-    record(makeEvent('win.checked', VIS.SEALED, { outcome: state.outcome, rule: w.rule, camerasLit: w.camerasLit, fed: w.fed }));
-    record(makeEvent('verdict.aired', VIS.PUBLIC, {
-      status: state.outcome, camerasLit: w.camerasLit, alarms: state.incident.alarms,
-    }));
+    foldVerdict();
 
     state.lastPair = { ...state.pair };
     for (const s of sockets) s.seatRole = null;
     state.episode += 1;
+  }
+
+  /* =============================================================================================
+   * ⚖️ **THE EPISODE'S VERDICT — ONE COPY, TWO CALLERS.**
+   *
+   * This was six lines buried at the end of `playEpisode`, which is the OFFLINE machine only
+   * gates run. The live wire never folded the win at all: `enterExecution()` set the phase and
+   * stopped, so no live night has ever had an outcome, and `state.outcome` stayed null forever.
+   *
+   * ⚠️ **EXTRACTED, NOT COPIED, AND THAT IS THE WHOLE POINT.** `harness/episode-order.mjs` exists
+   * because the designed order and the live wire once disagreed while both halves were gated as
+   * correct. Growing a second copy of the win rule in `net/party/local.mjs` is the same mistake
+   * one layer down — the two would drift, and each would have a gate saying it was right.
+   *
+   * `EPISODE_CAP` is enforced here and nowhere else: a RENEWED at the cap is a CANCELLED,
+   * because a season that runs out of episodes without lighting its cameras is one Production won.
+   * ============================================================================================= */
+  function foldVerdict() {
+    const align = Object.fromEntries(deal.seats.map((s) => [s.id, s.alignment]));
+    const w = foldWin(log.all(), { count, alignmentOf: (id) => align[id] });
+    state.outcome = w.outcome === OUTCOME.RENEWED && state.episode >= EPISODE_CAP ? OUTCOME.CANCELLED : w.outcome;
+    /*
+     * 🚨 `fed` IS SEALED AND MUST STAY SEALED. `win.checked` is VIS.SEALED and carries it;
+     * `verdict.aired` is VIS.PUBLIC and does not. `rrr-social-round.md` §4: the feed gauge is a
+     * deliberately lossy proxy, and evil losing a partner looks exactly like evil winning — so
+     * airing the number would hand the room a deduction the design spent a whole beat denying it.
+     * Anything reading `foldWin`'s result for a payload must pick fields, never spread it.
+     */
+    record(makeEvent('win.checked', VIS.SEALED, { outcome: state.outcome, rule: w.rule, camerasLit: w.camerasLit, fed: w.fed }));
+    record(makeEvent('verdict.aired', VIS.PUBLIC, {
+      status: state.outcome, camerasLit: w.camerasLit, alarms: state.incident.alarms,
+    }));
+    return { outcome: state.outcome, rule: w.rule, camerasLit: w.camerasLit, episode: state.episode };
   }
 
   return {
@@ -732,6 +759,33 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       if (!state.voteResult) closeVote();
       setPhase('EXECUTION');
     },
+    /**
+     * ⚖️ **THE LIVE VERDICT BEAT — a RE-FOLD, and deliberately nothing else.**
+     *
+     * ⚠️ I first wrote this to bump `state.episode`, reasoning that the live wire never called
+     * `playEpisode` so nothing counted episodes. **That was wrong and `party-night` N17h caught
+     * it**: `runEpisodeFromBallots` in `net/party/local.mjs` calls `playEpisode` when casting
+     * resolves, so the bump — and `lastPair`, and clearing `seatRole` — already happen there.
+     * Doing them again here counted every episode twice.
+     *
+     * So this folds and airs, full stop. Re-folding is not redundant: `playEpisode` runs at
+     * CASTING time, over a log that does not yet contain the expedition, the nominations or the
+     * execution. By the time the verdict beat is reached the log has all three, and `foldWin` is
+     * a pure fold over the whole log — so the second answer is the true one.
+     *
+     * ⚠️ **KNOWN WART, STATED RATHER THAN HIDDEN.** That means a live episode records
+     * `win.checked` / `verdict.aired` twice: once early and stale, once complete. The fix is to
+     * stop `playEpisode` folding when the live wire is driving, which means teaching it that it
+     * is not the whole episode — a bigger change than this beat, and its own slice.
+     *
+     * Returns what the TV needs to air. `fed` is deliberately not in it — see `foldVerdict`.
+     */
+    enterVerdict() {
+      setPhase('VERDICT');
+      return foldVerdict();
+    },
+    /** The session's outcome so far, or null while it is still RENEWED. */
+    outcome: () => state.outcome,
     /**
      * Published nameplate. 12 chars, same cap as the phone spec's cheap join. Does not broadcast —
      * the transport decides when a frame or lobby snapshot should follow.

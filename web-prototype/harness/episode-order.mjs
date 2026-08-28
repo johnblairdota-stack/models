@@ -16,10 +16,21 @@
  * machines AGREE, deriving the expected walk from `orderFor` so it follows any future change to
  * the running order and fails only when the halves drift apart again.
  *
- * ⚠️ **E2 EXCLUDES `VERDICT` ON PURPOSE AND THAT IS A KNOWN GAP, NOT A CONVENIENCE.** The wire
- * has no `verdict` beat — `show.js` says so itself, and `RUNDOWN_BEATS` shows it on the TV rail
- * as a label that never lights. `WIRE_MISSING` below names it. **The day Verdict grows a wire
- * beat, delete it from that list** and E2b will stop passing vacuously.
+ * ✅ **`WIRE_MISSING` IS EMPTY AS OF 2026-08-28, AND E2b IS NO LONGER VACUOUS.** This header used
+ * to carry a standing instruction — *"the day Verdict grows a wire beat, delete it from that
+ * list"* — because `VERDICT` was a designed phase that `show.js` had no beat for and the TV rail
+ * drew as a label that never lit. That day came: `SHOW_BEATS` carries `verdict`, `AFTER_RUN_NEXT`
+ * walks `execution → verdict → casting`, and `net/party/local.mjs` `enterVerdictLive` airs it. So
+ * every beat `orderFor` designs is now on the wire, and E2 compares the two machines with no
+ * exclusion list between them at all.
+ *
+ * ⚠️ **KEEP THE LIST, EMPTY.** It is the honest way to stage a designed beat ahead of its wire,
+ * and E2b's detail line prints it. Adding a name back is allowed; leaving one there quietly is
+ * the thing this gate exists to prevent.
+ *
+ * ⚠️ **`REUNION` IS NOT MISSING — IT IS NOT AN EPISODE BEAT.** It is not in `EPISODE_ORDER`, so
+ * it is out of E2's scope by construction. The session-end edge into it (RENEWED plays on,
+ * anything else ends the night) is gated by `party-night` N17h and N17j, which drive both sides.
  */
 
 import { nextShowBeat, SHOW_BEATS, RUNDOWN_BEATS } from '../src/party/show.js';
@@ -30,7 +41,7 @@ let pass = 0, fail = 0;
 const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' · ' + d : ''}`); } else { fail++; console.log(`  FAIL ${n}${d ? ' · ' + d : ''}`); } return c; };
 
 /** Designed beats the live wire does not have yet. Shrinking this list is progress. */
-const WIRE_MISSING = [PHASE.VERDICT];
+const WIRE_MISSING = [];
 /** Beats the after-run chain does not cover because the run itself does. */
 const NOT_AFTER_RUN = [PHASE.CASTING, PHASE.EXPEDITION];
 
