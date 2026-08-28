@@ -116,9 +116,17 @@ function distK(sprite, camera) {
  * legibility.mjs` is the instrument that says whether that mattered: it measures the glyph
  * pixels that reach the television, not the texture they were baked from.
  * ============================================================================================= */
-const TAB_W = 46;
+const TAB_W = 38;
 
 function paintSeatTab(g, seat, accent, H) {
+  /*
+   * ⚠️ **`Number(null)` IS 0, NOT NaN** — and `Number('')` is 0 too. A `Number.isFinite` guard
+   * alone therefore passes for "no seat at all" and paints a seat-1 tab on every plate meant to
+   * have none: a merged pair's shared plate, and any caller passing no tab. Caught by measuring
+   * rather than by reading — with the bug, plates with and without a tab produced byte-identical
+   * glyph metrics, because both were drawing one. Reject the absent cases FIRST.
+   */
+  if (seat == null || seat === '') return 0;
   const n = Number(seat);
   if (!Number.isFinite(n) || n < 0) return 0;
   g.fillStyle = accent || CHROME;

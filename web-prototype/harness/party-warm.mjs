@@ -3484,6 +3484,17 @@ console.log('\nparty-warm — the lobby-warm night');
     && !/GLYPH_OUTLINE[\s\S]{0,80}strokeText/.test(plateSrc.slice(plateSrc.indexOf('function paintSeatTab'),
       plateSrc.indexOf('function paintPlate'))));
 
+  /*
+   * ⚠️ **W38c2 · `Number(null)` IS 0.** The first cut guarded the tab with `Number.isFinite`
+   * alone, which passes for null and for '' — so every plate meant to have NO tab got a seat-1
+   * one, merged pairs included. It was invisible to inspection and obvious to measurement: with
+   * the bug, plates with and without a tab produced byte-identical glyph metrics, because both
+   * were drawing a tab. The absent cases must be rejected before the numeric coercion.
+   */
+  t('W38c2 control · an absent seat is rejected before Number() can coerce it to zero',
+    /if \(seat == null \|\| seat === ''\) return 0;/.test(plateSrc)
+    && plateSrc.indexOf("seat == null") < plateSrc.indexOf('const n = Number(seat)'));
+
   // Control. A merged pair is ONE name over TWO robots: it has no single seat, so it gets no tab
   // rather than a tab naming the wrong half. And the tab joins the idempotence key, or a robot
   // coming back from a pair would keep the tabless plate for the rest of the night.
