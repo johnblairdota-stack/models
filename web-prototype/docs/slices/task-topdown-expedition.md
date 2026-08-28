@@ -351,3 +351,29 @@ something is wired wrong.
 - Any edit to `player.js`.
 - A lid opacity fade. If the pop still reads badly after the §4.6 timing, that is its own slice.
 - The vestigial `act` key on `MOVE_KEYS` — it travels one hop as a constant `0`. Leave it.
+
+---
+
+## 13. Found while building — the ballroom is not a top-down room, and that is fine
+
+`perspective-shots` photographs from the runner's spawn, which is the **ballroom centre**, and
+the `top` frame there is dominated by a gold lattice with the chandeliers correctly hidden
+behind it. That is not the crane failing. Two measured reasons, both pre-existing:
+
+1. **The ballroom is 9.6 m tall** (`views/room-ballroom.js`: 26 × 16 × 9.6). `top` puts the eye
+   at **9.0 m**, so in that one room the camera is *under* the ceiling rather than over it —
+   a high interior shot, not an overhead.
+2. **Its lid refuses almost everything.** `lidCensus().spaces['r0.ballroom'].refused` reports
+   `ballroom-night.r0.ballroom` spanning **−8 → 40 m** as a single merged bucket, plus `gilt`
+   (−2.1 → 9.6), `wall` (0 → 9.6), `mould` and `fixture:glow`. `setLid` only hides a bucket that
+   lies **entirely** at or above the storey, and the ported ballroom asset is one bucket
+   containing the whole room, so there is nothing it is allowed to take.
+
+Neither bites the game: the expedition is top-down **outside** the ballroom, where storeys are
+4.8 m and the lid buckets are per-space. It does mean the `progress/persp/4-top.png` reference
+is a picture of the ballroom's ceiling ornament and should not be read as the play view — the
+play view is measured by the drive, which walks out first.
+
+Verified while building: `setHangers` does hide both `r0.ballroom.chandelier.*` groups
+(`visible: false`), and at `top` the camera reports `eyeY 9.0 · dist 1.20 · basisYaw 3.1416`,
+i.e. plan north, `craneS 1`, `reels 0`.

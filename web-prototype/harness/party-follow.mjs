@@ -23,8 +23,10 @@ import {
   FOLLOW_VIEW, SHOT_NAMES, THROTTLES,
   CAM_MIN_DIST, CAM_LIFT, CAM_SWING, CHASE_DIST, CHASE_HEIGHT, CHASE_LOOK_Y,
   CUT_SHOTS, OVERHEAD, PERSPECTIVES, PERSPECTIVE_RIG, cueViolations, isOverhead,
-  nextPerspective, perspectiveEye, runPerspective, cleanCampose,
+  nextPerspective, perspectiveEye, rigMapness, runPerspective, cleanCampose,
   cleanThrottle, followParams, followUrl, followViolations, isFollowBeat,
+  CHASE_LATERAL, PLAN_YAW, isPlanLocked, lerpRig, lookYaw, smootherstep,
+  chaseOrbitOffset as chaseOrbitOffsetLike,
 } from '../src/party/follow.js';
 import { readFile } from 'node:fs/promises';
 import { ACCENTS, SHELLS } from '../src/party/look.js';
@@ -323,9 +325,30 @@ console.log('\nparty-follow — the TV follow slot');
    * steering a lens up to 180° from the way the body happens to point, so that single line could
    * reverse the controls in one frame at the worst possible moment.
    */
+  /*
+   * ⚠️ **THIS USED TO COUNT `_lockYaw =` ASSIGNMENTS AND CAP THEM AT SIX.** That was a proxy for
+   * the real claim — *geometry never writes the steered frame* — and the proxy broke the moment
+   * the frame legitimately grew arms it did not have (plan lock, and the slerp into it), while
+   * the claim itself was never in danger. A count cannot tell a new steering rule from a leak.
+   *
+   * So assert the claim directly: the two functions that CORRECT a shot around geometry —
+   * `_valid` and `_reel` — must not contain a single write to `_lockYaw`. That is stronger than
+   * the count ever was (a seventh assignment inside `_reel` would have passed at five), and it
+   * cannot go stale when the steering grows.
+   */
+  const methodBody = (name) => {
+    const i = bed.indexOf(`\n  ${name}(`);
+    if (i < 0) return '';
+    const j = bed.indexOf('\n  }', i);
+    return j < 0 ? bed.slice(i) : bed.slice(i, j);
+  };
+  const reelBody = methodBody('_reel');
+  const validBody = methodBody('_valid');
   t('F10e · a chase-locked run therefore cannot have its controls rotated by geometry at all',
     /liveRunShot/.test(bed) && /this\._lockYaw = orbit\.yaw;/.test(bed)
-      && (bed.match(/this\._lockYaw = /g) || []).length <= 6);
+      && reelBody.length > 0 && validBody.length > 0
+      && !/this\._lockYaw\s*=/.test(reelBody) && !/this\._lockYaw\s*=/.test(validBody),
+    `_reel ${reelBody.length}b · _valid ${validBody.length}b · neither writes the frame`);
 }
 
 /* =============================================================================================
@@ -388,11 +411,25 @@ console.log('\nparty-follow — the TV follow slot');
       && !OVERHEAD.includes('chase') && !OVERHEAD.includes('wide')
       && PERSPECTIVE_RIG.wide.height < STOREY,
     OVERHEAD.map((p) => `${p} ${PERSPECTIVE_RIG[p].height}m vs storey ${STOREY}m`).join(' · '));
+  /*
+   * ⚠️ **THE LID RULE IS NOW A HEIGHT, NOT A PERSPECTIVE NAME**, and that is a strengthening
+   * rather than a rewording. `isOverhead(want)` fired the instant the name changed, so on a
+   * crane the ceiling vanished while the camera was still on the floor. `LID_LIFT_H` fires when
+   * the eye is about to rise THROUGH the roof, which makes the rule symmetric on the way back
+   * down for free and reproduces the name test exactly on the four table rigs.
+   */
+  const lidLift = Number((bed.match(/const LID_LIFT_H = ([\d.]+);/) || [])[1]);
   t('F11c2 · and the bed takes it off, plus what HANGS from it, on change only',
-    /room\.setLid\?\.\(!overhead\)/.test(bed)
-      && /setHangers\(overhead\)/.test(bed)
+    /room\.setLid\?\.\(!lidOff\)/.test(bed)
+      && /setHangers\(lidOff\)/.test(bed)
       && /chandelier\|pendant/.test(bed)
-      && /if \(overhead !== perf\.lidOff\)/.test(bed));
+      && /if \(lidOff !== perf\.lidOff\)/.test(bed));
+  t('F11c2b · the roof lifts BEFORE the eye reaches it — the threshold is under a storey',
+    Number.isFinite(lidLift) && lidLift > PERSPECTIVE_RIG.chase.height && lidLift < STOREY - 1.0,
+    `LID_LIFT_H ${lidLift}m under a ${STOREY}m storey`);
+  t('F11c2c · and that one height still sorts the four rigs exactly as the name test did',
+    PERSPECTIVES.every((p) => (PERSPECTIVE_RIG[p].height >= lidLift) === OVERHEAD.includes(p)),
+    PERSPECTIVES.map((p) => `${p} ${PERSPECTIVE_RIG[p].height}m`).join(' · '));
   t('F11c3 control · and it restores only what it took, never what something else hid',
     /if \(e\.o\.visible\) \{ e\.o\.visible = false; e\.took = true; \}/.test(bed)
       && /else if \(e\.took\) \{ e\.o\.visible = true; e\.took = false; \}/.test(bed));
@@ -405,9 +442,47 @@ console.log('\nparty-follow — the TV follow slot');
   t('F11d · the shot-correction logic stands down for an overhead rig',
     /if \(isOverhead\(this\.shot\)\) return true;/.test(bed)
       && /!isOverhead\(this\.shot\) && eDist > 1e-4/.test(bed));
+  /*
+   * The lamp still climbs off the lens and over the runner — it just CROSSFADES there now
+   * instead of swapping in one frame, which on a `P` press was a ×10 intensity jump in the
+   * middle of what is now a camera move. `mapness` is the mixer, and it is 0 at the chase rig,
+   * so the ground recipe is still the shipped 3.5 / 1.4 exactly.
+   */
   t('F11d2 · and the key light moves over the runner, because a point light 9 m up never arrives',
-    /if \(isOverhead\(want\)\) \{/.test(bed)
-      && /camLight\.distance = up \* 1\.5;/.test(bed));
+    /const lampMap = rigMapness\(perf\.liveRig\);/.test(bed)
+      && /camLight\.distance = mix\(3\.5, up \* 1\.5\);/.test(bed)
+      && /camLight\.intensity = mix\(1\.4, 6\.0 \+ up \* 0\.9\);/.test(bed));
+  t('F11d3 · the handheld and the lag fade out as the view becomes a map, and are UNTOUCHED on the ground',
+    rigMapness(PERSPECTIVE_RIG.chase) === 0
+      && rigMapness(PERSPECTIVE_RIG.top) === 1
+      && rigMapness(PERSPECTIVE_RIG.iso) > rigMapness(PERSPECTIVE_RIG.wide)
+      && /\(1 - mapness\)/.test(bed)
+      && /6\.5 \+ 26 \* mapness/.test(bed),
+    PERSPECTIVES.map((p) => `${p} ${rigMapness(PERSPECTIVE_RIG[p]).toFixed(2)}`).join(' · '));
+
+  /*
+   * 🚨 **TWO SOURCES OF ONE TRUTH, AND NOTHING ASSERTED THEY AGREED.** `chaseOrbitOffset` reads
+   * `CHASE_DIST` / `CHASE_HEIGHT` / `CHASE_LATERAL`; `PERSPECTIVE_RIG.chase` carries the same
+   * three numbers again. That was harmless while only `chaseOrbitOffset` drew the chase — but
+   * the crane has to solve the DROP through `perspectiveEye` (the lock is already `chase` on the
+   * first frame of coming home, so the old path would put the eye at 1.62 m instantly and the
+   * 9 m move would never be seen). Both paths now draw the chase, so the day the two tables
+   * disagree the camera would jump at the end of every drop, and this is the line that says so.
+   */
+  t('F11g · the chase rig and the chase constants are the same camera, to the millimetre',
+    PERSPECTIVE_RIG.chase.dist === CHASE_DIST
+      && PERSPECTIVE_RIG.chase.height === CHASE_HEIGHT
+      && PERSPECTIVE_RIG.chase.lateral === CHASE_LATERAL,
+    `rig ${PERSPECTIVE_RIG.chase.dist}/${PERSPECTIVE_RIG.chase.height}/${PERSPECTIVE_RIG.chase.lateral}`
+      + ` vs const ${CHASE_DIST}/${CHASE_HEIGHT}/${CHASE_LATERAL}`);
+  {
+    // ...and they solve to the same eye, which is the thing that actually has to hold.
+    const a = perspectiveEye(PERSPECTIVE_RIG.chase, 0.7, 0.12);
+    const b = chaseOrbitOffsetLike(0.7, 0.12);
+    t('F11g2 · and they solve to the same eye offset at a live yaw and pitch',
+      Math.abs(a.x - b.x) < 1e-12 && Math.abs(a.y - b.y) < 1e-12 && Math.abs(a.z - b.z) < 1e-12,
+      `(${a.x.toFixed(4)}, ${a.y.toFixed(4)}, ${a.z.toFixed(4)})`);
+  }
 
   t('F11e · a live run holds the chosen perspective, and a typed ?shot= still wins',
     runPerspective('run', null, 'top') === 'top'

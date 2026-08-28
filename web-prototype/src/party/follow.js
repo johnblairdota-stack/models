@@ -165,6 +165,17 @@ export const isPlanLocked = (name) =>
   !(PERSPECTIVE_RIG[String(name || '')] ?? PERSPECTIVE_RIG.chase).orbit;
 
 /**
+ * ⏱️ **HOW LONG THE CRANE TAKES, AND WHY THE TWO NUMBERS DIFFER.**
+ *
+ * Going out is the reveal: the player is being told, without a caption, that the view and their
+ * controls have changed, and that reading takes a beat. Coming home is a release — the mission
+ * is done and the ballroom is on screen — so making them watch the same move in reverse for as
+ * long would be charging them for information they already have.
+ */
+export const RISE_SECONDS = 1.35;
+export const DROP_SECONDS = 1.10;
+
+/**
  * Where each perspective puts the eye, as an offset from the runner, and how it frames them.
  *
  * `dist` is horizontal metres behind; `height` is metres above the floor; `lateral` is the
@@ -220,6 +231,27 @@ export function lerpRig(a, b, s) {
     fov: mix(a.fov, b.fov),
     orbit: t <= 0 ? a.orbit : b.orbit,
   };
+}
+
+/**
+ * 🗺️ **HOW MUCH OF A MAP THIS RIG IS, 0..1 — the dial the handheld and the lag hang off.**
+ *
+ * A crane's `blend` is progress through a move and is 1 at rest at BOTH ends, so it cannot say
+ * whether the camera is currently a shoulder or a plan. Eye height can: it is 0 at the chase
+ * rig, 1 at `top`, and it moves continuously through a transition, so one number serves the
+ * held view and the move into it without a second state.
+ *
+ * What it is for: a camera a person is carrying should sway and lag, and a camera bolted nine
+ * metres over a room should do neither — ±2 cm of handheld on a 52° lens that high is a map
+ * that drifts, which reads as a bug rather than as an operator. At `chase` this returns exactly
+ * 0, so every ground shot keeps the shipped feel untouched.
+ */
+export function rigMapness(rig) {
+  const lo = PERSPECTIVE_RIG.chase.height;
+  const hi = PERSPECTIVE_RIG.top.height;
+  const h = Number(rig?.height);
+  if (!Number.isFinite(h) || hi <= lo) return 0;
+  return Math.max(0, Math.min(1, (h - lo) / (hi - lo)));
 }
 
 /**
