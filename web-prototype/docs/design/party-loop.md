@@ -39,7 +39,10 @@ Both-partners-running is a later A/B, not the first playable.
 - Seated circle of 8 ornate chairs (current `chairRow` is wall-lining showcase only).
 - Roles, voting, partner pick, terminals, camera unlocks.
 - Phone first-person + touch. Private guide flyover.
-- TV reality-TV follow camera (limited, produced), not god-view.
+- TV reality-TV follow camera (limited, produced), not god-view. **Amended 2026-08-28:** the
+  expedition is played top-down with the roof off over the runner's OWN rooms only — "not
+  god-view" now means never the whole house at once, rather than never overhead. See
+  `docs/slices/task-topdown-expedition.md`.
 
 ## Drop as the verb
 
@@ -47,7 +50,9 @@ Player-aimed sledge. Look stays for running halls.
 
 ## Do not
 
-- Put the guide map or hunter path on the TV.
+- Put the guide map or hunter path on the TV. (Still absolute. The top-down the expedition is
+  played in is a tight follow over the runner — it carries no marks, no route and no whole-house
+  fit, so it is not the map.)
 - Treat `session-model.md` as the spec.
 - Give evil red eyes (that is the hunter's silhouette). Evil looks like goods unless John changes this.
 - Write a ghost UI for taken players.

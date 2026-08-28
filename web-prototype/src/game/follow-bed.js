@@ -7,8 +7,10 @@ import { MOVE, WEAPON_RANGE } from './rules.js';
 import { CONTACT_PHASE, SWING_DUR } from './sledge.js';
 import {
   CAM_LIFT, CAM_MIN_DIST, CAM_SWING, CHASE_EYE_Y_MAX, CHASE_HEIGHT, CHASE_LOOK_Y,
-  CUT_SHOTS, PERSPECTIVES, PERSPECTIVE_RIG, SHOT_NAMES, chaseOrbitOffset, isOverhead, liveRunShot, lookYaw,
-  perspectiveEye, runPerspective, stepLookOrbit, stickCamMove, stickMag,
+  CUT_SHOTS, DROP_SECONDS, PERSPECTIVES, PERSPECTIVE_RIG, PLAN_YAW, RISE_SECONDS, SHOT_NAMES,
+  BALLROOM_PERSPECTIVE, chaseOrbitOffset, isOverhead, isPlanLocked, lerpRig, liveRunShot, lookYaw,
+  perspectiveEye, rigMapness, runPerspective, smootherstep, stepBallroomView, stepLookOrbit,
+  stickCamMove, stickMag,
 } from '../party/follow.js';
 import { bleedCoolPos, bleedKeyAngle, facingPortal } from '../lighting/door-bleed.js';
 import { HOME_ROOM, MISSION_ROOM, PLAN_OPTS } from '../party/mansion.js';
@@ -63,8 +65,12 @@ import { buildIntroBed, ballroomOf } from './intro-bed.js';
  * 🚨 **THE TV STILL NEVER GETS THE GUIDE'S VIEW**, and that has not moved an inch.
  * `party-loop.md`'s "Do not" list, first item. Three things are refused here structurally rather
  * than by convention, and `harness/party-follow-drive.mjs` D5 asserts all three from outside:
- *   · `room.setLid()` is never called. The ceilings stay on.
- *   · every shot's eye is clamped under the space's storey (`EYE_CEIL_MARGIN`).
+ *   · 🚨 **OUT OF DATE SINCE THE PERSPECTIVES SHIPPED, and narrowed rather than abandoned.**
+ *     `room.setLid()` IS called now, and the eye DOES rise above the storey — but only for the
+ *     two overhead rigs, and only over the rooms residency admits. The refusal that survives is
+ *     the one the rule was written for: the TV never sees the whole house at once, so it never
+ *     becomes the guide's map. `party-follow-drive` D5 asserts the narrowed form; `party-follow`
+ *     F11c2d asserts the scope. Ratified by John after `CRITIC-LEDGER` round 8 raised it.
  *   · there is no marker, no plan and no minimap in this file at all — and the hunter token has
  *     no mesh, so it cannot appear on the shared screen even by accident.
  *
@@ -80,6 +86,79 @@ const THROTTLE_DRIVE = {
 
 /** A shot's eye must stay this far under its space's storey. A camera in the ceiling is a god-view. */
 const EYE_CEIL_MARGIN = 1.1;
+
+/**
+ * 🏠 The eye height at which the roof comes off, in metres. A storey is 4.8, so 3.2 takes the
+ * ceiling away while the camera is still a metre and a half beneath it — the player watches it
+ * lift rather than finding it already gone. It is a HEIGHT and not a perspective name so that
+ * the rule is symmetric on the way back down without a second threshold, and because the real
+ * reason is "the camera is about to rise through it", not "this rig is called top".
+ */
+const LID_LIFT_H = 3.2;
+
+/* =============================================================================================
+ * 🌑 **THE DARK THE HUNTER STANDS IN — and why the runner's lamp alone cannot make it.**
+ *
+ * John: the expedition is *"where the hunter stalks them from the shadows"* and *"the player
+ * can't see the hunter coming."* From nine metres up with the roof off that is a lighting
+ * problem, and the shipped numbers were tuned for the opposite goal: the overhead lamp got a
+ * 13.5 m reach because the first top-down came back almost black and had to be made judgeable.
+ * A 13.5 m pool lights a hunter at 8 m perfectly.
+ *
+ * 🚨 **AND SHRINKING THE LAMP IS NOT ENOUGH ON ITS OWN.** The per-space rig's key is a
+ * `SpotLight(0xffdcb4, 150, 34)` that lights the whole room independently of `camLight`, so
+ * whatever the runner's lamp does, the room stays lit. Ducking the key is the change that
+ * decides whether any of this works; the pool is what puts the light back where the player is.
+ * The hemisphere `fill` is ducked too, more gently, because it is the term that keeps the
+ * geometry readable at all and taking it to zero would make the frame unplayable rather than
+ * tense.
+ *
+ * ⚠️ Ducked, never zeroed, and never on the ground rigs: all three scale with `rigMapness`, so
+ * at the chase rig they are exactly the shipped values and this cannot regress the show's
+ * existing look.
+ */
+const OVERHEAD_KEY_DUCK = 0.75;    // 150 -> 37.5 at `top`
+const OVERHEAD_FILL_DUCK = 0.55;   // 4.60 -> 2.07 at `top`
+/**
+ * A three.js point light with `decay 2` and a finite `distance` is WINDOWED: past `distance` it
+ * contributes exactly zero, so this number is the concealment. The lamp hangs 4.2 m over the
+ * runner, so a 6.5 m reach is a lit floor radius of sqrt(6.5² − 4.2²) ≈ 4.96 m and a hunter at
+ * 8 m receives nothing from it at all.
+ *
+ * Intensity has to climb to pay for it: three's windowed falloff at the runner's feet goes from
+ * (1 − 4.2/13.5)² = 0.475 to (1 − 4.2/6.5)² = 0.125, so holding the pool as bright means roughly
+ * ×3.8. 54 is that, rounded — and it is a starting value settled against the luma probe, not an
+ * algebraic result.
+ */
+const POOL_DIST = 6.5;
+/**
+ * How high over the runner the lamp hangs. A constant rather than the old `min(4.2, height*0.55)`
+ * because the pool is now the light source and its SHAPE matters: lower is a tighter, more
+ * directional puddle with a faster edge, which is what makes the dark beyond it read as dark
+ * rather than as underexposure. 3.2 m gives a lit floor radius of √(6.5² − 3.2²) ≈ 5.66 m.
+ */
+const POOL_UP = 3.2;
+/**
+ * ⚠️ **THIS IS 120 AND NOT 54, AND THE FIRST NUMBER WAS WRONG FOR AN INSTRUCTIVE REASON.**
+ *
+ * 54 was solved to hold the pool at the brightness the SHIPPED overhead lamp gave — and the
+ * shipped lamp was never the light. The room's key spot was, at 150 through a 34 m cone. So
+ * ducking the key by three quarters and matching the old lamp produced a frame whose mean luma
+ * still passed D2 (14.7 of 255) while the floor around the player was at 5.5: technically lit,
+ * unreadable in practice, and lit mostly by a window across the room rather than by anything
+ * the runner carries.
+ *
+ * Solved instead against three's own windowed falloff — `(1/d²)·(1 − (d/D)⁴)²` — for a pool
+ * that is unmistakably the source: at d = 3.2, D = 6.5 the attenuation is 0.0865, so 85 puts
+ * ~7.4 at the runner's feet against the ~0.78 the shipped overhead delivered — an order of
+ * magnitude, which is what it takes for a lamp to BE the light rather than to garnish one.
+ *
+ * Bench: at 120 the pool clipped (runner patch 168 of 255, max 239, with a bloom bar across the
+ * frame). 85 is that backed off below the clip. It is a look number and therefore John's dial,
+ * not a derived constant — the derived part is only that it must be ~100×, not ~1×, the value
+ * it replaced.
+ */
+const POOL_I = 85;
 
 /** Clear width / clear height the route filter demands. See `room.js` L822 — a route through an
  *  opening the body cannot fit is the exact failure `minW` was written to prevent. */
@@ -315,6 +394,12 @@ class FollowOperator {
      */
     this._lockYaw = null;
     this._lockPitch = 0;
+    /** Where the steered frame was when a plan-locked rig was chosen. See the slerp in `update`. */
+    this._yawFrom = null;
+    this._pitchFrom = null;
+    /** The live (possibly blended) rig and the crane's eased progress. The bed owns both. */
+    this._rig = null;
+    this._blend = 0;
     /** How many times the shot has had to be corrected. Read by harness/cam-clip-drive. */
     this.reels = 0;
     /** Which correction won, per REEL_TRIES index; last slot is the fallback. Harness only. */
@@ -327,9 +412,26 @@ class FollowOperator {
     return pool[Math.floor(this.rng() * pool.length) % pool.length];
   }
 
-  /** Where a given shot wants its eye, in world space. */
+  /**
+   * Where a given shot wants its eye, in world space.
+   *
+   * 🧭 **A PLAN-LOCKED RIG IS NAILED TO `PLAN_YAW`, AND THAT IS THE WHOLE FIX FOR A MAP THAT
+   * TURNED.** This line used to read `shot === 'chase' && _lockYaw != null`, so `iso` and `top`
+   * fell through to `runner.facing` and the "stable map" swung with the robot's body — the
+   * rotating-map problem `orbit: false` was written to prevent, arriving by the other door.
+   * `orbit: true` rigs still take the steered yaw, which is what makes `wide` a real chase.
+   */
   _solve(shot, runner, out) {
-    const f = (shot === 'chase' && this._lockYaw != null) ? this._lockYaw : runner.facing;
+    /*
+     * `_lockYaw` is the steered yaw and it is authoritative when it exists — during a crane it
+     * is mid-slerp toward `PLAN_YAW`, and reading the destination instead would snap the frame
+     * to plan north on the first frame of a move that takes 1.35 s. The `isPlanLocked` fallback
+     * is for the UNDRIVEN director path, where `cut()` can land on an overhead rig with no lock
+     * at all; without it that path would rotate the map with the body.
+     */
+    const f = this._lockYaw != null
+      ? this._lockYaw
+      : (isPlanLocked(shot) ? PLAN_YAW : runner.facing);
     const fx = Math.sin(f), fz = Math.cos(f);
     const rx = -Math.cos(f), rz = Math.sin(f);   // the right-hand perpendicular, `player.js` L899
     const p = runner.pos;
@@ -347,12 +449,28 @@ class FollowOperator {
          * 🎥 A HELD PERSPECTIVE. The overhead rigs take no pitch — `perspectiveEye` refuses it —
          * because a top-down view you can tilt is a chase camera with extra steps, and tilting
          * it is how a player loses the map they came to the view for.
+         *
+         * `this._rig` is the LIVE rig, which during a crane is a blend that is in no table. It
+         * wins over the name, because for 1.35 s the name is where the camera is going and not
+         * where it is.
          */
-        const off = perspectiveEye(shot, f, this._lockYaw != null ? this._lockPitch : 0);
+        const off = perspectiveEye(this._rig ?? shot, f, this._lockYaw != null ? this._lockPitch : 0);
         return out.set(p.x + off.x, off.y, p.z + off.z);
       }
       case 'chase':
       default: {
+        /*
+         * ⚠️ **THE DROP GOES THROUGH HERE, SO CHASE HAS TO HONOUR THE LIVE RIG TOO.** Coming
+         * home the lock is already `chase` on the first frame; solving it from `chaseOrbitOffset`
+         * would put the eye at 1.62 m instantly and the 9 m crane would never be seen. The two
+         * paths agree at rest — `PERSPECTIVE_RIG.chase` carries the same 2.90 / 1.62 / 0.35 as
+         * `CHASE_DIST` / `CHASE_HEIGHT` / `CHASE_LATERAL`, and gate F11g now asserts that,
+         * because nothing did and they are two sources of one truth.
+         */
+        if (this._rig) {
+          const off = perspectiveEye(this._rig, f, this._lockYaw != null ? this._lockPitch : 0);
+          return out.set(p.x + off.x, off.y, p.z + off.z);
+        }
         const off = chaseOrbitOffset(f, this._lockYaw != null ? this._lockPitch : 0);
         return out.set(p.x + off.x, off.y, p.z + off.z);
       }
@@ -499,16 +617,63 @@ class FollowOperator {
    */
   update(dt, t, runner, camera, lastPortal, speed01, opts = {}) {
     const lock = opts.lockShot && SHOTS.includes(opts.lockShot) ? opts.lockShot : null;
+    /* The live rig and how far through the crane we are. Both are the bed's to own — the
+     * operator is told where the camera should be, it does not decide when the show changes. */
+    this._rig = opts.rig ?? null;
+    this._blend = Math.max(0, Math.min(1, Number(opts.blend) || 0));
     if (lock) {
       this.shot = lock;
       this.until = 1e9;
       this._seeded = true;
-      if (lock === 'chase') {
+      /* =======================================================================================
+       * 🕹️ **`_lockYaw` IS SET FOR EVERY PERSPECTIVE NOW, NOT NULLED — and this one `else` was
+       * costing the game its controls on three rigs out of four.**
+       *
+       * `basisYaw()` returns `_lockYaw` when it has one and falls through to `lensYaw()` when it
+       * does not. Nulling it here meant `wide` / `iso` / `top` took their movement frame from
+       * WHERE THE LENS ENDED UP — the exact defect the block above `basisYaw` says was removed,
+       * reintroduced the moment a second perspective existed. On `top` it was worse than the
+       * original: that yaw is read off a 1.20 m baseline against an eye that is lerping and
+       * handheld-swaying, so forward drifted continuously under a resting thumb.
+       *
+       * Three arms, and every rig now has a real steered yaw:
+       *   · **plan-locked** (`iso`, `top`) hold `PLAN_YAW`. The map does not turn, and the stick
+       *     becomes absolute — see `PLAN_YAW`'s block in `follow.js` for the arithmetic.
+       *   · **orbiting perspectives** (`chase`, `wide`) integrate the look stick exactly as chase
+       *     always has. This is also what makes `wide`'s advertised `orbit: true` true: it was
+       *     unreachable before, because the pitch it needs was never non-zero.
+       *   · **a pinned director shot** (`?shot=lead`) keeps the old null. Those are framed from
+       *     the body by `_solve` and have no steered frame of their own.
+       * ======================================================================================= */
+      if (isPlanLocked(lock)) {
+        /*
+         * 🧭 The frame swings to plan north ON THE CRANE'S OWN CURVE, not on the first frame.
+         * `_yawFrom` is captured once, when the lock becomes plan-locked, so the slerp is a
+         * function of the blend rather than an integrator — that makes the boom and the frame
+         * provably arrive together, and it is why the stick cannot disagree with the screen
+         * part-way up. Shortest arc, so a chase pointing at 3.0 rad turns the near way.
+         */
+        if (this._lockYaw == null) {
+          this._lockYaw = PLAN_YAW;
+          this._lockPitch = 0;
+          this._yawFrom = PLAN_YAW;
+          this._pitchFrom = 0;
+        } else {
+          if (this._yawFrom == null) { this._yawFrom = this._lockYaw; this._pitchFrom = this._lockPitch; }
+          const turn = Math.atan2(
+            Math.sin(PLAN_YAW - this._yawFrom),
+            Math.cos(PLAN_YAW - this._yawFrom));
+          this._lockYaw = this._yawFrom + turn * this._blend;
+          this._lockPitch = this._pitchFrom * (1 - this._blend);
+        }
+      } else if (PERSPECTIVES.includes(lock)) {
+        this._yawFrom = null;
+        this._pitchFrom = null;
         if (this._lockYaw == null) {
           this._lockYaw = runner.facing;
           this._lockPitch = 0;
           this.look.set(runner.pos.x, CHASE_LOOK_Y, runner.pos.z);
-          this._solve('chase', runner, this.eye);
+          this._solve(lock, runner, this.eye);
         }
         const orbit = stepLookOrbit(this._lockYaw, this._lockPitch, opts.lookX, opts.lookY, dt);
         this._lockYaw = orbit.yaw;
@@ -526,10 +691,14 @@ class FollowOperator {
       } else {
         this._lockYaw = null;
         this._lockPitch = 0;
+        this._yawFrom = null;
+        this._pitchFrom = null;
       }
     } else {
       this._lockYaw = null;
       this._lockPitch = 0;
+      this._yawFrom = null;
+      this._pitchFrom = null;
       if (!this._seeded) { this._seeded = true; this.cut(runner, lastPortal); }
       this.until -= dt;
       if (this.until <= 0) this.cut(runner, lastPortal);
@@ -538,9 +707,18 @@ class FollowOperator {
     this._solve(this.shot, runner, this._want);
     if (!this._valid(this._want, runner)) this._reel(this._want, runner);
 
-    // The operator LAGS. A camera welded to a body reads as a drone; a camera that arrives a
-    // beat late reads as a person carrying it.
-    const k = this.shot === 'doorway' ? 1 : 1 - Math.exp(-6.5 * dt);
+    /*
+     * The operator LAGS. A camera welded to a body reads as a drone; a camera that arrives a
+     * beat late reads as a person carrying it.
+     *
+     * 🎬 **AND IT STOPS LAGGING AS THE VIEW BECOMES A MAP.** A 6.5 rate is a person's arm; on a
+     * crane it is a boom that arrives soft and mushy at exactly the moment the move needs to
+     * feel ARRIVED, and overhead it is a map that slides behind the runner. `mapness` is 0 at
+     * the chase rig, so every ground shot keeps the shipped 6.5 unchanged, and 1 at `top`.
+     * Handheld becoming mechanical is itself the signal that the show changed cameras.
+     */
+    const mapness = rigMapness(this._rig ?? PERSPECTIVE_RIG[this.shot]);
+    const k = this.shot === 'doorway' ? 1 : 1 - Math.exp(-(6.5 + 26 * mapness) * dt);
     this.eye.lerp(this._want, k);
 
     /* =========================================================================================
@@ -560,7 +738,7 @@ class FollowOperator {
     const ex = this.eye.x - runner.pos.x;
     const ez = this.eye.z - runner.pos.z;
     const eDist = Math.hypot(ex, ez);
-    // From twelve metres up you cannot be inside the robot, and `top` sits deliberately close in
+    // From nine metres up you cannot be inside the robot, and `top` sits deliberately close in
     // plan. The floor is about the chase lens; applying it overhead would only shove the map.
     if (!isOverhead(this.shot) && eDist > 1e-4 && eDist < CAM_MIN_DIST) {
       const s = CAM_MIN_DIST / eDist;
@@ -569,7 +747,9 @@ class FollowOperator {
     }
 
     // Handheld. Two low-frequency sines per axis so it never repeats on a visible period.
-    const g = 0.35 + speed01 * 0.65;
+    // Handheld fades out as the view becomes a map (`mapness`): nobody is carrying a rig nine
+    // metres up, and a drifting, rolling plan reads as a defect rather than as a camera operator.
+    const g = (0.35 + speed01 * 0.65) * (1 - mapness);
     const sway = 0.020 * g;
     camera.position.set(
       this.eye.x + (Math.sin(t * 1.31) + Math.sin(t * 2.17) * 0.5) * sway,
@@ -577,7 +757,8 @@ class FollowOperator {
       this.eye.z + (Math.cos(t * 1.09) + Math.cos(t * 2.53) * 0.5) * sway);
 
     // Frame the chest, not the feet, and lag the look too so a corner is a whip rather than a snap.
-    this.look.lerp(this._aim.set(runner.pos.x, CHASE_LOOK_Y, runner.pos.z), 1 - Math.exp(-8.0 * dt));
+    this.look.lerp(this._aim.set(runner.pos.x, CHASE_LOOK_Y, runner.pos.z),
+      1 - Math.exp(-(8.0 + 26 * mapness) * dt));
     camera.up.set(0, 1, 0);
     camera.lookAt(this.look);
     // The breath in the wrist. Applied after `lookAt` so it is a lens rotation, not a target move.
@@ -998,6 +1179,22 @@ export async function buildFollowBed(engine, opts = {}) {
   const cool = new THREE.PointLight(0xa8ccf4, 46, 10, 2);
   scene.add(warmA, warmB, cool);
   const fill = new THREE.HemisphereLight(0x6f7d96, 0x3a2a1c, 4.60);
+  /*
+   * The two base intensities, captured once so the overhead duck is a pure scaling of the
+   * shipped value rather than a second set of numbers that could drift from it.
+   *
+   * ⚠️ **AND `key` REALLY IS A CONSTANT ALL NIGHT, WHICH IS A PRE-EXISTING BUG THIS SLICE ONLY
+   * DECLINES TO INHERIT.** `followRig`'s `read()` fills `want.key.i` from each space's own
+   * `lights.key.intensity`, and `apply()` lerps positions and the hemisphere ground colour and
+   * NEVER writes `L.key.intensity` — so every room's authored key brightness is dead and the
+   * spot sits at its constructed 150 from boot to teardown. Capturing the base here is correct
+   * either way; the day the per-room intensity is wired up, `KEY_I0` becomes `want.key.i` and
+   * the duck below still means the same thing. Not fixed here: it is a lighting slice, not this
+   * one, and quietly turning six rooms' key lights on inside a camera change is how a look
+   * regression arrives with nobody's name on it.
+   */
+  const KEY_I0 = key.intensity;
+  const FILL_I0 = fill.intensity;
   scene.add(fill);
 
   /**
@@ -1054,11 +1251,34 @@ export async function buildFollowBed(engine, opts = {}) {
      * Once a phone drives, the schedule never runs again that night.
      */
     driven: false,
-    /** The held perspective: chase / wide / iso / top. A `shot` cue picks it; nothing else does. */
+    /** The held perspective: chase / wide / iso / top. The ballroom threshold picks it; `P` pins. */
     perspective: 'chase',
-    /** What the rig was last applied for, so the lid and the lens are touched on CHANGE only. */
+    /**
+     * 🚪 What the LOOP last decided, and whether a human has overridden it.
+     *
+     * Two authorities write `perspective` now and they need a rule rather than a race. The
+     * threshold writes it on a crossing; the dev `P` key writes it and raises `pinned`, which
+     * mutes the loop until the runner next crosses the ballroom line — at which point the game
+     * takes its camera back. That keeps `P` usable as the ceiling-art inspection tool
+     * `docs/handoff/ballroom-next.md` documents without letting it strand the show in a
+     * perspective the expedition did not ask for.
+     */
+    loopView: BALLROOM_PERSPECTIVE,
+    pinned: false,
+    /** What the rig was last applied for, so a CHANGE is what starts a crane. */
     appliedRig: null,
+    /* 🎬 The crane between two rigs. `from` is whatever was on screen when the change landed —
+     * not the table entry for `appliedRig` — so interrupting a crane half way bends the move
+     * from where it actually is rather than snapping back to a rig nobody is looking at. */
+    craneFrom: null,
+    craneTo: null,
+    craneT: 0,
+    craneDur: 0,
+    /** The rig actually on screen this frame. A blend is a legal rig that is not in the table. */
+    liveRig: null,
     lidOff: false,
+    /** Which spaces the roof is currently off over, joined. A memo so the walk re-scopes once. */
+    lidScope: null,
     stick: { x: 0, y: 0 },
     look: { x: 0, y: 0 },
     run: false,
@@ -1085,6 +1305,29 @@ export async function buildFollowBed(engine, opts = {}) {
 
   const _dir = new THREE.Vector3();
   const _views = [{ pos: engine.camera.position, dir: _dir }];
+  /* =============================================================================================
+   * 👁️ **THE OVERHEAD VIEWPOINT IS THE RUNNER, NOT THE LENS.**
+   *
+   * `_views` holds a LIVE REFERENCE to the camera position, which is right for a chase — the
+   * lens is where the player is looking from. Overhead it is wrong twice over, and the second
+   * one is the expensive one:
+   *
+   *   · `iso` hangs 5.60 m back in plan, so standing near a wall the camera's XZ lands outside
+   *     every space's footprint plus the 0.6 m pad. `spaceAt` returns null, `setViewpoints` falls
+   *     back to `_cur`, and residency LATCHES on the last room the lens happened to be over
+   *     while the runner walks on into one that then goes dark when its hold expires.
+   *   · `dir` is near-vertical from above, so the portal-bleed facing test
+   *     (`dx*dir.x + dz*dir.z` against `-0.35 * hypot`) is comparing against a horizontal
+   *     component of roughly zero and admits or drops neighbours on noise.
+   *
+   * ⚠️ **`spaceAt` IGNORES Y** (`room.js` — a pure XZ AABB with a 0.6 m pad), so the height is
+   * NOT the problem and an earlier draft of this slice was wrong to say residency collapses
+   * because the eye is above the roof. It does not; it drifts sideways. The fix is the same
+   * either way: from the moment the camera starts to lift, residency is keyed on the body, whose
+   * position and heading are both meaningful at any perspective.
+   * ============================================================================================= */
+  const _runnerDir = new THREE.Vector3();
+  const _runnerViews = [{ pos: runner.pos, dir: _runnerDir }];
   const _warmEye = new THREE.Vector3();
   const _warmAt = new THREE.Vector3();
   const _reel = new THREE.Vector3();
@@ -1454,9 +1697,13 @@ export async function buildFollowBed(engine, opts = {}) {
      *  · **The lens.** Each rig carries its own field of view, because "the rooms scaled
      *    differently" is mostly how much of one you can see at once.
      *
-     * The CONTROLS need no special case, and that is a result rather than an omission: the fix
-     * that stopped a wall rotating the stick made the frame `_lockYaw`, which is a real yaw at
-     * every perspective — including straight down, where a camera-derived frame is degenerate.
+     *  · **The controls.** This block used to claim they needed no special case, *"because the
+     *    fix that stopped a wall rotating the stick made the frame `_lockYaw`, which is a real
+     *    yaw at every perspective."* 🚨 **That was true of `chase` and of nothing else, and the
+     *    claim outlived the code that would have made it true.** `_lockYaw` was NULLED for every
+     *    other lock, so `basisYaw()` fell back to the lens on `wide` / `iso` / `top` and the
+     *    stick's frame drifted with a swaying eye. It is now set on every perspective — see the
+     *    three-arm block in `FollowOperator.update` — and only THEN is the sentence true.
      * ========================================================================================= */
     /* =========================================================================================
      * 📐 **A PINNED POSE OWNS THE CAMERA OUTRIGHT.**
@@ -1490,21 +1737,83 @@ export async function buildFollowBed(engine, opts = {}) {
       return;
     }
 
+    /* =========================================================================================
+     * 🎬 **THE CRANE. A PERSPECTIVE CHANGE IS A CAMERA MOVE, NOT A CUT.**
+     *
+     * What this replaced: `appliedRig` flipped, the FOV snapped 58→52, every ceiling in the
+     * house lost `visible` in one frame, and the key light jumped ×10 in intensity and ×3.9 in
+     * range — all on the same frame. The only thing that moved was the eye, dragged 7.4 m by the
+     * operator's `1-exp(-6.5·dt)` lag, and because a `lerp` is a CHORD that path went straight
+     * through the ceiling plane. It read as a glitch, and it got away with the ceiling only
+     * because the lid happened to be taken off first in the same frame.
+     *
+     * Now one eased scalar owns the whole change: the rig itself (`lerpRig`), the lens, the
+     * steered yaw, the lid, the handheld, the operator's own lag, and the light. There is no
+     * frame during a crane at which the camera is in a state nothing accounts for.
+     *
+     * ⚠️ **`craneFrom` IS WHAT IS ON SCREEN, NOT THE TABLE ENTRY FOR THE OLD NAME.** Press the
+     * key twice quickly and the second crane starts from the half-risen rig the player is
+     * actually looking at. Starting from `PERSPECTIVE_RIG[appliedRig]` would snap the boom back
+     * down to a rig nobody has seen for half a second and then re-lift it.
+     * ========================================================================================= */
+    /* 🚪 The threshold decides the camera. See `perf.loopView` for who wins when a human has
+     * pressed `P`, and `stepBallroomView` for the hysteresis that stops a doorway strobing it. */
+    if (mode === 'run' && ballroom) {
+      const loopWant = stepBallroomView(perf.loopView, runner.pos, ballroom);
+      if (loopWant !== perf.loopView) {
+        perf.loopView = loopWant;
+        perf.pinned = false;               // a crossing is the loop taking its camera back
+        perf.perspective = loopWant;
+      } else if (!perf.pinned) {
+        perf.perspective = loopWant;
+      }
+    }
+
     const want = runPerspective(mode, opts.pinShot, perf.perspective);
     if (want && want !== perf.appliedRig) {
+      perf.craneFrom = perf.liveRig ?? PERSPECTIVE_RIG[perf.appliedRig] ?? PERSPECTIVE_RIG.chase;
+      perf.craneTo = PERSPECTIVE_RIG[want] ?? PERSPECTIVE_RIG.chase;
+      // Going out is the reveal and gets the time; coming home is a release and must not make
+      // the player wait. The first application of a night is instant — there is nothing to
+      // crane FROM, and a boom that flew in from the chase rig on the run cue would be a move
+      // the show never made.
+      perf.craneDur = perf.appliedRig == null ? 0
+        : (isOverhead(want) ? RISE_SECONDS : DROP_SECONDS);
+      perf.craneT = 0;
       perf.appliedRig = want;
-      const overhead = isOverhead(want);
-      if (overhead !== perf.lidOff) {
-        room.setLid?.(!overhead);
-        setHangers(overhead);
-        perf.lidOff = overhead;
-      }
-      const rig = PERSPECTIVE_RIG[want];
-      if (rig?.fov) { engine.camera.fov = rig.fov; engine.camera.updateProjectionMatrix(); }
+    }
+
+    if (perf.craneT < perf.craneDur) perf.craneT = Math.min(perf.craneDur, perf.craneT + dt);
+    const craneS = perf.craneDur > 0 ? perf.craneT / perf.craneDur : 1;
+    const craneEase = smootherstep(craneS);
+    perf.liveRig = (!perf.craneTo || craneS >= 1)
+      ? (perf.craneTo ?? PERSPECTIVE_RIG[want ?? 'chase'] ?? PERSPECTIVE_RIG.chase)
+      : lerpRig(perf.craneFrom, perf.craneTo, craneS);
+
+    if (perf.liveRig?.fov && Math.abs(engine.camera.fov - perf.liveRig.fov) > 1e-4) {
+      engine.camera.fov = perf.liveRig.fov;
+      engine.camera.updateProjectionMatrix();
+    }
+
+    /* 🏠 **THE ROOF COMES OFF WHEN THE CAMERA IS ABOUT TO RISE THROUGH IT — a height, not a
+     * perspective name.** `LID_LIFT_H` is 3.2 m against a 4.8 m storey, so on the way up the
+     * ceiling lifts away while the eye is still comfortably beneath it (the player watches it
+     * go) and on the way down it is back before the eye drops under it. Expressing the rule in
+     * metres rather than in `isOverhead(want)` also makes it exactly symmetric for free, and it
+     * reproduces the old name test precisely on the four table rigs: chase 1.62 and wide 2.85
+     * stay under, iso 5.60 and top 9.0 go over. */
+    const lidOff = (perf.liveRig?.height ?? 0) >= LID_LIFT_H;
+    if (lidOff !== perf.lidOff) {
+      room.setLid?.(!lidOff, lidOff ? (room.residentIds?.() ?? null) : null);
+      setHangers(lidOff);
+      perf.lidOff = lidOff;
+      perf.lidScope = lidOff ? ((room.residentIds?.() ?? []).join(',')) : null;
     }
 
     operator.update(dt, t, runner, engine.camera, perf.lastPortal, speed01, {
       lockShot: want,
+      rig: perf.liveRig,
+      blend: craneEase,
       lookX: perf.look.x,
       lookY: perf.look.y,
       followFacing: !perf.driven,
@@ -1512,27 +1821,42 @@ export async function buildFollowBed(engine, opts = {}) {
     intro?.holdStep?.(dt, t);
 
     /*
-     * 💡 **THE KEY LIGHT FOLLOWS THE LENS ON THE GROUND AND THE RUNNER FROM ABOVE.**
+     * 💡 **THE KEY LIGHT FOLLOWS THE LENS ON THE GROUND AND THE RUNNER FROM ABOVE, AND CROSSES
+     * BETWEEN THE TWO RATHER THAN JUMPING.**
      *
      * On the chase rigs it rides just under and ahead of the lens, so it throws onto the runner
      * rather than flaring the lens it is attached to. Overhead that recipe fails outright: the
-     * lamp is a point light with a 3.5 m reach and `top` puts it TWELVE METRES up, so its light
+     * lamp is a point light with a 3.5 m reach and `top` puts it NINE metres up, so its light
      * never arrives and the first top-down shot came back almost black. From above it hangs over
-     * the runner instead — which is the standard top-down key, and the only way the view is
-     * readable enough for John to judge it at all.
+     * the runner instead — the standard top-down key.
+     *
+     * ⚠️ **IT USED TO SWAP IN ONE FRAME**, which on a `P` press was a ×10 jump in intensity and
+     * a ×3.9 jump in range — an exposure pop in the middle of what is now a camera move. Both
+     * recipes are computed every frame and mixed by `mapness`, so the lamp climbs off the lens
+     * and over the runner along the same curve as the boom. At the chase rig `mapness` is 0 and
+     * the numbers are the shipped 3.5 / 1.4 exactly.
      */
-    if (isOverhead(want)) {
-      // Scaled to the rig, so iso and top are lit the same amount rather than the same number.
-      const up = (PERSPECTIVE_RIG[want]?.height ?? 6);
-      camLight.position.set(runner.pos.x, (runner.pos.y ?? 0) + Math.min(4.2, up * 0.55), runner.pos.z);
-      camLight.distance = up * 1.5;
-      camLight.intensity = 6.0 + up * 0.9;
-    } else {
-      camLight.position.copy(engine.camera.position);
-      camLight.position.y -= 0.18;
-      camLight.distance = 3.5;
-      camLight.intensity = 1.4;
+    const lampMap = rigMapness(perf.liveRig);
+    {
+      // Where each recipe wants the lamp, then one crossfade over both.
+      const overX = runner.pos.x;
+      const overY = (runner.pos.y ?? 0) + POOL_UP;
+      const overZ = runner.pos.z;
+      const groundX = engine.camera.position.x;
+      const groundY = engine.camera.position.y - 0.18;
+      const groundZ = engine.camera.position.z;
+      const mix = (a, b) => a + (b - a) * lampMap;
+      camLight.position.set(mix(groundX, overX), mix(groundY, overY), mix(groundZ, overZ));
+      camLight.distance = mix(3.5, POOL_DIST);
+      camLight.intensity = mix(1.4, POOL_I);
     }
+
+    /* 🌑 The room goes dark around the pool. See `OVERHEAD_KEY_DUCK` — the key spot is the light
+     * that actually decides whether a hunter at 8 m is visible, because it does not care where
+     * the runner's lamp is. Both are pure scalings of the base value by `mapness`, so the chase
+     * rig is untouched and there is no state to get out of step. */
+    key.intensity = KEY_I0 * (1 - OVERHEAD_KEY_DUCK * lampMap);
+    fill.intensity = FILL_I0 * (1 - OVERHEAD_FILL_DUCK * lampMap);
 
     engine.camera.getWorldDirection(_dir);
     const space = room.spaceAt(runner.pos) ?? room.spaceAt(engine.camera.position);
@@ -1542,7 +1866,27 @@ export async function buildFollowBed(engine, opts = {}) {
         portals: room.portals(), spaces: room.spaces,
       });
     }
-    room.setViewpoints(_views, dt);
+    // The body owns residency the moment the camera starts to lift. See `_runnerViews`.
+    if (lampMap > 0) {
+      _runnerDir.set(Math.sin(runner.facing), 0, Math.cos(runner.facing));
+      room.setViewpoints(_runnerViews, dt);
+    } else {
+      room.setViewpoints(_views, dt);
+    }
+
+    /* 🏠 **AND THE ROOF COMES OFF ONLY OVER WHAT RESIDENCY JUST ADMITTED.** The scope is applied
+     * after `setViewpoints`, so it is this frame's set and not last frame's — the room you are
+     * walking into opens as you arrive rather than a beat later. `party-loop.md`'s "Do not" is
+     * narrowed, not repealed: the TV may see over the walls of the room the runner is in and the
+     * ones a door away, and never the whole house. */
+    if (perf.lidOff) {
+      const ids = room.residentIds?.() ?? null;
+      const key = ids ? ids.join(',') : '';
+      if (key !== perf.lidScope) {
+        perf.lidScope = key;
+        room.setLid?.(false, ids);
+      }
+    }
     room.update?.(dt);
   }
 
@@ -1578,7 +1922,19 @@ export async function buildFollowBed(engine, opts = {}) {
     runner,
     /** What the overlay prints, and what the drive asserts on. Never a room name — §3.3.5. */
     readout: () => ({
-      shot: mode === 'run' ? operator.shot : mode,
+      /*
+       * 📺 **THE SLUG NAMES THE MOVE WHILE THE MOVE IS HAPPENING.**
+       *
+       * `CRANE` is a real television word for a camera going up, and putting it on the shot slug
+       * for 1.35 s is what tells the room the perspective change is a PRODUCTION CHOICE rather
+       * than the picture breaking. Without it the slug jumps CHASE -> TOP with a second and a
+       * half of unexplained movement between them, which is the read this whole slice exists to
+       * avoid. It disappears at the top, so the steady state is still the clean `TOP`.
+       */
+      shot: mode !== 'run' ? mode
+        : (perf.craneT < perf.craneDur
+          ? ((perf.craneTo?.height ?? 0) > (perf.craneFrom?.height ?? 0) ? 'crane' : 'drop')
+          : operator.shot),
       throttle: perf.driven
         ? (perf.run ? 'RUN' : (stickMag(perf.stick.x, perf.stick.y) > 0 ? 'WALK' : 'STILL'))
         : (perf.hesitateFor > 0 ? 'CREEP' : perf.throttle),
@@ -1647,6 +2003,20 @@ export async function buildFollowBed(engine, opts = {}) {
       shot: operator.shot,
       reels: operator.reels,
       reelWins: operator.reelWins.slice(),
+      /*
+       * 🎬 **THE CRANE, REPORTED — because a moving camera cannot be photographed on a stopwatch.**
+       *
+       * `perspective-shots` used to cue a perspective, sleep 2.2 s and measure, which was sound
+       * while a change was a cut. It is not sound now: the bed is paced by `dt`, `engine.js`
+       * clamps `dt` to 0.1 to stop a spiral, and on a software rasteriser at ~3 fps that makes
+       * sim time run at roughly a third of wall time. The instrument measured a camera that was
+       * still on its way and reported the rig as wrong. So the settle is now OBSERVABLE: a probe
+       * waits for `craning` to go false instead of guessing a duration.
+       */
+      craning: perf.craneT < perf.craneDur,
+      craneS: +(perf.craneDur > 0 ? perf.craneT / perf.craneDur : 1).toFixed(4),
+      rigHeight: +(perf.liveRig?.height ?? 0).toFixed(3),
+      rigDist: +(perf.liveRig?.dist ?? 0).toFixed(3),
       mode,
     }),
 
@@ -1707,6 +2077,10 @@ export async function buildFollowBed(engine, opts = {}) {
         // Put the runner back on its feet in the ballroom — the pair is sent in from the circle.
         runner.pos.set(start.x, room.floorY ?? 0, start.z);
         runner.vel.set(0, 0, 0);
+        // The pair is sent in from the circle, so the night starts on the ballroom's own camera
+        // and any pin from a previous episode's inspection is dropped with it.
+        perf.loopView = BALLROOM_PERSPECTIVE;
+        perf.pinned = false;
         armMission(c.episode ?? 1);
         return;
       }
@@ -1720,7 +2094,7 @@ export async function buildFollowBed(engine, opts = {}) {
          * (or John, on the dev key) deciding how the game is viewed, and it holds until they
          * change it again. So a perspective is accepted during a run and a director's shot is not.
          */
-        if (PERSPECTIVES.includes(c.shot)) { perf.perspective = c.shot; return; }
+        if (PERSPECTIVES.includes(c.shot)) { perf.perspective = c.shot; perf.pinned = true; return; }
         if (liveRunShot(mode, opts.pinShot) === 'chase') return;
         operator.shot = c.shot;
         operator.until = 5.5;
@@ -1764,6 +2138,10 @@ export async function buildFollowBed(engine, opts = {}) {
         x: +hunter.pos.x.toFixed(2), z: +hunter.pos.z.toFixed(2),
       },
       mission: { phase: mission.phase, room: mission.room },
+      // The camera the show is actually on, so the pad can match it. `appliedRig` and not the
+      // live blend: a crane is 1.35 s and this channel is 2 Hz, so reporting the destination
+      // means the sheet swaps once, at the start, rather than chattering through the move.
+      view: perf.appliedRig ?? BALLROOM_PERSPECTIVE,
     }),
     /** The patrol, for `harness/party-follow-drive.mjs`. Never rendered, never on the wire. */
     hunterTelemetry: () => ({ ...hunter.telemetry(), room: hunter.roomId() }),

@@ -38,6 +38,7 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
 import { createRoom } from '../../src/party/room.js';
+import { OUTCOME } from '../../src/party/win.js';
 import { WARM_STAGES, moveViolations, warmPct, worldViolations } from '../../src/party/follow.js';
 import {
   isShowBeat, missionEndsRun, recapAfterMs, nextShowBeat, holdMsFor, remainingMs,
@@ -576,7 +577,27 @@ export function progressShow(room) {
     enterExecutionLive(room);
     return 'execution';
   }
+  if (next === 'verdict') {
+    enterVerdictLive(room);
+    return 'verdict';
+  }
   if (next === 'casting') {
+    /* =========================================================================================
+     * 🏁 **THE FIRST CONDITIONAL EDGE IN THE WHOLE WIRE — and the only thing that ever ends a
+     * session.**
+     *
+     * Every other step in this chain is unconditional: a beat finishes and the next one starts.
+     * `AFTER_RUN_NEXT.verdict` is 'casting' as the DEFAULT, and this is where the fold gets to
+     * overrule it. Until now nothing did — `PRIME-TIME-STATE.md` §2 put it flatly: "Nothing ever
+     * ends a session." `EPISODE_CAP` was a number in a table that no code enforced.
+     *
+     * RENEWED means play on. Anything else — FINALE, CANCELLED, ABANDONED — is the night over,
+     * and the Reunion is the payoff D5 says the whole silent-death design is borrowing against.
+     * ========================================================================================= */
+    if (room.game?.outcome?.() && room.game.outcome() !== OUTCOME.RENEWED) {
+      enterReunionLive(room);
+      return 'reunion';
+    }
     enterNextCasting(room);
     return 'casting';
   }
@@ -707,6 +728,90 @@ function enterExecutionLive(room) {
   setShow(room, 'execution');
   fanout(room, lynchPayload(room));
   scheduleShowProgress(room, holdMsFor('execution'));
+}
+
+/**
+ * ⚖️ **THE VERDICT BEAT.** Same shape as `enterExecutionLive` above: put the room in the beat,
+ * tell the phones, arm the hold.
+ *
+ * The fold itself is `room.game.enterVerdict()` and it lives in `src/party/room.js` on purpose —
+ * see `foldVerdict`'s block there. A second copy of the win rule in this file is exactly the
+ * drift `harness/episode-order.mjs` was written to catch.
+ *
+ * ⚠️ The payload PICKS fields off the fold and never spreads it. `foldWin` returns `fed`, and
+ * the feed count is the one number `rrr-social-round.md` §4 keeps back until the Reunion.
+ */
+function enterVerdictLive(room) {
+  const v = room.game.enterVerdict();
+  setShow(room, 'verdict');
+  /*
+   * 🚨 FIELDS ARE PICKED, NEVER SPREAD. `enterVerdict()` returns `rule` beside these, and the
+   * rule names the reason the season ended — W3 is "evil fed the Hunter enough goods", which is
+   * the sealed feed count wearing a different hat. `FANOUT_KEYS.verdict` is the closed schema
+   * that makes a slip here a gate failure rather than a leak (`party-night` N17h0b).
+   */
+  fanout(room, {
+    t: 'verdict',
+    status: v.outcome,
+    camerasLit: v.camerasLit,
+    need: v.need,
+    episode: v.episode,
+  });
+  scheduleShowProgress(room, holdMsFor('verdict'));
+}
+
+/**
+ * 🎬 **THE REUNION.** Session-end, so it has no `AFTER_RUN_NEXT` entry and no hold: it is the
+ * last thing that happens and nothing follows it. The clock is cleared rather than re-armed.
+ */
+function enterReunionLive(room) {
+  clearShowClock(room);
+  room.showUntil = null;
+  setShow(room, 'reunion');
+  fanout(room, { t: 'season', status: room.game.outcome() });
+  fanout(room, reunionPayload(room));
+}
+
+/* =================================================================================================
+ * 🎭 **THE ONE MESSAGE IN THE WHOLE WIRE THAT TELLS EVERYBODY WHAT EVERYBODY WAS.**
+ *
+ * ⚠️ **IT DOES NOT BREAK `entitle.js`, AND THE DIFFERENCE MATTERS.** The plan for this slice said
+ * the Reunion would "deliberately break" the matrix's *"NO ROW. Nobody, ever, pre-REUNION"* on
+ * `players[].alignment`. It does not, and it must not: `MATRIX` projects the STATE FRAME, and a
+ * frame-level exception would have to read "denied, unless the phase is REUNION" — a condition
+ * inside the projector, on the one filter in this codebase that is deny-by-default precisely so
+ * that it cannot fail open. The reveal is its own message with its own closed schema instead, so
+ * the frame filter never learns the word "unless" and the matrix's promise stays literally true.
+ *
+ * 🚨 **THIS IS THE ONLY CALLER, AND IT IS INSIDE `enterReunionLive`.** Not exported, not reachable
+ * from `handleClient`, and not sent on any other beat: a socket cannot ask for it, and a beat
+ * cannot leak it by being entered early, because entering the Reunion IS the disclosure. The
+ * ordering guard is `party-night` N17m — nothing named an alignment before this message.
+ *
+ * `querySeq` travels with every award because `reunion.js`'s header is emphatic that it is the
+ * difference between a list of names and the bit people quote afterwards: the sequence numbers
+ * that earned it. Nothing renders footage from them yet — the Director's Cut is its own slice —
+ * but the evidence ships with the claim rather than being bolted on after.
+ * ================================================================================================= */
+function reunionPayload(room) {
+  const r = room.game.reunionSpecial();
+  return {
+    t: 'reveal',
+    seats: r.rollCall.map((p) => ({
+      id: p.id, seat: p.seat, role: p.role, alignment: p.alignment,
+      believedTheyWere: p.believedTheyWere, finalClaim: p.finalClaim,
+      death: p.death ? { by: p.death.by, seq: p.death.seq, executioner: p.death.executioner ?? null } : null,
+    })),
+    awards: r.awards.map((a) => ({
+      award: a.award, winner: a.winner, why: a.why, querySeq: a.querySeq,
+    })),
+    decisive: r.decisive
+      ? { episode: r.decisive.episode, because: r.decisive.because, atSeq: r.decisive.atSeq }
+      : null,
+    chat: r.chat.map((c) => ({
+      seq: c.seq, text: c.text, author: c.author, generated: c.generated,
+    })),
+  };
 }
 
 function enterNextCasting(room) {
@@ -973,6 +1078,37 @@ export const FANOUT_KEYS = {
    */
   nomOk: ['t', 'ok', 'target', 'why'],
   /*
+   * ⚖️ **THE VERDICT, AND THE LIST IS SHORT BECAUSE OF WHAT IS NOT ON IT.**
+   *
+   * `rrr-social-round.md` §4 draws the line and calls the precision "the whole of P6": the
+   * status, the cameras and the episode are AIRED, attributed and permanent. Held back until the
+   * Reunion: every alignment and role, which incidents had an evil cause, chat authorship — and
+   * `fed`, the feed count, which `foldWin` returns right beside `camerasLit`.
+   *
+   * 🚨 That last one is why this row exists at all. The feed gauge is a deliberately lossy
+   * proxy: evil losing a partner looks exactly like evil winning. Airing it would hand the room
+   * a deduction the design spends the entire night denying it — so a later "we already have the
+   * fold, just spread it" fails closed here instead of quietly ending the social game.
+   */
+  verdict: ['t', 'status', 'camerasLit', 'need', 'episode'],
+  /*
+   * The reveal, and its three nested shapes. Closed like every other fanout — which here is doing
+   * more work than usual: this is the message that is ALLOWED to carry an alignment, so the schema
+   * is the only thing standing between "the Reunion" and "the Reunion plus whatever else was on
+   * the object". `castSeed` and `state.world` are one careless spread away and neither is here.
+   */
+  reveal: ['t', 'seats', 'awards', 'decisive', 'chat'],
+  revealSeat: ['id', 'seat', 'role', 'alignment', 'believedTheyWere', 'finalClaim', 'death'],
+  revealDeath: ['by', 'seq', 'executioner'],
+  revealAward: ['award', 'winner', 'why', 'querySeq'],
+  revealDecisive: ['episode', 'because', 'atSeq'],
+  revealChat: ['seq', 'text', 'author', 'generated'],
+  /*
+   * 🎬 The season is over. One word, and it is the same word the Verdict plate just aired — the
+   * Reunion's own reveals travel on their own payload, once the beat has actually started.
+   */
+  season: ['t', 'status'],
+  /*
    * 🍮 WHO IS PAIRED, AND WHAT THEY ARE CALLED NOW. Public by design — the room watching JOHN
    * reach out to ELLIE is the entire point, and both names are already on the television.
    *
@@ -989,10 +1125,29 @@ export const FANOUT_KEYS = {
 };
 export const FANOUT_FORBIDDEN = ['role', 'alignment', 'cover', 'claim', 'castSeed', 'you', 'teammates', 'flyover', 'hunter', 'deal'];
 
-function extraKeys(obj, allowed, path, out) {
+/* =================================================================================================
+ * 🎭 **THE ONLY EXEMPTION FROM `FANOUT_FORBIDDEN` IN THE WHOLE WIRE, AND IT IS TWO WORDS LONG.**
+ *
+ * `FANOUT_FORBIDDEN` is an absolute blocklist rather than a per-message rule, and it did its job
+ * the first time the Reunion's reveal was fanned: the server threw rather than sending it. That
+ * is the correct behaviour and the reason this is an exemption instead of a deletion.
+ *
+ * ⚠️ **IT IS NAMED, IT IS TINY, AND IT APPLIES TO ONE NESTED SHAPE.** Only `role` and `alignment`,
+ * only on `reveal.seat`, only from `reunionPayload`. `castSeed`, `you`, `teammates`, `flyover`,
+ * `hunter` and `deal` stay forbidden on the reveal exactly as everywhere else — the Reunion tells
+ * the room what everybody WAS, not how the deal was generated or what the guide could see.
+ *
+ * `cover` stays forbidden here too, and that is not a loophole: `reunion.js` calls it
+ * `believedTheyWere`, which is its name in the design and not a synonym invented to get past this
+ * list. If a future payload wants the key `cover`, it fails, and it should — a second name for the
+ * same secret is how a blocklist stops meaning anything.
+ * ================================================================================================= */
+const REVEAL_EXEMPT = ['role', 'alignment'];
+
+function extraKeys(obj, allowed, path, out, exempt = []) {
   if (!obj || typeof obj !== 'object') return;
   for (const k of Object.keys(obj)) {
-    if (FANOUT_FORBIDDEN.includes(k)) out.push(`${path}.${k}`);
+    if (FANOUT_FORBIDDEN.includes(k) && !exempt.includes(k)) out.push(`${path}.${k}`);
     else if (!allowed.includes(k)) out.push(`${path}.${k}`);
   }
 }
@@ -1022,6 +1177,19 @@ export function fanoutViolations(msg) {
     if (msg.result) extraKeys(msg.result, FANOUT_KEYS.lynchResult, 'lynch.result', bad);
   } else if (msg.t === 'warm') {
     extraKeys(msg, FANOUT_KEYS.warm, 'warm', bad);
+  } else if (msg.t === 'verdict') {
+    extraKeys(msg, FANOUT_KEYS.verdict, 'verdict', bad);
+  } else if (msg.t === 'season') {
+    extraKeys(msg, FANOUT_KEYS.season, 'season', bad);
+  } else if (msg.t === 'reveal') {
+    extraKeys(msg, FANOUT_KEYS.reveal, 'reveal', bad);
+    for (const s of msg.seats || []) {
+      extraKeys(s, FANOUT_KEYS.revealSeat, 'reveal.seat', bad, REVEAL_EXEMPT);
+      if (s.death) extraKeys(s.death, FANOUT_KEYS.revealDeath, 'reveal.death', bad);
+    }
+    for (const a of msg.awards || []) extraKeys(a, FANOUT_KEYS.revealAward, 'reveal.award', bad);
+    if (msg.decisive) extraKeys(msg.decisive, FANOUT_KEYS.revealDecisive, 'reveal.decisive', bad);
+    for (const c of msg.chat || []) extraKeys(c, FANOUT_KEYS.revealChat, 'reveal.chat', bad);
   } else if (msg.t === 'ballotOk') {
     extraKeys(msg, FANOUT_KEYS.ballotOk, 'ballotOk', bad);
   } else if (msg.t === 'nomOk') {
@@ -1420,7 +1588,11 @@ function handleClient(room, bound, self, msg) {
    */
   if (msg.t === 'world' && isTV) {
     if (worldViolations(msg).length) return;
-    room.game.setWorld({ runner: msg.runner, hunter: msg.hunter, mission: msg.mission });
+    // Named, never spread — this is the boundary where the TV's report becomes room state, and
+    // a spread would let a widened report add fields nobody entitled.
+    room.game.setWorld({
+      runner: msg.runner, hunter: msg.hunter, mission: msg.mission, view: msg.view,
+    });
     endRunOnMission(room, msg.mission);
     return;
   }
@@ -1477,6 +1649,18 @@ function handleClient(room, bound, self, msg) {
    * exactly that and wiped two live pairs mid-conversation, repeatably.  and 
    * already carried this guard; this one did not.
    */
+  /*
+   * 🛑 **SKIP TO REUNION — isTV, for the same reason `show` is.** It is the one control that can
+   * end everybody's night, so a seated phone must not be able to send it: the missing guard on
+   * `show` let an adversarial playtester drive the whole room, and this button is strictly worse
+   * to hand out. There is no confirmation step on the television because there is no keyboard at
+   * a sofa; the host is the person holding the remote, and W6 records who ended it in the log.
+   */
+  if (msg.t === 'skip' && isTV) {
+    room.game.skipToReunion();
+    enterReunionLive(room);
+    return;
+  }
   if (msg.t === 'show' && isTV && typeof msg.beat === 'string') {
     // Host workaround ("Watch the run") and N14 pacing. Not the product clock.
     // ⚠️ `enterBeatLive`, NOT `setShow` — see its header. `setShow` here repainted the sign

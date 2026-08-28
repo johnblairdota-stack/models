@@ -1570,6 +1570,12 @@ export async function buildTestRoom(engine, o = {}) {
   }
   function setViewpoint(pos, dir, dt) { return setViewpoints([{ pos, dir }], dt); }
   function visibleSpaces() { return spaces.filter((s) => s.visible).length; }
+  /**
+   * WHICH spaces are resident, not how many. `visibleSpaces()` answers a budget question; this
+   * answers a product one — it is the set the party TV is allowed to take the roof off over, so
+   * that a top-down cannot see into a room the runner has not reached. Read-only copy.
+   */
+  function residentIds() { return [..._resident].map((s) => s.id); }
 
 
   /**
@@ -2001,7 +2007,7 @@ export async function buildTestRoom(engine, o = {}) {
     panelOf(id) { return panels.find((p) => p.id === id) ?? null; },
     chainedDoorsOf,
     spaceAt, spacesOnSegment, pathPortals, portals,
-    setViewpoint, setViewpoints, visibleSpaces,
+    setViewpoint, setViewpoints, visibleSpaces, residentIds,
     /**
      * LOOSE OBJECTS JOIN RESIDENCY — see the block above `setViewpoints` for the measurement.
      * `trackLoose` is called for anything scene-parented that BELONGS to a room rather than to
@@ -2031,12 +2037,28 @@ export async function buildTestRoom(engine, o = {}) {
      * ⚠️ **RESTORE ONLY WHAT WE TOOK**, the same conservatism `untrackLoose` uses: `took` is
      * checked rather than assumed, so this can never overwrite a `false` some other system set.
      */
-    setLid(on) {
+    /**
+     * 🏠 **`ids` SCOPES THE ROOF-OFF TO NAMED SPACES — and that argument is a product rule, not
+     * an optimisation.**
+     *
+     * The fly-over wants the whole house open and passes nothing, which is the old behaviour
+     * verbatim. The party TV must not: a roof off over the WHOLE house lets the shared screen
+     * see over walls into rooms the runner is not in, which is the guide's private map arriving
+     * by another route — `docs/design/CRITIC-LEDGER.md` round 8 flagged exactly this and John
+     * answered it (roof off locally). So the expedition passes the runner's own resident set.
+     *
+     * A space not named in `ids` is RESTORED rather than left alone, so the set can shrink as
+     * the runner walks and the room behind them closes over again. `took` is still the only
+     * thing that is put back, so this can never turn on something another system hid.
+     */
+    setLid(on, ids = null) {
       _lidOn = !!on;
+      const scope = ids == null ? null : new Set(ids);
       let hidden = 0;
       for (const sp of spaces) {
+        const off = !_lidOn && (scope == null || scope.has(sp.id));
         for (const e of sp._lid ?? []) {
-          if (_lidOn) { if (e.took) { e.mesh.visible = true; e.took = false; } }
+          if (!off) { if (e.took) { e.mesh.visible = true; e.took = false; } }
           else if (e.mesh.visible) { e.mesh.visible = false; e.took = true; }
           if (e.took) hidden++;
         }

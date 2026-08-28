@@ -36,8 +36,12 @@ Designed order (`src/party/phases.js:45`, `EPISODE_ORDER`):
 ```
 Casting → Expedition → Recap → Debrief → Reckoning → Vote → Execution → Verdict
    ↑                                                                       │
-   └───────────────────────────────────────────────────────────────────────┘
-every episode runs this in full · session is designed to end in a Reunion special
+   │                                                          RENEWED      │
+   └───────────────────────────────────────────────────────────────────────┤
+                                                                           │
+                    FINALE / CANCELLED / ABANDONED ─────────► Reunion ◄─────┘
+                                                        (roll call · cut · awards · chat)
+every episode runs this in full · the fold decides which way out of the Verdict
 ```
 
 **Every episode runs the same order, premiere included.** `orderFor` used to stop episode 1
@@ -47,11 +51,13 @@ rather than asserting an order — it derives the expected live walk from `order
 any future change and fails only when they drift apart again. **If you change the running order,
 change it in `phases.js` and let that gate tell you what moves.**
 
-**One designed beat is still off the wire: `VERDICT`.** `SHOW_BEATS` has eight beats and no
-`verdict` and no `reunion`; `AFTER_RUN_NEXT.execution = 'casting'` walks Execution straight back
-to Casting, while the TV rundown rail shows Verdict as a label that never lights. This is staged,
-not broken — `episode-order`'s `WIRE_MISSING` names it, and the day Verdict grows a wire beat,
-delete it from that list.
+**The whole designed order is on the wire as of 2026-08-28, and a session can end.** `SHOW_BEATS`
+carries `verdict` and `reunion`; `AFTER_RUN_NEXT` walks `execution → verdict → casting`, and that
+last edge is **conditional on the fold** — RENEWED plays on, FINALE / CANCELLED / ABANDONED enter
+the Reunion. It is the first conditional edge in the whole wire and the only thing that has ever
+ended a session. `episode-order`'s `WIRE_MISSING` is now empty, which is what it was written to
+become. The Reunion is deliberately NOT on the rundown rail: the rail is one episode's schedule,
+and the Reunion happens once.
 
 **Before you "fix" anything else here, read the gap list in `docs/design/PRIME-TIME-STATE.md`.**
 
@@ -60,12 +66,49 @@ delete it from that list.
 These were decided in playtest and cost real sessions to arrive at. Changing one is a design
 decision, not a refactor.
 
-- **D13 · The phone is a controller, never a viewport.** No 3D on the phone. The runner's chase
-  camera lives on the **TV**. Phone is two sticks: left = move (camera-relative to the TV cam),
-  right = look/orbit. A phone chase embed was built (#29) and **removed** (#30) because it loaded
-  slowly and did not work.
-- **Chase-only during the run** — no shoulder / lead / doorway cuts under the player's thumb.
+- **D13 · The phone is a controller, never a viewport.** No 3D on the phone. The runner's camera
+  lives on the **TV**. A phone chase embed was built (#29) and **removed** (#30) because it loaded
+  slowly and did not work. The pad has **two shapes**, and which one is live follows the camera:
+  on the ground it is two sticks (left = move, camera-relative; right = look/orbit); under the
+  plan-locked top-down the look stick is **not rendered** and the move stick is **absolute** —
+  screen direction is world direction — with RUN/SWING grown into the freed half. The phone is
+  told which via `you.view` (runner-audience). Gates: `party-warm` W26i–W26i4.
+- **The DIRECTOR may not cut during the run** — no shoulder / lead / doorway under the player's
+  thumb, because those invert a camera-relative stick. ⚠️ This bullet used to read *"chase-only
+  during the run"* and that became literally false when the four perspectives shipped; a
+  perspective is **held**, chosen by the game, and is not a cut. Gate: `party-warm` W26h/W26h2.
+- **The expedition chooses its own camera at the ballroom threshold.** Inside the ballroom the
+  show is on `chase`; outside it the show is `top`, and the change between them is a 1.35 s
+  **crane** (1.10 s coming back), not a cut. Hysteresis is a 2.20 m dead band at the wall so a
+  doorway cannot strobe it. The `?dev=1` **P** key still cycles all four rigs for inspecting
+  ceiling art, and the next crossing takes the camera back. Gates: `party-follow` F11i–F11i5,
+  `party-warm` W26h3.
+- **The TV may see over the walls of the runner's OWN rooms, and never the whole house.**
+  `party-loop.md`'s "Do not" #1 is narrowed, not repealed — no whole-house fit, no hunter mark,
+  no route line, no plan diagram. `setLid(on, ids)` is scoped to residency's set. Ratified by
+  John after `CRITIC-LEDGER` round 8 raised it. Gates: `party-follow` F11c2d,
+  `party-follow-drive` D5.
 - **Casting has no "Send them in" button.** Once runner and guide lock, the TV counts 3·2·1.
+- **The Verdict airs a status, cameras, a casualty by VISIBLE CAUSE and an incident count — and
+  nothing else.** `rrr-social-round.md` §4; *"precision here is the whole of P6"*. Held back until
+  the Reunion: every alignment and role, **the feed count** (evil losing a partner looks exactly
+  like evil winning), which incidents were sabotage, and chat authorship. `foldWin` returns `fed`
+  and `rule` right beside `camerasLit`, and the rule is the same leak in a costume — W3 *is* the
+  feed count in words. Gates: `party-night` N17h0b, `party-warm` W47c/W47d.
+- **The Reunion's reveal is its own message, not an exception inside `entitle.js`.** `MATRIX`
+  projects the state frame and stays deny-by-default with no "unless the phase is REUNION"
+  anywhere in it; `t:'reveal'` is a separate fanout with a closed schema and a **named** two-word
+  exemption from `FANOUT_FORBIDDEN` (`role`, `alignment`, on `reveal.seat` only). `cover` is still
+  forbidden even there — it travels as `believedTheyWere`, which is its name in the design.
+  Gates: `party-night` N17m–N17m3, `party-warm` W47i.
+- **SKIP TO REUNION is isTV and takes two taps.** It ends everybody's night, so a seated phone
+  must not be able to send it, and one tap must not be able to either. Offered from a chair only —
+  never mid-expedition. Gates: `party-night` N17k–N17k4, `party-warm` W47f.
+- **A season lasts exactly `EPISODE_CAP` AIRED episodes.** The cap is measured against
+  `state.airingEpisode`, not `state.episode`, because `playEpisode` bumps that before the live
+  Verdict beat is reached and after the offline one — a live room used to stop after four of five
+  while the offline machine stopped after five, with a green gate on each. Gates: `episode-order`
+  E6/E6b, `party-night` N17n, `win-machine` W10c.
 - **Every episode runs the full order, premiere included** — episode 1 votes and evicts like any
   other. Decided 2026-08-25; `phases.js` `orderFor` carries the argument, the 105s it costs the
   night, and the line to change back if a real premiere feels arbitrary. Gate: `episode-order`.
@@ -190,6 +233,12 @@ are ONE question here, because the smash is a ray with a finite `far`, and the r
 pitch control at all — `follow-bed.js`'s driven branch passes `{move, run, aimYaw}` and never
 `aimPitch`, so a phone-driven runner is pinned at −0.06 rad all night. The swing is one shallow
 fan, not a sweepable cone.
+
+Known **undecided**, and it is John's call rather than a refactor: `COMPOSITION[n].cameras` and
+`WIN_TARGETS[n].cameraTarget` disagree — **3 against 4 at eight players** — and both files
+describe theirs as how many cameras must be lit to win. The running state counts against the
+first; `foldWin` decides W2 against the second. The Verdict plate reports the fold's number,
+because the plate is a report on the fold, and carries it on the wire so it cannot drift.
 
 ## Working style
 

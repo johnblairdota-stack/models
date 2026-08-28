@@ -477,6 +477,24 @@ t('I1b · public cosmetics are rowed; hunter/deal/role on a player still have no
     && audienceFor('players[].role') === null
     && audienceFor('players[].alignment') === null,
   'a later secret field still fails I1');
+/*
+ * 🎥 **THE CAMERA THE SHOW IS ON IS THE RUNNER'S BUSINESS AND NOBODY ELSE'S.**
+ *
+ * I1/I2 already sweep every observed key path, but `you.view` only appears once a TV is actually
+ * rendering a run and `playEpisode` never calls `setWorld` — so it would be rowed correctly and
+ * never exercised. State the row directly, the same way I1b states the ones that must have none.
+ *
+ * `runner`, not `all`: it exists so the pad can match its labels to the live controls, and a
+ * seated phone that knew the camera had been handed a fact about the house it did not earn.
+ * `top`/`iso` also imply the roof is off, which is a spatial fact and the TV must never be told
+ * anything it did not itself compute.
+ */
+t('I1c · the live camera is runner-audience — a seated phone and the TV are never told it',
+  audienceFor('you.view') === 'runner'
+    && entitled(audienceFor('you.view'), { seatRole: 'runner' })
+    && !entitled(audienceFor('you.view'), { seatRole: 'guide' })
+    && !entitled(audienceFor('you.view'), { seatRole: null }),
+  'you.view · runner');
 t('I2 · no key path reaches a socket its row does not entitle', R.I2, R.detail.I2 || `${SEEDS.length} seeds clean`);
 t('I3 · semantic sweep — no ground-truth value in a non-entitled transcript', R.I3, R.detail.I3 || 'no foreign role or alignment observed');
 t('I3b · every claim on the wire was published by its owner, never inferred', R.I3b,

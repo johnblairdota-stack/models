@@ -210,8 +210,23 @@ none of those in scope.
 
 Derived from `party-loop.md`'s **Do not** section, plus what follows from it.
 
-1. **Never put the guide's flyover on the TV.** No top-down, no roofless view, no minimap bug, no
-   route line, no plan diagram. `placeFlyCamera` (`src/views/game.js:2273`) is a phone-only view.
+1. **Never put the guide's FLYOVER on the TV.** No whole-house fit, no minimap bug, no route line,
+   no plan diagram, no hunter mark. `placeFlyCamera` (`src/views/game.js:2273`) is a phone-only view.
+
+   ⚠️ **AMENDED 2026-08-28, ratified by John.** This rule used to read *"no top-down, no roofless
+   view"* full stop, and the expedition is now played top-down with the roof off — see
+   `web-prototype/docs/slices/task-topdown-expedition.md`. The narrowing is deliberate and the
+   line it draws is **how much of the house at once**, not the angle:
+
+   | still forbidden | now allowed |
+   |---|---|
+   | a fitted whole-house frame | a tight follow, ~9 m over the runner |
+   | the roof off over rooms the runner is not in | the roof off over the runner's own room and its portal neighbours |
+   | a hunter mark, a route line, a plan diagram | the hunter as a silhouette a real camera can see (item 2, unchanged) |
+
+   The guide keeps the whole-house map and the hunter ring, which is the asymmetry this rule
+   exists to protect. `CRITIC-LEDGER.md` round 8 raised the conflict; the answer is recorded
+   there. Gates: `party-follow` F11c2d, `party-follow-drive` D5.
 2. **Never draw the hunter's path**, its destination, its awareness value, or the sense overlay
    (`flyover.senses`, `src/views/game.js:2453`) on the TV. The hunter appears only as a silhouette a
    real camera can actually see.

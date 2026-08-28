@@ -1,0 +1,74 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; }
+    a { color: #f5a14a; } a:hover { color: #ffbe7d; }
+  </style>
+</helmet>
+
+<!-- ═══════ THE ONE MOMENT THE ROLE CARD IS ALLOWED TO BE FACE-UP ═══════
+     All night the card is hold-to-reveal and blurred at rest, so a neighbour's glance at an
+     unattended phone learns nothing. At the Reunion that rule expires: the TV is flipping every
+     nameplate anyway, so the card goes face-up and STAYS there. It is the personal half of the
+     roll call — the TV says what you were, this says what it cost you.
+
+     🚨 This screen is where the entitlement rule bends, and it must bend HERE and nowhere
+     earlier. `entitle.js` carries "NO ROW. Nobody, ever, pre-REUNION" for alignment; the Reunion
+     payload is the one deliberate exception, and `revealSet` is already the leak dictionary
+     `reunion-truth` U2 checks it against. The risk this design has to avoid is a screen that
+     renders the reveal a beat before the beat. -->
+
+<div style="width: 390px; height: 844px; position: relative; background: #0c0a08; color: #f3ece3; overflow: hidden; display: flex; flex-direction: column; font-size: 16px;">
+
+  <div style="flex: 0 0 auto; padding: 14px 16px 10px; background: #12100c; border-bottom: 1px solid rgba(245,161,74,.14);">
+    <div style="display: flex; justify-content: space-between; align-items: baseline;">
+      <div style="font-size: 11px; letter-spacing: .24em; text-transform: uppercase; font-weight: 800; color: #f5a14a;">The Reunion</div>
+      <div style="font-size: 26px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums;">4:00</div>
+    </div>
+    <div style="margin-top: 6px; font-size: 15px; color: #a89884;">Roll call · Director's Cut · Awards · Chat</div>
+  </div>
+
+  <div style="flex: 1 1 auto; min-height: 0; overflow: hidden; padding: 18px 14px 8px; display: flex; flex-direction: column; gap: 12px;">
+
+    <div style="padding: 20px 18px 22px; border-radius: 14px; background: linear-gradient(180deg, #241f1a 0%, #171310 100%); border: 1px solid rgba(255,138,122,.35);">
+      <div style="font-size: 11px; letter-spacing: .24em; text-transform: uppercase; font-weight: 800; color: #ff8a7a;">Your card · face up at last</div>
+      <div style="margin-top: 12px; font-size: 40px; font-weight: 800; line-height: 1;">The Fixer</div>
+      <div style="margin-top: 10px; font-size: 15px; letter-spacing: .18em; text-transform: uppercase; font-weight: 800; color: #ff8a7a;">Production</div>
+      <div style="margin-top: 14px; font-size: 16px; line-height: 1.4; color: #a89884;">You rigged the chandelier in episode 2. Nobody ever said your name for it.</div>
+    </div>
+
+    <div style="padding: 14px 15px 15px; border-radius: 12px; background: #12100c;">
+      <div style="font-size: 11px; letter-spacing: .22em; text-transform: uppercase; font-weight: 800; color: #8a7d70;">What you told them</div>
+      <div style="margin-top: 7px; font-size: 18px; font-weight: 700; line-height: 1.35; color: #f3ece3;">&#8220;Sound Guy. I was watching the north hall.&#8221;</div>
+      <div style="margin-top: 8px; font-size: 15px; color: #a89884;">Believed for three episodes.</div>
+    </div>
+
+    <div style="padding: 14px 15px 15px; border-radius: 12px; background: #12100c;">
+      <div style="font-size: 11px; letter-spacing: .22em; text-transform: uppercase; font-weight: 800; color: #8a7d70;">How it ended</div>
+      <div style="margin-top: 7px; display: flex; align-items: center; gap: 10px;">
+        <span style="font-size: 20px; font-weight: 800; color: #ff8a7a;">Executed</span>
+        <span style="font-size: 16px; color: #a89884;">episode 3</span>
+      </div>
+      <div style="margin-top: 6px; font-size: 15px; color: #a89884;">On Ellie's nomination, four votes to three.</div>
+    </div>
+
+    <div style="padding: 14px 15px 15px; border-radius: 12px; background: #12100c; border-left: 5px solid #f5a14a;">
+      <div style="font-size: 11px; letter-spacing: .22em; text-transform: uppercase; font-weight: 800; color: #f5a14a;">You won an award</div>
+      <div style="margin-top: 6px; font-size: 22px; font-weight: 800;">Best Liar</div>
+    </div>
+  </div>
+
+  <div style="flex: 0 0 auto; padding: 12px 14px 22px; background: #12100c; border-top: 1px solid rgba(245,161,74,.14);">
+    <div style="font-size: 14px; line-height: 1.4; color: #8a7d70; text-align: center;">The chat comes off the mixer next — every line, and who really wrote it.</div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

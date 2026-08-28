@@ -76,7 +76,8 @@ function skippedForCause(ws) {
 import {
   AFTER_RUN_BEATS, DEBRIEF_HOLD_MS, RECAP_BACKSTOP_MS, RECAP_HOLD_MS, SHOW_BEATS,
   RUNDOWN_BEATS, holdMsFor, missionEndsRun, nextShowBeat, railDrainPct, recapAfterMs,
-  remainingMs, rundownRibbon, RUN_END,
+  remainingMs, rundownRibbon, RUN_END, isTalkBeat,
+  REUNION_PLAN, reunionBeatAt, rollCallRevealed,
 } from '../src/party/show.js';
 import { missionFor, MISSION_TABLE } from '../src/party/mission.js';
 import { ROOMS, hunterVisibleToGuide } from '../src/party/coverage.js';
@@ -93,7 +94,9 @@ import { isNightToken } from '../src/party/palette.js';
 import { BALLROOM_POINTS } from '../src/lighting/ballroom-rig.js';
 import { leftoverRuns, barrierFillForEdge } from '../src/game/dig-policy.js';
 import { MATRIX } from '../net/party/entitle.js';
-import { FANOUT_KEYS, fanoutViolations } from '../net/party/local.mjs';
+import { FANOUT_FORBIDDEN, FANOUT_KEYS, fanoutViolations } from '../net/party/local.mjs';
+import { OUTCOME, outcomeLine } from '../src/party/win.js';
+import { PHASE, SECONDS } from '../src/party/phases.js';
 import { existsSync, openSync, readSync, closeSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -1641,11 +1644,18 @@ console.log('\nparty-warm — the lobby-warm night');
 
 // ---- W27 — NIGHT LOOP: RECAP → DEBRIEF → CASTING, CHAPEL TABLE ON EP2 ----------------------
 {
-  t('W27 · debrief is a show beat — Recap is not the end of the night',
+  /*
+   * ⚠️ **INVERTED 2026-08-28 — `execution` no longer hands straight back to Casting.**
+   * The chain grew a seventh beat between them, so the assertion that used to pin
+   * `nextShowBeat('execution') === 'casting'` was pinning the ABSENCE of an ending. It now pins
+   * the walk through the Verdict, and `nextShowBeat('verdict')` is Casting only as the DEFAULT —
+   * `progressShow` overrules it on a finished season (`party-night` N17h / N17j gate both sides).
+   */
+  t('W27 · debrief is a show beat, and the run walks all the way to the Verdict',
     SHOW_BEATS.includes('debrief') && SHOW_BEATS.includes('reckoning')
-      && AFTER_RUN_BEATS.join(',') === 'recap,debrief,reckoning,vote,execution,casting'
+      && AFTER_RUN_BEATS.join(',') === 'recap,debrief,reckoning,vote,execution,verdict,casting'
       && nextShowBeat('recap') === 'debrief' && nextShowBeat('debrief') === 'reckoning'
-      && nextShowBeat('execution') === 'casting');
+      && nextShowBeat('execution') === 'verdict' && nextShowBeat('verdict') === 'casting');
   // Debrief 75s -> 300s on 2026-08-25: a CEILING now, ended by a majority tapping READY
   // (`party-night` N21). What the change cost the night budget is argued in `round-loop` R2.
   t('W27a · holds are the shooting-schedule seconds, not a silent second table',
@@ -1662,8 +1672,19 @@ console.log('\nparty-warm — the lobby-warm night');
   t('W27d · CAUGHT is still reserved — hunter take is still the next slice',
     !/RUN_END\.CAUGHT/.test(localSrc));
   const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
-  t('W27e · debrief is not painted as a run, and the host canLock looks at this pair not last episode\'s',
-    /const onTalk = show === 'recap' \|\| show === 'debrief'/.test(hostSrc)
+  /*
+   * ⚠️ **REWRITTEN 2026-08-28 — this pinned a HAND-WRITTEN COPY of TALK_BEATS.** It asserted the
+   * literal text `const onTalk = show === 'recap' || show === 'debrief'`, which locked in the
+   * second table rather than the behaviour: `onRun` reads `onTalk`, and `hasPair` is still true at
+   * the Verdict, so the first beat the copy had never heard of would have painted the expedition
+   * over the Showrunner. It is derived now, and the assertion follows — plus the control that
+   * `show.js` really does class every seated beat as one, so "derived" is not derived from a lie.
+   */
+  t('W27e · the host derives its seated beats from TALK_BEATS, and canLock looks at this pair',
+    /const onTalk = show === 'recap' \|\| onStage;/.test(hostSrc)
+    && !/const onTalk = show === 'recap' \|\| show === 'debrief'/.test(hostSrc)
+    && ['debrief', 'reckoning', 'vote', 'execution', 'verdict', 'reunion'].every(isTalkBeat)
+    && !isTalkBeat('recap') && !isTalkBeat('expedition') && !isTalkBeat('casting')
     && /!pair\.runner/.test(hostSrc)
     && /show === 'debrief'/.test(hostSrc));
   t('W27f · episode 2+ smashes the chapel catalog table-round, not a invented GLB',
@@ -1948,19 +1969,48 @@ console.log('\nparty-warm — the lobby-warm night');
     /liveRunShot\(mode, opts\.pinShot\) === 'chase'\) return/.test(bedSrc)
     && /lockShot: want/.test(bedSrc)
     && /const want = runPerspective\(mode, opts\.pinShot, perf\.perspective\)/.test(bedSrc)
-    && /if \(PERSPECTIVES\.includes\(c\.shot\)\) \{ perf\.perspective = c\.shot; return; \}/.test(bedSrc)
+    && /if \(PERSPECTIVES\.includes\(c\.shot\)\) \{ perf\.perspective = c\.shot; perf\.pinned = true; return; \}/.test(bedSrc)
     && /until = 1e9/.test(bedSrc));
+  /*
+   * 🚪 **AND THE EXPEDITION NOW PICKS ITS OWN CAMERA, WITH `P` AS AN OVERRIDE THAT EXPIRES.**
+   * John: *"each expedition takes place outside the ball room… it's top down perspective."* So
+   * two authorities write `perf.perspective` and they need a rule rather than a race: the
+   * ballroom threshold writes it on a crossing and clears any pin, the dev key writes it and
+   * raises one. That keeps `P` usable for inspecting ceiling art in play (`ballroom-next.md`)
+   * without letting it strand the show in a perspective the expedition never asked for.
+   */
+  t('W26h3 · the ballroom threshold owns the camera, and a crossing takes it back from `P`',
+    /const loopWant = stepBallroomView\(perf\.loopView, runner\.pos, ballroom\);/.test(bedSrc)
+    && /perf\.pinned = false;\s+\/\/ a crossing is the loop taking its camera back/.test(bedSrc)
+    && /\} else if \(!perf\.pinned\) \{/.test(bedSrc));
   t('W26h2 control · and a director shot can still never be held on a run unless it was TYPED',
     ['shoulder', 'lead', 'doorway'].every((s) => runPerspective('run', null, s) === 'chase')
       && runPerspective('run', 'shoulder', null) === 'shoulder',
     'only ?shot= pins a director shot');
-  t('W26i · the runner phone is a pad — two sticks, no chase embed, eyes on the TV',
+  t('W26i · the runner phone is a pad — no chase embed, eyes on the TV',
     !/warmUrl\(/.test(phoneSrc)
     && !/runner-chase-layer/.test(phoneSrc)
     && !/sendChaseCue/.test(phoneSrc)
     && /id="stick"/.test(phoneSrc)
     && /id="stick-look"/.test(phoneSrc)
     && /Eyes on the TV/.test(phoneSrc));
+  /*
+   * 🎥 **AND THE PAD HAS TWO SHAPES NOW, so asserting that the source CONTAINS a look stick is
+   * no longer the same as asserting the player gets one.** Both branches live in this file, so a
+   * grep for `id="stick-look"` passes whatever the top-down sheet actually renders. What has to
+   * hold is the CONDITION: the look stick is inside a `topDown ? '' : ...` arm, the copy differs
+   * between the two, and the camera is in the repaint key or the pad would keep the wrong shape
+   * for the rest of the night.
+   */
+  t('W26i2 · under a plan-locked top-down the look stick is not rendered at all',
+    /const topDown = camView === 'top' \|\| camView === 'iso';/.test(phoneSrc)
+    && /\$\{topDown \? '' : `<div class="stick-col">\s*\n\s*<div class="stick stick-look"/.test(phoneSrc)
+    && /The stick is the room — push where you want to go/.test(phoneSrc));
+  t('W26i3 · and the camera is part of the sheet\'s repaint key, so it re-shapes on the crossing',
+    /const camStamp = iAmRunner \? `:\$\{frame\?\.you\?\.view \|\| 'chase'\}` : '';/.test(phoneSrc)
+    && /\$\{hasCard\(\) \? 'card' : 'nocard'\}\$\{camStamp\}/.test(phoneSrc));
+  t('W26i4 · the phone learns the camera from its own seat only — never from the TV',
+    /frame\?\.you\?\.view/.test(phoneSrc));
   t('W26j · the guide path is still the map — chase is not mounted on that sheet',
     /guideMapSvg\(/.test(phoneSrc)
     && /iAmGuide/.test(phoneSrc)
@@ -2073,7 +2123,12 @@ console.log('\nparty-warm — the lobby-warm night');
       && RUNDOWN_BEATS[0] === 'lobby'
       && RUNDOWN_BEATS.includes('verdict')
       && !RUNDOWN_BEATS.includes('reunion')
-      && !SHOW_BEATS.includes('verdict'));
+      /* ⚠️ INVERTED 2026-08-28. This read `!SHOW_BEATS.includes('verdict')` and that was the
+         gate FOR the stub — the chip was grey because no beat lit it. Verdict is on the wire
+         now, so the rail lights it with no change to `rundownRailHtml` at all: `live` is
+         `SHOW_BEATS.includes(id)`. The Reunion stays OFF the rail on purpose — the rundown is
+         one EPISODE's schedule, and the Reunion is what happens when there are no more. */
+      && SHOW_BEATS.includes('verdict'));
 
   const lobby = rundownRailHtml({ beat: 'lobby' });
   const debrief = rundownRailHtml({ beat: 'debrief' });
@@ -2116,9 +2171,17 @@ console.log('\nparty-warm — the lobby-warm night');
     && /data-rail-drain/.test(hostSrc)
     && /ON AIR/.test(hostSrc));
 
-  t('W30f · guide map is still never on the TV, and verdict is a stub on the rail',
+  /*
+   * ⚠️ **INVERTED 2026-08-28 — the grey chip lights.** `stub` is the rail's word for "on the
+   * schedule, but nothing on the wire ever reaches it", and Verdict wore it from the day the rail
+   * shipped. It is now `next` from the lobby like every other beat ahead of the playhead. The
+   * control half of this — that NOTHING is a stub any more — is deliberately asserted too: if a
+   * future beat is drawn on the rail before it is wired, this fails and says so.
+   */
+  t('W30f · guide map is still never on the TV, and the verdict chip is no longer a stub',
     !/guideMapSvg/.test(hostSrc) && !/GUIDE_MAP/.test(hostSrc)
-      && lobby.includes('class="show-rail-seg stub" data-rail-seg="verdict"')
+      && lobby.includes('class="show-rail-seg next" data-rail-seg="verdict"')
+      && !lobby.includes('show-rail-seg stub')
       && debrief.includes('class="show-rail-seg on" data-rail-seg="debrief"'));
 
   t('W30g · rail CSS stays inside the shared chrome string — tokens, no hex, no backticks',
@@ -3566,6 +3629,155 @@ console.log('\nparty-warm — the lobby-warm night');
     && /const tab = \{ seat: r\.seat\.seat, accent: r\.seat\.accent \};/.test(bedSrc)
     && /setNameTagLabel\(r\.tag, r\.seat\.name, skin, tab\)/.test(bedSrc)
     && /sprite\.userData\.tagTab === tabKey/.test(plateSrc));
+}
+
+// ---- W47 · THE VERDICT AND THE REUNION REACH A SCREEN --------------------------------------
+//
+// The wire got the Verdict beat on 2026-08-28 (`party-night` N17h0, `episode-order` E2b). A beat
+// with no view is a black television for fifteen seconds, and a phone that goes blank because
+// `isTalkBeat` now claims a beat its sheet has never heard of. These are the screens.
+//
+// 🚨 **THE HALF THIS BLOCK EXISTS FOR IS WHAT IS *NOT* ON THEM.** `rrr-social-round.md` §4 holds
+// the feed count, every alignment and every role back until the Reunion — and `rule` is the same
+// leak in a costume, because W3 is "evil fed the Hunter enough goods" spelled out in words. The
+// server keeps them off the wire (`FANOUT_KEYS.verdict`); these keep them off the screen.
+{
+  const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
+  const phoneSrc = await readFile(new URL('../src/views/party-phone.js', import.meta.url), 'utf8');
+  const clientSrc = await readFile(new URL('../src/party/night-client.js', import.meta.url), 'utf8');
+
+  t('W47 · the TV has a Verdict branch and a Reunion branch, and neither is the chase',
+    /show === 'verdict'/.test(hostSrc) && /show === 'reunion'/.test(hostSrc)
+      && /verdictFacts\(/.test(hostSrc)
+      && isTalkBeat('verdict') && isTalkBeat('reunion'));
+
+  t('W47a · the phone draws both too — isTalkBeat now claims them, so a missing sheet is blank',
+    /beat === 'verdict'/.test(phoneSrc) && /beat === 'reunion'/.test(phoneSrc)
+      && /function paintVerdict/.test(phoneSrc) && /function paintReunion/.test(phoneSrc));
+
+  /*
+   * The sentence a status MEANS is one function in `win.js`, beside the machine that produces the
+   * statuses — because the TV and the phone both say it, and two copies that must agree and can
+   * drift is what `episode-order` exists to punish one layer up.
+   */
+  t('W47b · both screens read the outcome words from win.js — not a copy each',
+    /outcomeLine\(/.test(hostSrc) && /outcomeLine\(/.test(phoneSrc)
+      && !/'The season continues\. Casting is next\.'/.test(hostSrc)
+      && !/'The season continues\. Casting is next\.'/.test(phoneSrc)
+      && outcomeLine(OUTCOME.RENEWED).includes('continues')
+      && outcomeLine(OUTCOME.CANCELLED).includes('Production wins')
+      && outcomeLine(OUTCOME.FINALE).includes('cast wins')
+      && outcomeLine(OUTCOME.ABANDONED).includes('Nobody wins')
+      && outcomeLine(undefined).includes('deciding'),
+    Object.values(OUTCOME).map(outcomeLine).join(' | '));
+
+  /*
+   * ⚠️ These match CODE, not prose. A bare `/\bfed\b/` failed on this block's own explanation of
+   * why the feed count is withheld — a gate that forbids naming the thing it protects makes the
+   * next person delete the argument to get green. `.fed` / `fed:` is the read or the write.
+   */
+  t('W47c control · no feed count and no fold rule anywhere near either screen',
+    !/\.fed\b|\bfed\s*[:=]/.test(hostSrc) && !/\.fed\b|\bfed\s*[:=]/.test(phoneSrc)
+      && !/verdict\.rule|v\.rule/.test(hostSrc) && !/verdict\.rule|v\.rule/.test(phoneSrc)
+      && !/\.rule\b/.test(clientSrc)
+      && /THERE IS NO `fed` ON THIS/.test(clientSrc));
+
+  /*
+   * ⚠️ The camera count on the plate is measured against the target THE FOLD USED, not the one
+   * the running state carries. `COMPOSITION[8].cameras` is 3 and `WIN_TARGETS[8].cameraTarget`
+   * is 4 — a real divergence, flagged rather than quietly picked — so a plate that read
+   * `frame.cameras.needed` would print a target the rule never used.
+   */
+  t('W47d · the plate counts cameras against the fold\'s own target, carried on the wire',
+    FANOUT_KEYS.verdict.includes('need') && FANOUT_KEYS.verdict.includes('camerasLit')
+      && !FANOUT_KEYS.verdict.includes('fed') && !FANOUT_KEYS.verdict.includes('rule')
+      && /v\.need/.test(hostSrc) && /v\.need/.test(phoneSrc)
+      && !/frame\?\.cameras/.test(hostSrc.slice(hostSrc.indexOf("show === 'verdict'"),
+        hostSrc.indexOf("show === 'casting'"))),
+    FANOUT_KEYS.verdict.join(','));
+
+  /*
+   * 🛑 **SKIP TO REUNION.** One control, one call site, and both of its guards are behavioural
+   * rather than cosmetic: it is offered only from a chair (`onStage`, which `show.js` owns — never
+   * mid-expedition, where ending the session takes the run away from the one person playing), and
+   * it takes TWO taps, because a remote gets sat on and there is no undo on the other side of
+   * `host.skip`. The isTV half is the server's and is gated by `party-night` N17k.
+   */
+  t('W47f · SKIP TO REUNION is offered from a chair only, and it arms before it sends',
+    /id="to-reunion"/.test(hostSrc)
+      && /if \(onStage && show !== 'reunion'\)/.test(hostSrc)
+      && /SKIP_ARM_MS = \d+/.test(hostSrc)
+      && /ui\.skipArmedUntil = Date\.now\(\) \+ SKIP_ARM_MS/.test(hostSrc)
+      && /client\.send\(\{ t: 'skip' \}\)/.test(hostSrc)
+      // the send is behind the arm check, not beside it
+      && /if \(Date\.now\(\) < ui\.skipArmedUntil\)[\s\S]{0,140}client\.send\(\{ t: 'skip' \}\)/.test(hostSrc));
+
+  /* ===========================================================================================
+   * 🎭 **W47e — REPLACED 2026-08-28.** This asserted that the Reunion screens revealed NOTHING,
+   * which was true for exactly one commit: the payload was staged and the views were holding
+   * frames. Leaving it would have made the gate an argument against finishing the beat. What
+   * replaces it is the property that actually has to hold once the reveal exists.
+   *
+   * 🚨 **`null` IS DRAWN AS `null`.** The one risk the Reunion design has is a screen that renders
+   * the reveal a beat before the beat, and the way that happens is a defaulted empty shape that
+   * looks like an answer — `{seats: []}` reads as "the Reunion says nobody was anybody". Both
+   * views take the payload optionally and neither invents one.
+   * =========================================================================================== */
+  t('W47e · both Reunion screens draw the reveal, and neither defaults it into existence',
+    /client\.reveal/.test(hostSrc) && /c\.reveal/.test(phoneSrc)
+      && /this\.reveal = null/.test(clientSrc)
+      && !/reveal \|\| \{ seats/.test(clientSrc)
+      && /Do not default this to an empty shape/.test(clientSrc));
+
+  /*
+   * ⚠️ **THE PHONE'S REUNION CARD MUST NOT COME FROM `role.card`.** The card this view has held
+   * all game carries the player's COVER — the Glitched believes they are the Camera Op — so a
+   * Reunion sheet built from it would tell them the lie one last time on the one screen whose
+   * whole job is the truth. `reunion-truth` U2 caught exactly this substitution once already, in
+   * the other direction. `believedTheyWere` is where the cover belongs and it is named as such.
+   */
+  t('W47g · the phone\'s face-up card is the reveal\'s row for this seat, not the role card',
+    /c\.reveal\?\.seats \|\| \[\]\)\.find\(\(s\) => s\.id === me\?\.playerId\)/.test(phoneSrc)
+      && /believedTheyWere/.test(phoneSrc)
+      && !/state\.card[\s\S]{0,200}reunion/i.test(phoneSrc));
+
+  /*
+   * The Reunion is the one beat with no server clock — nothing after it decides what a phone may
+   * do — so the television paces itself off one table. The arithmetic is checkable in bare node,
+   * which is the whole reason the table is in `show.js` rather than four numbers in a view.
+   */
+  t('W47h · the Reunion\'s four beats spend exactly the budget phases.js set aside for them',
+    REUNION_PLAN.reduce((a, b) => a + b.ms, 0) === SECONDS[PHASE.REUNION] * 1000
+      && REUNION_PLAN.map((b) => b.beat).join(',') === 'rollCall,cut,awards,chat'
+      && reunionBeatAt(0).beat === 'rollCall'
+      && reunionBeatAt(SECONDS[PHASE.REUNION] * 1000 + 60_000).beat === 'chat'
+      && rollCallRevealed(0, 8) === 1
+      && rollCallRevealed(REUNION_PLAN[0].ms, 8) === 8
+      && rollCallRevealed(1e9, 8) === 8
+      && rollCallRevealed(1e9, 0) === 0,
+    `${REUNION_PLAN.reduce((a, b) => a + b.ms, 0) / 1000}s of ${SECONDS[PHASE.REUNION]}s`);
+
+  /*
+   * 🚨 The reveal is the ONLY message allowed to carry a role or an alignment, and the exemption
+   * is named rather than achieved by deleting the blocklist. `cover` is deliberately still
+   * forbidden even there — `reunion.js` calls it `believedTheyWere`, which is its name in the
+   * design and not a synonym invented to get past a list.
+   */
+  t('W47i · the reveal is a named exemption from FANOUT_FORBIDDEN, not a hole in it',
+    FANOUT_FORBIDDEN.includes('role') && FANOUT_FORBIDDEN.includes('alignment')
+      && FANOUT_FORBIDDEN.includes('cover') && FANOUT_FORBIDDEN.includes('castSeed')
+      && FANOUT_KEYS.revealSeat.includes('role') && FANOUT_KEYS.revealSeat.includes('alignment')
+      && !FANOUT_KEYS.revealSeat.includes('cover')
+      && FANOUT_KEYS.revealSeat.includes('believedTheyWere')
+      && fanoutViolations({
+        t: 'reveal', seats: [{ id: 'p1', seat: 0, role: 'fixer', alignment: 'evil',
+          believedTheyWere: null, finalClaim: null, death: null }], awards: [], decisive: null, chat: [],
+      }).length === 0
+      && fanoutViolations({
+        t: 'reveal', seats: [{ id: 'p1', cover: 'cameraOp' }], awards: [], decisive: null, chat: [],
+      }).length > 0
+      && fanoutViolations({ t: 'lobby', seats: [{ id: 'p1', alignment: 'evil' }] }).length > 0,
+    FANOUT_KEYS.revealSeat.join(','));
 }
 
 console.log(`\nparty-warm: ${pass} passed, ${fail} failed`);

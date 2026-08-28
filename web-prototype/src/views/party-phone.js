@@ -24,6 +24,7 @@ import { missionFor } from '../party/mission.js';
 import { intelLine } from '../party/intel.js';
 import { STICK_DEADZONE, warmLabel } from '../party/follow.js';
 import { formatRemain, isTalkBeat, LATE_DEBRIEF_MS, remainingMs } from '../party/show.js';
+import { outcomeLine } from '../party/win.js';
 import { NO_ONE } from '../party/vote.js';
 
 export default async function partyPhone({ params }) {
@@ -567,9 +568,21 @@ export default async function partyPhone({ params }) {
       state.missionSeen = null;
     }
 
+    /*
+     * 🎥 **THE CAMERA IS PART OF THE SHEET'S SHAPE, so it belongs in the stamp.**
+     *
+     * `liveStamp` is what lets a world report patch the pad in place instead of rebuilding it —
+     * a rebuild destroys the stick under the player's thumb along with its `setPointerCapture`.
+     * The runner's sheet now has two SHAPES (a look stick on the ground, none under a plan-locked
+     * top-down), so the camera has to be in the key or the pad would keep the wrong one forever.
+     *
+     * It costs exactly one rebuild per crossing, which is the frame the player is watching a
+     * 1.35 s camera move on the television rather than their own hands.
+     */
+    const camStamp = iAmRunner ? `:${frame?.you?.view || 'chase'}` : '';
     const liveStamp = beat === 'expedition' && !state.stage
       ? `${beat}:${iAmRunner ? 'run' : iAmGuide ? 'guide' : 'watch'}:${missionPhase}`
-        + `:${hasCard() ? 'card' : 'nocard'}`
+        + `:${hasCard() ? 'card' : 'nocard'}${camStamp}`
       : null;
     if (liveStamp && root.dataset.liveUi === liveStamp && patchLive(frame)) {
       window.__rrrPhone = { frame, beat, seat: me.seat, iAmRunner, iAmGuide };
@@ -653,6 +666,10 @@ export default async function partyPhone({ params }) {
          * The list you name the dead from must be the one that still contains them.
          */
         body += paintExecution(players, c);
+      } else if (beat === 'verdict') {
+        body += paintVerdict(me, c);
+      } else if (beat === 'reunion') {
+        body += paintReunion(me, c);
       }
     } else if (beat === 'lobby' || phase === 'LOBBY') {
       body += `<h1>${esc(myName)}</h1>
@@ -665,6 +682,21 @@ export default async function partyPhone({ params }) {
         <p class="hint">${esc(playerName(players, pair.runner || recap.runner))} walks · ${esc(playerName(players, pair.guide || recap.guide))} talks.</p>`;
     } else if (beat === 'expedition') {
       if (iAmRunner) {
+        /*
+         * 🎥 **WHICH CAMERA THE SHOW IS ON, AND WHY THIS SHEET HAS TWO SHAPES.**
+         *
+         * D13's pad was written when there was one camera. There are four now, and the top-down
+         * one changes what the sticks MEAN: it is plan-locked, so screen direction is world
+         * direction and the stick is absolute — push where you want to go — and the look stick
+         * has nothing to swing, because a top-down you can turn is the rotating map the whole
+         * perspective exists to avoid. Printing "Right stick looks" over a dead control is worse
+         * than printing nothing.
+         *
+         * `frame.you.view` is runner-audience (`net/party/entitle.js`), so no other seat and not
+         * the TV is told which camera the show is on.
+         */
+        const camView = frame?.you?.view || 'chase';
+        const topDown = camView === 'top' || camView === 'iso';
         /*
          * 🕹️ **FULL CONTROL, NOT FOUR SPEEDS.** John: *"replace STILL/CREEP/WALK/RUN with full
          * movement control and freedom. Runner spawns equipped with the sledge."*
@@ -687,11 +719,13 @@ export default async function partyPhone({ params }) {
          * contribution from a chair.
          */
         body += `<h1>You walk.</h1>
-          <p class="hint">Eyes on the TV. Left stick walks into the shot. Right stick looks. Hold RUN, tap SWING.</p>
+          <p class="hint">${topDown
+            ? 'Eyes on the TV. The stick is the room — push where you want to go. Hold RUN, tap SWING.'
+            : 'Eyes on the TV. Left stick walks into the shot. Right stick looks. Hold RUN, tap SWING.'}</p>
           <p class="hint">Listen to your guide — they have the map, you have the hammer.</p>
           ${missionLine(frame)}
           ${hereLine(frame)}
-          <div class="stick-wrap">
+          <div class="stick-wrap${topDown ? ' top' : ''}">
             <div class="stick-col">
               <div class="stick" id="stick"><div class="nub" data-nub></div></div>
               <div class="stick-cap">Move</div>
@@ -700,10 +734,10 @@ export default async function partyPhone({ params }) {
               <button class="stick-btn" id="run-btn" type="button">Run</button>
               <button class="stick-btn swing" id="swing-btn" type="button">Swing</button>
             </div>
-            <div class="stick-col">
+            ${topDown ? '' : `<div class="stick-col">
               <div class="stick stick-look" id="stick-look"><div class="nub" data-nub-look></div></div>
               <div class="stick-cap">Look</div>
-            </div>
+            </div>`}
           </div>
           ${padFxHtml()}`;
       } else if (iAmGuide) {
@@ -1795,6 +1829,86 @@ export default async function partyPhone({ params }) {
     }
     const who = playerName(players, r.executed);
     html += `<p class="hint">${esc(who)} is out. The nameplate is face-down. Nothing about alignment.</p>`;
+    return html;
+  }
+
+  /* ===========================================================================================
+   * ⚖️ **THE PHONE DOES ALMOST NOTHING FOR FIFTEEN SECONDS, AND THAT IS THE POINT.**
+   *
+   * The Verdict is the Showrunner's announcement on the TELEVISION. A pad that competed with it
+   * would split the room's attention at the one moment the night is being summarised — the same
+   * argument that took WORD FROM THE HOUSE off the runner's sheet. So: the status, the one line
+   * that says what happens next, whether this seat is still in the show, and nothing to press.
+   *
+   * 🚨 **NO ALIGNMENT, NO ROLE, NO FEED COUNT.** `alive` is already public (it is on every frame
+   * and the TV shows the nameplate go down), so saying it here leaks nothing. Everything else
+   * about what a player WAS is the Reunion's, and a sheet that said it a beat early would undo
+   * the beat the whole design is borrowing against.
+   * =========================================================================================== */
+  function paintVerdict(me, c) {
+    const v = c.verdict;
+    const status = v?.status || '…';
+    const line = v ? outcomeLine(v.status) : 'The Showrunner is deciding.';
+    const cams = v ? `${v.camerasLit}${v.need == null ? '' : ` of ${v.need}`} cameras lit.` : '';
+    let html = `<h1>${esc(status)}</h1>${phoneClock(c)}
+      <p class="hint">${esc(line)}${cams ? ` ${esc(cams)}` : ''}</p>`;
+    if (me && me.alive === false) {
+      html += `<p class="hint">You are out of the show. Your nameplate is face-down — and nobody
+        has been told what you were. You can still talk.</p>`;
+    }
+    html += `<p class="hint">Eyes on the TV. Nothing to press.</p>`;
+    return html;
+  }
+
+  /* ===========================================================================================
+   * 🎬 **THE ONE MOMENT THE ROLE CARD IS ALLOWED TO BE FACE-UP.**
+   *
+   * All night the card is hold-to-reveal and blurred at rest, so a neighbour's glance at an
+   * unattended phone learns nothing. At the Reunion that rule expires: the TV is turning over
+   * every nameplate anyway. This is the personal half of the roll call — the TV says what you
+   * were, this says what it cost you.
+   *
+   * 🚨 **IT DRAWS `c.reveal` OR IT DRAWS NOTHING — never `role.card`.** The card this view has
+   * held all game carries the player's COVER, not their truth: the Glitched believes they are the
+   * Camera Op, and a Reunion sheet that read the card would tell them the lie one last time, on
+   * the one screen whose entire job is the truth. `reunion.js` names the cover separately, as
+   * `believedTheyWere`, and that distinction is what `reunion-truth` U2 caught once already.
+   *
+   * ⚠️ **NULL IS DRAWN AS NULL.** If the payload has not arrived this points at the television and
+   * names nobody. A defaulted empty shape is how a reveal renders a beat before the beat.
+   * =========================================================================================== */
+  function paintReunion(me, c) {
+    const status = c.season || c.verdict?.status || 'THE SEASON IS OVER';
+    let html = `<h1>${esc(status)}</h1>
+      <p class="hint">${esc(outcomeLine(c.season || c.verdict?.status))}</p>`;
+    const mine = (c.reveal?.seats || []).find((s) => s.id === me?.playerId);
+    if (!mine) {
+      html += `<p class="hint">The Reunion is on the TV: the roll call, then the awards. Every
+        nameplate gets turned over.</p>`;
+      return html;
+    }
+    /*
+     * The same `.role-card` the deal drew, with no hold-to-reveal over it. Reusing the class is
+     * the point: the card the player has been protecting all night is the card that goes face-up,
+     * and a second look for the same object would read as a different thing.
+     */
+    html += `<div class="role-card reunion-card">
+      <div class="rule">Your card · face up at last</div>
+      <div class="role">${esc(mine.role)}</div>
+      <div class="side">${esc(mine.alignment === 'evil' ? 'Production' : 'The cast')}</div>
+    </div>`;
+    if (mine.believedTheyWere && mine.believedTheyWere !== mine.role) {
+      html += `<p class="hint">You spent the whole night believing you were the
+        ${esc(mine.believedTheyWere)}. Nobody was going to tell you.</p>`;
+    }
+    if (mine.finalClaim) html += `<p class="hint">What you told them: “${esc(mine.finalClaim)}”</p>`;
+    html += `<p class="hint">${mine.death
+      ? `You were ${mine.death.by === 'EXECUTED' ? 'executed' : 'taken'}.`
+      : 'You made it to the end.'}</p>`;
+    const won = (c.reveal?.awards || []).filter((a) => a.winner === me?.playerId);
+    for (const a of won) {
+      html += `<p class="hint"><b>${esc(a.award)}</b> — ${esc(a.why)}</p>`;
+    }
     return html;
   }
 

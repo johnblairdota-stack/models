@@ -370,6 +370,31 @@ hunter has a visible body. John asked for the see-through roof explicitly, so it
 consequence is a locked design rule and the mitigation (take the ceiling off only the room the
 runner is in) is a decision for him, not a tidy-up.
 
+#### ✅ ANSWERED 2026-08-28 — take it off locally, and the rule is narrowed rather than repealed
+
+John's call, in the session that built `docs/slices/task-topdown-expedition.md`. The mitigation
+this entry proposed is the one taken: `setLid(on, ids)` is scoped to residency's own set, so the
+roof comes off over the room the runner is in and the ones a door away and **never the whole
+house**. Measured outside the ballroom: **3 of 13 spaces**, following the walk.
+
+Four decisions were ratified with it, and all four are built:
+
+| question | answer |
+|---|---|
+| how far does the override go | tight follow, roof off locally — no whole-house fit, no hunter mark, no route line |
+| what do the controls become | absolute single stick; the look stick is not rendered under a plan-locked rig |
+| does the map turn with the runner | **no** — nailed to `PLAN_YAW`, translate only |
+| how much of the hunter is in scope | perspective and transition only; the body, chase and take are the next slice |
+
+`docs/design/rrr-broadcast.md` §6.1 and `party-loop.md`'s "Do not" carry the narrowed wording,
+`CLAUDE.md` carries the locked-rule bullets, and the refusal that survives is gated by
+`party-follow` F11c2d and the rewritten `party-follow-drive` D5.
+
+⚠️ The second half of this entry — *"the hunter has a visible body"* — is **still open** and is
+the next slice's problem. What this one leaves it is a dark to stand in: the runner's lamp is
+windowed at 6.5 m, the room key is ducked to ×0.25 overhead, and the `top` frame does not reach
+8 m in its short axis. Gates `party-follow` F11h–F11h4.
+
 ---
 
 ## Round 9 — the ballroom asset reaches Prime Time (John's ask, third time of asking)

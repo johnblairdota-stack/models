@@ -46,7 +46,8 @@
     "gate:nominee-skin": "node harness/nominee-skin.mjs",
     "gate:seated-actions": "node harness/seated-actions.mjs",
     "gate:accusation-stage": "node harness/accusation-stage.mjs",
-    "gate:party-audio": "node harness/party-audio.mjs"
+    "gate:party-audio": "node harness/party-audio.mjs",
+    "gate:perspective-shots": "node harness/perspective-shots.mjs"
   },
   "dependencies": {
     "three": "^0.180.0",

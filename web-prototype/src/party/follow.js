@@ -134,6 +134,92 @@ export const PERSPECTIVES = ['chase', 'wide', 'iso', 'top'];
 export const OVERHEAD = ['iso', 'top'];
 export const isOverhead = (name) => OVERHEAD.includes(String(name || ''));
 
+/* =============================================================================================
+ * 🧭 **PLAN NORTH — the yaw a map-like perspective is nailed to, and why it is exactly π.**
+ *
+ * `orbit: false` was written to stop the LOOK STICK swinging an overhead view. It did not stop
+ * the BODY swinging it: `_solve` placed every non-chase rig from `runner.facing`, so the whole
+ * "stable map" turned with the robot — the D-pad-on-a-rotating-map problem the rig table's own
+ * comment says `top` exists to avoid, arriving through the other door.
+ *
+ * So a plan-locked rig is nailed to one compass bearing and translates only. The bearing is the
+ * one the guide's map already draws in (`rrr-phone-ux.md` §4: screen-up is world −Z, screen-right
+ * is +X), so the guide and the television finally agree about the word "left".
+ *
+ * 🚨 **AND THE SAME CONSTANT IS THE CONTROL SCHEME, WHICH IS WHY THERE IS NO SECOND MOVEMENT
+ * MODEL IN THIS SLICE.** `player.js` `_stepGround` is aim-relative:
+ *
+ *     want = ( sin(aimYaw)·mv.y − cos(aimYaw)·mv.x , 0 , cos(aimYaw)·mv.y + sin(aimYaw)·mv.x )
+ *
+ * At `aimYaw = π` that is stick-up → world `(0,0,−1)` and stick-right → world `(+1,0,0)`. Screen
+ * direction IS world direction, on both axes, with `player.js` untouched. The absolute top-down
+ * stick is this constant and nothing else.
+ * ============================================================================================= */
+export const PLAN_YAW = Math.PI;
+/**
+ * A rig the look stick may not swing is a rig that must not turn under the body either — the two
+ * are the same promise. Derived from the table rather than kept as a second list, so a future rig
+ * cannot be added to one and forgotten in the other.
+ */
+export const isPlanLocked = (name) =>
+  !(PERSPECTIVE_RIG[String(name || '')] ?? PERSPECTIVE_RIG.chase).orbit;
+
+/**
+ * ⏱️ **HOW LONG THE CRANE TAKES, AND WHY THE TWO NUMBERS DIFFER.**
+ *
+ * Going out is the reveal: the player is being told, without a caption, that the view and their
+ * controls have changed, and that reading takes a beat. Coming home is a release — the mission
+ * is done and the ballroom is on screen — so making them watch the same move in reverse for as
+ * long would be charging them for information they already have.
+ */
+export const RISE_SECONDS = 1.35;
+export const DROP_SECONDS = 1.10;
+
+/* =============================================================================================
+ * 🚪 **THE EXPEDITION CHOOSES ITS OWN CAMERA — the ballroom threshold is the switch.**
+ *
+ * John: *"each expedition takes place outside the ball room where the hunter stalks them from
+ * the shadows. It's top down perspective… the ballroom remains how it is currently with the
+ * players locked in the seat or the chase camera when you are exiting into the house. That
+ * means there is an exact transition phase for the camera."*
+ *
+ * So the perspective stops being a thing a developer presses and becomes a property of WHERE THE
+ * RUNNER IS. The predicate is the ballroom AABB the mission phase already uses for `done` — the
+ * same one, extracted, because a second copy of a room test is a thing that drifts.
+ *
+ * ⚠️ **HYSTERESIS, OR THE CAMERA STROBES IN THE DOORWAY.** A bare in/out test flips every time a
+ * body jitters across the line, and a 1.35 s crane restarting twice a second is worse than no
+ * crane at all. Leaving needs the runner outside the box GROWN by `VIEW_MARGIN`; returning needs
+ * them inside it SHRUNK by the same. One signed margin does both, so the two halves cannot be
+ * given different values by accident.
+ * ============================================================================================= */
+export const VIEW_MARGIN = 1.10;
+export const EXPEDITION_PERSPECTIVE = 'top';
+export const BALLROOM_PERSPECTIVE = 'chase';
+
+/**
+ * Is this point inside the ballroom rectangle? A POSITIVE margin shrinks the box (you must be
+ * well in), a NEGATIVE one grows it (you must be well out). Y is ignored, as it is everywhere
+ * else this house tests rooms.
+ */
+export function insideBallroom(pos, room, margin = 0) {
+  if (!pos || !room) return false;
+  return pos.x > room.x0 + margin && pos.x < room.x1 - margin
+    && pos.z > room.z0 + margin && pos.z < room.z1 - margin;
+}
+
+/**
+ * Which perspective the night wants, given where the body is. Pure, and deliberately ignorant of
+ * cranes and pins: it answers only "ballroom or house", and the bed decides what that costs.
+ */
+export function stepBallroomView(current, pos, room, margin = VIEW_MARGIN) {
+  if (!room) return current;
+  if (current === EXPEDITION_PERSPECTIVE) {
+    return insideBallroom(pos, room, margin) ? BALLROOM_PERSPECTIVE : current;
+  }
+  return insideBallroom(pos, room, -margin) ? current : EXPEDITION_PERSPECTIVE;
+}
+
 /**
  * Where each perspective puts the eye, as an offset from the runner, and how it frames them.
  *
@@ -159,15 +245,75 @@ export function nextPerspective(name) {
   return PERSPECTIVES[(i < 0 ? 0 : i + 1) % PERSPECTIVES.length];
 }
 
+/** Smootherstep. Zero velocity at BOTH ends, which is what stops a crane having a stop frame. */
+export function smootherstep(x) {
+  const t = Math.max(0, Math.min(1, Number(x) || 0));
+  return t * t * t * (t * (t * 6 - 15) + 10);
+}
+
+/**
+ * 🎬 **THE CRANE INTERPOLATES THE RIG, NOT A PITCH — and that is not a workaround, it is the
+ * only move compatible with the decision above.**
+ *
+ * `perspectiveEye` refuses a pitch for an overhead rig on purpose: *"a top-down view you can
+ * tilt is a chase camera with extra steps."* So a ground→overhead transition cannot be a boom
+ * swinging up an arc, because the arc IS a pitch and halfway through it the view would be the
+ * exact tilted thing that decision forbids.
+ *
+ * Blending the four numbers instead gives a camera that rises and pulls in without ever being
+ * "a tilted top-down" at any point on the path — at every value of `s` the result is a legal
+ * rig, just not one in the table. `orbit` does not interpolate: it belongs to the rig you are
+ * arriving at the moment you leave, so the look stick stops steering the instant a plan-locked
+ * destination is chosen rather than fading out.
+ */
+export function lerpRig(a, b, s) {
+  const t = smootherstep(s);
+  const mix = (x, y) => x + (y - x) * t;
+  return {
+    dist: mix(a.dist, b.dist),
+    height: mix(a.height, b.height),
+    lateral: mix(a.lateral, b.lateral),
+    fov: mix(a.fov, b.fov),
+    orbit: t <= 0 ? a.orbit : b.orbit,
+  };
+}
+
+/**
+ * 🗺️ **HOW MUCH OF A MAP THIS RIG IS, 0..1 — the dial the handheld and the lag hang off.**
+ *
+ * A crane's `blend` is progress through a move and is 1 at rest at BOTH ends, so it cannot say
+ * whether the camera is currently a shoulder or a plan. Eye height can: it is 0 at the chase
+ * rig, 1 at `top`, and it moves continuously through a transition, so one number serves the
+ * held view and the move into it without a second state.
+ *
+ * What it is for: a camera a person is carrying should sway and lag, and a camera bolted nine
+ * metres over a room should do neither — ±2 cm of handheld on a 52° lens that high is a map
+ * that drifts, which reads as a bug rather than as an operator. At `chase` this returns exactly
+ * 0, so every ground shot keeps the shipped feel untouched.
+ */
+export function rigMapness(rig) {
+  const lo = PERSPECTIVE_RIG.chase.height;
+  const hi = PERSPECTIVE_RIG.top.height;
+  const h = Number(rig?.height);
+  if (!Number.isFinite(h) || hi <= lo) return 0;
+  return Math.max(0, Math.min(1, (h - lo) / (hi - lo)));
+}
+
 /**
  * The eye offset for a perspective, in world space, given the frame the player is steering.
  *
  * Pure, and deliberately separate from `chaseOrbitOffset` rather than a special case of it: the
  * overhead rigs do not take a pitch at all, because a top-down view that could be pitched is just
  * a chase camera with extra steps and the player would lose the map.
+ *
+ * `name` may also be a rig OBJECT, which is how `lerpRig`'s in-between rigs are drawn — a
+ * transition is a rig that is not in the table, and it has to be solvable by the same function
+ * or the crane would be a second camera model to keep in sync with the first.
  */
 export function perspectiveEye(name, yaw, pitch = 0) {
-  const rig = PERSPECTIVE_RIG[String(name || '')] || PERSPECTIVE_RIG.chase;
+  const rig = (name && typeof name === 'object')
+    ? name
+    : (PERSPECTIVE_RIG[String(name || '')] || PERSPECTIVE_RIG.chase);
   const f = Number(yaw) || 0;
   const fx = Math.sin(f), fz = Math.cos(f);
   const rx = -Math.cos(f), rz = Math.sin(f);
@@ -887,7 +1033,18 @@ export function moveViolations(msg) {
  * house; `role`, `alignment`, `cover`, `claim`, `castSeed`, `you`, `teammates` and `deal` are
  * facts about a person, and not one of them has a key here or can be added by accident.
  */
-export const WORLD_KEYS = ['t', 'runner', 'hunter', 'mission', 'seq'];
+/**
+ * 🎥 `view` — WHICH CAMERA THE SHOW IS ON, so the runner's pad can match it.
+ *
+ * The controls change with the perspective (absolute stick under a plan-locked top-down, a
+ * camera-relative stick plus a look stick on the ground), so the phone has to know which one is
+ * live. It rides the TV's existing world report because the TV is the only process that knows —
+ * `party-loop.md`'s asymmetry, unchanged: the mansion exists in the follow slot and nowhere else.
+ *
+ * It is a perspective NAME and nothing else. It carries no position, no room and no hunter, so
+ * it cannot become a second channel for the map; `entitle.js` still gates who is told.
+ */
+export const WORLD_KEYS = ['t', 'runner', 'hunter', 'mission', 'seq', 'view'];
 export const WORLD_SPOT_KEYS = ['room', 'x', 'z'];
 export const WORLD_MISSION_KEYS = ['phase', 'room'];
 
@@ -908,5 +1065,8 @@ export function worldViolations(msg) {
       bad.push(`world.mission.phase=${msg.mission.phase}`);
     }
   }
+  // Closed, exactly as `mission.phase` is: an invented camera name is refused at the door rather
+  // than forwarded for the phone to fail to understand.
+  if (msg.view != null && !PERSPECTIVES.includes(msg.view)) bad.push(`world.view=${msg.view}`);
   return bad;
 }

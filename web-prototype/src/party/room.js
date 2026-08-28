@@ -24,7 +24,8 @@ import { hunterVisibleToGuide, ROOMS } from './coverage.js';
 import { applyTake, resolveContact, MODE, PLATE } from './taken.js';
 import { tallyCasting } from './ballot.js';
 import { tallyVote, executioner, nominate, reckoningClosed, canLynchVote, assumedLynchVotes, nominatorLockedChoice, NO_ONE } from './vote.js';
-import { foldWin, OUTCOME } from './win.js';
+import { foldWin, OUTCOME, WIN_TARGETS } from './win.js';
+import { reunion } from './reunion.js';
 import { PHASE, EPISODE_CAP } from './phases.js';
 import { cleanLook } from './look.js';
 import { STALE_MAX, intelFor } from './intel.js';
@@ -200,6 +201,17 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
      */
     if (!sock.isTV && sock.seatRole === 'runner' && base.you && state.world?.runner?.room) {
       base.you = { ...base.you, here: state.world.runner.room };
+    }
+    /*
+     * WHICH CAMERA THE SHOW IS ON — the same seat, the same reasoning, one field wider.
+     *
+     * The runner's controls change with the perspective: absolute under the plan-locked top-down,
+     * camera-relative with a look stick on the ground. A pad that did not know which was live
+     * would print the wrong instructions over the right sticks. Set separately from `here` so a
+     * report that carries a view but no room still delivers it.
+     */
+    if (!sock.isTV && sock.seatRole === 'runner' && base.you && state.world?.view) {
+      base.you = { ...base.you, view: state.world.view };
     }
     /*
      * 🗺️ **`|| state.world` — AND WITHOUT IT THE GUIDE'S NEW MAP IS A FLOOR PLAN WITH NO MARKS ON
@@ -668,17 +680,73 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     }
 
     // ---- the win machine, folded over the log we just wrote
-    const align = Object.fromEntries(deal.seats.map((s) => [s.id, s.alignment]));
-    const w = foldWin(log.all(), { count, alignmentOf: (id) => align[id] });
-    state.outcome = w.outcome === OUTCOME.RENEWED && state.episode >= EPISODE_CAP ? OUTCOME.CANCELLED : w.outcome;
-    record(makeEvent('win.checked', VIS.SEALED, { outcome: state.outcome, rule: w.rule, camerasLit: w.camerasLit, fed: w.fed }));
-    record(makeEvent('verdict.aired', VIS.PUBLIC, {
-      status: state.outcome, camerasLit: w.camerasLit, alarms: state.incident.alarms,
-    }));
+    foldVerdict();
 
     state.lastPair = { ...state.pair };
     for (const s of sockets) s.seatRole = null;
     state.episode += 1;
+  }
+
+  /* =============================================================================================
+   * ⚖️ **THE EPISODE'S VERDICT — ONE COPY, TWO CALLERS.**
+   *
+   * This was six lines buried at the end of `playEpisode`, which is the OFFLINE machine only
+   * gates run. The live wire never folded the win at all: `enterExecution()` set the phase and
+   * stopped, so no live night has ever had an outcome, and `state.outcome` stayed null forever.
+   *
+   * ⚠️ **EXTRACTED, NOT COPIED, AND THAT IS THE WHOLE POINT.** `harness/episode-order.mjs` exists
+   * because the designed order and the live wire once disagreed while both halves were gated as
+   * correct. Growing a second copy of the win rule in `net/party/local.mjs` is the same mistake
+   * one layer down — the two would drift, and each would have a gate saying it was right.
+   *
+   * `EPISODE_CAP` is enforced here and nowhere else: a RENEWED at the cap is a CANCELLED,
+   * because a season that runs out of episodes without lighting its cameras is one Production won.
+   * ============================================================================================= */
+  function foldVerdict() {
+    const align = Object.fromEntries(deal.seats.map((s) => [s.id, s.alignment]));
+    const w = foldWin(log.all(), { count, alignmentOf: (id) => align[id] });
+    /*
+     * 🚨 **`airingEpisode`, NOT `episode` — AND THIS IS THE SECOND HALF OF THE DOUBLE-BUMP BUG.**
+     *
+     * The two callers reach this line at different moments in the episode. Offline, `playEpisode`
+     * folds and THEN does `state.episode += 1`, so `state.episode` is the episode that just aired.
+     * Live, `playEpisode` has already returned — bump included — before the Verdict beat starts,
+     * so `state.episode` is the episode being SET UP. Comparing that to `EPISODE_CAP` ended a live
+     * season one episode early: `party-night` N17n drove a real room and it stopped after four of
+     * five, while `win-machine` W10c drove the offline one and it stopped after five. Two machines
+     * disagreeing while both had a gate calling them correct is precisely what `episode-order`
+     * exists for, one layer up.
+     *
+     * `state.airingEpisode` is the episode ON THE AIR and is set by both paths at the top of the
+     * episode, so it means the same thing in both. Offline it is identical to `state.episode`
+     * here, so nothing about the gates' existing behaviour moves.
+     */
+    const aired = state.airingEpisode ?? state.episode;
+    state.outcome = w.outcome === OUTCOME.RENEWED && aired >= EPISODE_CAP ? OUTCOME.CANCELLED : w.outcome;
+    /*
+     * 🚨 `fed` IS SEALED AND MUST STAY SEALED. `win.checked` is VIS.SEALED and carries it;
+     * `verdict.aired` is VIS.PUBLIC and does not. `rrr-social-round.md` §4: the feed gauge is a
+     * deliberately lossy proxy, and evil losing a partner looks exactly like evil winning — so
+     * airing the number would hand the room a deduction the design spent a whole beat denying it.
+     * Anything reading `foldWin`'s result for a payload must pick fields, never spread it.
+     */
+    record(makeEvent('win.checked', VIS.SEALED, { outcome: state.outcome, rule: w.rule, camerasLit: w.camerasLit, fed: w.fed }));
+    record(makeEvent('verdict.aired', VIS.PUBLIC, {
+      status: state.outcome, camerasLit: w.camerasLit, alarms: state.incident.alarms,
+    }));
+    /*
+     * 📷 **THE TARGET TRAVELS WITH THE COUNT, because the plate must not be able to disagree with
+     * the rule.** `state.cameras.needed` is `COMPOSITION[n].cameras` and the TV's run chrome
+     * counts against it; `foldWin` decides W2 against `WIN_TARGETS[n].cameraTarget`. **At eight
+     * players those are 3 and 4** — a real divergence, flagged to John rather than quietly picked,
+     * because which one is the objective is a design call. A Verdict plate is a report on THIS
+     * fold, so it reports the number this fold measured against and no other.
+     */
+    return {
+      outcome: state.outcome, rule: w.rule,
+      camerasLit: w.camerasLit, need: WIN_TARGETS[count]?.cameraTarget ?? null,
+      episode: aired,
+    };
   }
 
   return {
@@ -827,6 +895,59 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       setPhase('EXECUTION');
     },
     /**
+     * ⚖️ **THE LIVE VERDICT BEAT — a RE-FOLD, and deliberately nothing else.**
+     *
+     * ⚠️ I first wrote this to bump `state.episode`, reasoning that the live wire never called
+     * `playEpisode` so nothing counted episodes. **That was wrong and `party-night` N17h caught
+     * it**: `runEpisodeFromBallots` in `net/party/local.mjs` calls `playEpisode` when casting
+     * resolves, so the bump — and `lastPair`, and clearing `seatRole` — already happen there.
+     * Doing them again here counted every episode twice.
+     *
+     * So this folds and airs, full stop. Re-folding is not redundant: `playEpisode` runs at
+     * CASTING time, over a log that does not yet contain the expedition, the nominations or the
+     * execution. By the time the verdict beat is reached the log has all three, and `foldWin` is
+     * a pure fold over the whole log — so the second answer is the true one.
+     *
+     * ⚠️ **KNOWN WART, STATED RATHER THAN HIDDEN.** That means a live episode records
+     * `win.checked` / `verdict.aired` twice: once early and stale, once complete. The fix is to
+     * stop `playEpisode` folding when the live wire is driving, which means teaching it that it
+     * is not the whole episode — a bigger change than this beat, and its own slice.
+     *
+     * Returns what the TV needs to air. `fed` is deliberately not in it — see `foldVerdict`.
+     */
+    enterVerdict() {
+      setPhase('VERDICT');
+      return foldVerdict();
+    },
+    /* ===========================================================================================
+     * 🛑 **THE HOST CALLS THE NIGHT — the one control that ends a session by hand.**
+     *
+     * `win.js` W6 has anticipated this since the fold was written: `host.skip` fires ABANDONED,
+     * and until now **nothing in the codebase had ever emitted the event**. A rule with no
+     * emitter is a rule nobody has ever seen run.
+     *
+     * 🚨 **THE SKIP IS RECORDED BEFORE THE PHASE, AND THE ORDER IS THE WHOLE CORRECTNESS.**
+     * `foldWin` resolves by LOG ORDER and breaks on the first rule that fires — so writing
+     * `phase.VERDICT` first would let W5 (RENEWED at the cap is a CANCELLED) beat the host's own
+     * call by one sequence number, and a night the host abandoned would be recorded as a win for
+     * Production. Skip first; then the phase; then fold.
+     *
+     * ⚠️ **AN ALREADY-DECIDED SEASON IS NOT OVERWRITTEN, AND THAT IS NOT A BUG.** If a rule fired
+     * earlier in the log it is earlier in the log, and the fold keeps it: the host pressing SKIP
+     * after the cameras came up does not take the win away from the cast. What the skip
+     * guarantees is that the night ENDS, not that nobody won it.
+     *
+     * ABANDONED is public: `rrr-social-round.md` gives no side the win, so there is nothing to
+     * conceal about it. The alignments it stops short of are still the Reunion's to reveal.
+     * =========================================================================================== */
+    skipToReunion() {
+      record(makeEvent('host.skip', VIS.PUBLIC, { episode: state.episode }));
+      setPhase('VERDICT');
+      return foldVerdict();
+    },
+    /** The session's outcome so far, or null while it is still RENEWED. */
+    outcome: () => state.outcome,
+    /**
      * Published nameplate. 12 chars, same cap as the phone spec's cheap join. Does not broadcast —
      * the transport decides when a frame or lobby snapshot should follow.
      */
@@ -856,10 +977,10 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
      *
      * @returns {boolean} true when the mission phase changed, so the transport can act on it
      */
-    setWorld({ runner = null, hunter = null, mission = null } = {}) {
+    setWorld({ runner = null, hunter = null, mission = null, view = null } = {}) {
       const wasPhase = state.world?.mission?.phase ?? 'none';
       state.worldTick += 1;
-      state.world = { runner, hunter, mission };
+      state.world = { runner, hunter, mission, view };
 
       /*
        * ⚠️ **RE-ASSERT THE SEAT ROLES, BECAUSE `playEpisode` CLEARS THEM BEFORE THE RUN IS OVER.**
@@ -928,6 +1049,26 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
      * a silently-dropped field can be seen from outside `project`. See `unrowedSeen`.
      */
     unrowed: () => [...unrowedSeen],
+    /* ===========================================================================================
+     * 🏆 **THE REUNION SPECIAL, COMPUTED — the room's whole night, read back off its own log.**
+     *
+     * `src/party/reunion.js` has been written, complete and fully exercised by
+     * `harness/reunion-truth.mjs` since long before anything called it: six exported queries and
+     * no product caller. This is the caller.
+     *
+     * 🚨 **THERE IS NO SECOND REVEAL PIPELINE, AND THIS IS THE LINE THAT KEEPS THAT TRUE.** It
+     * passes `log.all()` — the same stream the live filter reads — so a leak and a missing reveal
+     * are the same bug, and the only way to add something to the Reunion is to write the event
+     * during play. A hand-assembled reveal payload would let the two drift for a month.
+     *
+     * ⚠️ **IT DOES NOT CHECK THE PHASE, AND IT MUST NOT.** Deciding when the reveal is allowed is
+     * the transport's job (`enterReunionLive`), and putting a second guard here would make the
+     * real one look optional. This is a query; the room decides when to ask it.
+     * =========================================================================================== */
+    reunionSpecial() {
+      const align = Object.fromEntries(deal.seats.map((s) => [s.id, s.alignment]));
+      return reunion(log.all(), { alignmentOf: (id) => align[id] });
+    },
     /** Ground truth. Belongs to the gate and the Reunion. Never to a socket. */
     truth: () => ({
       seats: deal.seats.map((s) => ({ ...s })),

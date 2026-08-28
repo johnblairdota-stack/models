@@ -12,6 +12,7 @@
 
 import { foldWin, WIN_TARGETS, OUTCOME, TICK_ORDER } from '../src/party/win.js';
 import { EPISODE_CAP } from '../src/party/phases.js';
+import { createRoom } from '../src/party/room.js';
 
 let pass = 0, fail = 0;
 const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' · ' + d : ''}`); } else { fail++; console.log(`  FAIL ${n}${d ? ' · ' + d : ''}`); } return c; };
@@ -111,6 +112,54 @@ const fold = (evts, count = 8, alignmentOf = align8) => foldWin(mk(evts), { coun
   const evilFed = fold([DEAL, ...['p7', 'p8', 'p1'].map((id) => ({ type: 'player.taken', data: { id } }))]);
   t('W9c control · an evil player taken by the Hunter does not feed it',
     evilFed.rule === 'W1' && evilFed.fed === 0, `fed=${evilFed.fed}, ended on ${evilFed.rule}`);
+}
+
+// ---------------------------------------------------------------- W10 · a session actually ends
+/* =================================================================================================
+ * 🏁 **THE ASSERTION THAT COULD NOT BE WRITTEN UNTIL 2026-08-28 — a session TERMINATES.**
+ *
+ * Every rule above was gated against a hand-built log, which proves the fold and proves nothing
+ * about the game: `PRIME-TIME-STATE.md` §2 said it flatly — *"Nothing ever ends a session."*
+ * `EPISODE_CAP` was a number in a table no code enforced, `foldWin`'s only caller was the offline
+ * `playEpisode`, and W6 had no emitter. So this is the missing half: drive real rooms and assert
+ * they stop.
+ *
+ * ⚠️ **THE CONTROL IS THE INTERESTING ARM.** A machine that always ends is not the property —
+ * `playMatch`'s own `while` would satisfy "it terminates" by hanging up on episode 1. What has to
+ * hold is that it ends for a REASON the fold names, and never on RENEWED.
+ * ================================================================================================= */
+{
+  let unended = null, noRule = null;
+  const rules = new Set();
+  for (const seed of [3, 5, 7, 9, 11, 13, 17, 19]) {
+    const r = createRoom({ count: 8, castSeed: seed * 7, worldSeed: seed, send: () => {}, emit: () => {} });
+    r.start();
+    r.playMatch({ hunterRoom: 'cellar' });
+    const out = r.state.outcome;
+    if (!out || out === OUTCOME.RENEWED) { unended = `seed ${seed} finished on ${out}`; break; }
+    const checked = r.log.all().filter((e) => e.type === 'win.checked').at(-1);
+    if (!checked?.data?.rule && out !== OUTCOME.CANCELLED) noRule = noRule || `seed ${seed}: ${out} with no rule`;
+    if (checked?.data?.rule) rules.add(checked.data.rule);
+    if (r.state.episode > EPISODE_CAP + 1) { unended = `seed ${seed} ran past the cap to ${r.state.episode}`; break; }
+  }
+  t('W10 · every match ends, inside the cap, on an outcome that is not RENEWED',
+    unended === null, unended || `8 seeds · rules seen: ${[...rules].join(',') || 'cap only'}`);
+  t('W10b · and each ending names the rule that caused it', noRule === null, noRule || 'all attributed');
+
+  /*
+   * The cap is the backstop and `foldVerdict` is the only place it is enforced: a season that runs
+   * out of episodes without lighting its cameras is one Production won. Asserted here as the
+   * TERMINATION guarantee — with no rule firing at all, the night still has to stop.
+   */
+  const quiet = createRoom({ count: 8, castSeed: 4242, worldSeed: 42, send: () => {}, emit: () => {} });
+  quiet.start();
+  for (let i = 0; i < EPISODE_CAP + 3; i++) {
+    if (quiet.state.outcome && quiet.state.outcome !== OUTCOME.RENEWED) break;
+    quiet.playEpisode({ scaffold: false, hunterRoom: 'cellar' });
+  }
+  t('W10c · a night where nothing happens still ends at EPISODE_CAP, and evil takes it',
+    quiet.state.outcome === OUTCOME.CANCELLED && quiet.state.episode > EPISODE_CAP,
+    `${quiet.state.outcome} after ${quiet.state.episode - 1} episodes, cap ${EPISODE_CAP}`);
 }
 
 console.log(`\nwin-machine: ${pass} passed, ${fail} failed`);
