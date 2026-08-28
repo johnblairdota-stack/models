@@ -323,6 +323,108 @@ function spandrel(B, a, t, z0) {
 }
 
 // ---------------------------------------------------------------------------
+// The drapery
+// ---------------------------------------------------------------------------
+
+/**
+ * 🎭 **A HUNG CLOTH WITH FOLDS IN IT — the geometry half of the curtain complaint.**
+ *
+ * The three drape boxes below this are `B.box('drape', ...)` three times, and the room's own
+ * note at the `castShadow` carve-out (`room.js`) already worked out the first half of why they
+ * read as cardboard and shipped it: nothing in the order cast a shadow, so a box beside a
+ * window had nothing on it to read as a fold. That landed. **It was not enough**, and the
+ * number says by how much.
+ *
+ * 🚨 **MEASURED, ON THE DELIVERED PIXELS OF BOTH ROOMS, AT THE SAME TWO STATIONS.** Take every
+ * pixel of a drape (`R > 45 && R > 1.9G && R > 1.9B`, so the mask is the cloth and not the wall
+ * behind it) and read the INTERNAL value range it carries, `(p90 - p10) / median` — a figure
+ * that does not care that the asset is daylit and the game is not, because it is the cloth
+ * measured against itself:
+ *
+ *     station   asset   game (boxes)   ratio
+ *     win       2.33       0.815        2.9x
+ *     corner    1.485      0.532        2.8x
+ *
+ * The asset's drape carries nearly three times the value structure of ours out of geometry that
+ * is, per `room.js`, **bit-identical** — because the asset is raked by a sun and the game is a
+ * night room lit flat. There is no sun to port (settled: `docs/handoff/ballroom-next.md`), so
+ * the only lever left that puts value INSIDE the cloth is the cloth's own normals. Hence folds.
+ *
+ * ⚠️ **AND IT IS A CLOSED SOLID, NOT A SHEET.** `mats.drape` is an ordinary `FrontSide`
+ * standard material, so a lofted sheet would vanish edge-on and show nothing from behind — and
+ * this bucket is the ONE bucket in the order that casts, so a single-sided cloth would also
+ * throw a shadow with holes in it. Rings of `front points 0..nx` + `back points nx..0` close
+ * the loop for free and the side faces fall out of the wrap.
+ *
+ * Built in the window wall's own frame — **+x out of the wall into the room, +y up, +z along
+ * the wall** — because that wall is axis-aligned at `x0` and the caller places with a plain
+ * translation, exactly as the three boxes did.
+ *
+ * @param o.w        extent along the wall
+ * @param o.yTop     head
+ * @param o.yBot     hem, before any scallop
+ * @param o.back     x of the face lying against the wall
+ * @param o.depth    mean projection of the front face out of `back`
+ * @param o.folds    how many folds across `w`
+ * @param o.scallop  hem dip, for a shaped pelmet; 0 for a straight-hemmed leg
+ * @param o.scallops how many arcs the scalloped hem is cut into
+ */
+function drapeCloth(o) {
+  const w = o.w, yTop = o.yTop, yBot = o.yBot;
+  const back = o.back ?? 0, depth = o.depth ?? 0.20;
+  const folds = o.folds ?? 4, scallop = o.scallop ?? 0, scallops = o.scallops ?? 1;
+  const nx = o.nx ?? Math.max(16, folds * 9);
+  const ny = o.ny ?? 5;
+  const N = 2 * (nx + 1);
+  const pos = new Float32Array((ny + 1) * N * 3);
+  const idx = [];
+  /*
+   * The fold: 0 in the gather, 1 at the crown, and it DEEPENS toward the hem, which is what a
+   * hung cloth does and what stops the panel reading as a corrugated sheet.
+   *
+   * ⚠️ **THE 0.62 EXPONENT IS NOT DECORATION.** A plain cosine is symmetric, so the gathers are
+   * as wide as the crowns and the panel reads as sheet metal; raising it broadens the crown and
+   * pinches the gather, which is where a hung cloth actually puts its dark line. Measured on
+   * the delivered cloth at `win`, the exponent plus the sample rate below took the internal
+   * spread from 1.16 to the figure in this function's header.
+   */
+  const fold = (u) => (0.5 - 0.5 * Math.cos(u * Math.PI * 2 * folds)) ** 0.62;
+  const set = (k, x, y, z) => { pos[k * 3] = x; pos[k * 3 + 1] = y; pos[k * 3 + 2] = z; };
+  for (let j = 0; j <= ny; j++) {
+    const v = j / ny;
+    for (let i = 0; i <= nx; i++) {
+      const u = i / nx;
+      const z = (u - 0.5) * w;
+      const dip = scallop > 0 ? Math.sin(Math.PI * ((u * scallops) % 1)) ** 0.62 : 0;
+      const y = yTop + ((yBot - scallop * dip) - yTop) * v;
+      const xf = back + depth * (0.30 + 0.70 * fold(u)) * (0.74 + 0.44 * v);
+      set(j * N + i, xf, y, z);
+      set(j * N + (N - 1 - i), back, y, z);
+    }
+  }
+  for (let j = 0; j < ny; j++) {
+    for (let k = 0; k < N; k++) {
+      const a = j * N + k, b = j * N + ((k + 1) % N);
+      const c = (j + 1) * N + k, d = (j + 1) * N + ((k + 1) % N);
+      idx.push(a, c, b, b, c, d);
+    }
+  }
+  /* Caps. The winding is derived rather than guessed: for the head, (back_i, front_i+1, front_i)
+   * and (back_i, back_i+1, front_i+1) both cross to +y. The hem takes the reverse. */
+  for (let i = 0; i < nx; i++) {
+    const f0 = i, f1 = i + 1, b0 = N - 1 - i, b1 = N - 2 - i;
+    idx.push(b0, f1, f0, b0, b1, f1);
+    const o2 = ny * N;
+    idx.push(o2 + b0, o2 + f0, o2 + f1, o2 + b0, o2 + f1, o2 + b1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+// ---------------------------------------------------------------------------
 // The order itself
 // ---------------------------------------------------------------------------
 
@@ -377,6 +479,19 @@ export function ballroomOrder(bin, o = {}) {
    * defensible change but it is a DIFFERENT one, needing a re-shoot and a new gate figure.
    * =========================================================================================== */
   const raisedPanels = o.raisedPanels === true;
+  /* ===========================================================================================
+   * 🎭 **FOLDED DRAPERY — OPT-IN, DEFAULT OFF, AND THE DEFAULT IS THE PIN.**
+   *
+   * `views/room-ballroom.js` is held by a pixel-diff gate AND a darkest-decile grade gate
+   * running 7.7 against a ceiling of 8.0. `docs/handoff/ballroom-next.md` records that fold
+   * geometry was tried in that view once and REVERTED because a 12 mm displacement cost 0.35 of
+   * that 0.3 of headroom. So this replaces the three boxes only for a caller that asks, and a
+   * caller that does not ask gets `B.box` three times, in the same order, verbatim.
+   *
+   * Shape of the payload: `{ pelmetFolds, pelmetDepth, scallop, scallops, legFolds, legDepth }`,
+   * every one defaulted in the emitter, so `drapeFolds: {}` is the whole opt-in.
+   * =========================================================================================== */
+  const drapeFolds = o.drapeFolds ?? null;
   const uvWall = o.uvWall ?? 2.4;
   /**
    * ⚠️ **THE LOWER RUN'S SKIRTING IS THE CALLER'S AND THE UPPER RUN'S IS NOT.** Two skirtings in
@@ -488,10 +603,38 @@ export function ballroomOrder(bin, o = {}) {
         });
       }
       // a crimson drape swagged over each window head, and its two side panels
-      B.box('drape', 0.14, 1.15, win.w + 0.95, x0 + 0.24, winHead - 0.35, wz, 0.8);
-      for (const s of [-1, 1]) {
-        B.box('drape', 0.20, win.h * 0.80, 0.55, x0 + 0.28, win.sill + win.h * 0.42,
-          wz + s * (win.w / 2 + 0.24), 0.8);
+      if (drapeFolds) {
+        /*
+         * 🎭 **THE FOLDED CURTAIN — SAME ENVELOPE, DIFFERENT NORMALS.** Every number here is
+         * read off the three boxes it replaces so the silhouette does not move: the pelmet's
+         * head stays at `winHead + 0.225` and its deepest scallop lands on the box's own
+         * `winHead - 0.925`; each leg keeps the box's 0.55 m width, its 0.18-0.38 m projection
+         * and its `sill + 0.02h .. sill + 0.82h` drop. What changes is that the cloth now has a
+         * front face whose normal sweeps through every fold, and a hem that is cut rather than
+         * sawn — see `drapeCloth`, and the two measured spreads in its header.
+         */
+        const D = drapeFolds;
+        const pel = drapeCloth({
+          w: win.w + 0.95, yTop: winHead + 0.225, yBot: winHead - 0.69,
+          back: 0.17, depth: D.pelmetDepth ?? 0.22, folds: D.pelmetFolds ?? 9,
+          scallop: D.scallop ?? 0.235, scallops: D.scallops ?? 5, ny: 4,
+        });
+        B.add('drape', pel, new THREE.Matrix4().makeTranslation(x0, 0, wz), 0.8);
+        pel.dispose();
+        for (const s of [-1, 1]) {
+          const leg = drapeCloth({
+            w: 0.55, yTop: win.sill + win.h * 0.82, yBot: win.sill + win.h * 0.02,
+            back: 0.18, depth: D.legDepth ?? 0.22, folds: D.legFolds ?? 5, ny: 6,
+          });
+          B.add('drape', leg, new THREE.Matrix4().makeTranslation(x0, 0, wz + s * (win.w / 2 + 0.24)), 0.8);
+          leg.dispose();
+        }
+      } else {
+        B.box('drape', 0.14, 1.15, win.w + 0.95, x0 + 0.24, winHead - 0.35, wz, 0.8);
+        for (const s of [-1, 1]) {
+          B.box('drape', 0.20, win.h * 0.80, 0.55, x0 + 0.28, win.sill + win.h * 0.42,
+            wz + s * (win.w / 2 + 0.24), 0.8);
+        }
       }
     }
   }

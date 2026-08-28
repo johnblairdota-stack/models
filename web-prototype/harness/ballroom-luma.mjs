@@ -79,6 +79,9 @@ const say = (s) => console.log(s);
  * room's own bounds, so a generated room of another size is still the same place in the room. */
 const STATIONS = {
   arch:   { eye: { u: 0.50, v: 0.78, y: 1.62 }, at: { u: 0.50, v: 0.02, y: 1.70 } },
+  /* `win` was missing here while `ballroom-compare` has had it all along, so the one station
+   * that looks straight at the curtains could not be measured. Copied from that file verbatim. */
+  win:    { eye: { u: 0.72, v: 0.50, y: 1.62 }, at: { u: 0.02, v: 0.50, y: 1.50 } },
   wide:   { eye: { u: 0.50, v: 0.92, y: 4.60 }, at: { u: 0.50, v: 0.10, y: 1.20 } },
   floor:  { eye: { u: 0.50, v: 0.62, y: 1.35 }, at: { u: 0.34, v: 0.14, y: 0.02 } },
   mirror: { eye: { u: 0.22, v: 0.50, y: 1.62 }, at: { u: 0.98, v: 0.50, y: 2.40 } },
@@ -123,6 +126,55 @@ const PROBE_SPEC = {
      * bimodal population, so the upper decile is what gets compared.
      */
     stat: 'p90',
+  },
+  /*
+   * ------------------------------------------------------------------------------------------
+   * THE CURTAINS · A SURFACE MEASURED AGAINST **ITSELF**, WHICH IS THE ONLY WAY THIS ONE WORKS
+   * ------------------------------------------------------------------------------------------
+   * The complaint is *"flat slabs ... one flat red, no fold shading"*, and the obvious probe —
+   * drape against the wall behind it — cannot see it: a flat slab and a folded one have the
+   * SAME mean, and it is the mean that a subject/reference ratio compares. What separates them
+   * is the value range INSIDE the cloth, so `spread` reports `(p90 - p10) / median` over the
+   * subject's own pixels and ignores the reference entirely.
+   *
+   * 🚨 **AND IT IS SCALE-FREE ON PURPOSE, BECAUSE THE ONLY BAR AVAILABLE IS DAYLIT.** The asset
+   * is a sunlit hall and the game is a night room; any absolute figure would compare the two
+   * suns. A ratio taken inside one surface does not care how bright that surface is, which is
+   * what makes the asset's number quotable here at all:
+   *
+   *     station   asset (daylight)   game, three boxes   game, folded
+   *     win             2.33               0.815             1.179     <- red-pixel crop
+   *     corner          1.485              0.532             0.639     <- red-pixel crop
+   *     win               --               0.947             0.962     <- this probe's mask
+   *     corner            --               0.437             1.055     <- this probe's mask
+   *
+   * TWO INSTRUMENTS, AND THEY DISAGREE AT ONE STATION FOR A READABLE REASON. The asset cannot
+   * be masked — it is a different view with no `__rrrFollow` to reach into — so its figures come
+   * from the same statistic taken over the RED pixels of a fixed crop of
+   * `progress/compare/win.asset.png` (`R > 45 && R > 1.9G && R > 1.9B`). Run the same crop over
+   * the game and the two agree at `corner` and part company at `win`:
+   *
+   *   · **`corner` is the honest station for this probe.** Two drapes, close, filling the frame.
+   *     0.437 -> 1.055, a 2.4x gain, and both instruments see it.
+   *   · **`win` is not, and the mask says why.** That station sees all five bays at five
+   *     distances, so most of the masked population's variance is bay-to-bay rather than
+   *     inside a fold, and the boxes already scored 0.947 on it. `ERODE_PX` costs the folds
+   *     further: eroding 2 px off a surface whose bright crowns ARE a few pixels wide removes
+   *     the detail under test (n falls 18157 -> 9192). The crop, which takes two bays and does
+   *     not erode, reads the same change as +45%.
+   *
+   * ⚠️ **THE RESIDUAL GAP TO THE ASSET IS A SUN AND NOT A DEFECT.** `room.js` records that the
+   * two rooms emit BIT-IDENTICAL drape geometry, so the whole of the asset's 2.33 is its raking
+   * daylight, which `docs/handoff/ballroom-next.md` settles as un-portable. Under the estate's
+   * hemisphere-led night key a vertical fold rotates its normal about Y, which is the one axis a
+   * hemisphere light is invariant to — so geometry buys what is bought here and not more.
+   */
+  drape: {
+    why: 'the curtains · fold shading, measured inside the cloth',
+    subject: 'kit:drape', reference: 'kit:wall',
+    want: 'spread >= 0.90 at corner — three flat boxes delivered 0.437',
+    stations: ['win', 'corner'],
+    narrow: 'radius', spread: true,
   },
   /*
    * D5 · the ceiling. This one is here for its MASKS rather than its ratio: `up` shows a large
@@ -345,7 +397,8 @@ async function measure(page, beauty, subjMask, refMask, near, erode, narrow) {
       if (!a.length) return null;
       const srt = [...a].sort((p, q) => p - q);
       return { n: a.length, mean: a.reduce((p, q) => p + q, 0) / a.length,
-        med: srt[srt.length >> 1], p90: srt[Math.floor(srt.length * 0.9)] };
+        med: srt[srt.length >> 1], p90: srt[Math.floor(srt.length * 0.9)],
+        p10: srt[Math.floor(srt.length * 0.1)] };
     };
     return { subject: stat(subj), reference: stat(ref), diag };
   }, [beauty, subjMask, refMask, near, erode, narrow]);
@@ -422,8 +475,13 @@ try {
         /* Under ~500 delivered pixels a surface is a sliver and its mean is noise; say so rather
          * than quoting a number to two decimal places. */
         const thin = S.n < 500 || R.n < 500 ? '   [THIN — treat as indicative only]' : '';
+        /* `spread` is the subject measured against ITSELF — see the drape probe's own note. */
+        const spread = S.med > 0 ? (S.p90 - S.p10) / S.med : null;
         say(`    ${stId.padEnd(7)} subject ${K} ${S[K].toFixed(1)} (n=${S.n}, mean ${S.mean.toFixed(1)})  ·  reference ${K} ${R[K].toFixed(1)} (n=${R.n}, mean ${R.mean.toFixed(1)})  ·  ratio ${ratio.toFixed(2)}${ratio > 1.0 ? '   <-- brighter than its neighbour' : ''}${thin}`);
-        lines.push({ key, stId, stat: K, subject: S, reference: R, ratio });
+        if (spec.spread) {
+          say(`            spread (p90-p10)/med ${spread.toFixed(3)}  ·  p10 ${S.p10.toFixed(1)} med ${S.med.toFixed(1)} p90 ${S.p90.toFixed(1)}`);
+        }
+        lines.push({ key, stId, stat: K, subject: S, reference: R, ratio, spread });
       }
     }
     await writeFile(path.join(OUT, 'luma.json'), JSON.stringify(lines, null, 2));

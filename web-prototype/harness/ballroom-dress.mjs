@@ -629,6 +629,148 @@ const orderSrc = await read('src/world/ballroom-order.js');
 }
 
 /* =============================================================================================
+ * THE CURTAINS — FOLDS AND A SHAPED PELMET, AND THE BRIEF'S PREMISE IS WRONG
+ * =============================================================================================
+ * The complaint, from the round-1 critique: *"The curtains are flat slabs. Hard vertical edges,
+ * one flat red, no fold shading, no valance or pelmet. The asset's drapes have a soft gradient
+ * across each fold and a shaped pelmet above."*
+ *
+ * 🚨 **THE SECOND SENTENCE IS FALSE AND IT IS FALSE IN THE SOURCE, NOT JUST IN MY OPINION.**
+ * `room.js`'s own note at the drape shadow carve-out says the two rooms emit *"bit-identical
+ * drapes, three axis-aligned boxes per window, out of this same shared builder"* — and B41 below
+ * proves it by building the order the showcase's way and counting the triangles. The asset has
+ * no folds and no pelmet. Photographed at 4x off `progress/compare/win.asset.png`, its drape is
+ * the same rectangle ours is.
+ *
+ * ⚠️ **THE FIRST SENTENCE IS TRUE ANYWAY, AND THE NUMBER IS WHY THE WORK WAS DONE.** Take the
+ * internal value range a drape delivers, `(p90 - p10) / median` over the cloth's own pixels —
+ * scale-free, so a daylit hall and a night room are comparable:
+ *
+ *     station   asset   game (three boxes)   game (folded)
+ *     corner    1.485        0.437               1.055        <- masked, harness/ballroom-luma
+ *     win       2.33         0.815               1.179        <- red-pixel crop, same statistic
+ *
+ * Same geometry in both rooms, so the whole of the asset's lead was its raking sun — which
+ * `docs/handoff/ballroom-next.md` settles as un-portable ("the game room is NIGHT"). The only
+ * lever left that puts value inside the cloth is the cloth's own normals. `drapeCloth` in
+ * `ballroom-order.js` supplies them, and 0.437 -> 1.055 at `corner` is what they bought.
+ *
+ * ⚠️ **DEFAULT OFF, AND B41 IS THE PIN.** Fold geometry was tried in `views/room-ballroom.js`
+ * once and reverted: it cost 0.35 of that page's 0.3 of grade headroom. The showcase passes no
+ * `drapeFolds`, so it still gets `B.box` three times in the same order.
+ * ============================================================================================= */
+{
+  const THREE = await import('three');
+  const { GeoBin } = await import('../src/world/kit.js');
+  const { ballroomOrder } = await import('../src/world/ballroom-order.js');
+
+  /** Build ONLY the window wall (the only phase that emits drapery) and return its drape bucket. */
+  const drapeBucket = (opts) => {
+    const bin = new GeoBin();
+    ballroomOrder(bin, {
+      x0: -13, x1: 13, z0: -8, z1: 8, h: 9.6,
+      parts: { windowWall: true, mirrorWall: false, endWall: false, nearWall: false,
+        ceiling: false, mirrors: false, dressing: false, balustrade: false },
+      ...opts,
+    });
+    return bin.bins.get('drape') ?? [];
+  };
+  /** Every vertex of a bucket, as flat arrays, plus the merged normal set. */
+  const verts = (arr) => {
+    const out = [];
+    for (const g of arr) {
+      const p = g.attributes.position, n = g.attributes.normal;
+      for (let i = 0; i < p.count; i++) {
+        out.push({ x: p.getX(i), y: p.getY(i), z: p.getZ(i),
+          nx: n.getX(i), ny: n.getY(i), nz: n.getZ(i) });
+      }
+    }
+    return out;
+  };
+  const tris = (arr) => arr.reduce((a, g) => a + (g.index ? g.index.count : g.attributes.position.count) / 3, 0);
+  const bbox = (v) => ({
+    x0: Math.min(...v.map((q) => q.x)), x1: Math.max(...v.map((q) => q.x)),
+    y0: Math.min(...v.map((q) => q.y)), y1: Math.max(...v.map((q) => q.y)),
+    z0: Math.min(...v.map((q) => q.z)), z1: Math.max(...v.map((q) => q.z)),
+  });
+  /** Distinct normal directions, quantised to 0.1 — a box has six and nothing else. */
+  const dirs = (v) => new Set(v.map((q) => `${Math.round(q.nx * 10)},${Math.round(q.ny * 10)},${Math.round(q.nz * 10)}`)).size;
+
+  const boxes = drapeBucket({});
+  const folded = drapeBucket({ drapeFolds: {} });
+  const vb = verts(boxes), vf = verts(folded);
+
+  /*
+   * 🚨 THE PIN. Five window bays x three boxes x twelve triangles. If this ever stops being 180,
+   * the SHOWCASE's drapery has changed and its pixel-diff gate is about to fail for a reason
+   * nobody will connect to this file.
+   */
+  t('B40 · with no drapeFolds the order still emits three plain boxes per bay',
+    tris(boxes) === 180 && dirs(vb) === 6,
+    `${tris(boxes)} tris · ${dirs(vb)} distinct normals (a box has 6)`);
+
+  t('B41 · ...which is what makes the critique\'s premise checkable: the ASSET has no folds',
+    /bit-identical\*\* drapes, three axis-aligned boxes per window/.test(roomSrc),
+    'room.js has recorded the two rooms emitting the same geometry all along');
+
+  /*
+   * The fold, asserted as NORMALS rather than as triangles. Triangle count alone would pass for
+   * a finely tessellated flat slab, which is the exact thing being replaced.
+   */
+  t('B42 · folded drapery delivers a continuum of normals, not six',
+    dirs(vf) >= 120, `${dirs(vf)} distinct normal directions`);
+  t('B42c · CONTROL the boxes it replaces fail B42', !(dirs(vb) >= 120), `${dirs(vb)}`);
+
+  /*
+   * ⚠️ **THE ENVELOPE IS THE SAFETY PROPERTY, NOT THE PICTURE.** Every number in the emitter is
+   * read off the boxes so the drape cannot grow into a window reveal, a pilaster or a console
+   * table. The head, the hem and the run along the wall must not move at all; the only axis
+   * allowed to give is the projection INTO the room, and only by the fold depth.
+   */
+  const bb = bbox(vb), bf = bbox(vf);
+  const same = (a, b, tol) => Math.abs(a - b) <= tol;
+  t('B43 · the folded drape keeps the boxes\' head, hem and run along the wall',
+    same(bb.y0, bf.y0, 0.005) && same(bb.y1, bf.y1, 0.005)
+    && same(bb.z0, bf.z0, 0.005) && same(bb.z1, bf.z1, 0.005),
+    `y ${bf.y0.toFixed(3)}..${bf.y1.toFixed(3)} (was ${bb.y0.toFixed(3)}..${bb.y1.toFixed(3)}) · `
+    + `z ${bf.z0.toFixed(2)}..${bf.z1.toFixed(2)} (was ${bb.z0.toFixed(2)}..${bb.z1.toFixed(2)})`);
+  t('B44 · and it reaches no further into the room than the fold depth',
+    bf.x1 - bb.x1 <= 0.08 && bf.x0 >= bb.x0 - 0.001,
+    `front face ${bf.x1.toFixed(3)} against the boxes\' ${bb.x1.toFixed(3)}`);
+  t('B44c · CONTROL a payload with a runaway fold depth fails B44',
+    bbox(verts(drapeBucket({ drapeFolds: { legDepth: 0.9 } }))).x1 - bb.x1 > 0.08,
+    'the bound is real, not a restatement of the default');
+
+  /*
+   * THE PELMET IS SHAPED. Count the distinct heights present in the HEM BAND — `winHead - 1.00`
+   * to `winHead - 0.60`, i.e. the 0.40 m the scallop is cut out of. A box contributes its two
+   * horizontal edges and nothing between them, wherever you sample it; an arc contributes the
+   * arc. 5 mm buckets, so this is a shape test and not a float-equality test.
+   *
+   * ⚠️ A z-window would have been the tidier filter and it does not work: a `BoxGeometry` has
+   * vertices only at its eight CORNERS, so the swag box has nothing at all near the bay centre
+   * and the control scored zero rather than one. The band catches both paths on equal terms.
+   */
+  const hemYs = (v) => {
+    const band = v.filter((q) => q.y > 5.4 - 1.00 && q.y < 5.4 - 0.60);
+    return new Set(band.map((q) => Math.round(q.y * 200))).size;   // 5 mm buckets
+  };
+  t('B45 · the pelmet hem is cut into arcs rather than sawn straight',
+    hemYs(vf) >= 8, `${hemYs(vf)} distinct heights in the hem band (5 mm buckets)`);
+  t('B45c · CONTROL the swag box it replaces has two — its own bottom edge and the legs\' tops',
+    hemYs(vb) === 2, `${hemYs(vb)}: the swag at winHead - 0.925 and the leg heads at 4.617`);
+
+  /* --- the opt-in, from both ends -------------------------------------------------------- */
+  t('B46 · the GAME opts in, exactly once',
+    (roomSrc.match(/\r?\n\s*drapeFolds: \{\},\r?\n/g) || []).length === 1);
+  t('B47 · the PINNED showcase does not, so its three boxes are byte-identical',
+    !/drapeFolds/.test(await read('src/views/room-ballroom.js')),
+    'views/room-ballroom.js is held by a pixel-diff gate and a 7.7/8.0 grade gate');
+  t('B47c · CONTROL the flag really is what switches it — the order defaults it to null',
+    /const drapeFolds = o\.drapeFolds \?\? null;/.test(orderSrc));
+}
+
+/* =============================================================================================
  * D6 · THE COLOUR ERRORS — MEASURED, AND NEITHER ONE IS WHAT IT LOOKS LIKE
  * =============================================================================================
  * Handoff D6 reports two things, both marked *"Suspected, not diagnosed."* Both were diagnosed

@@ -3328,6 +3328,22 @@ export async function buildTestRoom(engine, o = {}) {
            */
           raisedPanels: true,
           /*
+           * 🎭 **THE FOLDS — the second half of the curtain fix, and the half the shadow
+           * carve-out below was explicitly holding open.** That note ends *"if shadow plus the
+           * material still reads flat, folds are next — game-only, and default off."* It does,
+           * and here is the number: masked and measured on the delivered pixels of both rooms,
+           * the internal value range a drape carries, `(p90 - p10) / median`, is **2.33 in the
+           * asset and 0.815 in the game at `win`** — and 1.485 against 0.532 at `corner`. Same
+           * geometry in both (three axis-aligned boxes), so the whole of that 2.8x is the
+           * asset's raking sun, which is settled as un-portable. Normals are the only lever
+           * left, so the cloth gets normals: see `drapeCloth` in `ballroom-order.js`.
+           *
+           * ⚠️ **GAME-ONLY, AND THE FLAG IS WHY.** `views/room-ballroom.js` lost 0.35 of its
+           * 0.3 of grade headroom to fold geometry once already. `drapeFolds` is unset there,
+           * that view still gets three boxes, and its pixel-diff gate is untouched.
+           */
+          drapeFolds: {},
+          /*
            * 🏛️ The marble border, derived from the room rather than authored. The showcase's
            * 2.2 m on a 16 m short side is 0.1375 of it; snapping that to whole marble squares is
            * what stops a generated ballroom showing a sliver of a square against the skirting.
