@@ -3389,7 +3389,7 @@ console.log('\nparty-warm — the lobby-warm night');
   t('W37c · the Execution says each of its facts exactly once',
     /function executionSwing/.test(hostSrc)
     && /verdict: executionSwing\(/.test(hostSrc)
-    && /kicker: 'Casting is next\.'/.test(hostSrc)
+    && /kicker: client\.lynchResult \? 'Casting is next\.' : 'Counting the ballot\.'/.test(hostSrc)
     // the tell for the old defect: `kicker` and `verdict` fed the SAME builder
     && !/kicker: executionLine\(/.test(hostSrc));
 
@@ -3397,6 +3397,18 @@ console.log('\nparty-warm — the lobby-warm night');
   // event log want both facts in one string. Only the TV splits them.
   t('W37c control · executionLine survives for the surfaces that want one sentence',
     /function executionLine/.test(hostSrc));
+
+  /*
+   * ⚠️ **W37c2 · THE RESULT-LESS WINDOW.** Splitting one sentence into three elements deleted
+   * `executionLine`'s `!result` fallback along with the duplicate it was duplicating — and that
+   * fallback was the only thing on the screen when the Execution beat is reached before its
+   * result is (a reconnecting TV; the beat landing a tick early). Caught by photographing the
+   * beat with no `lynchResult` on the wire, where the screen announced the NEXT beat while this
+   * one had said nothing. Every element on this beat is now result-gated in the same direction.
+   */
+  t('W37c2 · with no result on the wire the beat says so, rather than pointing at the next one',
+    /kicker: client\.lynchResult \? 'Casting is next\.' : 'Counting the ballot\.'/.test(hostSrc)
+    && /if \(!result\) return '';/.test(hostSrc));
 
   t('W37d · every tappable list on the phone carries the seat, the link list included',
     /data-link="\$\{esc\(p\.id\)\}"[^]{0,120}\$\{seatChip\(c, p\.id\)\}/.test(phoneSrc)

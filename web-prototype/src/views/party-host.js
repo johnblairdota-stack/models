@@ -1068,7 +1068,15 @@ export default async function partyHost({ params }) {
          * hand, the nameplate names who is out, and the kicker says what happens next — three
          * elements, three different facts. `party-warm` W37c is the lock.
          */
-        kicker: 'Casting is next.', beat: 'execution',
+        /*
+         * ⚠️ **AND THE KICKER WAITS FOR THE RESULT BEFORE IT LOOKS PAST THE BEAT.** Photographed
+         * at `progress/talk/tv-execution.png`: reached with no `lynchResult` on the wire — a TV
+         * that reconnects mid-Execution, or the beat landing a tick before the result does — the
+         * screen said only "Casting is next.", announcing the NEXT beat while this one had not
+         * said anything at all. `executionLine`'s old `!result` fallback ("The vote is in.") was
+         * covering that window, and deleting the duplicate deleted the cover with it.
+         */
+        kicker: client.lynchResult ? 'Casting is next.' : 'Counting the ballot.', beat: 'execution',
         who: executed ? joinedName(names, executed, 'A player') : 'Nobody',
         whoSub: executed ? 'out' : 'no eviction',
         whoId: executed,
