@@ -883,14 +883,28 @@ const BEAT_DOOR = {
   reckoning: enterReckoningLive,
   vote: enterVoteLive,
   execution: enterExecutionLive,
+  /*
+   * Verdict joined the wire on the top-down fork. The `]` key walks Execution → Verdict via
+   * `nextShowBeat`, so leaving it as a setShow-only jump would reprint the same bug this door
+   * exists for: the television says VERDICT while the server is still in EXECUTION.
+   */
+  verdict: enterVerdictLive,
   casting: enterNextCasting,
 };
 
 /** The beats a `t:'show'` jump must enter through their live transition. Read by the gate. */
 export const LIVE_BEAT_DOORS = Object.keys(BEAT_DOOR);
 
-/** Beats with no live transition of their own — see rule 2 above. Read by the gate. */
-export const SETSHOW_ONLY_BEATS = ['lobby', 'expedition'];
+/**
+ * Beats `t:'show'` may paint without a live transition — see rule 2 above. Read by the gate.
+ *
+ * `lobby` and `expedition` have none. **Reunion has one** (`enterReunionLive`) and it is
+ * deliberately not on this verb: the reveal is the fold's walk out of Verdict, or SKIP TO
+ * REUNION (`t:'skip'`), and a show-verb jump would dump everybody's card without recording
+ * the skip. `show-beat` SB2 reddened the day Verdict and Reunion joined `SHOW_BEATS`; this
+ * is the decision that gate asked for.
+ */
+export const SETSHOW_ONLY_BEATS = ['lobby', 'expedition', 'reunion'];
 
 export function enterBeatLive(room, beat) {
   if (!room || !isShowBeat(beat)) return room?.show ?? null;
