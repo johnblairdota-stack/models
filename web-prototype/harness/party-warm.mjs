@@ -1910,13 +1910,30 @@ console.log('\nparty-warm — the lobby-warm night');
     ['shoulder', 'lead', 'doorway'].every((s) => runPerspective('run', null, s) === 'chase')
       && runPerspective('run', 'shoulder', null) === 'shoulder',
     'only ?shot= pins a director shot');
-  t('W26i · the runner phone is a pad — two sticks, no chase embed, eyes on the TV',
+  t('W26i · the runner phone is a pad — no chase embed, eyes on the TV',
     !/warmUrl\(/.test(phoneSrc)
     && !/runner-chase-layer/.test(phoneSrc)
     && !/sendChaseCue/.test(phoneSrc)
     && /id="stick"/.test(phoneSrc)
     && /id="stick-look"/.test(phoneSrc)
     && /Eyes on the TV/.test(phoneSrc));
+  /*
+   * 🎥 **AND THE PAD HAS TWO SHAPES NOW, so asserting that the source CONTAINS a look stick is
+   * no longer the same as asserting the player gets one.** Both branches live in this file, so a
+   * grep for `id="stick-look"` passes whatever the top-down sheet actually renders. What has to
+   * hold is the CONDITION: the look stick is inside a `topDown ? '' : ...` arm, the copy differs
+   * between the two, and the camera is in the repaint key or the pad would keep the wrong shape
+   * for the rest of the night.
+   */
+  t('W26i2 · under a plan-locked top-down the look stick is not rendered at all',
+    /const topDown = camView === 'top' \|\| camView === 'iso';/.test(phoneSrc)
+    && /\$\{topDown \? '' : `<div class="stick-col">\s*\n\s*<div class="stick stick-look"/.test(phoneSrc)
+    && /The stick is the room — push where you want to go/.test(phoneSrc));
+  t('W26i3 · and the camera is part of the sheet\'s repaint key, so it re-shapes on the crossing',
+    /const camStamp = iAmRunner \? `:\$\{frame\?\.you\?\.view \|\| 'chase'\}` : '';/.test(phoneSrc)
+    && /\$\{hasCard\(\) \? 'card' : 'nocard'\}\$\{camStamp\}/.test(phoneSrc));
+  t('W26i4 · the phone learns the camera from its own seat only — never from the TV',
+    /frame\?\.you\?\.view/.test(phoneSrc));
   t('W26j · the guide path is still the map — chase is not mounted on that sheet',
     /guideMapSvg\(/.test(phoneSrc)
     && /iAmGuide/.test(phoneSrc)

@@ -1033,7 +1033,18 @@ export function moveViolations(msg) {
  * house; `role`, `alignment`, `cover`, `claim`, `castSeed`, `you`, `teammates` and `deal` are
  * facts about a person, and not one of them has a key here or can be added by accident.
  */
-export const WORLD_KEYS = ['t', 'runner', 'hunter', 'mission', 'seq'];
+/**
+ * 🎥 `view` — WHICH CAMERA THE SHOW IS ON, so the runner's pad can match it.
+ *
+ * The controls change with the perspective (absolute stick under a plan-locked top-down, a
+ * camera-relative stick plus a look stick on the ground), so the phone has to know which one is
+ * live. It rides the TV's existing world report because the TV is the only process that knows —
+ * `party-loop.md`'s asymmetry, unchanged: the mansion exists in the follow slot and nowhere else.
+ *
+ * It is a perspective NAME and nothing else. It carries no position, no room and no hunter, so
+ * it cannot become a second channel for the map; `entitle.js` still gates who is told.
+ */
+export const WORLD_KEYS = ['t', 'runner', 'hunter', 'mission', 'seq', 'view'];
 export const WORLD_SPOT_KEYS = ['room', 'x', 'z'];
 export const WORLD_MISSION_KEYS = ['phase', 'room'];
 
@@ -1054,5 +1065,8 @@ export function worldViolations(msg) {
       bad.push(`world.mission.phase=${msg.mission.phase}`);
     }
   }
+  // Closed, exactly as `mission.phase` is: an invented camera name is refused at the door rather
+  // than forwarded for the phone to fail to understand.
+  if (msg.view != null && !PERSPECTIVES.includes(msg.view)) bad.push(`world.view=${msg.view}`);
   return bad;
 }

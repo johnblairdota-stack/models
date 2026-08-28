@@ -2074,6 +2074,10 @@ export async function buildFollowBed(engine, opts = {}) {
         x: +hunter.pos.x.toFixed(2), z: +hunter.pos.z.toFixed(2),
       },
       mission: { phase: mission.phase, room: mission.room },
+      // The camera the show is actually on, so the pad can match it. `appliedRig` and not the
+      // live blend: a crane is 1.35 s and this channel is 2 Hz, so reporting the destination
+      // means the sheet swaps once, at the start, rather than chattering through the move.
+      view: perf.appliedRig ?? BALLROOM_PERSPECTIVE,
     }),
     /** The patrol, for `harness/party-follow-drive.mjs`. Never rendered, never on the wire. */
     hunterTelemetry: () => ({ ...hunter.telemetry(), room: hunter.roomId() }),

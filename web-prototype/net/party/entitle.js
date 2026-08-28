@@ -90,6 +90,16 @@ export const MATRIX = [
    * checkable. Audience is runner — seated phones and the TV never see it.
    */
   ['you.here',                 'runner'],
+  /*
+   * ---- which camera the show is on, so the pad can match the controls to it.
+   *
+   * Not intel, not the map, not a position — a perspective NAME from a closed list of four. The
+   * runner's stick is absolute under the plan-locked top-down and camera-relative on the ground,
+   * so a pad that did not know which was live would be lying about its own labels. Audience is
+   * `runner` for the same reason `you.here` is: nobody else is steering, and the TV must not be
+   * told anything it did not itself compute.
+   */
+  ['you.view',                 'runner'],
 
   // ---- the room
   ['players[].id',             'all'],

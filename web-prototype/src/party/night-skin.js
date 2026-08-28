@@ -484,6 +484,14 @@ export function injectNightSkin() {
     .stick.on .nub { background:var(--night-ink); }
     .stick-cap { font-size:11px; letter-spacing:.2em; text-transform:uppercase;
       color:var(--night-dim); font-weight:700; }
+    /* 🎥 THE TOP-DOWN PAD. The look stick is gone — a plan-locked map has nothing to swing — so
+       the two columns share the width and RUN / SWING grow into the half it leaves behind. The
+       stick stays in its own corner rather than centring: moving it would undo the thumb's
+       learned position at the exact moment the player is being asked to relearn the mapping. */
+    .stick-wrap.top { grid-template-columns: minmax(120px,1.15fr) 1fr; }
+    .stick-wrap.top .stick { max-width:200px; }
+    .stick-wrap.top .stick-side { justify-content:flex-end; }
+    .stick-wrap.top .stick-btn { min-height:96px; font-size:17px; }
     .stick-side { display:flex; flex-direction:column; gap:10px; }
     .stick-btn { appearance:none; border:0; font:inherit; font-weight:700; letter-spacing:.12em;
       text-transform:uppercase; border-radius:12px; padding:0 12px; min-height:62px; min-width:76px;

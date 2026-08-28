@@ -1283,7 +1283,11 @@ function handleClient(room, bound, self, msg) {
    */
   if (msg.t === 'world' && isTV) {
     if (worldViolations(msg).length) return;
-    room.game.setWorld({ runner: msg.runner, hunter: msg.hunter, mission: msg.mission });
+    // Named, never spread — this is the boundary where the TV's report becomes room state, and
+    // a spread would let a widened report add fields nobody entitled.
+    room.game.setWorld({
+      runner: msg.runner, hunter: msg.hunter, mission: msg.mission, view: msg.view,
+    });
     endRunOnMission(room, msg.mission);
     return;
   }

@@ -531,9 +531,21 @@ export default async function partyPhone({ params }) {
       state.missionSeen = null;
     }
 
+    /*
+     * 🎥 **THE CAMERA IS PART OF THE SHEET'S SHAPE, so it belongs in the stamp.**
+     *
+     * `liveStamp` is what lets a world report patch the pad in place instead of rebuilding it —
+     * a rebuild destroys the stick under the player's thumb along with its `setPointerCapture`.
+     * The runner's sheet now has two SHAPES (a look stick on the ground, none under a plan-locked
+     * top-down), so the camera has to be in the key or the pad would keep the wrong one forever.
+     *
+     * It costs exactly one rebuild per crossing, which is the frame the player is watching a
+     * 1.35 s camera move on the television rather than their own hands.
+     */
+    const camStamp = iAmRunner ? `:${frame?.you?.view || 'chase'}` : '';
     const liveStamp = beat === 'expedition' && !state.stage
       ? `${beat}:${iAmRunner ? 'run' : iAmGuide ? 'guide' : 'watch'}:${missionPhase}`
-        + `:${hasCard() ? 'card' : 'nocard'}`
+        + `:${hasCard() ? 'card' : 'nocard'}${camStamp}`
       : null;
     if (liveStamp && root.dataset.liveUi === liveStamp && patchLive(frame)) {
       window.__rrrPhone = { frame, beat, seat: me.seat, iAmRunner, iAmGuide };
@@ -630,6 +642,21 @@ export default async function partyPhone({ params }) {
     } else if (beat === 'expedition') {
       if (iAmRunner) {
         /*
+         * 🎥 **WHICH CAMERA THE SHOW IS ON, AND WHY THIS SHEET HAS TWO SHAPES.**
+         *
+         * D13's pad was written when there was one camera. There are four now, and the top-down
+         * one changes what the sticks MEAN: it is plan-locked, so screen direction is world
+         * direction and the stick is absolute — push where you want to go — and the look stick
+         * has nothing to swing, because a top-down you can turn is the rotating map the whole
+         * perspective exists to avoid. Printing "Right stick looks" over a dead control is worse
+         * than printing nothing.
+         *
+         * `frame.you.view` is runner-audience (`net/party/entitle.js`), so no other seat and not
+         * the TV is told which camera the show is on.
+         */
+        const camView = frame?.you?.view || 'chase';
+        const topDown = camView === 'top' || camView === 'iso';
+        /*
          * 🕹️ **FULL CONTROL, NOT FOUR SPEEDS.** John: *"replace STILL/CREEP/WALK/RUN with full
          * movement control and freedom. Runner spawns equipped with the sledge."*
          *
@@ -651,11 +678,13 @@ export default async function partyPhone({ params }) {
          * contribution from a chair.
          */
         body += `<h1>You walk.</h1>
-          <p class="hint">Eyes on the TV. Left stick walks into the shot. Right stick looks. Hold RUN, tap SWING.</p>
+          <p class="hint">${topDown
+            ? 'Eyes on the TV. The stick is the room — push where you want to go. Hold RUN, tap SWING.'
+            : 'Eyes on the TV. Left stick walks into the shot. Right stick looks. Hold RUN, tap SWING.'}</p>
           <p class="hint">Listen to your guide — they have the map, you have the hammer.</p>
           ${missionLine(frame)}
           ${hereLine(frame)}
-          <div class="stick-wrap">
+          <div class="stick-wrap${topDown ? ' top' : ''}">
             <div class="stick-col">
               <div class="stick" id="stick"><div class="nub" data-nub></div></div>
               <div class="stick-cap">Move</div>
@@ -664,10 +693,10 @@ export default async function partyPhone({ params }) {
               <button class="stick-btn" id="run-btn" type="button">Run</button>
               <button class="stick-btn swing" id="swing-btn" type="button">Swing</button>
             </div>
-            <div class="stick-col">
+            ${topDown ? '' : `<div class="stick-col">
               <div class="stick stick-look" id="stick-look"><div class="nub" data-nub-look></div></div>
               <div class="stick-cap">Look</div>
-            </div>
+            </div>`}
           </div>
           ${padFxHtml()}`;
       } else if (iAmGuide) {

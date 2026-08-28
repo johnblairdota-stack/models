@@ -180,6 +180,17 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       base.you = { ...base.you, here: state.world.runner.room };
     }
     /*
+     * WHICH CAMERA THE SHOW IS ON — the same seat, the same reasoning, one field wider.
+     *
+     * The runner's controls change with the perspective: absolute under the plan-locked top-down,
+     * camera-relative with a look stick on the ground. A pad that did not know which was live
+     * would print the wrong instructions over the right sticks. Set separately from `here` so a
+     * report that carries a view but no room still delivers it.
+     */
+    if (!sock.isTV && sock.seatRole === 'runner' && base.you && state.world?.view) {
+      base.you = { ...base.you, view: state.world.view };
+    }
+    /*
      * 🗺️ **`|| state.world` — AND WITHOUT IT THE GUIDE'S NEW MAP IS A FLOOR PLAN WITH NO MARKS ON
      * IT, WHICH THE FIRST BROWSER PASS PHOTOGRAPHED.**
      *
@@ -751,10 +762,10 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
      *
      * @returns {boolean} true when the mission phase changed, so the transport can act on it
      */
-    setWorld({ runner = null, hunter = null, mission = null } = {}) {
+    setWorld({ runner = null, hunter = null, mission = null, view = null } = {}) {
       const wasPhase = state.world?.mission?.phase ?? 'none';
       state.worldTick += 1;
-      state.world = { runner, hunter, mission };
+      state.world = { runner, hunter, mission, view };
 
       /*
        * ⚠️ **RE-ASSERT THE SEAT ROLES, BECAUSE `playEpisode` CLEARS THEM BEFORE THE RUN IS OVER.**
