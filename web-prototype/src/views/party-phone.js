@@ -1463,24 +1463,120 @@ export default async function partyPhone({ params }) {
     return `<span class="seat-chip" style="background:${esc(look.accent)}">${esc(String(seat.seat + 1))}</span>`;
   }
 
+  /* ==========================================================================================
+   * 🩸 **THE STANDING BOARD — WHO HAS BEEN NAMED, BY WHOM, AND WHETHER IT IS YOU.**
+   *
+   * MEASURED FIRST (`harness/phone-accusation.mjs`, 2026-08-28, eight phones, two nominations
+   * standing and confirmed on the television). What the phones said before this existed:
+   *
+   *   TV `.nom-board`      "1 Sam NAMED BY JOHN 3 · 2 Bo NAMED BY ELLIE 5", 2 seat chips
+   *   nominator (John)     "You have nominated. Watch the TV."   0 names · 0 chips · 0 receipts
+   *   nominee   (Sam, 3)   "Standing: Sam, Bo"                   0 chips  — byte-identical to
+   *   bystander (Alex, 7)  "Standing: Sam, Bo"                   0 chips    the bystander's copy
+   *
+   * Three separate holes, and the middle one is the product one:
+   *
+   * 1. **`Standing: Sam` NAMES NOBODY IN A ROOM WITH TWO SAMS.** Duplicate names are a locked
+   *    rule, and the seat chip is the whole answer to it — it is already on every tappable row,
+   *    the vote list, the vote receipt and the TV's own board. It was on the one line that says
+   *    who is on the block. Alexandria's sheet offered her `4 Sam` to tap while telling her
+   *    `Sam` was standing, and those are two different people.
+   * 2. **THE PERSON WHO WAS JUST NAMED IS NOT TOLD.** Sam's sheet and the bystander's sheet
+   *    carried the same sentence. The television announces the accusation, her robot wears a red
+   *    tag, and the thing in her hand said nothing — so the one player who has to answer it is
+   *    the one player reading it off someone else's screen.
+   * 3. **THE NOMINATOR HAD NO RECEIPT, AND THE PLACEHOLDER COULD LIE.** Every other beat gives
+   *    one: the Vote's is `The room recorded · [3] Sam` and `loop-ui-play` S1 gates it. The
+   *    Reckoning's was `You have nominated. Watch the TV.` — no name, no seat, and driven by the
+   *    OPTIMISTIC local `state.nominated` rather than by the server's fanout. That is not
+   *    theoretical: a run of the harness above drove a Reckoning the server had not entered, it
+   *    refused all eight nominations with `not reckoning`, and every phone still read
+   *    "You have nominated." over an empty ballot. Same bug the vote receipt's own header was
+   *    written about; same fix, which is to quote `c.noms` and never `state.nominated`.
+   *
+   * 🚨 **THE ONLY TWO FIELDS TOUCHED ARE `nominator` AND `target`, AND BOTH ARE ALREADY PUBLIC.**
+   * `FANOUT_KEYS.nomRow` (`net/party/local.mjs`) and `CUE_NOM_KEYS` (`src/party/follow.js`) are
+   * both exactly `['nominator','target']`, the television has printed both since #34, and
+   * `standingNames()` below has computed `by` all along and thrown it away. Names, seats and
+   * accents are `players[].name` / the lobby seat list, every one of them an `all` row in
+   * `net/party/entitle.js`. **No new field crosses any wire for this** — if a future line here
+   * wants one that has no matrix row, that is a design decision and `party-isolation` I1c is
+   * the thing that will say so out loud.
+   *
+   * Rendered entirely in CSS that already exists (`night-skin.js` owns the sheet, not this
+   * file): `.pick-list button.locked-out` is the dashed, un-tappable row the cast list already
+   * uses for a blocked pick, `.self-pick` is its gold "this one is you" inset, and `.receipt` /
+   * `.receipt.coerced` are the green and red receipt the ballot already speaks in. Nothing here
+   * animates or holds state across a repaint — `paint()` rebuilds `root.innerHTML` on every
+   * socket message and anything stateful would strobe.
+   * ========================================================================================== */
+
+  /** One standing nomination as a row: WHO is on the block, and WHO put them there. */
+  function standingRow(n, me, c) {
+    const mine = n.target === me.playerId;
+    const byMe = n.nominator === me.playerId;
+    return `<button type="button" class="locked-out${mine ? ' self-pick' : ''}" disabled
+        aria-disabled="true" data-standing="${esc(n.target)}">
+      ${seatChip(c, n.target)}
+      <span style="min-width:0">
+        <span style="display:block">${esc(n.name)}${mine ? ' · YOU' : ''}</span>
+        <span class="hint" style="display:flex;align-items:center;gap:7px;margin-top:4px">
+          named by ${seatChip(c, n.nominator)}<span>${esc(n.by)}${byMe ? ' · you' : ''}</span>
+        </span>
+      </span>
+    </button>`;
+  }
+
+  /** The board every phone sees, plus the red plate the named player sees and nobody else does. */
+  function standingBoard(standing, me, c) {
+    if (!standing.length) return '';
+    const onMe = standing.find((n) => n.target === me.playerId);
+    let html = '';
+    if (onMe) {
+      html += `<div class="receipt coerced">
+        <div class="receipt-k">You have been named by</div>
+        <div class="receipt-v">${seatChip(c, onMe.nominator)}<span>${esc(onMe.by)}</span></div>
+        <p class="hint">You are standing. The room votes next.</p>
+      </div>`;
+    }
+    html += `<p class="hint">Standing — ${standing.length === 1 ? 'one name' : `${standing.length} names`}, and who said them</p>
+      <div class="pick-list">${standing.map((n) => standingRow(n, me, c)).join('')}</div>`;
+    return html;
+  }
+
   function paintNominate(players, me, c, opts = {}) {
     const late = !!opts.late;
     const standing = standingNames(players, c);
-    const already = standing.some((n) => n.nominator === me.playerId) || state.nominated;
+    /*
+     * ⚠️ **THE RECEIPT IS THE SERVER'S ROW; THE HIDE IS THE LOCAL FLAG.** `state.nominated` is
+     * set the instant the thumb lands so a second tap cannot double-send — that is a debounce
+     * and it stays. It is NOT evidence that anything was recorded, so it never gets to write a
+     * name onto this sheet. See the header, and the vote receipt's.
+     */
+    const mine = standing.find((n) => n.nominator === me.playerId);
+    const already = !!mine || state.nominated;
     const targets = (players || []).filter((p) => p.id !== me.playerId && p.alive !== false
       && !standing.some((n) => n.target === p.id));
+    /* The lead is an instruction, so it is printed only when there is something to tap. It used
+     * to be unconditional and sat directly above "You have nominated" — the sheet telling you to
+     * do the thing it had just told you you had already done. */
+    const canTap = iCanAct(players, me) && !already && targets.length > 0;
     let html = late
-      ? `<p class="hint">Talk's ending — name someone</p>`
-      : `<h1>Reckoning.</h1>${phoneClock(c)}<p class="hint">Tap who you name</p>`;
-    if (standing.length) {
-      html += `<p class="hint">Standing: ${esc(standing.map((n) => n.name).join(', '))}</p>`;
-    }
+      ? (canTap ? `<p class="hint">Talk's ending — name someone</p>` : '')
+      : `<h1>Reckoning.</h1>${phoneClock(c)}${canTap ? '<p class="hint">Tap who you name</p>' : ''}`;
+    html += standingBoard(standing, me, c);
     if (!iCanAct(players, me)) {
       html += `<p class="hint">The dead do not nominate.</p>`;
       return html;
     }
     if (already) {
-      html += `<p class="hint">You have nominated. Watch the TV.</p>`;
+      html += mine
+        ? `<div class="receipt">
+            <div class="receipt-k">The room recorded your nomination</div>
+            <div class="receipt-v">${seatChip(c, mine.target)}<span>${esc(mine.name)}</span></div>
+            <p class="hint">Your nomination is your vote. You do not vote again.</p>
+          </div>`
+        : `<p class="hint">Sending your nomination…</p>`;
       return html;
     }
     if (!targets.length) {
