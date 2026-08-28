@@ -117,6 +117,9 @@ const OK = { reaction: 'CLAP', beat: 'expedition', alive: true, lastAt: null, no
     spawnOffset(0).ox !== spawnOffset(1).ox
     && spawnOffset(1).ox !== spawnOffset(2).ox
     && spawnOffset(0).oy !== spawnOffset(1).oy);
+  t('R8c · and the lanes are wider than the face, so spam is not a smear on the first chip',
+    Math.abs(spawnOffset(1).ox - spawnOffset(0).ox) >= 56
+    && Math.abs(spawnOffset(2).ox - spawnOffset(0).ox) >= 24);
 
   // `events` is newest-LAST, the order the client appends in — so p11 is the most recent here.
   const crowd = Array.from({ length: 20 }, (_, i) => ev(`p${i}`, 'CLAP', (19 - i) * 10));

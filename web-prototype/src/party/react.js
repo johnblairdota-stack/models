@@ -101,7 +101,8 @@ export function onAir(events, now) {
  */
 export function spawnOffset(n) {
   const i = Math.max(0, n | 0);
-  const ox = (i % 2 === 0 ? 1 : -1) * (16 + Math.floor(i / 2) * 18);
-  const oy = (i * 13) % 40;
+  // Wider than the 56 px face so a second tap is a new lane, not a smear on the first.
+  const ox = (i % 2 === 0 ? 1 : -1) * (44 + Math.floor(i / 2) * 38);
+  const oy = (i * 17) % 48;
   return { ox, oy };
 }
