@@ -270,8 +270,19 @@ try {
     console.log('');
   }
 
-  t('C4 · no two tags overlap', pairs.length === 0,
-    pairs.length ? `${pairs.length} pairs, worst ${pairs[0].buried}% buried (${pairs[0].a}/${pairs[0].b})` : 'clear');
+  /*
+   * ⚠️ **C4 IS A READING, NOT A VERDICT — JOHN'S CALL, 2026-08-28:** *"I don't mind the tags
+   * occluding each other."* The overlap is real and this still measures it, because a number
+   * that stops being collected is a number nobody can notice moving. What it no longer does is
+   * FAIL: the critic filed the collision as a defect and the owner of the design says it is not
+   * one, and a gate that reports red on a deliberate choice trains everybody to ignore red.
+   *
+   * What John did flag is size — *"maybe a little too big, but the readability was the issue when
+   * it was smaller"* — which is a constraint on any fix, not a request to shrink: the far tags
+   * were unreadable at the old size and must not go back. C6 is that constraint as a floor.
+   */
+  console.log(`   overlap reading: ${pairs.length} pairs`
+    + `${pairs.length ? `, worst ${pairs[0].buried}% of the smaller tag` : ''} — not a defect, see header\n`);
 
   /*
    * ⚠️ **C5 IS THE ONE THAT CORRECTED THE CRITIC.** The finding claimed the near tags were about
@@ -284,6 +295,15 @@ try {
   const spread = Math.max(...hs) / Math.max(1e-6, Math.min(...hs));
   t('C5 · nearest and furthest tags are within 2x of each other',
     spread <= 2, `${Math.min(...hs).toFixed(1)}px → ${Math.max(...hs).toFixed(1)}px = ${spread.toFixed(2)}x`);
+
+  /*
+   * C6 · THE FLOOR THE LAST SHRINK HIT. The tags were smaller once and the far side of the
+   * circle could not be read; that is why the near/far curve exists at all. Any future trim of
+   * the big near tags must come off the NEAR end — the far end is already at the size that was
+   * found to be the minimum. This guards the direction of the next change.
+   */
+  t('C6 · the furthest tag is still at least 28px tall — the size the last shrink bottomed out at',
+    Math.min(...hs) >= 28, `smallest ${Math.min(...hs).toFixed(1)}px`);
 
   await writeFile(path.join(SHOTDIR, 'staging.json'), JSON.stringify({ m, pairs }, null, 2));
   console.log(`\n  staging.json in progress/circle/`);
