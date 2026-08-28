@@ -597,8 +597,42 @@ export function wallRun(bin, o = {}) {
   const marg = o.panelBevel ?? 0.125;
   // the bead worked on the inner edge of the stiles, where the field meets the framing
   const beadProf = new Prof(0, 0).to(0, 0.026).ovolo(-0.028, -0.026, 4).points;
+  /* ===========================================================================================
+   * 🪵 **`panelMould` — A BOLECTION ON THE FRAMING. OPT-IN, DEFAULT NULL, AND THE 26 mm BEAD
+   * ABOVE IS WHY IT EXISTS.**
+   *
+   * Round-2 critique: *"The wall panels are scored lines, not mouldings. Every panel on every
+   * wall is a thin dark line drawn on flat paint."* That is exactly what is delivered, and the
+   * cause is not a missing profile — `beadProf` is a real ovolo with an up-facing fillet and a
+   * quarter round off it. The cause is that it is **26 mm on a wall photographed from 11.6 m**,
+   * where the ballroom's `arch` station runs about 50 px/m, so the whole moulding subtends 1.3
+   * px. Scanned across a panel edge at the `corner` station on the shipped build, the delivered
+   * row reads
+   *
+   *     ... 48.6  49.4  48.6  49.7  43.6  |8.6|  49.5  57.2  58.3  58.8 ...
+   *
+   * — a ONE-PIXEL black notch between flat wall at ~49 and the raised field at ~58. No lit edge
+   * on either side of it, because at 1.3 px the lit face and the shadowed face average into the
+   * same pixel and the gilt bucket (a metal, unlit at night in that width) resolves it dark.
+   * More profile does not fix that. More SIZE does, and 75 mm is what a bolection on a 1.9 m
+   * panel is in real joinery anyway.
+   *
+   * ⚠️ **IT LANDS IN `K.wall`, NOT `K.mould`, AND THAT IS THE OTHER HALF.** A bolection is
+   * painted with the panelling it frames, so it takes the boiserie's diffuse rather than the
+   * gilding's metal — which is what gives it a value that varies with its own normals instead of
+   * a value that is dark at every width. It also costs **zero draw calls**: same key, same
+   * bucket, same merged mesh as the field and the chamfer it sits between.
+   *
+   * ⚠️ **THE SIZE IS BOUNDED BY `RAIL`, NOT BY TASTE.** The moulding grows outward from the
+   * panel over the framing, so `w` + the bead's 22 mm has to fit inside RAIL (0.13) above and
+   * below, or it eats the rail. 0.075 leaves 33 mm of rail and 63 mm of stile.
+   *
+   * `light-shaft.js` and `study-order.js` also pass `raised: true` and pass no `panelMould`, so
+   * they are untouched.
+   * =========================================================================================== */
+  const bol = o.panelMould ?? null;
   /** one raised-and-fielded panel: proud centre plate, chamfered margin, framing bead. */
-  const fielded = (cx, cy, pw, ph, rs, mg) => {
+  const fielded = (cx, cy, pw, ph, rs, mg, k = 1) => {
     const fw = Math.max(0.08, pw - 2 * mg), fh = Math.max(0.08, ph - 2 * mg);
     put(K.wall, new THREE.BoxGeometry(fw, fh, 0.024), tr(cx, cy, rs - 0.012), o.uvWall ?? 1.2);
     // the FIELDING. `mitredFrame` grows outward from its sight opening, so a profile running
@@ -607,6 +641,16 @@ export function wallRun(bin, o = {}) {
     put(K.wall, mitredFrame(new Prof(0, rs).to(mg * 0.88, 0.005).to(mg, 0.0).points, fw, fh),
       tr(cx, cy, 0), o.uvWall ?? 1.2);
     put(K.mould, mitredFrame(beadProf, pw + 0.044, ph + 0.044), tr(cx, cy, 0.002));
+    // ...and, when the caller asks for it, the bolection outside the bead. `panelMouldProfile`
+    // grows INWARD from its sight opening, so the sight is set out by the bead's 22 mm plus the
+    // moulding's own width and the band lands on the framing with its quirk against the bead.
+    if (bol) {
+      const bw = (bol.w ?? 0.075) * k, bd = (bol.d ?? 0.052) * k;
+      const gilded = bol.key === 'mould';
+      put(gilded ? K.mould : K.wall,
+        mitredFrame(panelMouldProfile(bw, bd), pw + 0.044 + 2 * bw, ph + 0.044 + 2 * bw),
+        tr(cx, cy, 0.002), gilded ? null : (o.uvWall ?? 1.2));
+    }
   };
   // ⚠ A PANEL DRAWN ACROSS AN OPENING — THE BUG THIS BLOCK EXISTS TO END.
   //
@@ -666,7 +710,7 @@ export function wallRun(bin, o = {}) {
       const cy = (SKIRT_H + (DADO_H - 0.16)) / 2;
       if (pw > 0.2 && ph > 0.15 && !clashes(cx - pw / 2, cx + pw / 2, cy - ph / 2, cy + ph / 2)) {
         if (raised) {
-          fielded(cx, cy, pw, ph, rise * 0.72, marg * 0.70);
+          fielded(cx, cy, pw, ph, rise * 0.72, marg * 0.70, 0.70);
         } else {
           const sunk = new THREE.BoxGeometry(pw, ph, 0.02);
           put(K.wall, sunk, tr(cx, cy, -reveal * 0.7), o.uvWall ?? 1.2);

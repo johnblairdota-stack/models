@@ -492,6 +492,24 @@ export function ballroomOrder(bin, o = {}) {
    * every one defaulted in the emitter, so `drapeFolds: {}` is the whole opt-in.
    * =========================================================================================== */
   const drapeFolds = o.drapeFolds ?? null;
+  /* ===========================================================================================
+   * 🪵 **THE PANEL BOLECTION — OPT-IN, DEFAULT OFF, FOR THE SAME REASON AND WITH A SHARPER EDGE
+   * TO IT: THE SHOWCASE'S PANELS ARE NOT VISIBLE AT ALL.**
+   *
+   * `raisedPanels` above records it: the sunk path puts the field at `z -reveal` (-0.11) and its
+   * bolection at -0.09, INSIDE a 0.30 m wall slab that runs 0 to -0.30. The showcase takes that
+   * path, so `views/room-ballroom.js` has no panel relief in its frame whatever this flag does —
+   * and a 4x crop of `progress/compare/*.asset.png` at any station shows plain plaster where the
+   * critique reports a bead. Default off keeps the pin honest all the same: the flag adds a
+   * mitred frame per panel, and a merged bucket that gains geometry is a merged bucket whose
+   * buffer layout has moved.
+   *
+   * Payload is `wallRun`'s: `{ w, d }`, defaulted there. See that flag's own note for the
+   * measured scanline that produced 75 mm.
+   * =========================================================================================== */
+  const panelMould = o.panelMould ?? null;
+  const panelRise = o.panelRise;
+  const panelBevel = o.panelBevel;
   const uvWall = o.uvWall ?? 2.4;
   /**
    * ⚠️ **THE LOWER RUN'S SKIRTING IS THE CALLER'S AND THE UPPER RUN'S IS NOT.** Two skirtings in
@@ -576,13 +594,13 @@ export function ballroomOrder(bin, o = {}) {
   if (parts.windowWall) {
     wallRun(B, {
       x: x0, z: z1, length: wallLen, height: split, bays: bays.window, rotY: HALF_PI,
-      keys: K, uvWall, raised: raisedPanels, giltPanel: true, reveal: 0.11,
+      keys: K, uvWall, raised: raisedPanels, panelMould, panelRise, panelBevel, giltPanel: true, reveal: 0.11,
       cornice: false, solid: SOLID, skirt: skirtLo, dado: dadoOn.window,
       openings: ops(winLocal.map((zl) => ({ x0: zl - win.w / 2, x1: zl + win.w / 2, y0: win.sill, y1: split })), 'window'),
     });
     wallRun(B, {
       x: x0, z: z1, length: wallLen, height: h - split, y0: split, bays: bays.window, rotY: HALF_PI,
-      keys: K, uvWall, raised: raisedPanels, dado: false, giltPanel: true, reveal: 0.11,
+      keys: K, uvWall, raised: raisedPanels, panelMould, panelRise, panelBevel, dado: false, giltPanel: true, reveal: 0.11,
       corniceH: upper.corniceH, corniceProj: upper.corniceProj,
       fieldLo: upper.fieldLo, fieldHi: upper.fieldHi, solid: SOLID, skirt: skirtHi,
       openings: winLocal.map((zl) => ({ x0: zl - win.w / 2, x1: zl + win.w / 2, y0: 0, y1: winHead - split })),
@@ -650,12 +668,12 @@ export function ballroomOrder(bin, o = {}) {
   if (parts.mirrorWall) {
     wallRun(B, {
       x: x1, z: z0, length: wallLen, height: split, bays: bays.mirror, rotY: -HALF_PI,
-      keys: K, uvWall, raised: raisedPanels, giltPanel: true, cornice: false, reveal: 0.11,
+      keys: K, uvWall, raised: raisedPanels, panelMould, panelRise, panelBevel, giltPanel: true, cornice: false, reveal: 0.11,
       solid: SOLID, skirt: skirtLo, dado: dadoOn.mirror, openings: ops([], 'mirror'),
     });
     wallRun(B, {
       x: x1, z: z0, length: wallLen, height: h - split, y0: split, bays: bays.mirror, rotY: -HALF_PI,
-      keys: K, uvWall, raised: raisedPanels, dado: false, giltPanel: true, reveal: 0.11,
+      keys: K, uvWall, raised: raisedPanels, panelMould, panelRise, panelBevel, dado: false, giltPanel: true, reveal: 0.11,
       corniceH: upper.corniceH, corniceProj: upper.corniceProj,
       fieldLo: upper.fieldLo, fieldHi: upper.fieldHi, solid: SOLID, skirt: skirtHi,
     });
@@ -709,7 +727,7 @@ export function ballroomOrder(bin, o = {}) {
   if (parts.endWall) {
     wallRun(B, {
       x: x0, z: z0, length: endLen, height: split, bays: bays.end,
-      keys: K, uvWall, raised: raisedPanels, giltPanel: true, cornice: false, solid: SOLID, skirt: skirtLo,
+      keys: K, uvWall, raised: raisedPanels, panelMould, panelRise, panelBevel, giltPanel: true, cornice: false, solid: SOLID, skirt: skirtLo,
       dado: dadoOn.end,
       openings: ops(P.arches.map((a) => ({
         x0: a.x - x0 - a.w / 2, x1: a.x - x0 + a.w / 2, y0: 0, y1: a.h,
@@ -717,7 +735,7 @@ export function ballroomOrder(bin, o = {}) {
     });
     wallRun(B, {
       x: x0, z: z0, length: endLen, height: h - split, y0: split, bays: bays.end,
-      keys: K, uvWall, raised: raisedPanels, dado: false, giltPanel: true, solid: SOLID, skirt: skirtHi,
+      keys: K, uvWall, raised: raisedPanels, panelMould, panelRise, panelBevel, dado: false, giltPanel: true, solid: SOLID, skirt: skirtHi,
       corniceH: upper.corniceH, corniceProj: upper.corniceProj,
       fieldLo: upper.fieldLo, fieldHi: upper.fieldHi,
       openings: P.arches.map((a) => ({
@@ -753,12 +771,12 @@ export function ballroomOrder(bin, o = {}) {
   if (parts.nearWall) {
     wallRun(B, {
       x: x1, z: z1, length: endLen, height: split, bays: bays.near, rotY: Math.PI,
-      keys: K, uvWall, raised: raisedPanels, giltPanel: true, cornice: false, solid: SOLID, skirt: skirtLo,
+      keys: K, uvWall, raised: raisedPanels, panelMould, panelRise, panelBevel, giltPanel: true, cornice: false, solid: SOLID, skirt: skirtLo,
       dado: dadoOn.near, openings: ops([], 'near'),
     });
     wallRun(B, {
       x: x1, z: z1, length: endLen, height: h - split, y0: split, bays: bays.near, rotY: Math.PI,
-      keys: K, uvWall, raised: raisedPanels, dado: false, giltPanel: true, solid: SOLID, skirt: skirtHi,
+      keys: K, uvWall, raised: raisedPanels, panelMould, panelRise, panelBevel, dado: false, giltPanel: true, solid: SOLID, skirt: skirtHi,
       corniceH: upper.corniceH, corniceProj: upper.corniceProj,
       fieldLo: upper.fieldLo, fieldHi: upper.fieldHi,
     });

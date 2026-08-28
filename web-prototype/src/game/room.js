@@ -3328,6 +3328,29 @@ export async function buildTestRoom(engine, o = {}) {
            */
           raisedPanels: true,
           /*
+           * 🪵 **AND A BOLECTION ON THE FRAMING, BECAUSE A 26 mm BEAD AT 11.6 m IS A SCORED
+           * LINE.** Round-2 critique: *"The wall panels are scored lines, not mouldings ... a
+           * thin dark line drawn on flat paint."* True as delivered, and the diagnosis is size
+           * rather than a missing profile. Scanned across a panel edge at the `corner` station,
+           * the shipped row reads `48.6 49.4 48.6 49.7 43.6 [8.6] 49.5 57.2 58.3` — a ONE-PIXEL
+           * black notch, with no lit edge either side of it, between flat wall at ~49 and the
+           * raised field at ~58. `wallRun`'s bead is a real ovolo; at 1.3 px its lit face and
+           * its shadowed face land in the same pixel, and it is in the gilt bucket, which at
+           * that width has no specular to catch and resolves dark.
+           *
+           * ⚠️ **AND THE CRITIQUE'S COMPARISON IS BACKWARDS.** *"The asset's have a real bead."*
+           * The asset has no panel relief at all: the showcase takes the SUNK path, which puts
+           * the field at z -0.11 inside a 0.30 m wall slab, and `ballroom-order.js` has said so
+           * since the port. The game's panels are ours, they are the better thing, and this
+           * makes them read as the joinery they already are.
+           *
+           * 75 mm wide, 52 mm deep, and both numbers are bounded rather than chosen: the
+           * moulding grows outward from the panel over the framing, so its width plus the bead's
+           * 22 mm has to fit inside `RAIL` (0.13) or it eats the rail. 0.075 leaves 33 mm of rail
+           * and 63 mm of stile, and a bolection on a 1.9 m panel is about that in real joinery.
+           */
+          panelMould: { w: 0.075, d: 0.052 },
+          /*
            * 🎭 **THE FOLDS — the second half of the curtain fix, and the half the shadow
            * carve-out below was explicitly holding open.** That note ends *"if shadow plus the
            * material still reads flat, folds are next — game-only, and default off."* It does,

@@ -846,5 +846,90 @@ const orderSrc = await read('src/world/ballroom-order.js');
     'if it were identity, B39 would pass vacuously');
 }
 
+/* =============================================================================================
+ * THE PANEL BOLECTION — THE SECOND ROUND-2 COMPLAINT, AND ITS COMPARISON WAS BACKWARDS TOO
+ * =============================================================================================
+ * Critique: *"The wall panels are scored lines, not mouldings. Every panel on every wall is a
+ * thin dark line drawn on flat paint. The asset's have a real bead."*
+ *
+ * The first sentence is true as delivered. The last one is not. `views/room-ballroom.js` passes
+ * neither `raisedPanels` nor `panelMould`, so the showcase takes the SUNK path, which puts the
+ * field at z -0.11 INSIDE a 0.30 m wall slab — the asset has no panel relief in frame at all.
+ * The game's panels are the better thing already; they were just too small to read.
+ *
+ * 🚨 **AND THE DIAGNOSIS IS SIZE, NOT A MISSING PROFILE.** `wallRun`'s `beadProf` is a real
+ * ovolo. It is 26 mm on a wall photographed from 11.6 m, where the `arch` station runs about
+ * 50 px/m — so the whole moulding subtends 1.3 px, its lit face and its shadowed face average
+ * into one pixel, and the gilt bucket (a metal with no specular at that width, at night)
+ * resolves it dark. Scanned across a panel edge at `corner`, before and after:
+ *
+ *     before   48.6  49.4  48.6  49.7  43.6  [8.6]  49.5  57.2  58.3     one black pixel
+ *     after    57.4  64.8  59.9  68.4  69.4  [13.4] 51.5  56.7  55.3     a lit edge, then the line
+ *
+ * The lit edge went from 49.7 — indistinguishable from the flat wall beside it at 49.2 — to
+ * 69.4, about 20 counts clear of it. That is the difference between a scored line and a
+ * moulding, and it is bought with width rather than with more profile.
+ * ============================================================================================= */
+{
+  const THREE = await import('three');
+  const kit = await import('../src/world/kit.js');
+  const kitSrc = await read('src/world/kit.js');
+
+  /** Count what a wall run puts in each bucket, with and without the flag. */
+  const run = (extra) => {
+    const bins = new Map();
+    const bin = { add(key, geo) {
+      const n = geo.index ? geo.index.count / 3 : geo.attributes.position.count / 3;
+      bins.set(key, (bins.get(key) || 0) + n);
+      return this;
+    } };
+    kit.wallRun(bin, {
+      x: 0, z: 0, length: 12, height: 4.8, bays: 4, raised: true,
+      keys: { wall: 'wall', mould: 'mould', skirt: 'mould', cornice: 'mould' },
+      ...extra,
+    });
+    return bins;
+  };
+  const off = run({});
+  const on = run({ panelMould: { w: 0.075, d: 0.052 } });
+
+  t('B48 · the bolection adds geometry to the WALL bucket',
+    (on.get('wall') || 0) > (off.get('wall') || 0),
+    `${Math.round(off.get('wall') || 0)} -> ${Math.round(on.get('wall') || 0)} tris`);
+  t('B48c · CONTROL with the flag absent the run is unchanged — twelve other rooms and two other orders',
+    (off.get('wall') || 0) === (run({}).get('wall') || 0)
+    && (on.get('wall') || 0) !== (off.get('wall') || 0),
+    'default null, and the difference is real');
+
+  /*
+   * 🚨 **THE BUCKET IS THE OTHER HALF OF THE FIX, NOT A DETAIL.** A bolection is painted with
+   * the panelling it frames, so it belongs in the boiserie's diffuse. Put it in `mould` — the
+   * gilt bucket, a metal — and it goes dark at every width, which is the failure being repaired.
+   * It also makes the moulding free: same key, same merged mesh as the field it sits between.
+   */
+  t('B49 · ...and NOT to the gilt bucket, which is what made the bead read dark',
+    (on.get('mould') || 0) === (off.get('mould') || 0),
+    'a bolection takes the panelling\'s paint, not the gilding\'s metal — and costs 0 draw calls');
+
+  /*
+   * The width is bounded by the joinery, not by taste: the moulding grows outward over the
+   * framing, so its width plus the bead's 22 mm has to fit inside RAIL or it eats the rail.
+   */
+  const m = roomSrc.match(/panelMould: \{ w: ([\d.]+), d: ([\d.]+) \}/);
+  t('B50 · the game opts in, with a width that fits inside the rail', !!m
+    && Number(m[1]) + 0.022 <= kit.RAIL,
+    m ? `w ${m[1]} + bead 0.022 <= RAIL ${kit.RAIL}` : 'PATTERN NOT FOUND');
+  t('B50c · CONTROL a width that would eat the rail fails that test', !(0.115 + 0.022 <= kit.RAIL),
+    `0.115 + 0.022 > ${kit.RAIL}`);
+
+  t('B51 · the PINNED showcase takes neither raised panels nor a bolection',
+    !/raisedPanels/.test(await read('src/views/room-ballroom.js'))
+    && !/panelMould/.test(await read('src/views/room-ballroom.js')),
+    'so its wall runs are byte-identical, and its own claim to a bead is checkable: it has none');
+  t('B51c · CONTROL the sunk path really does bury the field inside the wall slab',
+    /reveal/.test(kitSrc) && /const sunk = new THREE\.BoxGeometry\(pw, ph, 0\.02\);/.test(kitSrc),
+    'z -0.11 in a 0.30 m slab — nothing of it reaches the frame');
+}
+
 console.log(`\n  ${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
