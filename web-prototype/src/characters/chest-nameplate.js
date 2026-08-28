@@ -95,7 +95,45 @@ function distK(sprite, camera) {
   return tagDistK(_world, camera);
 }
 
-function paintPlate(label, skin = null) {
+/* =============================================================================================
+ * 🔢 **THE SEAT TAB — which Sam, on the one surface the room looks at while arguing.**
+ *
+ * Duplicate names are a LOCKED product rule ("there is deliberately no anti-dupe system"), and
+ * D6/S1 answers it everywhere else with `seatChip`: the nominee board, the vote list, the vote
+ * receipt, the casting lamps, and the phone's link list. The floating tag — the label over the
+ * actual robot, which is what a table reads while accusing each other — was the last list
+ * without it. Photographed at N=8: two identical `SAM` plates in one frame.
+ *
+ * ⚠️ **THIS AMENDS A LOCKED RULE AND WAS APPROVED BEFORE IT WAS WRITTEN.** The tag spec is
+ * "black-outlined white text"; that is untouched — the NAME keeps its exact treatment, stroke and
+ * colours. What is added is a tab beside it. John's call, 2026-08-28.
+ *
+ * ⚠️ **NO NEW DATA AND NO NEW CHANNEL.** `seat` and `accent` are already on the intros cue
+ * (`CUE_CAST_KEYS = ['id','seat','name','shell','accent']`) and already validated at the
+ * iframe's door by `cueViolations`. This reads what the circle was already given.
+ *
+ * The tab costs the name width — 256px of canvas is all there is — so `harness/nametag-
+ * legibility.mjs` is the instrument that says whether that mattered: it measures the glyph
+ * pixels that reach the television, not the texture they were baked from.
+ * ============================================================================================= */
+const TAB_W = 46;
+
+function paintSeatTab(g, seat, accent, H) {
+  const n = Number(seat);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  g.fillStyle = accent || CHROME;
+  g.fillRect(4, 4, TAB_W, H - 8);
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.font = `900 34px ui-sans-serif, system-ui, sans-serif`;
+  // The number sits on the player's own accent, so it is read as colour first and digit second
+  // — the same "seat 4 is pink" the lamps and the pick lists teach.
+  g.fillStyle = GLYPH_OUTLINE;
+  g.fillText(String(n + 1), 4 + TAB_W / 2, H * 0.54);
+  return TAB_W;
+}
+
+function paintPlate(label, skin = null, seat = null, accent = null) {
   if (typeof document === 'undefined') return null;
   const ink = skin?.ink || INK;
   const chrome = skin?.chrome || CHROME;
@@ -128,17 +166,22 @@ function paintPlate(label, skin = null) {
 
   const text = String(label || '').trim().slice(0, NAME_CAP).toUpperCase();
   if (!text) return null;
+  // A merged pair wears ONE name over two robots and has no single seat — `setPairs` passes no
+  // seat for exactly that reason, and the tab is absent rather than wrong.
+  const tab = paintSeatTab(g, seat, accent, H);
+  const fieldX = 4 + tab;
+  const fieldW = W - fieldX - 4;
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.lineJoin = 'round';
   g.miterLimit = 2;
   let size = 44;
   g.font = `900 ${size}px ui-sans-serif, system-ui, sans-serif`;
-  while (size > 22 && g.measureText(text).width > W - 24) {
+  while (size > 22 && g.measureText(text).width > fieldW - 20) {
     size -= 2;
     g.font = `900 ${size}px ui-sans-serif, system-ui, sans-serif`;
   }
-  const cx = W * 0.5, cy = H * 0.54;
+  const cx = fieldX + fieldW * 0.5, cy = H * 0.54;
   g.lineWidth = NAMEPLATE_SPEC.strokePx;
   g.strokeStyle = GLYPH_OUTLINE;
   g.strokeText(text, cx, cy);
@@ -268,11 +311,20 @@ function captionLayer(sprite) {
  * Returns false and changes nothing if the label is empty — a robot must never end up wearing a
  * blank plate because a name arrived late.
  */
-export function setNameTagLabel(sprite, label, skin = null) {
+export function setNameTagLabel(sprite, label, skin = null, tab = null) {
   if (!sprite?.material) return false;
   const text = String(label || '').trim().slice(0, NAME_CAP);
   if (!text) return false;
-  if (sprite.userData.tagLabel === text && sprite.userData.tagSkin === (skin?.ink || '')) return true;
+  /*
+   * 🔢 The seat tab joins the idempotence key. Without it, a robot coming BACK from a merged
+   * pair — `setPairs` calls this with the seat again — would match on label+skin alone and keep
+   * the pair's tabless plate, so its seat number would vanish for the rest of the night after
+   * its first conversation.
+   */
+  const tabKey = Number.isFinite(Number(tab?.seat)) ? `${tab.seat}:${tab.accent || ''}` : '';
+  if (sprite.userData.tagLabel === text
+    && sprite.userData.tagSkin === (skin?.ink || '')
+    && sprite.userData.tagTab === tabKey) return true;
   /*
    * The pop fires on a REAL change only — the early return above means the per-tap `links`
    * fanout, which re-sends the same pairs, cannot make the plate throb continuously. And it
@@ -280,7 +332,7 @@ export function setNameTagLabel(sprite, label, skin = null) {
    * get to see, and it costs nothing to give it one.
    */
   if (sprite.userData.tagLabel) sprite.userData.popAt = Date.now();
-  const tex = paintPlate(text, skin);
+  const tex = paintPlate(text, skin, tab?.seat ?? null, tab?.accent ?? null);
   if (!tex) return false;
   const old = sprite.userData.ownedTex;
   sprite.material.map = tex;
@@ -288,15 +340,16 @@ export function setNameTagLabel(sprite, label, skin = null) {
   sprite.userData.ownedTex = tex;
   sprite.userData.tagLabel = text;
   sprite.userData.tagSkin = skin?.ink || '';
+  sprite.userData.tagTab = tabKey;
   if (old && old !== tex) old.dispose?.();
   return true;
 }
 
-export function attachHeadNameTag(player, name) {
+export function attachHeadNameTag(player, name, tab = null) {
   const label = String(name || '').trim().slice(0, NAME_CAP);
   if (!label || !player) return null;
 
-  const tex = paintPlate(label);
+  const tex = paintPlate(label, null, tab?.seat ?? null, tab?.accent ?? null);
   if (!tex) return null;
 
   const parent = player.root;

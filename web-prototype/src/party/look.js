@@ -702,9 +702,18 @@ export const SHOW_CHROME_CSS = `
     .show-rail-seg.stub { opacity:.5; }
     .show-rail.ribbon { height:22px; padding:0 28px; box-sizing:border-box; }
     .show-rail.ribbon .show-rail-seg { gap:2px; }
-    .show-rail.ribbon .show-rail-k { font-size:8px; letter-spacing:.2em; line-height:10px;
-      height:0; opacity:0; overflow:hidden; box-shadow:none; padding:0; }
+    /* 📺 **THE RIBBON KEEPS ITS LABELS.** Direction B shrinks the rundown to 22px during the run
+       so the picture stays king, and that rule is right — but this used to spend the 22px by
+       collapsing every label except the current one to 'height:0', which left eight unlabelled
+       1px lines. Photographed at 1600x900: it does not read as "the schedule, minimised", it
+       reads as a rendering artifact, and it costs the rail the one thing it exists for — where
+       the room is in the night. Same height, same rule, labels that survive: 10px of line at 8px
+       type, dimmed by state rather than deleted. */
+    .show-rail.ribbon .show-rail-k { font-size:8px; letter-spacing:.14em; line-height:10px;
+      height:10px; opacity:.55; overflow:hidden; white-space:nowrap;
+      box-shadow:none; padding:0; }
     .show-rail.ribbon .show-rail-seg.on .show-rail-k { height:10px; opacity:1; }
+    .show-rail.ribbon .show-rail-seg.past .show-rail-k { opacity:.34; }
     .show-rail.ribbon .show-rail-track { height:3px; }
     .show-rail.ribbon .show-rail-seg.on .show-rail-track { height:4px; }
     .night.on-run .show-rail { padding:0 22px 2px; }

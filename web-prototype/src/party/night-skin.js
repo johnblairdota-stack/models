@@ -346,6 +346,29 @@ export function injectNightSkin() {
       width:100%; height:100%; min-height:0; flex:1; pointer-events:none; }
     .night.on-talk .intro-frame.talk-frame { height:100%; width:100%; max-width:100%;
       max-height:100%; aspect-ratio:auto; margin:0; }
+    /* 🎴 THE ROLE-CARD WINDOW USES THE WHOLE TELEVISION.
+       It was the top 45% with ~500px of black under it. Nothing is added to fill that — the same
+       five elements are laid out to the height the room is sitting in front of: the board
+       centres in the space it was crowded out of, the lamps grow, and the bake bar goes full
+       width because during this window it is the only thing on the screen that MOVES and the
+       only honest answer to what everyone is waiting for. No backticks in this comment. */
+    .night.on-cards .night-main { display:flex; flex-direction:column; justify-content:center;
+      padding:0 40px 24px; overflow:hidden; }
+    .night.on-cards .cast-board { margin:0; }
+    .night.on-cards .cast-k { font-size:13px; letter-spacing:.3em; }
+    .night.on-cards .cast-lead { font-size:clamp(34px, 4.2vw, 68px); margin-top:12px; }
+    .night.on-cards .cast-lamps { margin-top:clamp(18px, 3vh, 40px); gap:16px;
+      grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); }
+    .night.on-cards .cast-lamp { padding:clamp(16px, 2.4vh, 30px) 12px clamp(14px, 2vh, 24px); gap:14px; }
+    .night.on-cards .cast-lamp .who { font-size:clamp(17px, 1.5vw, 24px); }
+    .night.on-cards .cast-lamp .seat-chip { min-width:44px; height:44px; font-size:21px; }
+    .night.on-cards .cast-warm { margin-top:clamp(20px, 4vh, 52px); }
+    .night.on-cards .warm { max-width:none; margin-top:0; }
+    .night.on-cards .warm-text { font-size:14px; letter-spacing:.26em; }
+    .night.on-cards .warm-track { height:14px; border-radius:7px; }
+    .night.on-cards .ballot { margin-top:18px; }
+    .night.on-cards .hint.cards-foot { margin-top:clamp(14px, 2.4vh, 28px); font-size:18px; }
+    .night.on-cards .actions { margin-top:18px; }
     /* 🎬 CASTING IS THE PICTURE, AND THE BALLOTS RIDE ON TOP OF IT RATHER THAN BESIDE IT.
        John: bigger feed, take the right column, drop the counter / the lower third / the
        'ballots land here' line, and run the results as an overlay. The frame taking all four
@@ -377,6 +400,18 @@ export function injectNightSkin() {
        the bottom of it. castStage stands the lamp strip down whenever either is on screen, so
        these two never share the corner. */
     .night.on-cast .actions { position:absolute; left:24px; bottom:16px; margin:0; z-index:3; }
+    /* The talk slate — the same contract as '.run-frame.live .run-slate', which has covered the
+       run beat since PR #5: it IS the picture until the camera reports a rendered frame, then it
+       fades out under one. Without it the Recap is a black rectangle over three quarters of the
+       television, because Recap is reached while the follow is still warming. */
+    .talk-slate { position:absolute; inset:0; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; gap:12px; pointer-events:none;
+      transition: opacity .8s ease; }
+    .intro-frame.live .talk-slate { opacity:0; }
+    .talk-slate-mark { font-size:clamp(22px, 3vw, 44px); font-weight:800; letter-spacing:.22em;
+      text-transform:uppercase; color:rgba(var(--night-accent-rgb), .5); }
+    .talk-slate-sub { font-size:clamp(11px, 1.1vw, 14px); letter-spacing:.26em;
+      text-transform:uppercase; font-weight:700; color:var(--night-dim); }
     .recap-mini { align-self:flex-start; display:flex; flex-wrap:wrap; gap:6px 12px;
       padding:6px 10px; border-radius:6px; background:rgba(12,10,8,.72);
       border:1px solid rgba(var(--night-accent-rgb), .28); font-size:12px;

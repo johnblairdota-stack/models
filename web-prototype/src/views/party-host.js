@@ -1124,7 +1124,10 @@ export default async function partyHost({ params }) {
       if (hasPair) body += `<button class="btn ghost" id="to-run">Watch the run</button>`;
       body += `</div>`;
       if (episode === 1 && !showingIntros && !ui.introsSent) {
-        body += `<p class="hint spaced">Episode 1 airs every ballot. After the run the room nominates.</p>`;
+        // One line, not two: this sat 40px under "No ballots yet — phones pick a runner and a
+        // guide." at the same size and colour, so the pair read as one paragraph broken by a
+        // mistake. The board above already says nobody has sent a ballot.
+        body += `<p class="hint cards-foot">Episode 1 airs every ballot. After the run, the room nominates.</p>`;
       }
     } else {
       body += `
@@ -1165,6 +1168,14 @@ export default async function partyHost({ params }) {
      * `.night.on-cast` block in `night-skin.js` for why the stacking has to move with it.
      */
     const onCast = show === 'casting' && ui.introsSent && ui.introsDone;
+    /*
+     * 🎴 **THE ROLE-CARD WINDOW IS ITS OWN SCREEN, AND IT WAS USING HALF OF ONE.** Photographed
+     * at `progress/r5/01-tv-casting-cards.png`: strapline, kicker, headline, eight lamps, bake
+     * bar and two grey hints all packed into the top 45%, then ~500px of empty black. The board
+     * fixed the empty BALLROOM it was built for; the SCREEN was still mostly empty. `on-cards`
+     * is what lets the same five elements use the height they are sitting in front of.
+     */
+    const onCards = show === 'casting' && !ui.introsSent;
     const onTalkFrame = onStage || onRecap || onCast;
     /* =========================================================================================
      * ⏱️ ONE CLOCK. NOT TWO.
@@ -1181,7 +1192,7 @@ export default async function partyHost({ params }) {
     const stageHasClock = body.includes('data-show-clock');
     const ribbon = onRun || rundownRibbon(show);
     const hold = holdMsFor(show, client.noms?.length ?? 0);
-    root.className = `night${onRun ? ' on-run' : ''}${onIntro ? ' on-intro' : ''}${onTalkFrame ? ' on-talk' : ''}${onCast ? ' on-cast' : ''}${onRecap ? ' on-recap' : ''}`;
+    root.className = `night${onRun ? ' on-run' : ''}${onIntro ? ' on-intro' : ''}${onTalkFrame ? ' on-talk' : ''}${onCast ? ' on-cast' : ''}${onCards ? ' on-cards' : ''}${onRecap ? ' on-recap' : ''}`;
     // The camera plate is a body child, so squaring it off for the full-bleed cast frame has to
     // be said on <body> rather than inside `root` — same shape as `rrr-warming` in `placeFollow`.
     document.body.classList.toggle('rrr-cast', onCast);
@@ -1197,7 +1208,7 @@ export default async function partyHost({ params }) {
         </div>
       </div>
       ${rundownRailHtml({ beat: show, until: ui.showUntil, holdMs: hold, ribbon })}
-      ${onRun || onStage || onRecap || show === 'lobby' ? '' : `<div class="night-line">${esc(SHOW_LINE)}</div>`}
+      ${onRun || onStage || onRecap || onCards || show === 'lobby' ? '' : `<div class="night-line">${esc(SHOW_LINE)}</div>`}
       <div class="night-main">${body}</div>`;
 
     /*
@@ -1471,7 +1482,7 @@ function castStage({ votes, names, tiebreaks, board }) {
     <div class="talk-stage cast-stage">
       <div class="talk-well">
         <div class="talk-picture">
-          <div class="intro-frame talk-frame" aria-label="Ballroom circle"></div>
+          <div class="intro-frame talk-frame" aria-label="Ballroom circle">${talkSlateHtml('casting')}</div>
         </div>
       </div>
       ${castOverlay(votes, names, tiebreaks)}
@@ -1499,6 +1510,32 @@ function castOverlay(votes, names, tiebreaks) {
     <div class="cast-slips">${slips || '<p class="cast-empty">phones are picking</p>'}</div>
     ${why ? `<p class="cast-why">${esc(why)}</p>` : ''}
   </aside>`;
+}
+
+/**
+ * 🎬 **THE TALK FRAME'S SLATE — what the picture is before the camera is.**
+ *
+ * `runStage` has had one since PR #5: a face, a name and `camera warming`, so a television that
+ * cannot build WebGL — or simply has not finished baking — degrades to something legible and
+ * on-brand rather than to black. `talkStage` never got the equivalent, and the Recap is where
+ * that bites: it is the FIRST beat after the run, it is reached while `followLive` is still
+ * false, and the result is 1888x805 of pure black over three quarters of the television.
+ * Photographed at `progress/talk/tv-recap.png`.
+ *
+ * ⚠️ **IT NAMES NOBODY AND CLAIMS NOTHING ABOUT THE ROOM.** The talk beats have no single
+ * subject — that is the whole reason the nameplate stopped being drawn on them — so this is the
+ * show's own mark and the state of the camera, and nothing else. Anything more would be a claim
+ * about a picture that does not exist yet.
+ *
+ * `placeFollow` toggles `.live` on the frame the instant the follow reports a rendered frame,
+ * and the CSS fades the slate out under it — the same mechanism, and the same single line of
+ * CSS, that `.run-frame.live .run-slate` has always used.
+ */
+function talkSlateHtml(beat) {
+  return `<div class="talk-slate" aria-hidden="true">
+    <div class="talk-slate-mark">${esc(SHOW_TITLE)}</div>
+    <div class="talk-slate-sub">${esc(String(beat || 'ballroom'))} · camera warming</div>
+  </div>`;
 }
 
 function talkStage({
@@ -1559,7 +1596,7 @@ function talkStage({
       </div>
       <div class="talk-well">
         <div class="talk-picture">
-          <div class="intro-frame talk-frame" aria-label="Ballroom circle"></div>
+          <div class="intro-frame talk-frame" aria-label="Ballroom circle">${talkSlateHtml(beat)}</div>
         </div>
         ${side ? `<aside class="talk-side">${side}</aside>` : ''}
       </div>

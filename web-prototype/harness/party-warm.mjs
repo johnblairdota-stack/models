@@ -2119,8 +2119,14 @@ console.log('\nparty-warm — the lobby-warm night');
       && /\$\{facts \|\| ''\}/.test(hostSrc)
       && !/function recapBoard/.test(hostSrc));
 
+  /*
+   * The strapline suppression list GROWS — `onCards` joined it when the role-card window stopped
+   * printing SHOW_LINE directly above its own kicker, where the two competed. So this asserts
+   * the terms the recap needs are in the list rather than pinning the list's exact shape; the
+   * `!/onCards/` half of that would just be a spelling test on a growing list.
+   */
   t('W31a · recap hides the show line and locks night-main to one viewport',
-    /onRun \|\| onStage \|\| onRecap \|\| show === 'lobby'/.test(hostSrc)
+    /onRun \|\| onStage \|\| onRecap \|\|[^?]*show === 'lobby'/.test(hostSrc)
       && /\.night\.on-talk \.night-main, \.night\.on-recap \.night-main \{ padding:0 16px 10px; overflow:hidden/.test(skin)
       && /\.night\.on-talk \.night-line, \.night\.on-recap \.night-line \{ display:none/.test(skin));
 
@@ -3419,6 +3425,72 @@ console.log('\nparty-warm — the lobby-warm night');
   // same as covering every list. Four tappable/aired lists, four calls.
   t('W37d control · four lists, four seatChip calls — nominate, lynch, receipt, link',
     (phoneSrc.match(/seatChip\(c, /g) || []).length >= 4);
+}
+
+// ---- W38 · ROUND 2, GROUP A — the four the critic left on the table ------------------------
+//
+// F7 the talk frame had no slate · F6 the ribbon rail was unlabelled hairlines · F5 the
+// role-card window used the top 45% of the screen · F12 the floating name tag was the last
+// public list with no seat number. All from `docs/design/loop-ui-critique.md`, all photographed.
+{
+  const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
+  const skin = await readFile(new URL('../src/party/night-skin.js', import.meta.url), 'utf8');
+  const plateSrc = await readFile(new URL('../src/characters/chest-nameplate.js', import.meta.url), 'utf8');
+  const bedSrc = await readFile(new URL('../src/game/intro-bed.js', import.meta.url), 'utf8');
+
+  // F7 · the Recap is reached with the follow still warming, so a talk frame with no slate is a
+  // black rectangle over three quarters of the television. Same fade contract as the run slate.
+  t('W38 · the talk frame has a slate, on the same .live contract as the run frame',
+    /function talkSlateHtml/.test(hostSrc)
+    && /talkSlateHtml\(beat\)/.test(hostSrc)
+    && /talkSlateHtml\('casting'\)/.test(hostSrc)
+    && /\.intro-frame\.live \.talk-slate \{ opacity:0/.test(skin));
+
+  // Control. The talk beats have no single subject — that is why the nameplate stopped being
+  // drawn on them — so the slate must not name anybody either.
+  t('W38 control · the slate names nobody and claims nothing about the room',
+    !/talkSlateHtml[\s\S]{0,400}joinedName/.test(hostSrc)
+    && !/talkSlateHtml[\s\S]{0,400}recap\./.test(hostSrc));
+
+  // F6 · Direction B's 22px ribbon is the rule and stays; what changed is that it no longer
+  // spends the height by deleting eight of the nine labels.
+  t('W38a · the ribbon rail keeps every label, dimmed by state rather than collapsed',
+    /\.show-rail\.ribbon \.show-rail-k \{[^}]*height:10px/.test(SHOW_CHROME_CSS)
+    && !/\.show-rail\.ribbon \.show-rail-k \{[^}]*height:0/.test(SHOW_CHROME_CSS)
+    && /\.show-rail\.ribbon \.show-rail-seg\.past \.show-rail-k \{ opacity/.test(SHOW_CHROME_CSS)
+    && /\.show-rail\.ribbon \{ height:22px/.test(SHOW_CHROME_CSS));
+
+  // F5 · the role-card window is its own screen and now uses its own height.
+  t('W38b · the role-card window lays out to the whole television',
+    /const onCards = show === 'casting' && !ui\.introsSent/.test(hostSrc)
+    && /onCards \? ' on-cards' : ''/.test(hostSrc)
+    && /\.night\.on-cards \.night-main \{ display:flex; flex-direction:column; justify-content:center/.test(skin)
+    && /\.night\.on-cards \.warm \{ max-width:none/.test(skin)
+    // the strapline stopped competing with the kicker directly beneath it
+    && /onRecap \|\| onCards \|\| show === 'lobby'/.test(hostSrc));
+
+  // F12 · APPROVED AMENDMENT to the locked tag spec (John, 2026-08-28). The NAME's treatment is
+  // untouched — black-outlined white, same stroke, same colours; a seat tab is added beside it.
+  t('W38c · the floating name tag carries the seat, like every other public list',
+    /function paintSeatTab/.test(plateSrc)
+    && /paintPlate\(text, skin, tab\?\.seat \?\? null, tab\?\.accent \?\? null\)/.test(plateSrc)
+    && /attachHeadNameTag\(body, seat\.name, \{ seat: seat\.seat, accent: seat\.accent \}\)/.test(bedSrc));
+
+  // Control. No new data and no new channel: `seat` and `accent` were already on the intros cue
+  // and already validated by `cueViolations`. If this ever needs a key that is not in
+  // CUE_CAST_KEYS, that is a wire change and a different review.
+  t('W38c control · the tab reads the cue it was already given, and adds no key to it',
+    CUE_CAST_KEYS.includes('seat') && CUE_CAST_KEYS.includes('accent')
+    && !/GLYPH_OUTLINE[\s\S]{0,80}strokeText/.test(plateSrc.slice(plateSrc.indexOf('function paintSeatTab'),
+      plateSrc.indexOf('function paintPlate'))));
+
+  // Control. A merged pair is ONE name over TWO robots: it has no single seat, so it gets no tab
+  // rather than a tab naming the wrong half. And the tab joins the idempotence key, or a robot
+  // coming back from a pair would keep the tabless plate for the rest of the night.
+  t('W38d control · a merged pair wears no seat tab, and unpairing restores the one it had',
+    /setNameTagLabel\(r\.tag, merged, \{ ink: LINK_INK, chrome: LINK_CHROME \}, null\)/.test(bedSrc)
+    && /setNameTagLabel\(r\.tag, r\.seat\.name, null, \{ seat: r\.seat\.seat, accent: r\.seat\.accent \}\)/.test(bedSrc)
+    && /sprite\.userData\.tagTab === tabKey/.test(plateSrc));
 }
 
 console.log(`\nparty-warm: ${pass} passed, ${fail} failed`);

@@ -406,7 +406,9 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       materials: tintedMaterials(base, seat.shell, seat.accent, ownedMaterials),
       avatar: twin,
     });
-    const tag = attachHeadNameTag(body, seat.name);
+    // 🔢 Seat + accent for the tag's seat tab — both already on the intros cue and validated
+    // there (`CUE_CAST_KEYS`), so this is the circle reading what it was handed.
+    const tag = attachHeadNameTag(body, seat.name, { seat: seat.seat, accent: seat.accent });
     if (tag?.material) ownedMaterials.push(tag.material);
     const bang = attachNomineeBang(body, tag);
     if (bang?.material) ownedMaterials.push(bang.material);
@@ -685,8 +687,10 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       }
       for (const r of robots) {
         const merged = byId.get(String(r.seat.id));
-        if (merged) setNameTagLabel(r.tag, merged, { ink: LINK_INK, chrome: LINK_CHROME });
-        else setNameTagLabel(r.tag, r.seat.name, null);
+        // A merged pair is ONE name over TWO robots, so it has no single seat and gets no tab —
+        // a seat number on a shared plate would name the wrong half of it half the time.
+        if (merged) setNameTagLabel(r.tag, merged, { ink: LINK_INK, chrome: LINK_CHROME }, null);
+        else setNameTagLabel(r.tag, r.seat.name, null, { seat: r.seat.seat, accent: r.seat.accent });
       }
       /*
        * 🟢 …and the data crossing the room between them. The merged plate is a change to
