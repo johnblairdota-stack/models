@@ -164,8 +164,14 @@ itself. A same-beat send therefore re-broadcasts without re-entering. `lobby` an
 stay `setShow`-only on purpose, because `playEpisode` owns EXPEDITION and needs a locked pair.
 Gate: `show-beat` — and per the `episode-order` lesson nothing in it is a hand-kept table, so
 **SB2 reddens the day a ninth `SHOW_BEATS` entry is added without deciding which side of the door
-it is on.** Still open, and NOT this bug: a genuine refusal is still silent — `lynchVote` pushes a
-`ballotOk` receipt, `nominate` pushes nothing.
+it is on.** **Closed the same day:** `nominate` now pushes a `nomOk` receipt like `lynchVote`'s `ballotOk`.
+`push`, never `fanout` — a nomination that lands is public, a nomination that is REFUSED is an
+intention that never became a fact, and fanning it would put an attempted accusation on eight
+screens the board deliberately does not carry. And the visible bug was never the silence: a phone
+holding a debounce for a nomination that did not exist could not nominate again that episode and
+read `Sending your nomination…` for the rest of the beat. Every reachable refusal is a race — the
+pick list already filters yourself, the dead and anyone standing — which is exactly when a receipt
+is the only thing that can tell you. Gate: `nom-receipt`.
 
 **Smash-target visibility is guarded now, and the guard is RED** (2026-08-28). It was the last
 live-found bug class with no regression net; `harness/target-sight.mjs` is the net, it is pure

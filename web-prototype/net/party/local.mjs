@@ -952,6 +952,27 @@ export const FANOUT_KEYS = {
      aired at Execution and must not leak before it. Listed so the shape is still closed. */
   ballotOk: ['t', 'ok', 'choice', 'why'],
   /*
+   * 🔨 A NOMINATOR'S OWN RECEIPT — the answer to a tap the server may have thrown away.
+   *
+   * ⚠️ **PUSHED TO ONE SOCKET AND NEVER FANNED, AND THAT IS THE WHOLE PRIVACY ARGUMENT.**
+   * A nomination that LANDS is public and already goes out on `noms` (`nomRow` is exactly
+   * `nominator` + `target`). A nomination that is REFUSED is not a fact about the room at all —
+   * it is an intention that never became one. Fanning "p3 tried to name p5 and was turned down"
+   * would put an attempted accusation on eight screens that the nomination board deliberately
+   * does not carry, in the beat where reading the room IS the game. So this goes to the handset
+   * that tapped and to nothing else, exactly like `ballotOk`, and `nom-receipt` NR5 asserts that
+   * no other socket — the television included — ever sees one.
+   *
+   * ⚠️ **`why` IS THE SERVER'S OWN REFUSAL STRING AND NOTHING ELSE.** Every reason the nominate
+   * path can produce (`applyNominate` here; `nominatePlayer` in `src/party/room.js`;
+   * `canNominate` / `canBeNominated` in `src/party/vote.js`) is a statement about something the
+   * tapper's own screen could already compute: the current beat, which is fanned; who is alive,
+   * which is an `all` row; which nominations stand, which is fanned; and a module constant. It
+   * reports what the server DID with this tap. It does not describe anyone's role, alignment,
+   * cover or intent, and it must never grow a field that does.
+   */
+  nomOk: ['t', 'ok', 'target', 'why'],
+  /*
    * 🍮 WHO IS PAIRED, AND WHAT THEY ARE CALLED NOW. Public by design — the room watching JOHN
    * reach out to ELLIE is the entire point, and both names are already on the television.
    *
@@ -1003,6 +1024,8 @@ export function fanoutViolations(msg) {
     extraKeys(msg, FANOUT_KEYS.warm, 'warm', bad);
   } else if (msg.t === 'ballotOk') {
     extraKeys(msg, FANOUT_KEYS.ballotOk, 'ballotOk', bad);
+  } else if (msg.t === 'nomOk') {
+    extraKeys(msg, FANOUT_KEYS.nomOk, 'nomOk', bad);
   } else if (msg.t === 'ready') {
     extraKeys(msg, FANOUT_KEYS.ready, 'ready', bad);
   } else if (msg.t === 'tally') {
@@ -1247,8 +1270,49 @@ function handleClient(room, bound, self, msg) {
     fanout(room, lobbySnapshot(room));
     return;
   }
+  /*
+   * 🚨 **A NOMINATION THE SERVER REFUSED SAID NOTHING TO THE PHONE THAT TAPPED.**
+   *
+   * This line was `applyNominate(room, self.playerId, msg.target);` — the result computed and
+   * thrown on the floor. `lynchVote`, eight lines down, has pushed a `ballotOk` receipt since the
+   * day its own header was written; the nominate handler pushed nothing, so a refused tap simply
+   * evaporated. The phone's Reckoning sheet then sat on `Sending your nomination…` — the string
+   * it prints when the local debounce has fired but the server's fanout never named you — for
+   * the rest of the beat, which reads as a dead handset rather than as a refusal.
+   *
+   * The systemic case (`t:'show'` leaving the room on a Reckoning screen the server was not in,
+   * so EVERY nomination died with `not reckoning`) is closed and is `show-beat`'s. What is left
+   * are the legitimate refusals, and they are all RACES — the beat clock ran out between the
+   * tap and its arrival, or two handsets named the same person in the same second, or a phone
+   * repainted a fraction after somebody else's nomination took the target off its list. The
+   * player's screen was right when they looked at it and wrong by the time their thumb landed;
+   * that is precisely when a receipt is the only thing that can tell them.
+   *
+   * ⚠️ **ONE SOCKET. `push`, NEVER `fanout`.** See `FANOUT_KEYS.nomOk` for the argument: a
+   * nomination that lands is public, a nomination that is refused is not a fact about the room.
+   *
+   * ⚠️ **THE RECEIPT REPORTS; IT DOES NOT INTERPRET.** `why` is the server's own string, passed
+   * through untouched. Deciding what a refusal MEANT for this player — "somebody named them
+   * first" versus "you have already spent your nomination", which are the same `why` — is the
+   * phone's job, done from the public standing board it already holds. The server does not
+   * author player-facing claims; that lesson cost a live night on 2026-08-28.
+   *
+   * `target` is echoed so the sheet can name who the tap was for without trusting its own memory
+   * across a repaint, and it is coerced to a string first: this is untrusted JSON from a
+   * stranger's handset and an object here would reflect an arbitrary nested payload back out
+   * past the closed-shape check, which only inspects top-level keys.
+   *
+   * Gate: `harness/nom-receipt.mjs`. Its control drops the result again and must go red.
+   */
   if (msg.t === 'nominate' && self && !isTV && self.playerId) {
-    applyNominate(room, self.playerId, msg.target);
+    const asked = typeof msg.target === 'string' ? msg.target : null;
+    const r = applyNominate(room, self.playerId, asked) || {};
+    push(room, bound.id, {
+      t: 'nomOk',
+      ok: r.ok === true,
+      target: r.nomination?.target ?? asked,
+      ...(r.why ? { why: r.why } : {}),
+    });
     return;
   }
   /*

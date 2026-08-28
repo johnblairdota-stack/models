@@ -75,6 +75,19 @@ export default async function partyPhone({ params }) {
     dealPending: false,
     lastBeat: null,
     nominated: false,
+    /**
+     * 🔨 **WHAT THE SERVER DID WITH MY LAST NOMINATION TAP.** `{ok, target, why}` off the wire,
+     * or null before it has answered.
+     *
+     * ⚠️ **THIS IS SERVER STATE THAT HAPPENS TO BE PARKED HERE, NOT A SECOND `state.nominated`.**
+     * The distinction is the whole lesson of the old nominator receipt, which was driven by the
+     * optimistic local flag and therefore LIED — see `paintNominate`'s header. `nominated` is set
+     * by a thumb; this is set only by a `t:'nomOk'` frame, and it is the one thing on this screen
+     * entitled to say a tap was refused. It is kept in this closure rather than on the shared
+     * client object for the same reason the whispers are — no other view needs it — but its
+     * provenance rule is `client.myBallot`'s exactly: nothing writes it except an incoming frame.
+     */
+    nomOk: null,
     /** My own READY thumb this beat. The room total arrives on the wire. */
     ready: false,
     /** Whispers this pairing. Never leaves the phone; cleared with the pair. */
@@ -140,6 +153,26 @@ export default async function partyPhone({ params }) {
           state.warm = m.stage; state.warmPct = m.pct ?? 0;
           const el = root.querySelector('[data-warm-line]');
           if (el) { el.textContent = warmSummary(); return; }
+        }
+        /*
+         * 🔨 **THE ANSWER TO A TAP, AND THE ONLY THING THAT MAY RELEASE THE DEBOUNCE.**
+         *
+         * `state.nominated` is set the instant the thumb lands so a second tap cannot double-send.
+         * That is right while the tap is in flight and WRONG the moment the server says it did
+         * not take it — a phone left holding a debounce for a nomination that does not exist can
+         * never nominate again this episode, and its sheet reads `Sending your nomination…` until
+         * the beat ends. So a refusal, and only a refusal off the wire, hands the thumb back.
+         *
+         * An `ok` receipt deliberately does NOT feed the sheet's green plate: that plate quotes
+         * `c.noms`, the public row, because a receipt this phone holds privately cannot survive a
+         * reconnect and the public one can. See `paintNominate`'s header.
+         */
+        if (m.t === 'nomOk') {
+          state.nomOk = { ok: m.ok !== false, target: typeof m.target === 'string' ? m.target : '', why: m.why || '' };
+          if (!state.nomOk.ok) {
+            state.nominated = false;
+            padFx('Not recorded.', '', [0, 25, 40, 25]);
+          }
         }
         if (m.t === 'event' && m.ev?.type === 'role.card') dealt(!!m.replay);
         /*
@@ -474,6 +507,9 @@ export default async function partyPhone({ params }) {
     if (prevBeat !== null && beat !== prevBeat) {
       if (state.stage === 'premiere') state.stage = null;
       if (card.isOpen()) card.closeCard();
+      // A refusal belongs to the beat that refused it. `debrief is still talk` is advice about a
+      // window that has since opened, and a Reckoning refusal is not news in the Vote.
+      state.nomOk = null;
     }
     // Face-down phones after Debrief. Same smash pattern — two beats, not a drone.
     if (beat === 'reckoning' && prevBeat !== 'reckoning') {
@@ -785,7 +821,7 @@ export default async function partyPhone({ params }) {
      */
     window.__rrrPhone = { frame, beat, seat: me.seat, iAmRunner, iAmGuide, showUntil: c.showUntil };
 
-    if (beat !== 'reckoning' && beat !== 'debrief') state.nominated = false;
+    if (beat !== 'reckoning' && beat !== 'debrief') { state.nominated = false; state.nomOk = null; }
     if (beat !== 'vote') state.voted = false;
     // My thumb belongs to ONE beat. Carrying it into the next would silently hand the next
     // talk beat a majority nobody voted for.
@@ -1544,6 +1580,99 @@ export default async function partyPhone({ params }) {
     return html;
   }
 
+  /* ==========================================================================================
+   * 🔨 **THE TAP THAT DID NOT LAND — and why this is a plate rather than a whole new mechanic.**
+   *
+   * `net/party/local.mjs`'s `t:'nominate'` handler computed `applyNominate`'s answer and threw it
+   * away, so a refused nomination said NOTHING to the handset that made it. The visible symptom
+   * was not silence, which would at least look like nothing had happened: `state.nominated` was
+   * already true from the thumb, `c.noms` never named this phone, so the `already` branch below
+   * printed **`Sending your nomination…` for the rest of the beat** over a server that had
+   * finished with the message. A dead handset and a refusal look identical from the sofa.
+   *
+   * 🚨 **EVERY REFUSAL THIS SCREEN CAN ACTUALLY MEET IS A RACE, AND THAT IS THE PRODUCT CASE.**
+   * The pick list already prevents each rule locally — it filters out yourself, the dead, anyone
+   * already standing, and it hides itself once your own nomination is on the board. So the only
+   * taps that reach a refusal are the ones where the sheet was RIGHT when the player looked at it
+   * and STALE by the time the thumb landed: two handsets naming the same person in the same
+   * second, or the Reckoning clock expiring in flight. Those are exactly the moments a player
+   * cannot reconstruct from the television, because the board simply shows somebody else's
+   * nomination where they expected their own.
+   *
+   * ⚠️ **THE TABLE COVERS REASONS THIS SHEET CANNOT REACH, ON PURPOSE.** `no self-nomination` and
+   * a dead NOMINATOR's `not living` are prevented by the list above and by "The dead do not
+   * nominate"; `standing-nomination cap reached` is unreachable from a live wire at all, because
+   * `reckoningClosed` ends the beat on the third standing name before a fourth can be refused
+   * (`nom-receipt` NR8 proves it rather than asserting it). They are here so that the sheet
+   * cannot go blank, and for the same reason the `default` prints the server's own string
+   * verbatim: the failure being fixed is a player told nothing, and a reason nobody predicted
+   * must not reproduce it.
+   *
+   * 🚨 **THE ONE PIECE OF INTERPRETATION IS DONE HERE, FROM PUBLIC STATE, NOT BY THE SERVER.**
+   * `already nominated this episode` is TWO different refusals wearing one string — `canNominate`
+   * means *you have spent yours*, `canBeNominated` means *they are already on the block* — and
+   * telling a player the wrong one is worse than telling them nothing. The disambiguation reads
+   * `c.noms`, the public standing board this phone already holds, and nothing else. The server
+   * does not author it: a receipt reports what the server DID, and what it meant for this player
+   * is a question only this player's screen has the context to answer (`CLAUDE.md`, 2026-08-28).
+   *
+   * Rendered in CSS that already exists — `.receipt.coerced` is the red plate the vote receipt
+   * and the "you have been named" plate already speak in — and it holds no state across a
+   * repaint: `state.nomOk` is written by an incoming frame and by nothing else, which is the
+   * exact distinction the old lying receipt got wrong.
+   * ========================================================================================== */
+  function nomRefusalLine(refused, standing, target, alive) {
+    switch (refused.why) {
+      case 'not reckoning':
+        return 'The Reckoning had closed before your tap arrived.';
+      case 'debrief is still talk':
+        return 'Not yet — the Debrief is still talk. Naming opens at the end of it.';
+      case 'already nominated this episode':
+        return standing.some((n) => n.target === target)
+          ? 'Somebody named them first. Their nomination stands, not yours — name someone else.'
+          : 'You have already named someone this episode. One nomination each.';
+      case 'standing-nomination cap reached':
+        return 'The block is full — three names already stand.';
+      case 'no self-nomination':
+        return 'You cannot name yourself.';
+      /*
+       * ⚠️ `not living` IS ALSO TWO REFUSALS IN ONE STRING — `canNominate` means *you* are not
+       * in the show, `canBeNominated` means *they* are not. The nominator half is very nearly
+       * unreachable here, because a dead player never gets this far: `iCanAct` has already
+       * printed "The dead do not nominate" and returned. So the target reading is the default,
+       * and the other is chosen only when the public board says the target IS alive — which
+       * leaves the server's living list as the only thing that can have disagreed.
+       */
+      case 'not living':
+        return alive === true
+          ? 'The room does not count you among the living, so it took no nomination from you.'
+          : 'They are not in the show — the room will not put a name on them.';
+      default:
+        return refused.why || 'The room did not take it.';
+    }
+  }
+
+  /** The red plate a refused nominator gets, and nobody else — `state.nomOk` is theirs alone. */
+  function nomRefusalHtml(me, c, standing) {
+    const refused = state.nomOk;
+    if (!refused || refused.ok) return '';
+    // A nomination of mine that STANDS supersedes anything the server said about an earlier tap.
+    if (standing.some((n) => n.nominator === me.playerId)) return '';
+    const all = mergePublicNames(c.frame?.players, c.lobby);
+    const row = all.find((p) => p.id === refused.target) || null;
+    const line = nomRefusalLine(refused, standing, refused.target, row?.alive);
+    // Duplicate names are legal, so the seat travels with the name — same rule as every other
+    // row on this sheet. With no resolvable player the plate carries the reason alone.
+    const who = row
+      ? `<div class="receipt-v">${seatChip(c, refused.target)}<span>${esc(row.name)}</span></div>`
+      : '';
+    return `<div class="receipt coerced" data-nom-refused="${esc(refused.why || 'refused')}">
+      <div class="receipt-k">The room did not record that</div>
+      ${who}
+      <p class="hint">${esc(line)}</p>
+    </div>`;
+  }
+
   function paintNominate(players, me, c, opts = {}) {
     const late = !!opts.late;
     const standing = standingNames(players, c);
@@ -1569,6 +1698,9 @@ export default async function partyPhone({ params }) {
       html += `<p class="hint">The dead do not nominate.</p>`;
       return html;
     }
+    // Below the board, above the buttons — where the eye goes next after a tap that vanished.
+    // A refusal has already cleared the local debounce, so the pick list underneath is live again.
+    html += nomRefusalHtml(me, c, standing);
     if (already) {
       html += mine
         ? `<div class="receipt">
