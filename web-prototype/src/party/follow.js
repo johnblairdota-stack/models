@@ -134,6 +134,36 @@ export const PERSPECTIVES = ['chase', 'wide', 'iso', 'top'];
 export const OVERHEAD = ['iso', 'top'];
 export const isOverhead = (name) => OVERHEAD.includes(String(name || ''));
 
+/* =============================================================================================
+ * 🧭 **PLAN NORTH — the yaw a map-like perspective is nailed to, and why it is exactly π.**
+ *
+ * `orbit: false` was written to stop the LOOK STICK swinging an overhead view. It did not stop
+ * the BODY swinging it: `_solve` placed every non-chase rig from `runner.facing`, so the whole
+ * "stable map" turned with the robot — the D-pad-on-a-rotating-map problem the rig table's own
+ * comment says `top` exists to avoid, arriving through the other door.
+ *
+ * So a plan-locked rig is nailed to one compass bearing and translates only. The bearing is the
+ * one the guide's map already draws in (`rrr-phone-ux.md` §4: screen-up is world −Z, screen-right
+ * is +X), so the guide and the television finally agree about the word "left".
+ *
+ * 🚨 **AND THE SAME CONSTANT IS THE CONTROL SCHEME, WHICH IS WHY THERE IS NO SECOND MOVEMENT
+ * MODEL IN THIS SLICE.** `player.js` `_stepGround` is aim-relative:
+ *
+ *     want = ( sin(aimYaw)·mv.y − cos(aimYaw)·mv.x , 0 , cos(aimYaw)·mv.y + sin(aimYaw)·mv.x )
+ *
+ * At `aimYaw = π` that is stick-up → world `(0,0,−1)` and stick-right → world `(+1,0,0)`. Screen
+ * direction IS world direction, on both axes, with `player.js` untouched. The absolute top-down
+ * stick is this constant and nothing else.
+ * ============================================================================================= */
+export const PLAN_YAW = Math.PI;
+/**
+ * A rig the look stick may not swing is a rig that must not turn under the body either — the two
+ * are the same promise. Derived from the table rather than kept as a second list, so a future rig
+ * cannot be added to one and forgotten in the other.
+ */
+export const isPlanLocked = (name) =>
+  !(PERSPECTIVE_RIG[String(name || '')] ?? PERSPECTIVE_RIG.chase).orbit;
+
 /**
  * Where each perspective puts the eye, as an offset from the runner, and how it frames them.
  *
@@ -159,15 +189,54 @@ export function nextPerspective(name) {
   return PERSPECTIVES[(i < 0 ? 0 : i + 1) % PERSPECTIVES.length];
 }
 
+/** Smootherstep. Zero velocity at BOTH ends, which is what stops a crane having a stop frame. */
+export function smootherstep(x) {
+  const t = Math.max(0, Math.min(1, Number(x) || 0));
+  return t * t * t * (t * (t * 6 - 15) + 10);
+}
+
+/**
+ * 🎬 **THE CRANE INTERPOLATES THE RIG, NOT A PITCH — and that is not a workaround, it is the
+ * only move compatible with the decision above.**
+ *
+ * `perspectiveEye` refuses a pitch for an overhead rig on purpose: *"a top-down view you can
+ * tilt is a chase camera with extra steps."* So a ground→overhead transition cannot be a boom
+ * swinging up an arc, because the arc IS a pitch and halfway through it the view would be the
+ * exact tilted thing that decision forbids.
+ *
+ * Blending the four numbers instead gives a camera that rises and pulls in without ever being
+ * "a tilted top-down" at any point on the path — at every value of `s` the result is a legal
+ * rig, just not one in the table. `orbit` does not interpolate: it belongs to the rig you are
+ * arriving at the moment you leave, so the look stick stops steering the instant a plan-locked
+ * destination is chosen rather than fading out.
+ */
+export function lerpRig(a, b, s) {
+  const t = smootherstep(s);
+  const mix = (x, y) => x + (y - x) * t;
+  return {
+    dist: mix(a.dist, b.dist),
+    height: mix(a.height, b.height),
+    lateral: mix(a.lateral, b.lateral),
+    fov: mix(a.fov, b.fov),
+    orbit: t <= 0 ? a.orbit : b.orbit,
+  };
+}
+
 /**
  * The eye offset for a perspective, in world space, given the frame the player is steering.
  *
  * Pure, and deliberately separate from `chaseOrbitOffset` rather than a special case of it: the
  * overhead rigs do not take a pitch at all, because a top-down view that could be pitched is just
  * a chase camera with extra steps and the player would lose the map.
+ *
+ * `name` may also be a rig OBJECT, which is how `lerpRig`'s in-between rigs are drawn — a
+ * transition is a rig that is not in the table, and it has to be solvable by the same function
+ * or the crane would be a second camera model to keep in sync with the first.
  */
 export function perspectiveEye(name, yaw, pitch = 0) {
-  const rig = PERSPECTIVE_RIG[String(name || '')] || PERSPECTIVE_RIG.chase;
+  const rig = (name && typeof name === 'object')
+    ? name
+    : (PERSPECTIVE_RIG[String(name || '')] || PERSPECTIVE_RIG.chase);
   const f = Number(yaw) || 0;
   const fx = Math.sin(f), fz = Math.cos(f);
   const rx = -Math.cos(f), rz = Math.sin(f);

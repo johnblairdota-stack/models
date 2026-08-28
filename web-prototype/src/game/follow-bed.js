@@ -7,7 +7,8 @@ import { MOVE, WEAPON_RANGE } from './rules.js';
 import { CONTACT_PHASE, SWING_DUR } from './sledge.js';
 import {
   CAM_LIFT, CAM_MIN_DIST, CAM_SWING, CHASE_EYE_Y_MAX, CHASE_HEIGHT, CHASE_LOOK_Y,
-  CUT_SHOTS, PERSPECTIVES, PERSPECTIVE_RIG, SHOT_NAMES, chaseOrbitOffset, isOverhead, liveRunShot, lookYaw,
+  CUT_SHOTS, PERSPECTIVES, PERSPECTIVE_RIG, PLAN_YAW, SHOT_NAMES, chaseOrbitOffset, isOverhead,
+  isPlanLocked, liveRunShot, lookYaw,
   perspectiveEye, runPerspective, stepLookOrbit, stickCamMove, stickMag,
 } from '../party/follow.js';
 import { bleedCoolPos, bleedKeyAngle, facingPortal } from '../lighting/door-bleed.js';
@@ -327,9 +328,19 @@ class FollowOperator {
     return pool[Math.floor(this.rng() * pool.length) % pool.length];
   }
 
-  /** Where a given shot wants its eye, in world space. */
+  /**
+   * Where a given shot wants its eye, in world space.
+   *
+   * 🧭 **A PLAN-LOCKED RIG IS NAILED TO `PLAN_YAW`, AND THAT IS THE WHOLE FIX FOR A MAP THAT
+   * TURNED.** This line used to read `shot === 'chase' && _lockYaw != null`, so `iso` and `top`
+   * fell through to `runner.facing` and the "stable map" swung with the robot's body — the
+   * rotating-map problem `orbit: false` was written to prevent, arriving by the other door.
+   * `orbit: true` rigs still take the steered yaw, which is what makes `wide` a real chase.
+   */
   _solve(shot, runner, out) {
-    const f = (shot === 'chase' && this._lockYaw != null) ? this._lockYaw : runner.facing;
+    const f = isPlanLocked(shot)
+      ? PLAN_YAW
+      : (this._lockYaw != null ? this._lockYaw : runner.facing);
     const fx = Math.sin(f), fz = Math.cos(f);
     const rx = -Math.cos(f), rz = Math.sin(f);   // the right-hand perpendicular, `player.js` L899
     const p = runner.pos;
@@ -503,12 +514,37 @@ class FollowOperator {
       this.shot = lock;
       this.until = 1e9;
       this._seeded = true;
-      if (lock === 'chase') {
+      /* =======================================================================================
+       * 🕹️ **`_lockYaw` IS SET FOR EVERY PERSPECTIVE NOW, NOT NULLED — and this one `else` was
+       * costing the game its controls on three rigs out of four.**
+       *
+       * `basisYaw()` returns `_lockYaw` when it has one and falls through to `lensYaw()` when it
+       * does not. Nulling it here meant `wide` / `iso` / `top` took their movement frame from
+       * WHERE THE LENS ENDED UP — the exact defect the block above `basisYaw` says was removed,
+       * reintroduced the moment a second perspective existed. On `top` it was worse than the
+       * original: that yaw is read off a 1.20 m baseline against an eye that is lerping and
+       * handheld-swaying, so forward drifted continuously under a resting thumb.
+       *
+       * Three arms, and every rig now has a real steered yaw:
+       *   · **plan-locked** (`iso`, `top`) hold `PLAN_YAW`. The map does not turn, and the stick
+       *     becomes absolute — see `PLAN_YAW`'s block in `follow.js` for the arithmetic.
+       *   · **orbiting perspectives** (`chase`, `wide`) integrate the look stick exactly as chase
+       *     always has. This is also what makes `wide`'s advertised `orbit: true` true: it was
+       *     unreachable before, because the pitch it needs was never non-zero.
+       *   · **a pinned director shot** (`?shot=lead`) keeps the old null. Those are framed from
+       *     the body by `_solve` and have no steered frame of their own.
+       * ======================================================================================= */
+      if (isPlanLocked(lock)) {
+        if (this._lockYaw !== PLAN_YAW) {
+          this._lockYaw = PLAN_YAW;
+          this._lockPitch = 0;
+        }
+      } else if (PERSPECTIVES.includes(lock)) {
         if (this._lockYaw == null) {
           this._lockYaw = runner.facing;
           this._lockPitch = 0;
           this.look.set(runner.pos.x, CHASE_LOOK_Y, runner.pos.z);
-          this._solve('chase', runner, this.eye);
+          this._solve(lock, runner, this.eye);
         }
         const orbit = stepLookOrbit(this._lockYaw, this._lockPitch, opts.lookX, opts.lookY, dt);
         this._lockYaw = orbit.yaw;
@@ -1454,9 +1490,13 @@ export async function buildFollowBed(engine, opts = {}) {
      *  · **The lens.** Each rig carries its own field of view, because "the rooms scaled
      *    differently" is mostly how much of one you can see at once.
      *
-     * The CONTROLS need no special case, and that is a result rather than an omission: the fix
-     * that stopped a wall rotating the stick made the frame `_lockYaw`, which is a real yaw at
-     * every perspective — including straight down, where a camera-derived frame is degenerate.
+     *  · **The controls.** This block used to claim they needed no special case, *"because the
+     *    fix that stopped a wall rotating the stick made the frame `_lockYaw`, which is a real
+     *    yaw at every perspective."* 🚨 **That was true of `chase` and of nothing else, and the
+     *    claim outlived the code that would have made it true.** `_lockYaw` was NULLED for every
+     *    other lock, so `basisYaw()` fell back to the lens on `wide` / `iso` / `top` and the
+     *    stick's frame drifted with a swaying eye. It is now set on every perspective — see the
+     *    three-arm block in `FollowOperator.update` — and only THEN is the sentence true.
      * ========================================================================================= */
     /* =========================================================================================
      * 📐 **A PINNED POSE OWNS THE CAMERA OUTRIGHT.**

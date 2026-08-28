@@ -115,7 +115,7 @@ fields, never a pitch.**
 5. **Sway and wrist breath scale by `(1 - blend)`** (`follow-bed.js:568-582`). ±2 cm and
    ±0.006 rad on a 52° lens 9 m up is a drifting, rolling map. A shaky top-down reads as a bug.
 6. **The lid fires at `blend > 0.35`, and that number is arithmetic.** `height` smootherstepped
-   from 1.62 to 9.0 is **3.70 m** at s = 0.35 and **5.31 m** at s = 0.50, against a 4.8 m
+   from 1.62 to 9.0 is **3.36 m** at s = 0.35 and **5.31 m** at s = 0.50, against a 4.8 m
    storey. Firing at 0.35 takes the roof off while the eye is still *below* it, so the ceiling
    lifts away in front of the player instead of popping once they are already through it — and
    it removes, by construction, the chord-through-the-ceiling that today's `lerp` gets away
