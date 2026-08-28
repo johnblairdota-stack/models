@@ -3378,6 +3378,22 @@ console.log('\nparty-warm — the lobby-warm night');
         hostSrc.indexOf("show === 'casting'"))),
     FANOUT_KEYS.verdict.join(','));
 
+  /*
+   * 🛑 **SKIP TO REUNION.** One control, one call site, and both of its guards are behavioural
+   * rather than cosmetic: it is offered only from a chair (`onStage`, which `show.js` owns — never
+   * mid-expedition, where ending the session takes the run away from the one person playing), and
+   * it takes TWO taps, because a remote gets sat on and there is no undo on the other side of
+   * `host.skip`. The isTV half is the server's and is gated by `party-night` N17k.
+   */
+  t('W47f · SKIP TO REUNION is offered from a chair only, and it arms before it sends',
+    /id="to-reunion"/.test(hostSrc)
+      && /if \(onStage && show !== 'reunion'\)/.test(hostSrc)
+      && /SKIP_ARM_MS = \d+/.test(hostSrc)
+      && /ui\.skipArmedUntil = Date\.now\(\) \+ SKIP_ARM_MS/.test(hostSrc)
+      && /client\.send\(\{ t: 'skip' \}\)/.test(hostSrc)
+      // the send is behind the arm check, not beside it
+      && /if \(Date\.now\(\) < ui\.skipArmedUntil\)[\s\S]{0,140}client\.send\(\{ t: 'skip' \}\)/.test(hostSrc));
+
   t('W47e · and the Reunion sheet still reveals nothing — that payload is its own step',
     /DO NOT PUT A ROLE OR AN ALIGNMENT ON THIS SHEET/.test(phoneSrc)
       && /NOTHING HERE MAY NAME AN ALIGNMENT OR A ROLE/.test(hostSrc));

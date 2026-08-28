@@ -661,6 +661,71 @@ t('N13c · a refresh resumes the server show beat, not casting',
 }
 
 /* ===============================================================================================
+ * 🛑 **N17k · THE HOST CALLS THE NIGHT — the first emitter `host.skip` has ever had.**
+ *
+ * `win.js` W6 fires ABANDONED on a `host.skip` event and has done since the fold was written; the
+ * gate suite exercised the rule with a hand-built log, and no product code ever appended one. So
+ * this is not "does W6 work" — `win-machine` answers that — it is whether a real television can
+ * reach it, and whether anything else can.
+ *
+ * 🚨 **THE isTV ARM IS THE POINT.** A seated phone that could send `{t:'skip'}` could end the
+ * night for seven other people from the sofa. The `show` handler shipped without that guard and
+ * an adversarial playtester drove a whole room with it; this control is strictly worse to hand
+ * out, so the denial is gated before the happy path is.
+ * =============================================================================================== */
+{
+  const PORTX = PORT + 2;
+  const srvx = startServer({ port: PORTX, count: 8, castSeed: 11, worldSeed: 11, code: 'nx' });
+  await sleep(80);
+  const basex = `ws://localhost:${PORTX}/?room=nx`;
+  const tvx = await open(`${basex}&host=1`);
+  const p1x = await open(basex);
+  const p2x = await open(basex);
+  await sleep(80);
+  tvx.send({ t: 'start' });
+  await sleep(60);
+  const roomx = srvx.rooms.get('nx');
+
+  p1x.send({ t: 'skip' });
+  await sleep(60);
+  t('N17k · a seated phone cannot end the room\'s night',
+    roomx.show !== 'reunion' && roomx.game.outcome() !== OUTCOME.ABANDONED
+      && !roomx.game.log.all().some((e) => e.type === 'host.skip'),
+    JSON.stringify({ show: roomx.show, outcome: roomx.game.outcome() }));
+
+  tvx.send({ t: 'skip' });
+  await sleep(80);
+  const seasonx = last(tvx, 'season');
+  t('N17k2 · the television can — host.skip is recorded and W6 abandons the season',
+    roomx.show === 'reunion' && roomx.game.outcome() === OUTCOME.ABANDONED
+      && seasonx?.status === OUTCOME.ABANDONED
+      && last(p1x, 'season')?.status === OUTCOME.ABANDONED
+      && roomx.game.log.all().some((e) => e.type === 'host.skip'),
+    JSON.stringify({ show: roomx.show, outcome: roomx.game.outcome(), season: seasonx }));
+
+  /*
+   * ⚠️ **ORDER, NOT PRESENCE.** `foldWin` resolves by LOG ORDER and breaks on the first rule that
+   * fires, so recording `phase.VERDICT` before `host.skip` would let W5 beat the host's own call
+   * by one sequence number and file an abandoned night as a win for Production. The events are
+   * both there either way; only their order says which rule ran.
+   */
+  const logx = roomx.game.log.all();
+  const skipSeq = logx.find((e) => e.type === 'host.skip')?.seq;
+  const verdictSeq = logx.filter((e) => e.type === 'phase.VERDICT').at(-1)?.seq;
+  t('N17k3 · the skip is written BEFORE the phase it triggers, so W6 outruns W5',
+    Number.isFinite(skipSeq) && Number.isFinite(verdictSeq) && skipSeq < verdictSeq
+      && logx.find((e) => e.type === 'win.checked' && e.data.rule === 'W6') != null,
+    JSON.stringify({ skipSeq, verdictSeq }));
+
+  t('N17k4 · and an abandoned night is over — no clock, nothing scheduled after it',
+    roomx.showUntil == null && roomx.showClock == null && nextShowBeat('reunion') == null,
+    JSON.stringify({ until: roomx.showUntil, clock: roomx.showClock != null }));
+
+  for (const c of [tvx, p1x, p2x]) c.close();
+  srvx.close();
+}
+
+/* ===============================================================================================
  * 🔁 **N17j · THE OTHER SIDE OF THE BRANCH — a night that is NOT over goes back to Casting.**
  *
  * N17h above only ever sees the terminal edge, because the socket night it rides on has two dealt

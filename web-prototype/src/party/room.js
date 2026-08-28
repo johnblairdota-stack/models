@@ -796,6 +796,32 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       setPhase('VERDICT');
       return foldVerdict();
     },
+    /* ===========================================================================================
+     * 🛑 **THE HOST CALLS THE NIGHT — the one control that ends a session by hand.**
+     *
+     * `win.js` W6 has anticipated this since the fold was written: `host.skip` fires ABANDONED,
+     * and until now **nothing in the codebase had ever emitted the event**. A rule with no
+     * emitter is a rule nobody has ever seen run.
+     *
+     * 🚨 **THE SKIP IS RECORDED BEFORE THE PHASE, AND THE ORDER IS THE WHOLE CORRECTNESS.**
+     * `foldWin` resolves by LOG ORDER and breaks on the first rule that fires — so writing
+     * `phase.VERDICT` first would let W5 (RENEWED at the cap is a CANCELLED) beat the host's own
+     * call by one sequence number, and a night the host abandoned would be recorded as a win for
+     * Production. Skip first; then the phase; then fold.
+     *
+     * ⚠️ **AN ALREADY-DECIDED SEASON IS NOT OVERWRITTEN, AND THAT IS NOT A BUG.** If a rule fired
+     * earlier in the log it is earlier in the log, and the fold keeps it: the host pressing SKIP
+     * after the cameras came up does not take the win away from the cast. What the skip
+     * guarantees is that the night ENDS, not that nobody won it.
+     *
+     * ABANDONED is public: `rrr-social-round.md` gives no side the win, so there is nothing to
+     * conceal about it. The alignments it stops short of are still the Reunion's to reveal.
+     * =========================================================================================== */
+    skipToReunion() {
+      record(makeEvent('host.skip', VIS.PUBLIC, { episode: state.episode }));
+      setPhase('VERDICT');
+      return foldVerdict();
+    },
     /** The session's outcome so far, or null while it is still RENEWED. */
     outcome: () => state.outcome,
     /**

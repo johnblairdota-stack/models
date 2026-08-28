@@ -1429,6 +1429,18 @@ function handleClient(room, bound, self, msg) {
    * exactly that and wiped two live pairs mid-conversation, repeatably.  and 
    * already carried this guard; this one did not.
    */
+  /*
+   * 🛑 **SKIP TO REUNION — isTV, for the same reason `show` is.** It is the one control that can
+   * end everybody's night, so a seated phone must not be able to send it: the missing guard on
+   * `show` let an adversarial playtester drive the whole room, and this button is strictly worse
+   * to hand out. There is no confirmation step on the television because there is no keyboard at
+   * a sofa; the host is the person holding the remote, and W6 records who ended it in the log.
+   */
+  if (msg.t === 'skip' && isTV) {
+    room.game.skipToReunion();
+    enterReunionLive(room);
+    return;
+  }
   if (msg.t === 'show' && isTV && typeof msg.beat === 'string') {
     // Host workaround ("Watch the run") and N14 pacing. Not the product clock.
     if (msg.beat !== 'expedition') clearShowClock(room);

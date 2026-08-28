@@ -163,6 +163,16 @@ export function injectNightSkin() {
       color:#fff; letter-spacing:.04em; font-variant-numeric:tabular-nums;
       text-shadow:0 12px 48px rgba(0,0,0,.9); }
     .actions { display:flex; gap:12px; flex-wrap:wrap; margin-top:22px; }
+    /* 🛑 SKIP TO REUNION sits in the bottom corner of the television, quiet until it is armed.
+       It ends everybody's night, so it must be findable by the host and invisible to the room:
+       out of the picture's way, low contrast at rest, and unmistakable once the first tap has
+       landed. Absolute, because the talk beats fill the well and a flow row would push it. */
+    .skip-actions { position:absolute; right:22px; bottom:16px; margin:0; z-index:6; }
+    .skip-actions .btn { padding:8px 14px; font-size:11px; letter-spacing:.16em;
+      opacity:.42; transition:opacity .18s ease; }
+    .skip-actions .btn:hover, .skip-actions .btn:focus-visible { opacity:1; }
+    .skip-actions .btn.armed { opacity:1; border-color:#ff8a7a; color:#ff8a7a;
+      background:rgba(255,138,122,.10); }
     .err { color:#ff8a7a; white-space:pre-wrap; font-family:ui-monospace,Menlo,monospace; font-size:13px; }
     .ballot { display:flex; flex-direction:column; gap:14px; }
     .ballot .row { display:grid; grid-template-columns: 1fr auto 1fr; gap:20px; align-items:center;

@@ -67,6 +67,9 @@ export default async function partyHost({ params }) {
   const token = sessionStorage.getItem(tokenKey(code, 'tv'));
   const wsUrl = `${defaultWsUrl(wsPort)}/?room=${encodeURIComponent(code)}&host=1${token ? `&token=${token}` : ''}`;
 
+  /** How long SKIP TO REUNION stays armed after the first tap before it forgets it was asked. */
+  const SKIP_ARM_MS = 4000;
+
   const ui = {
     beat: 'lobby',
     /** SMASHED / TIME from the server's `show` message — how the last live run ended. Never
@@ -94,6 +97,14 @@ export default async function partyHost({ params }) {
     showUntil: null,
     /** Seated-circle cue after the run, so debrief is not an empty ballroom. */
     sitCued: false,
+    /**
+     * 🛑 SKIP TO REUNION is a TWO-TAP control, and this is the arm.
+     *
+     * One tap ends everybody's night. The 3·2·1 that arms Casting is the house idiom for "this
+     * is about to happen and you can still stop it", and the same argument applies harder here:
+     * a remote gets sat on. Epoch ms, so the arm expires on its own — see `SKIP_ARM_MS`.
+     */
+    skipArmedUntil: 0,
     nomsKey: '',
     /** Refusals still on air. Transient — an event, not a fact. See REFUSAL_HOLD_MS. */
     refusals: [],
@@ -1166,6 +1177,25 @@ export default async function partyHost({ params }) {
         </div>`;
     }
 
+    /*
+     * 🛑 **THE ONE CONTROL THAT ENDS EVERYBODY'S NIGHT — and it is only reachable from a chair.**
+     *
+     * Not during the expedition, because ending a session mid-chase takes the run away from the
+     * one person actually playing; not on the Reunion, because the night is already over there.
+     * `onStage` is the rule and `show.js` owns it, so this cannot drift into a second beat list.
+     *
+     * ⚠️ **TWO TAPS.** The first arms, the second sends, and the arm forgets itself after
+     * `SKIP_ARM_MS`. This is the same affordance as the Casting 3·2·1 for the same reason: a
+     * remote gets sat on, and there is no undo on the other side of `host.skip`.
+     */
+    if (onStage && show !== 'reunion') {
+      const armed = Date.now() < ui.skipArmedUntil;
+      body += `<div class="actions skip-actions">
+        <button class="btn ghost${armed ? ' armed' : ''}" id="to-reunion">${
+        armed ? 'End the night — tap again' : 'Skip to the Reunion'}</button>
+      </div>`;
+    }
+
     // 📺 `on-run` is what lets the night skin give the picture 90% of the television — see
     // `TV_FRAME_PCT` and the `.night.on-run` block in `night-skin.js`.
     /*
@@ -1237,6 +1267,21 @@ export default async function partyHost({ params }) {
     };
 
     root.querySelector('#go')?.addEventListener('click', startNight);
+    /*
+     * The arm lives in `ui` rather than on the element, because `paint()` rebuilds the button on
+     * every message — a flag on the DOM node would be wiped by the next fanout, which at a live
+     * table is a few times a second. Repaint so the label changes on the first tap.
+     */
+    root.querySelector('#to-reunion')?.addEventListener('click', () => {
+      if (Date.now() < ui.skipArmedUntil) {
+        ui.skipArmedUntil = 0;
+        client.send({ t: 'skip' });
+        return;
+      }
+      ui.skipArmedUntil = Date.now() + SKIP_ARM_MS;
+      paint();
+      setTimeout(paint, SKIP_ARM_MS + 40);
+    });
     root.querySelector('#to-run')?.addEventListener('click', () => setBeat('expedition'));
     root.querySelector('#to-cast')?.addEventListener('click', () => setBeat('casting'));
 
