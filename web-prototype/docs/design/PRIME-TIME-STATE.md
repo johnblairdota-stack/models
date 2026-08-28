@@ -2,6 +2,8 @@
 
 Audited against `main` @ `5752c22` (PR #49), 2026-08-25. **Updated after two fixes landed** —
 see §3 and §2, and the two patches that go with this document.
+**Updated again 2026-08-28** on `claude/casting-screen-layout-crgctg` — §5 has a new top row, and
+§7's "done" list has a third entry. The chain is 28 gates and 1273 assertions now, not 24 and 822.
 Method: read the phase machines, the wire, and every gate in `gates:party`. Nothing inferred from
 filenames or from chat transcripts.
 
@@ -90,10 +92,13 @@ N17c/N18.
 ## 5. Gate coverage — what is locked, what can regress
 
 CI (`.github/workflows/gates.yml:44`) runs the full `gates:party` chain on every push and PR.
-All 23 referenced scripts exist.
+All referenced scripts exist — 28 of them as of 2026-08-28, the four newest being `nominee-skin`,
+`seated-actions`, `accusation-stage` and `party-audio`.
 
 | Playtest finding | Fix | Gate | Status |
 |---|---|---|---|
+| **Every phone could identify the Glitched, on every live episode** | `playEpisode`'s claim loop deleted | `party-isolation` I3b (rewritten), I3c, control `leak: 5` | ✅ locked — **and the old I3b was CIRCULAR**, see below |
+| A field with no matrix row was dropped in silence | `project()`'s `unrowed` is banked, not discarded | `party-isolation` I1c, control `leak: 6` | ✅ locked — went red on first run against a pre-existing silent drop |
 | Empty ballots invented a pair at N=8 | `7d21bb1` | `party-night.mjs:366` + `:306`, `party-sockets.mjs:80` | ✅ locked, 3 gates |
 | 3·2·1 armed on the first ballot | `e5d81f9` | `cast-ballot.mjs:200-205` (B12b–e) + `party-warm.mjs:1483` greps the old rule is gone | ✅ locked |
 | Self-vote on the lynch ballot | `6fa0ae4`, `f4800bc` | `vote-table.mjs:108`, `party-night.mjs:191`, `:560` | ✅ locked |
@@ -102,6 +107,24 @@ All 23 referenced scripts exist.
 | **Smash target hidden behind furniture** | — | **none** | 🚨 **unguarded — "I couldn't see the painting" can come straight back** |
 | sitLock TDZ crash on walk-in | `105b77d` | `_sit_in_chair.mjs:195`, `party-warm.mjs:2105` | ⚠️ locked by **string-index grep on source order**, not runtime. Renaming an identifier passes the gate and reintroduces the TDZ. |
 | Missing nominate window after Debrief | `e94b308` | `party-night.mjs:639-644` | ✅ locked |
+
+### The circular gate, written down because it will happen again
+
+`party-isolation` I3b was named *"every claim on the wire was published by its owner"* and did not
+test that. It accepted a claim as owner-published if the event log held a PUBLIC
+`player.claim_set` — an event the server manufactured itself, in the same loop that wrote the
+value. The server published the claim, then cited its own publication as proof the owner had
+published it. **That gate reported 20 passed / 0 failed, including all four of its blindness
+controls, while `players[].claim` carried a column reading `contestant` for everyone except the
+Glitched to every phone on every live episode.** Reproduced at castSeed 5, 17 and 42.
+
+The generalisable fix, and the thing to copy the next time provenance is asserted anywhere:
+**assert against the DRIVER's record of what it published, never the server's record of what it
+did.** The driver is outside the thing under test; the log is inside it.
+
+This is also why §5's row for `sitLock` carries a ⚠️ rather than a ✅, and why W36a and W38d were
+both rewritten the same week: a gate that pins a spelling, a call site or a self-report is
+measuring the wrong surface, and three of them on this project did.
 
 ## 6. The redesign pack is not in the repo
 
@@ -129,9 +152,15 @@ truth in the repo.** The canvas itself is at
 2. ✅ **Server-side casting backstop** — a dead TV tab can no longer hang a room. `party-night`
    N20a–e, 6 assertions against a real server and real sockets, including killing the TV socket
    with ballots already in.
+3. ✅ **The Glitched no longer reaches the phones** (2026-08-28) — the leak above, plus the
+   accusation staging that found it: a nominee wears their own tag skin, the seated circle plays
+   toward the accusation, and the TV has a voice whose cue table is finite on purpose, because a
+   sting that rode the real margin would leak through magnitude with nothing wrong on screen.
+   Gates: `party-isolation` 24, `nominee-skin` 23, `seated-actions` 29, `accusation-stage` 51,
+   `party-audio` 60.
 
-Both verified to fail when reverted. Full suite after: **`npm run build` clean, 24 gates, 822
-assertions, 0 failures.**
+All three verified to fail when reverted. Full suite after: **`npm run build` clean, 28 gates,
+1273 assertions, 0 failures**, plus `loop-ui-play` 22/0 against eight real phones.
 
 **Still open, cheapest first:**
 
