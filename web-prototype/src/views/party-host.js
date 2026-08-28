@@ -19,7 +19,7 @@ import {
   DEFAULT_LOOK, SHOW_LINE, SHOW_TITLE, cleanLook, codeBugHtml, countdownHtml, nameplateHtml,
   paintLook, recBugHtml, robotFaceSvg, rundownRailHtml, titlePlateHtml, verdictPlateHtml,
 } from '../party/look.js';
-import { REACT_MOOD, onAir } from '../party/react.js';
+import { REACT_HOLD_MS, REACT_MOOD, onAir, spawnOffset } from '../party/react.js';
 import { mergePublicNames, publicName } from '../party/cast-ui.js';
 import { cueViolations, nextPerspective, warmLabel, warmPct, warmUrl } from '../party/follow.js';
 import {
@@ -668,6 +668,7 @@ export default async function partyHost({ params }) {
     frame?.classList.toggle('live', follow.live && runMode);
     // The lobby only becomes a scrim once there is a rendered frame to be a scrim over.
     document.body.classList.toggle('rrr-warming', !runMode && follow.live);
+    placeReactOverlay();
   }
 
   function followLoop() {
@@ -1003,65 +1004,74 @@ export default async function partyHost({ params }) {
   /* @audio-cue-builder:end */
 
   /**
-   * 👏 THE REACTION STRIP, patched in place along the bottom of the run.
+   * 👏 THE REACTION OVERLAY, patched in place over the run picture.
    *
-   * `onAir()` decides what is still up — newest first, one row per player, capped at six. The
-   * rebuild is keyed so an unchanged strip is not re-written four times a second: an `innerHTML`
-   * assignment on every tick would restart the entrance animation on every face and make a quiet
-   * strip flicker for the whole run.
+   * `onAir()` decides what is still up — newest first, capped, and EVERY event is its own chip
+   * so a spam tap spawns another rather than replacing. The rebuild is keyed on `{from, at}`
+   * so an unchanged overlay is not re-written four times a second (that would restart every
+   * rise). The camera layer sits at z-index 5 over `.run-frame`; this overlay is placed onto
+   * that same rect at z-index 6 so the faces actually float ON the picture, not under it.
    */
+  function placeReactOverlay() {
+    const mount = root.querySelector('[data-react-strip]');
+    if (!mount) return;
+    const frame = root.querySelector('.run-frame');
+    const on = ui.beat === 'expedition' && !!frame;
+    mount.classList.toggle('on-picture', on);
+    if (!on) return;
+    const r = frame.getBoundingClientRect();
+    mount.style.left = `${r.left}px`;
+    mount.style.top = `${r.top}px`;
+    mount.style.width = `${r.width}px`;
+    mount.style.height = `${r.height}px`;
+  }
+
   function paintReactStrip() {
     const mount = root.querySelector('[data-react-strip]');
     if (!mount) return;
+    placeReactOverlay();
     const live = onAir(client.reacts || [], Date.now());
-    const key = live.map((e) => `${e.from}:${e.r}`).join(',');
+    const eventKey = (e) => `${e.from}:${e.at}`;
+    const key = live.map((e) => `${eventKey(e)}:${e.r}`).join(',');
     if (key === ui.reactKey) return;
     ui.reactKey = key;
+    mount.style.setProperty('--react-hold', `${REACT_HOLD_MS}ms`);
     const names = mergePublicNames(client.lobby, client.links?.pairs);
-    const seatOf = (id) => (client.lobby?.seats || []).find((s) => s.playerId === id)?.seat ?? 99;
-    /*
-     * 🪑 **SORTED BY SEAT, NOT BY WHO REACTED LAST.** `onAir` picks the six by recency, but
-     * DISPLAYING them by recency means every arrival shoves everyone along one place — which
-     * both restarts their animation and makes a player's reaction appear somewhere new each
-     * time. Seat order is stable, so a face stays where the room learned to look for it.
-     */
-    const rows = [...live].sort((a, b) => seatOf(a.from) - seatOf(b.from));
-    const want = new Map(rows.map((e) => [e.from, e]));
+    const want = new Set(live.map(eventKey));
 
     /*
-     * 👉 **ADD AND REMOVE ONE CHIP — NEVER REBUILD THE ROW.** This used to assign `innerHTML`,
-     * which destroys and recreates all six chips every time ANY of them changes. During a busy
-     * run that fires several times a second, and each rebuild restarted the `night-rise`
-     * entrance on every face — so the strip juddered continuously, directly under the one thing
-     * the room is watching. It was doing that before a single symbol was added.
-     *
-     * Keyed on the PLAYER, not on the timestamp: a player who reacts again keeps their node and
-     * only their face is swapped, so the badge's loop carries on instead of snapping back to the
-     * start of its entrance. Gate: `party-warm` W42.
+     * 👉 **ADD AND REMOVE ONE CHIP — NEVER REBUILD THE ROW.** Assigning `innerHTML` would
+     * destroy mid-rise chips every time ANY of them changed. Keyed on the EVENT (`from`+`at`),
+     * never the player: a second tap from the same seat is a new node with a spawn offset, not
+     * a face-swap on the chip that is already floating. Gate: `react-pad` R8 / `party-warm` W45.
      */
     for (const el of [...mount.children]) {
       if (!want.has(el.dataset.rk)) el.remove();
     }
-    let prev = null;
-    for (const e of rows) {
+    const already = new Map();
+    for (const el of mount.children) {
+      const from = el.dataset.rk?.split(':')[0];
+      if (from) already.set(from, (already.get(from) || 0) + 1);
+    }
+    const born = [...live].sort((a, b) => a.at - b.at);
+    for (const e of born) {
+      const rk = eventKey(e);
+      if ([...mount.children].some((c) => c.dataset.rk === rk)) continue;
       const look = seatLook(client.lobby, e.from) || DEFAULT_LOOK;
       const mood = REACT_MOOD[e.r] || 'idle';
-      let el = [...mount.children].find((c) => c.dataset.rk === e.from);
-      if (!el) {
-        el = document.createElement('div');
-        el.className = 'react-chip';
-        el.dataset.rk = e.from;
-        el.innerHTML = `${robotFaceSvg(look.shell, look.accent, { size: 56, mood })}
-          <span class="react-who">${esc(joinedName(names, e.from, 'Someone'))}</span>`;
-        // Insert in seat order without touching the siblings already on air.
-        if (prev) prev.after(el); else mount.prepend(el);
-      } else if (el.dataset.rr !== e.r) {
-        // Same player, new reaction — swap the face only, leave the node and its name alone.
-        const face = el.querySelector('.bot-face');
-        if (face) face.outerHTML = robotFaceSvg(look.shell, look.accent, { size: 56, mood });
-      }
-      el.dataset.rr = e.r;
-      prev = el;
+      const n = already.get(e.from) || 0;
+      already.set(e.from, n + 1);
+      const { ox, oy } = spawnOffset(n);
+      const seat = (client.lobby?.seats || []).find((s) => s.playerId === e.from)?.seat ?? 3;
+      const el = document.createElement('div');
+      el.className = 'react-chip';
+      el.dataset.rk = rk;
+      el.style.setProperty('--ox', `${ox}px`);
+      el.style.setProperty('--oy', `${oy}px`);
+      el.style.setProperty('--seat-x', `${12 + Math.max(0, Math.min(7, seat)) * (76 / 7)}%`);
+      el.innerHTML = `${robotFaceSvg(look.shell, look.accent, { size: 56, mood })}
+        <span class="react-who">${esc(joinedName(names, e.from, 'Someone'))}</span>`;
+      mount.appendChild(el);
     }
   }
 
@@ -1772,7 +1782,8 @@ function runStage({ names, lobby, runnerId, guideId, cameras, alarms, followLive
       <div class="run-facts">Cameras ${cams?.unlocked ?? '—'} / ${cams?.needed ?? '—'} · alarms ${alarms ?? 0}</div>
       <!-- 👏 Filled by paintReactStrip on the 250 ms tick, NOT by paint(). A reaction expires by
            wall clock, and repainting the run frame four times a second to age it out would
-           remount the follow camera's canvas mid-chase. Empty mount, patched in place. -->
+           remount the follow camera's canvas mid-chase. Empty mount, patched in place, then
+           lifted onto the run-frame rect so the chips float over the picture. -->
       <div class="react-strip" data-react-strip aria-live="off"></div>
     </div>`;
 }

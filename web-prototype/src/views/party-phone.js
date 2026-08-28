@@ -715,8 +715,9 @@ export default async function partyPhone({ params }) {
          *
          * ⚠️ **THE GUIDE'S SHEET LOST IT TOO** — see `intelBlock`. A good guide reads the map and
          * its static; the strip was answering the same question underneath with a different rule.
-         * SEATED players keep it, and that is the one seat it was always for: it is their whole
-         * contribution from a chair.
+         * SEATED watchers lost it as well (DUSK, expedition): the house-word block was sitting
+         * between the emote pad and the card tab, and watchers do not get a house line. Production
+         * guides still get their feed.
          */
         body += `<h1>You walk.</h1>
           <p class="hint">${topDown
@@ -801,7 +802,6 @@ export default async function partyPhone({ params }) {
               <span>${r}</span>
             </button>`).join('')}
           </div>
-          ${intelBlock(frame)}
           ${state.flash ? `<p class="hint">${esc(state.flash)}</p>` : ''}`;
       }
     } else {

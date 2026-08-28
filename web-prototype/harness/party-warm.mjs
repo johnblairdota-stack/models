@@ -1427,7 +1427,7 @@ console.log('\nparty-warm — the lobby-warm night');
     /armMission\(c\.episode \?\? 1\)/.test(bedSrc) && /function armMission/.test(bedSrc));
 }
 
-// ---- W20 · WORD FROM THE HOUSE IS FOR THE CHAIRS ---------------------------------------------
+// ---- W20 · WORD FROM THE HOUSE IS GONE FROM THE CHAIRS TOO -----------------------------------
 //
 // John, playing the GOOD guide: the map was drawing its static — which is that guide's blindness,
 // working as designed — with *"No word on the hunter"* printed six pixels underneath it. Two
@@ -1435,8 +1435,9 @@ console.log('\nparty-warm — the lobby-warm night');
 // close, arriving from the other side.
 //
 // #12 took the strip off the RUNNER on the same argument: that seat already has a channel — a human
-// being talking to them. The guide's channel is the map. The one seat the strip was ever for is the
-// CHAIR, where it is a watcher's whole contribution.
+// being talking to them. The guide's channel is the map. DUSK then took it off the WATCHERS too:
+// the house-word block was sitting between the emote pad and "Your card — HOLD TO READ." Watchers
+// react; they do not get a house line. Production guides still get their feed.
 //
 // ⚠️ Asserted from SOURCE, because `views/party-phone.js` is a DOM view and this gate runs in bare
 // node with no `npm install`. The rendered claim is `party-playtest-drive.mjs` E6d.
@@ -1458,8 +1459,8 @@ console.log('\nparty-warm — the lobby-warm night');
     && !/intelBlock\(frame\)/.test(guideBranch));
   t('W20b · the runner\'s pad still has no intel block at all',
     !/intelBlock\(/.test(runnerBranch));
-  t('W20c control · a SEATED watcher keeps it — the strip was moved to one seat, not deleted',
-    /intelBlock\(frame\)/.test(seatedBranch));
+  t('W20c · a SEATED watcher has no house-word block — the strip is gone from the chairs too',
+    !/intelBlock\(/.test(seatedBranch));
 
   /*
    * 🚨 **AND IT IS KEYED TO THE ALIGNMENT, NOT TO THIS TICK'S GRADE.** `intelFor` returns null
@@ -3388,20 +3389,22 @@ console.log('\nparty-warm — the lobby-warm night');
     'height stays a max, shrink stays enabled');
 
   /*
-   * THE STRIP IS PATCHED PER PLAYER. It used to assign `innerHTML` for the whole row, which
-   * destroys and recreates all six chips whenever any one of them changes — several times a
-   * second during a run — restarting every entrance animation and making the strip judder under
-   * the picture. Keyed on the player and ordered by SEAT so nobody's chip moves when someone
-   * else reacts; a moved node restarts its animation just as a rebuilt one does.
+   * THE OVERLAY IS PATCHED PER EVENT. It used to assign `innerHTML` for the whole row, which
+   * destroys and recreates every chip whenever any one of them changes — several times a
+   * second during a run — restarting every rise. It then keyed on the PLAYER, which swallowed
+   * spam: a second clap from the same seat reused the node. Keyed on `{from, at}` now, with a
+   * spawn offset so stacked taps do not ride the same path.
    */
   const host = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
   // `\r?\n`, for the same reason W17a-pre carries it: a Windows checkout writes `}\r\n`.
   const painter = host.match(/function paintReactStrip\(\)[\s\S]*?\r?\n {2}\}\r?\n/)?.[0] ?? '';
   t('W45-pre · the strip painter was extracted', painter.length > 400, `${painter.length} chars`);
-  t('W45 · one arrival touches one chip · the row is never rebuilt, and it is ordered by seat',
+  t('W45 · one arrival is one chip keyed on the EVENT, not the player · spam does not reuse a node',
     !/mount\.innerHTML\s*=/.test(painter)
-      && /dataset\.rk === e\.from/.test(painter)
-      && /sort\(\(a, b\) => seatOf\(a\.from\) - seatOf\(b\.from\)\)/.test(painter)
+      && /dataset\.rk = rk/.test(painter)
+      && !/dataset\.rk === e\.from/.test(painter)
+      && /--ox/.test(painter)
+      && /spawnOffset\(/.test(painter)
       && /el\.remove\(\)/.test(painter));
 
   /*

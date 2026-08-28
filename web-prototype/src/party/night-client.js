@@ -178,7 +178,7 @@ export class PartyNightClient {
          */
         if (m.t === 'react' && typeof m.from === 'string') {
           this.reacts.push({ from: m.from, r: m.r, at: Number(m.at) || Date.now() });
-          if (this.reacts.length > 64) this.reacts.splice(0, this.reacts.length - 64);
+          if (this.reacts.length > 256) this.reacts.splice(0, this.reacts.length - 256);
         }
         /*
          * 🍮 Who is paired, and what they are called now. PUBLIC — every socket gets this, the
