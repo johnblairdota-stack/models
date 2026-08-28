@@ -1180,6 +1180,8 @@ export async function buildFollowBed(engine, opts = {}) {
     /** The rig actually on screen this frame. A blend is a legal rig that is not in the table. */
     liveRig: null,
     lidOff: false,
+    /** Which spaces the roof is currently off over, joined. A memo so the walk re-scopes once. */
+    lidScope: null,
     stick: { x: 0, y: 0 },
     look: { x: 0, y: 0 },
     run: false,
@@ -1206,6 +1208,29 @@ export async function buildFollowBed(engine, opts = {}) {
 
   const _dir = new THREE.Vector3();
   const _views = [{ pos: engine.camera.position, dir: _dir }];
+  /* =============================================================================================
+   * 👁️ **THE OVERHEAD VIEWPOINT IS THE RUNNER, NOT THE LENS.**
+   *
+   * `_views` holds a LIVE REFERENCE to the camera position, which is right for a chase — the
+   * lens is where the player is looking from. Overhead it is wrong twice over, and the second
+   * one is the expensive one:
+   *
+   *   · `iso` hangs 5.60 m back in plan, so standing near a wall the camera's XZ lands outside
+   *     every space's footprint plus the 0.6 m pad. `spaceAt` returns null, `setViewpoints` falls
+   *     back to `_cur`, and residency LATCHES on the last room the lens happened to be over
+   *     while the runner walks on into one that then goes dark when its hold expires.
+   *   · `dir` is near-vertical from above, so the portal-bleed facing test
+   *     (`dx*dir.x + dz*dir.z` against `-0.35 * hypot`) is comparing against a horizontal
+   *     component of roughly zero and admits or drops neighbours on noise.
+   *
+   * ⚠️ **`spaceAt` IGNORES Y** (`room.js` — a pure XZ AABB with a 0.6 m pad), so the height is
+   * NOT the problem and an earlier draft of this slice was wrong to say residency collapses
+   * because the eye is above the roof. It does not; it drifts sideways. The fix is the same
+   * either way: from the moment the camera starts to lift, residency is keyed on the body, whose
+   * position and heading are both meaningful at any perspective.
+   * ============================================================================================= */
+  const _runnerDir = new THREE.Vector3();
+  const _runnerViews = [{ pos: runner.pos, dir: _runnerDir }];
   const _warmEye = new THREE.Vector3();
   const _warmAt = new THREE.Vector3();
   const _reel = new THREE.Vector3();
@@ -1669,9 +1694,10 @@ export async function buildFollowBed(engine, opts = {}) {
      * stay under, iso 5.60 and top 9.0 go over. */
     const lidOff = (perf.liveRig?.height ?? 0) >= LID_LIFT_H;
     if (lidOff !== perf.lidOff) {
-      room.setLid?.(!lidOff);
+      room.setLid?.(!lidOff, lidOff ? (room.residentIds?.() ?? null) : null);
       setHangers(lidOff);
       perf.lidOff = lidOff;
+      perf.lidScope = lidOff ? ((room.residentIds?.() ?? []).join(',')) : null;
     }
 
     operator.update(dt, t, runner, engine.camera, perf.lastPortal, speed01, {
@@ -1724,7 +1750,27 @@ export async function buildFollowBed(engine, opts = {}) {
         portals: room.portals(), spaces: room.spaces,
       });
     }
-    room.setViewpoints(_views, dt);
+    // The body owns residency the moment the camera starts to lift. See `_runnerViews`.
+    if (lampMap > 0) {
+      _runnerDir.set(Math.sin(runner.facing), 0, Math.cos(runner.facing));
+      room.setViewpoints(_runnerViews, dt);
+    } else {
+      room.setViewpoints(_views, dt);
+    }
+
+    /* 🏠 **AND THE ROOF COMES OFF ONLY OVER WHAT RESIDENCY JUST ADMITTED.** The scope is applied
+     * after `setViewpoints`, so it is this frame's set and not last frame's — the room you are
+     * walking into opens as you arrive rather than a beat later. `party-loop.md`'s "Do not" is
+     * narrowed, not repealed: the TV may see over the walls of the room the runner is in and the
+     * ones a door away, and never the whole house. */
+    if (perf.lidOff) {
+      const ids = room.residentIds?.() ?? null;
+      const key = ids ? ids.join(',') : '';
+      if (key !== perf.lidScope) {
+        perf.lidScope = key;
+        room.setLid?.(false, ids);
+      }
+    }
     room.update?.(dt);
   }
 

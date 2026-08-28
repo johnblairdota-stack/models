@@ -420,10 +420,21 @@ console.log('\nparty-follow — the TV follow slot');
    */
   const lidLift = Number((bed.match(/const LID_LIFT_H = ([\d.]+);/) || [])[1]);
   t('F11c2 · and the bed takes it off, plus what HANGS from it, on change only',
-    /room\.setLid\?\.\(!lidOff\)/.test(bed)
+    /room\.setLid\?\.\(!lidOff, lidOff \? \(room\.residentIds\?\.\(\) \?\? null\) : null\)/.test(bed)
       && /setHangers\(lidOff\)/.test(bed)
       && /chandelier\|pendant/.test(bed)
       && /if \(lidOff !== perf\.lidOff\)/.test(bed));
+  /*
+   * 🚨 **AND IT COMES OFF ONLY OVER THE RUNNER'S OWN ROOMS.** `party-loop.md`'s "Do not" #1 is
+   * NARROWED here, not repealed: a roof off over the whole house lets the shared screen read
+   * over walls into rooms the runner has never entered, which is the guide's private map
+   * arriving by another route. `CRITIC-LEDGER` round 8 raised exactly this and John answered it.
+   * The scope is residency's own set, so it cannot drift from what the camera can actually see.
+   */
+  t('F11c2d · and only over the rooms residency admits — never the whole house',
+    /room\.setLid\?\.\(false, ids\)/.test(bed)
+      && /const ids = room\.residentIds\?\.\(\) \?\? null;/.test(bed)
+      && /if \(key !== perf\.lidScope\)/.test(bed));
   t('F11c2b · the roof lifts BEFORE the eye reaches it — the threshold is under a storey',
     Number.isFinite(lidLift) && lidLift > PERSPECTIVE_RIG.chase.height && lidLift < STOREY - 1.0,
     `LID_LIFT_H ${lidLift}m under a ${STOREY}m storey`);
