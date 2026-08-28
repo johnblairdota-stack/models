@@ -104,7 +104,7 @@ All referenced scripts exist — 28 of them as of 2026-08-28, the four newest be
 | Self-vote on the lynch ballot | `6fa0ae4`, `f4800bc` | `vote-table.mjs:108`, `party-night.mjs:191`, `:560` | ✅ locked |
 | Border doorways opening into void | `ee9f161` | `party-warm.mjs:2157` — `voidOpen===0 && outsideOpen===0` across 24 seeds | ✅ locked |
 | Props clipping into doorway apertures | `ee9f161` | `party-warm.mjs:2163` (+ `W34e` control) | ✅ locked |
-| **Smash target hidden behind furniture** | — | **none** | 🚨 **unguarded — "I couldn't see the painting" can come straight back** |
+| **Smash target hidden behind furniture** | — | `target-sight.mjs`, **red on the shipped arm, out of the CI chain on purpose** | 🚨 **guarded at last, and it REPRODUCES: 24/64 seeds bury the painting, worst case 13% visible** |
 | **Eight name tags bury each other — 97% of one name** | — | `tag-census.mjs` T7, **red on the shipped arm and out of the CI chain on purpose** | 🚨 **measured, unfixed — the fix is inside a locked rule and needs John** |
 | sitLock TDZ crash on walk-in | `105b77d` | `_sit_in_chair.mjs:195`, `party-warm.mjs:2105` | ⚠️ locked by **string-index grep on source order**, not runtime. Renaming an identifier passes the gate and reintroduces the TDZ. |
 | Missing nominate window after Debrief | `e94b308` | `party-night.mjs:639-644` | ✅ locked |
@@ -167,8 +167,10 @@ All three verified to fail when reverted. Full suite after: **`npm run build` cl
 
 3. **Commit the redesign pack.** It is not in the repo *and not on John's PC either* — see §6.
    Only the design canvas survives. This is the one item that is losing information every day.
-4. **A smash-target visibility gate** — the last live-found bug class with no regression net.
-   "I couldn't see the painting, it was behind the furniture" can come straight back.
+4. ~~A smash-target visibility gate~~ — **built 2026-08-28 as `harness/target-sight.mjs`, and it
+   caught the bug rather than clearing it.** What is open now is the FIX, not the gate: a shared
+   slot between `follow-bed.js:611` and `furn-layout.js:238`, a `vitrine` whose drawn half (0.651)
+   exceeds its inset (0.62), and `planPasses` asking the region graph for doors it cannot see.
 5. **Decide Verdict.** Grow the wire to it, or drop it from `RUNDOWN_BEATS`. Either is fine;
    advertising a beat that never lights is not. `episode-order`'s `WIRE_MISSING` names it so the
    choice stays visible.

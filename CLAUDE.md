@@ -134,9 +134,23 @@ file is deliberately NOT in `gates:party`**, because a red gate in the chain red
 it is a finding with a measurement behind it. The fix moves where the tag floats relative to the
 head, which is inside the locked tag rule below — **John's call, not a refactor.**
 
-Known unguarded: **smash-target visibility.** Nothing asserts a mission target is visible or
-reachable, so "the painting was behind the furniture" can silently come back. This is the last
-live-found bug class with no regression net.
+**Smash-target visibility is guarded now, and the guard is RED** (2026-08-28). It was the last
+live-found bug class with no regression net; `harness/target-sight.mjs` is the net, it is pure
+node and runs 64 seeds in ~2s, and it reproduces the bug rather than clearing it: **24 of 64
+seeds place a prop's body through the mission painting**, worst case **13% of the painting
+visible from anywhere you could swing at it**. Two placers own one slot and neither knows —
+`follow-bed.js:611` hangs the painting at `space.z0 + 0.22`, `furn-layout.js:238` puts a cam-wall
+prop at the same coordinate, character for character — and the `vitrine` is inset 0.62 with a
+drawn half of 0.651, so its body reaches behind the wall line. Separately, ~2% of nights seal the
+mission room outright: `pickPlanSeed`'s `planPasses` asks the region graph, which cannot see a
+door lost one stage later. **Not in `gates:party` until the shipped arm is green** — a red gate in
+the chain reddens every push. Same standing as `tag-census.mjs`.
+
+The definition it settled on is worth knowing before arguing with it: visibility and reachability
+are ONE question here, because the smash is a ray with a finite `far`, and the runner has no
+pitch control at all — `follow-bed.js`'s driven branch passes `{move, run, aimYaw}` and never
+`aimPitch`, so a phone-driven runner is pinned at −0.06 rad all night. The swing is one shallow
+fan, not a sweepable cone.
 
 ## Working style
 

@@ -179,6 +179,8 @@ camera      33.01, 1.92, 33.13 · 9.23 m from centre
 |---|---|---|
 | F11 tags collide | **5 overlapping pairs; worst buries 73% of the smaller tag**, second 59% | **confirmed, worse than it read** |
 | F11 scale inverted | 29.4px → 58.2px = **1.98×** | **overstated** — real, but under 2×, not the ~3× claimed |
+| F11 tags collide, **re-measured across the whole ring** | `tag-census.mjs`, 82 camera positions: nothing culled, cropped, occluded or shrunk — all 8 plates in frame every time, scale within 0.001 of the clamp, smallest 29.4px. **Worst burial 97%; only 4-6 of 8 names readable with room to spare, anywhere.** | **confirmed and generalised** — it is packing, not an angle: 1238px of plate against 861px of arc. **John's call 2026-08-28: leave it.** The seat tab and the nominee board carry the identity that matters. |
+| The nominee `!` marks are wildly different sizes | `accusation-beat.mjs` AB6, 8 marks in one frame at 3.92–12.80 m: **146.9px → 76.2px = 1.93×, and `tagDistK` predicts 1.93×** — every mark within 0.1% of prediction. Smallest 76px against a 24px floor. | **WITHDRAWN.** I read ~4× off a PNG by eye and was wrong. The instrument's own first pass was wrong too, by 21.8%, until it was corrected: a sprite under `sizeAttenuation` sizes along the **camera's up axis** and falls off with **view-space depth**, not world +Y and Euclidean distance, and both errors grow toward the frame edge where the near chairs sit. Nothing is illegible; it is the clamp behaving as designed past 8 m. |
 | F13 camera inside the ring | camera **9.23 m** from centre, ring reaches **4.63 m** | **FALSE — withdrawn** |
 
 **F13 was an impression and it was wrong.** The camera is outside the chair circle by a factor
