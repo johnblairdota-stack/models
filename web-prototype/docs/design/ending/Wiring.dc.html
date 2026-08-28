@@ -13,7 +13,7 @@
   </style>
 </helmet>
 
-<div style="width: 1600px; height: 1000px; background: #0c0a08; color: #f3ece3; overflow: hidden; display: flex; flex-direction: column; padding: 26px 30px 24px;">
+<div style="width: 1600px; height: 1000px; background: #0c0a08; color: #f3ece3; overflow: hidden; display: flex; flex-direction: column; gap: 16px; padding: 26px 30px 24px;">
 
   <div style="flex: 0 0 auto;">
     <div style="font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: #f5a14a; font-weight: 700;">The slice</div>
@@ -26,14 +26,14 @@
        §2 states the consequence flatly: "Nothing ever ends a session." `EPISODE_CAP` is 5 and
        nothing enforces it; `foldWin` is called only from the OFFLINE `playEpisode` that gates
        use. The live path, `enterExecution()`, never folds the win at all. -->
-  <div style="flex: 0 0 auto; margin-top: 22px; padding: 16px 18px 18px; border-radius: 12px; background: #12100c;">
+  <div style="flex: 0 0 auto; padding: 16px 18px 18px; border-radius: 12px; background: #12100c;">
     <div style="display: flex; align-items: center; gap: 10px;">
       <span style="font-size: 11px; letter-spacing: .26em; text-transform: uppercase; font-weight: 700; color: #8a7d70;">Today</span>
       <span style="font-size: 15px; color: #ff8a7a;">the chain closes on itself — nothing ever ends a session</span>
     </div>
     <div style="margin-top: 14px; display: flex; align-items: center; gap: 8px;">
       <div style="padding: 9px 15px; border-radius: 8px; background: #161310; font-size: 15px; font-weight: 700; color: #8a7d70;">execution</div>
-      <svg width="34" height="12" viewBox="0 0 34 12" fill="none" aria-hidden="true"><path d="M0 6h27M22 1.5 27.5 6 22 10.5" stroke="#4b423a" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <svg width="34" height="12" viewBox="0 0 34 12" fill="none" aria-hidden="true"><path d="M0 6h27M22 1.5 27.5 6 22 10.5" stroke="#8a7d70" stroke-opacity=".55" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <div style="padding: 9px 15px; border-radius: 8px; background: #161310; font-size: 15px; font-weight: 700; color: #8a7d70;">casting</div>
       <div style="margin-left: 14px; padding: 7px 14px; border-radius: 999px; border: 1px dashed rgba(255,138,122,.4); font-size: 14px; color: #ff8a7a;">verdict sits on the rail as a dead grey chip</div>
       <div style="margin-left: 8px; padding: 7px 14px; border-radius: 999px; border: 1px dashed rgba(255,138,122,.4); font-size: 14px; color: #ff8a7a;">reunion has no beat, no view, no caller</div>
@@ -45,7 +45,7 @@
        walk already expects. Reunion cannot join `AFTER_RUN_NEXT` — that chain is per-episode —
        so `progressShow`'s verdict case branches on the OUTCOME. That branch is the first
        conditional edge in the whole wire, and it is the only genuinely new control flow here. -->
-  <div style="flex: 0 0 auto; margin-top: 14px; padding: 16px 18px 18px; border-radius: 12px; background: #12100c; border: 1px solid rgba(245,161,74,.22);">
+  <div style="flex: 0 0 auto; padding: 16px 18px 18px; border-radius: 12px; background: #12100c; border: 1px solid rgba(245,161,74,.22);">
     <div style="display: flex; align-items: center; gap: 10px;">
       <span style="font-size: 11px; letter-spacing: .26em; text-transform: uppercase; font-weight: 700; color: #f5a14a;">After</span>
       <span style="font-size: 15px; color: #a89884;">one new beat, and the wire's first conditional edge</span>
@@ -60,26 +60,26 @@
 
       <div style="margin-left: 10px; display: flex; flex-direction: column; gap: 8px;">
         <div style="display: flex; align-items: center; gap: 8px;">
-          <svg width="30" height="12" viewBox="0 0 30 12" fill="none" aria-hidden="true"><path d="M0 6h23M18 1.5 23.5 6 18 10.5" stroke="#4b423a" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <svg width="30" height="12" viewBox="0 0 30 12" fill="none" aria-hidden="true"><path d="M0 6h23M18 1.5 23.5 6 18 10.5" stroke="#8a7d70" stroke-opacity=".55" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span style="font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: #8a7d70; font-weight: 700;">Renewed</span>
           <div style="padding: 7px 14px; border-radius: 8px; background: #161310; font-size: 15px; font-weight: 700; color: #8a7d70;">casting</div>
         </div>
         <div style="display: flex; align-items: center; gap: 8px;">
-          <svg width="30" height="12" viewBox="0 0 30 12" fill="none" aria-hidden="true"><path d="M0 6h23M18 1.5 23.5 6 18 10.5" stroke="#9ff2c8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <span style="font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: #9ff2c8; font-weight: 700;">Finale / Cancelled</span>
-          <div style="padding: 7px 16px; border-radius: 8px; background: rgba(159,242,200,.13); border: 1px solid #9ff2c8; font-size: 15px; font-weight: 800; color: #9ff2c8;">reunion <span style="font-weight: 600; color: #a89884;">4 min</span></div>
+          <svg width="30" height="12" viewBox="0 0 30 12" fill="none" aria-hidden="true"><path d="M0 6h23M18 1.5 23.5 6 18 10.5" stroke="#f5a14a" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span style="font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: #f5a14a; font-weight: 700;">Finale / Cancelled</span>
+          <div style="padding: 7px 16px; border-radius: 8px; background: rgba(245,161,74,.13); border: 1px solid #f5a14a; font-size: 15px; font-weight: 800; color: #f5a14a;">reunion <span style="font-weight: 600; color: #a89884;">4 min</span></div>
         </div>
       </div>
     </div>
 
     <div style="margin-top: 16px; display: flex; align-items: center; gap: 10px;">
       <div style="padding: 7px 14px; border-radius: 8px; background: #161310; font-size: 14px; font-weight: 700; color: #8a7d70;">host: skip to reunion</div>
-      <svg width="30" height="12" viewBox="0 0 30 12" fill="none" aria-hidden="true"><path d="M0 6h23M18 1.5 23.5 6 18 10.5" stroke="#4b423a" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <svg width="30" height="12" viewBox="0 0 30 12" fill="none" aria-hidden="true"><path d="M0 6h23M18 1.5 23.5 6 18 10.5" stroke="#8a7d70" stroke-opacity=".55" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <span style="font-size: 15px; color: #a89884;">emits <span style="color: #f3ece3; font-weight: 700;">host.skip</span> → <span style="color: #f3ece3; font-weight: 700;">ABANDONED</span> — rule W6 already anticipates it, and nothing has ever emitted it</span>
     </div>
   </div>
 
-  <div style="flex: 1 1 auto; min-height: 0; margin-top: 16px; display: flex; gap: 12px;">
+  <div style="flex: 1 1 auto; min-height: 0; display: flex; gap: 12px;">
 
     <!-- ═══════ ALREADY BUILT AND ALREADY GATED ═══════
          This column is why the slice is cheap. `reunion.js` has no product caller but is fully
@@ -120,7 +120,7 @@
     </div>
   </div>
 
-  <div style="flex: 0 0 auto; margin-top: 14px; display: flex; align-items: center; gap: 14px;">
+  <div style="flex: 0 0 auto; display: flex; align-items: center; gap: 14px;">
     <span style="font-size: 11px; letter-spacing: .26em; text-transform: uppercase; font-weight: 700; color: #8a7d70;">Success condition</span>
     <span style="font-size: 17px; color: #f3ece3;">delete <span style="font-weight: 700; color: #f5a14a;">PHASE.VERDICT</span> from <span style="font-weight: 700;">episode-order</span>'s WIRE_MISSING — the gate's own stated finish line, written into it before the work began.</span>
   </div>
