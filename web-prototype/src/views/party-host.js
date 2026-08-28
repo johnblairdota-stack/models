@@ -1111,9 +1111,19 @@ export default async function partyHost({ params }) {
           board: counting ? '' : castBoard(client.lobby, votes, castWarm()),
         });
       } else {
-        // The role-card window: the room's own shape, instead of an empty ballroom.
+        /*
+         * The role-card window: the room's own shape, instead of an empty ballroom.
+         *
+         * ⚠️ **THE BALLOT BOARD IS ONLY DRAWN ONCE THERE ARE BALLOTS.** Its empty state —
+         * "No ballots yet — phones pick a runner and a guide." — landed directly under the
+         * lamps, all eight of which already say READING, and directly above the episode-1 note,
+         * at the same size and colour as it. Photographed at N=8: two unrelated grey lines
+         * reading as one paragraph broken by a mistake. The lamps are the answer to "has anyone
+         * sent one"; this board is the answer to "what did they send", and it has nothing to say
+         * until they have.
+         */
         body += castBoard(client.lobby, votes, castWarm());
-        body += ballotBoard(votes, names, recap, episode, castTiebreaks(votes, episode));
+        if (votes.length) body += ballotBoard(votes, names, recap, episode, castTiebreaks(votes, episode));
       }
       body += `<div class="actions">`;
       if (sendLeft != null) {

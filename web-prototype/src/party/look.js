@@ -610,7 +610,10 @@ export const SHOW_CHROME_CSS = `
       display:flex; flex-direction:column; align-items:center; gap:8px;
       transition:opacity .3s ease, border-color .3s ease; }
     .cast-lamp.on { opacity:1; border-color:var(--night-live); }
-    .cast-lamp .who { font-size:clamp(15px, 1.5vw, 20px); font-weight:800; line-height:1.1; }
+    /* One line, always. "Mary-Kate 3" wrapped to two and made its lamp taller than the other
+       seven, so a row built to read as one shape read as a ragged one — photographed at N=8. */
+    .cast-lamp .who { font-size:clamp(15px, 1.5vw, 20px); font-weight:800; line-height:1.1;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
     .cast-lamp .meta { font-size:10px; letter-spacing:.2em; text-transform:uppercase;
       font-weight:700; color:var(--night-dim); }
     .cast-lamp.on .meta { color:var(--night-live); }
