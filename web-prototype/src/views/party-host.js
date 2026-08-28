@@ -74,6 +74,88 @@ export function audioSilenced(params, nav) {
   return nav?.webdriver === true;
 }
 
+/* =============================================================================================
+ * 📺 **AN OPTIMISTIC BEAT IS A CLAIM, NOT A FACT — AND NOTHING EVER CHECKED IT.**
+ *
+ * Three places on this television move `ui.beat` before the server has said anything:
+ * `startNight` (casting), `sendThemIn` (expedition) and `setBeat` (the dev `]` key and the
+ * host's "Watch the run"). That is deliberate — a party screen that goes dead for a round trip
+ * on the biggest cut of the night reads as a crash — but every one of them was a ONE-WAY door.
+ *
+ * 🩸 THE REPRODUCTION — `harness/host-desync.mjs`, and `PRIME-TIME-STATE.md` §4 called this the
+ * desync "most likely to bite in a real session". `t:'episode'` is refused whenever the server
+ * holds no valid ballots (`net/party/local.mjs`, `if (!votes.length) return;`) and it says
+ * NOTHING when it refuses: no `show`, no error, no fanout of any kind. The television has
+ * already painted the expedition and set `ui.locked`:
+ *
+ *     THE TELEVISION SAYS : EXPEDITION   (locked)
+ *     EVERY PHONE WAS TOLD: CASTING
+ *     THE SERVER IS IN    : casting
+ *     fanouts to the TV after the send: 0
+ *
+ * And `ui.locked` was assigned in exactly one place and cleared in NONE, so the 3·2·1 could
+ * never arm again for the rest of the night — not on that casting round and not on any later
+ * one. The refusal reason is not the point: a send dropped because the socket was not OPEN
+ * (`PartyNightClient.send` is a silent no-op) and a handler that threw (every client message
+ * runs inside a try/catch that logs and drops) reach the same screen by different doors.
+ *
+ * ⚠️ **NOT "THE TV'S BEAT MUST MATCH THE SERVER'S PHASE".** It must not: `playEpisode` runs the
+ * whole offline episode ahead of the room, so `state.phase` legitimately reads VERDICT during a
+ * live expedition (`PRIME-TIME-STATE.md` §4, `show-beat`'s header). And "never paint a beat
+ * before the server answers" costs the 3·2·1 its cut, which is the one moment the room is
+ * looking at the screen. The invariant is narrower, and it is about TIME rather than content:
+ *
+ *   **A locally-set beat is provisional for `BEAT_CLAIM_MS`. Past that, the only beat this
+ *   television may show is the last one the SERVER named** — `client.beat`, which is written
+ *   from `t:'show'` and from nothing else, so the roll-back target is read off the wire rather
+ *   than remembered here.
+ *
+ * What it costs, stated plainly: a fanout slower than `BEAT_CLAIM_MS` buys one wrong repaint
+ * before the next `show` message corrects it, and a room that keeps refusing keeps re-arming
+ * the countdown (~7s a try) instead of hanging. Both are better than a locked screen.
+ * ============================================================================================= */
+
+/** How long this television may run ahead of the room. One repaint, not a night. */
+export const BEAT_CLAIM_MS = 4000;
+
+/**
+ * Beats from which a pair may be sent in. The server naming one is the end of the episode
+ * `ui.locked` was set for. The gate asserts every entry is a real `show.js` beat, so a rename
+ * reddens rather than silently killing the countdown for a whole night.
+ */
+export const UNLOCK_ON_BEATS = ['lobby', 'casting'];
+
+/**
+ * The whole decision, pure and exported — the gate drives THIS function against a real server
+ * and real sockets rather than grepping this file for a spelling.
+ *
+ * @param {object} o
+ * @param {{beat:string, until:number}|null} o.claim  the provisional beat, if one is outstanding
+ * @param {string} o.beat        what the television is showing
+ * @param {string} o.serverBeat  the last beat the server named (`client.beat`)
+ * @param {boolean} o.locked     an episode this television asked for is in flight
+ * @returns {{beat:string, locked:boolean, claim:object|null, rolledBack:boolean, unlocked:boolean}}
+ */
+export function resolveBeatClaim({ claim, beat, serverBeat, locked = false, now = Date.now() } = {}) {
+  const out = { beat, locked: !!locked, claim: claim || null, rolledBack: false, unlocked: false };
+  // No word from the server yet is not evidence against a claim — never roll back onto nothing.
+  if (typeof serverBeat !== 'string' || !serverBeat) return out;
+  if (out.claim && (beat === serverBeat || out.claim.beat !== beat)) {
+    out.claim = null;                       // confirmed, or overtaken by a later local beat
+  } else if (out.claim && now >= out.claim.until) {
+    out.beat = serverBeat;                  // it never came. Rejoin the room.
+    out.claim = null;
+    out.rolledBack = true;
+    out.locked = false;
+    out.unlocked = true;
+  }
+  if (out.locked && !out.claim && out.beat === serverBeat && UNLOCK_ON_BEATS.includes(serverBeat)) {
+    out.locked = false;                     // the room is back where a pair is cast — unlock.
+    out.unlocked = true;
+  }
+  return out;
+}
+
 export default async function partyHost({ params }) {
   injectNightSkin();
   markPartyReady();
@@ -133,6 +215,12 @@ export default async function partyHost({ params }) {
     refusals: [],
     /** Last pair set pushed into the mansion, so a links fanout on every tap does not churn it. */
     pairKey: '',
+    /**
+     * A beat painted before the server confirmed it: `{ beat, until }`, null when there is
+     * nothing outstanding. See `resolveBeatClaim` — this field is what makes the optimism
+     * recoverable, and `settleBeatClaim` is the only thing that clears it.
+     */
+    claim: null,
   };
 
   /**
@@ -179,6 +267,10 @@ export default async function partyHost({ params }) {
         ui.beat = m.beat;
         ui.runEnd = m.end || null;
         ui.showUntil = Number.isFinite(m.until) ? m.until : null;
+        // The server has spoken: settle any outstanding claim, and drop `locked` if the room is
+        // back on a beat a pair is cast from. Without this line `locked` was set once a night
+        // and cleared never, and the countdown died with it.
+        settleBeatClaim();
       }
       if (m.t === 'full') ui.err = 'The TV seat is taken. Close the other host tab, or pick a new room code.';
       /*
@@ -324,8 +416,43 @@ export default async function partyHost({ params }) {
     return { n: count, of: `of ${r.need} ready`, done: count >= r.need };
   }
 
-  function setBeat(beat) {
+  /**
+   * Paint a beat now and remember the server has not confirmed it. Every local beat change on
+   * this television goes through here; `settleBeatClaim` is the other half.
+   */
+  function claimBeat(beat) {
     ui.beat = beat;
+    ui.claim = { beat, until: Date.now() + BEAT_CLAIM_MS };
+  }
+
+  /**
+   * Reconcile against the server's last word. Returns true when the screen has to change.
+   *
+   * Called from the 250 ms clock and from every inbound `show` message, so a confirmation heals
+   * the claim on arrival and a refusal is caught by the clock even though the refusal itself is
+   * silent — there is no message to hang the recovery off, which is the whole problem.
+   */
+  function settleBeatClaim() {
+    const r = resolveBeatClaim({
+      claim: ui.claim, beat: ui.beat, serverBeat: client.beat, locked: ui.locked,
+    });
+    const changed = r.beat !== ui.beat || r.locked !== ui.locked;
+    ui.beat = r.beat;
+    ui.claim = r.claim;
+    ui.locked = r.locked;
+    if (r.rolledBack) {
+      // The pair never went in. Let the room try again rather than sit on a locked screen. The
+      // arming state is reset rather than re-armed here: `shouldArmCastSend` is the ONE rule for
+      // when a 3·2·1 may start, and a roll-back must not become a second one.
+      ui.sendArmed = false;
+      ui.sendUntil = 0;
+      ui.firstBallotAt = 0;
+    }
+    return changed;
+  }
+
+  function setBeat(beat) {
+    claimBeat(beat);
     client.send({ t: 'show', beat });
     paint();
   }
@@ -890,6 +1017,8 @@ export default async function partyHost({ params }) {
   function startClockTick() {
     if (ui.clockTimer) return;
     ui.clockTimer = setInterval(() => {
+      // First, because everything below it reads `ui.beat` and `ui.locked`.
+      if (settleBeatClaim()) { paint(); return; }
       maybeArmFromBackstop();
       paintReactStrip();
       const sendLeft = sendCountdownLeft();
@@ -930,7 +1059,7 @@ export default async function partyHost({ params }) {
     initAudio({ capture: audioSilent });
     client.send({ t: 'start' });
     client.send({ t: 'casting' });
-    ui.beat = 'casting';
+    claimBeat('casting');
     maybeIntros();
     paint();
   }
@@ -944,8 +1073,10 @@ export default async function partyHost({ params }) {
     ui.sendUntil = 0;
     ui.firstBallotAt = 0;
     client.send({ t: 'episode', opts: {} });
-    // Optimistic — the server fans expedition to every socket including this TV.
-    ui.beat = 'expedition';
+    // Optimistic — the server fans expedition to every socket including this TV. A CLAIM, not a
+    // fact: `t:'episode'` is refused in silence when the server holds no valid ballots, and this
+    // screen used to sit on a locked expedition for the rest of the night. See resolveBeatClaim.
+    claimBeat('expedition');
     paint();
   }
 

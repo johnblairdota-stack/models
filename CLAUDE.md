@@ -134,6 +134,23 @@ file is deliberately NOT in `gates:party`**, because a red gate in the chain red
 it is a finding with a measurement behind it. The fix moves where the tag floats relative to the
 head, which is inside the locked tag rule below — **John's call, not a refactor.**
 
+**A beat the TV paints for itself is provisional, and `ui.locked` had no way out** (2026-08-28).
+`party-host.js` set `ui.beat` locally at four sites and never checked the local ones came true, so
+a refused `t:'episode'` left the television on a locked EXPEDITION while every phone held CASTING,
+with no recovery path. **The half nobody had named is worse:** `ui.locked = true` was the only
+assignment in the file and nothing anywhere set it false, while both `armSendCountdown` and
+`maybeArmFromBackstop` bail on it — so **after the first pair of the night the 3·2·1 could never
+arm again and every later casting round waited out the server's 45s backstop.** Fixed by
+`resolveBeatClaim`: a locally-set beat is provisional for 4s, after which the only beat the TV may
+show is the last one the SERVER named, and the lock ends when the server names a beat a pair is
+cast from. The roll-back target is read off the wire, never remembered locally. Rejected: "the
+TV's beat must match the server's phase" (false by design — `playEpisode` runs ahead, so
+`state.phase` legitimately reads VERDICT during a live expedition) and "never paint before the
+server answers" (spends a round trip on the one cut of the night the room is watching).
+**The refusal reason is not the invariant** — three doors reach the same screen: the server
+refusing, the send never leaving (`PartyNightClient.send` is a silent no-op on a closed socket),
+and a throw inside `handleClient`'s try/catch. Gate: `host-desync`.
+
 **`t:'show'` is a door into a beat, not a repaint** (2026-08-28). It called `setShow` only, so the
 dev `]` key and the host's shipped "Watch the run" workaround could leave a room on a RECKONING
 screen the server was not in — `applyNominate` gates on `room.show` and lets the tap through,

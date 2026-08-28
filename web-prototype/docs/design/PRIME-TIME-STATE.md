@@ -80,9 +80,11 @@ N17c/N18.
 
 ## 4. TV / phone desync risks
 
-- **Optimistic host beats.** `party-host.js:534` and `:549` set `ui.beat` locally before the server
-  fans out. If `t:'episode'` early-returns (`local.mjs:813`), the TV sits on *expedition* with
-  `ui.locked=true` while every phone stays on *casting*, with no recovery path.
+- ~~**Optimistic host beats.**~~ **CLOSED 2026-08-28**, and it was carrying a second bug: `ui.locked`
+  was assigned once and cleared nowhere, so after the first pair of the night the 3·2·1 could never
+  arm again and every later casting round waited out the 45s server backstop. `resolveBeatClaim`
+  makes a locally-set beat provisional for 4s and then defers to the last beat the SERVER named.
+  Gate: `host-desync` (26 assertions, control red on 9).
 - **Stale-frame lobby drop.** `party-phone.js:344,465` still falls back to `frame.phase === 'LOBBY'`,
   so a late frame can drop a phone to the lobby sheet mid-beat. The comment at `:445` records this
   being fixed for talk beats only.
@@ -179,5 +181,6 @@ All three verified to fail when reverted. Full suite after: **`npm run build` cl
 7. **Delete the dead `room.js:34` `PHASES`** — five stale phases, imported nowhere, beside a
    `setPhase` that validates nothing.
 
-**And one thing the fixes did not touch:** the TV/phone desync risks in §4 are all still live.
-The optimistic-host-beat one (`party-host.js:534`) is the most likely to bite in a real session.
+**§4 is down to two.** The optimistic-host-beat risk — the one this document called the most
+likely to bite in a real session — is closed, with `host-desync` guarding it. Still live: the
+stale-frame lobby drop (`party-phone.js:344,465`) and two clocks on one screen.
