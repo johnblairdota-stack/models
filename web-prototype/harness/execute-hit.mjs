@@ -188,7 +188,7 @@ t('H7e · smashLook dents the shell and setLimbVisible is no longer a no-op on t
   && /setLimbVisible\?\.\('shoulderL', false\)/.test(introSrc)
   && /setLimbVisible\(socket, visible\)/.test(cloneFn)
   && /collapsed\.add/.test(cloneFn)
-  && !/setLimbVisible\(\) \{\}/.test(cloneFn));
+  && !/^\s*setLimbVisible\(\) \{\s*\}/m.test(cloneFn));
 
 /* ── H8 · grip lock ─────────────────────────────────────────────────────────────────────── */
 t('H8 · GRIP_MOUNT is John\'s measured lock — not a restale of 2.37',

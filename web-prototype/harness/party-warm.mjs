@@ -2469,6 +2469,13 @@ console.log('\nparty-warm — the lobby-warm night');
   const hitSrc = await readFile(new URL('../src/game/execute-hit.js', import.meta.url), 'utf8');
   const chromeSrc = await readFile(new URL('../src/party/follow.js', import.meta.url), 'utf8');
   const viewSrc = await readFile(new URL('../src/views/party-follow.js', import.meta.url), 'utf8');
+  /*
+   * ⚠️ The empty-body ban is scoped to `cloneMeshAvatar`, not the whole file.
+   * A historical note that literally wrote `setLimbVisible() {}` in a comment
+   * made W33t red on 43e9034 while both real implementations were already
+   * `setLimbVisible(socket, visible)`. A comment is not a stub.
+   */
+  const cloneFn = meshSrc.slice(meshSrc.indexOf('export function cloneMeshAvatar'));
   t('W33t · Execution hit — retarget, wreck, loose chair, last-look C, camera B/A',
     /function retargetSledge/.test(introSrc)
     && /function beginHit/.test(introSrc)
@@ -2479,8 +2486,8 @@ console.log('\nparty-warm — the lobby-warm night');
     && /THEIR EYES/.test(chromeSrc)
     && /setScissorTest\(true\)/.test(viewSrc)
     && /lastLook: \(\) => intro\?\.lastLook/.test(bedSrc)
-    && /setLimbVisible\(socket, visible\)/.test(meshSrc)
-    && !/setLimbVisible\(\) \{\}/.test(meshSrc)
+    && /setLimbVisible\(socket, visible\)/.test(cloneFn)
+    && !/^\s*setLimbVisible\(\) \{\s*\}/m.test(cloneFn)
     && !/settleClip/.test(introSrc.slice(introSrc.indexOf('function stepExecute'), introSrc.indexOf('function afterBodies'))));
 }
 
