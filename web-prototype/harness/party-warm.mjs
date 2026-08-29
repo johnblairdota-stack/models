@@ -2474,7 +2474,7 @@ console.log('\nparty-warm — the lobby-warm night');
     && /function beginHit/.test(introSrc)
     && /function breakChairOut/.test(introSrc)
     && /function fillExecuteB/.test(introSrc)
-    && /function lastLook/.test(introSrc)
+    && /lastLook\(\)/.test(introSrc)
     && /HIT_CONTACT = 0\.381/.test(hitSrc)
     && /THEIR EYES/.test(chromeSrc)
     && /setScissorTest\(true\)/.test(viewSrc)

@@ -1410,7 +1410,7 @@ export async function createMeshAvatar(opts = {}) {
  *
  * Intros need idle + walk + sit. Execution reuses the SAME `mountInHand` / `SWINGS` /
  * `GRIP_MOUNT` the runner already has — completing the clone's avatar API, not a second
- * hammer. Limb collapse used to be a no-op on the clone (`setLimbVisible() {}`); the
+ * hammer. Limb collapse used to be a no-op on the clone; the
  * lynch hit needs it so a smashed body can keep a socket collapsed after the mixer.
  * Materials are cloned before tinting so a red seat cannot recolour the runner.
  *
