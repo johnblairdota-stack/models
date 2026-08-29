@@ -25,6 +25,7 @@ import {
   contactMix, retargetHead, occupies, execCamMode,
   stepLastLook, lastLookLive, lastLookOnAir,
   wreckPose, chairTopple, chairEyeline, seatedAim,
+  wreckLook, wreckCam, talkCycleShots, talkShotAt, WRECK_SHOT, WRECK_LOOK_Y, WRECK_EYE_Y,
 } from '../src/game/execute-hit.js';
 import { SHOWRUNNER } from '../src/party/vote.js';
 import { readFileSync } from 'node:fs';
@@ -258,6 +259,70 @@ t('H10 · seatedAim is a visor-height torso when Head is missing',
     /r\.wreckAge/.test(introSrc)
     && /wreckedIds/.test(introSrc)
     && /chairLoose: exec\.looseChairs\.length > 0/.test(introSrc));
+}
+
+/* ── H12 · the wreck is standing set dressing after the plate ───────────────────────────── */
+{
+  /*
+   * John, dusk sit-down 29 Aug. He was not on the hit. Afterwards he never saw
+   * a robot on the floor or their chair. The wreck lived only while exec.phase
+   * was on; setExecute('','') handed the lens back to visor talk (~1.16 m)
+   * from outside the ring. A late watcher saw an empty gap. If the bed rebuilt,
+   * wrecked flags died and the dead sat living again.
+   *
+   * Proof the camera HOLDS the wreck after the plate: wreckLook is the same
+   * low pair B used on the hit (look = floor+0.42, eye = floor+0.78). A talk
+   * cycle with wreckage visits that plate. Visor talk is ~1.16 m — this is not
+   * that. applyWreck + wreckedSeen re-dress a rebuilt bed from public-dead ids.
+   */
+  const sitAt = { x: 3, y: 0, z: 0 };
+  const seat = { x: 3, y: 0, z: 0, rotY: 0 };
+  const held = wreckLook({ sitAt, seat, face: 0, cx: 0, cz: 0, floorY: 0 });
+  const visorTalkY = 1.16;
+  t('H12 · after the plate the wreck plate looks at floor body + toppled chair, not a visor',
+    held.look.y === WRECK_LOOK_Y
+    && held.eye.y === WRECK_EYE_Y
+    && held.body.y === 0
+    && held.look.y < 0.7
+    && held.eye.y < 1.0
+    && held.look.y < visorTalkY
+    && Math.hypot(held.body.x - held.chair.x, held.body.z - held.chair.z) > 0.3,
+    `look.y=${held.look.y} eye.y=${held.eye.y} visor=${visorTalkY}`);
+  t('H12b · B\'s settled hit camera is that same pair — one look, not a second system',
+    (() => {
+      const live = wreckCam({
+        body: { x: held.body.x, z: held.body.z },
+        chair: { x: held.chair.x, z: held.chair.z },
+        cx: 0, cz: 0, floorY: 0,
+      });
+      return live.look.y === held.look.y && live.eye.y === held.eye.y
+        && Math.abs(live.look.x - held.look.x) < 1e-9;
+    })());
+  const base = [
+    { name: 'pair', dur: 9.5, span: 0.55 },
+    { name: 'orbit', dur: 13.0, span: 1.55 },
+    { name: 'wide', dur: 11.0, span: 1.85 },
+    { name: 'push', dur: 9.0, span: 0.28 },
+    { name: 'across', dur: 12.0, span: 0.90 },
+  ];
+  const withWreck = talkCycleShots(base, true);
+  const names = [];
+  for (let t = 0; t < 80; t += 0.5) names.push(talkShotAt(t, withWreck).name);
+  t('H12c · a talk cycle with wreckage visits the wreck plate; without, it does not invent one',
+    names.includes(WRECK_SHOT.name)
+    && talkCycleShots(base, false).every((s) => s.name !== WRECK_SHOT.name)
+    && talkShotAt(base.reduce((s, x) => s + x.dur, 0) + 0.2, withWreck).name === WRECK_SHOT.name);
+  t('H12d · talkFrame holds that plate after exec.phase is off; applyWreck survives dispose',
+    /shot\.name === WRECK_SHOT\.name/.test(introSrc)
+    && /wreckLook\(/.test(introSrc)
+    && /function applyWreck/.test(introSrc)
+    && /wreckHeld: robots\.some/.test(introSrc)
+    && /wreckedSeen/.test(bedSrc)
+    && /rememberWrecked/.test(bedSrc)
+    && /applySeenWreck/.test(bedSrc)
+    && /wrecked: \[\.\.\.wreckedSeen\]/.test(bedSrc)
+    && !/function restoreLooseChair/.test(introSrc)
+    && !/parkSit\(exec\.victim\)/.test(introSrc));
 }
 
 if (fail) {

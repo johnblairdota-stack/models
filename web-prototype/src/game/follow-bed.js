@@ -1296,6 +1296,20 @@ export async function buildFollowBed(engine, opts = {}) {
   let intro = null;
   let introCast = null;
   let runnerName = null;
+  /*
+   * Wrecked public ids survive dispose. The hit is a one-beat stunt on the
+   * bed; a late watcher / talk rebuild must still find the floor body.
+   */
+  const wreckedSeen = new Set();
+  function rememberWrecked(ids) {
+    for (const id of ids || []) {
+      if (id) wreckedSeen.add(String(id));
+    }
+  }
+  function applySeenWreck() {
+    if (!intro || !wreckedSeen.size) return;
+    intro.applyWreck?.([...wreckedSeen]);
+  }
   const mission = {
     phase: painting ? 'seek' : 'none',
     room: gallery?.id ?? null,
@@ -2041,9 +2055,10 @@ export async function buildFollowBed(engine, opts = {}) {
         if (!intro && introCast.length) {
           intro = buildIntroBed(engine, {
             room, cast: introCast, materials: botMats, avatar, reelSight: reelToSight,
-            talk: true,
+            talk: true, wrecked: [...wreckedSeen],
           });
         }
+        applySeenWreck();
         mode = intro ? 'intros' : 'warm';
         return;
       }
@@ -2052,7 +2067,9 @@ export async function buildFollowBed(engine, opts = {}) {
         return;
       }
       if (c.kind === 'execute') {
+        if (c.target) rememberWrecked([c.target]);
         intro?.setExecute?.(c.executioner, c.target);
+        applySeenWreck();
         return;
       }
       if (c.kind === 'pair') {
@@ -2062,6 +2079,7 @@ export async function buildFollowBed(engine, opts = {}) {
       if (c.kind === 'intros') {
         introCast = (c.cast || []).slice(0, 8);
         if (!introCast.length) return;
+        rememberWrecked(c.wrecked);
         const ids = introCast.map((s) => String(s.id)).join('\0');
         const have = intro?.castIds?.()?.join('\0');
         if (intro && (have === ids || c.talk)) {
@@ -2078,11 +2096,12 @@ export async function buildFollowBed(engine, opts = {}) {
           if (!c.talk) intro?.dispose();
           intro = buildIntroBed(engine, {
             room, cast: introCast, materials: botMats, avatar, reelSight: reelToSight,
-            talk: !!c.talk,
+            talk: !!c.talk, wrecked: [...wreckedSeen],
           });
         }
         intro?.setNominees?.([]);
         intro?.setExecute?.('', '');
+        applySeenWreck();
         mode = 'intros';
         runner.root.visible = false;
         return;

@@ -28,7 +28,7 @@ import {
 } from '../party/show.js';
 import { NO_ONE, SHOWRUNNER } from '../party/vote.js';
 import { outcomeLine } from '../party/win.js';
-import { describeCastTiebreaks, livingFromPublic, previewCastTiebreaks, shouldArmCastSend } from '../party/ballot.js';
+import { deadIdsFromPublic, describeCastTiebreaks, livingFromPublic, previewCastTiebreaks, shouldArmCastSend } from '../party/ballot.js';
 import { MAX_PAIRS } from '../party/link.js';
 
 /** TV chrome 3·2·1 after every living ballot (or the 20s backstop), then `{ t: 'episode' }`. */
@@ -760,6 +760,26 @@ export default async function partyHost({ params }) {
     });
   }
 
+  /** Public-dead seats — standing wreckage the mansion must keep finding. */
+  function wreckedCueIds() {
+    return [...deadIdsFromPublic({
+      players: client.frame?.players,
+      events: client.events,
+    })];
+  }
+
+  function sendIntros({ talk = false } = {}) {
+    const cast = introCast();
+    if (!cast.length) return false;
+    const wrecked = wreckedCueIds();
+    return sendCue({
+      kind: 'intros',
+      cast,
+      ...(talk ? { talk: true } : {}),
+      ...(wrecked.length ? { wrecked } : {}),
+    });
+  }
+
   /**
    * Everything the mansion reports back: its bake progress, its first frame, the end of the
    * intros, and — during the run only — where the bodies are.
@@ -848,10 +868,9 @@ export default async function partyHost({ params }) {
      */
     if (ui.beat === 'expedition' || ui.beat === 'recap' || ui.beat === 'debrief') return;
     if (ui.beat === 'reckoning' || ui.beat === 'vote' || ui.beat === 'execution') return;
-    const cast = introCast();
-    if (!cast.length) return;
+    if (!introCast().length) return;
     ui.introsSent = true;
-    sendCue({ kind: 'intros', cast });
+    sendIntros();
     armIntrosWatchdog();
   }
 
@@ -890,13 +909,12 @@ export default async function partyHost({ params }) {
   function cueSitDown({ retry = false } = {}) {
     if (!shouldSit()) return;
     if (ui.sitCued && !retry) return;
-    const cast = introCast();
-    if (!cast.length) return;
+    if (!introCast().length) return;
     if (ui.cuedRunner) {
       sendCue({ kind: 'idle' });
       ui.cuedRunner = null;
     }
-    ui.sitCued = sendCue({ kind: 'intros', cast, talk: true });
+    ui.sitCued = sendIntros({ talk: true });
   }
 
   function cueNominees() {

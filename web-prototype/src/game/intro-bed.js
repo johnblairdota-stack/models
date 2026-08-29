@@ -22,6 +22,7 @@ import {
   HIT_CONTACT, HIT_SLACK, SHOW_CONTACT_S,
   LAST_LOOK, contactMix, retargetHead, occupies, execCamMode,
   stepLastLook, wreckPose, chairTopple, chairEyeline, seatedAim,
+  wreckCam, wreckLook, talkCycleShots, talkShotAt, WRECK_SHOT,
 } from './execute-hit.js';
 
 export {
@@ -138,21 +139,23 @@ function clampInSpace(v, space, pad = 0.85) {
  * loop does not allocate. Always from OUTSIDE the ring — the chairs read as a circle.
  * Look is robots (a pair, a body, the opposite visor), never the empty rug centre.
  */
-function talkFrame(robots, clock, cx, cz, radius, space, eye, look) {
-  const n = Math.max(1, robots.length);
-  const wraps = Math.floor(Math.max(0, clock) / TALK_CYCLE);
-  let t = Math.max(0, clock) - wraps * TALK_CYCLE;
-  let idx = 0;
-  for (let i = 0; i < TALK_SHOTS.length; i++) {
-    if (t < TALK_SHOTS[i].dur) { idx = i; break; }
-    t -= TALK_SHOTS[i].dur;
-  }
-  const shot = TALK_SHOTS[idx];
-  const u = THREE.MathUtils.clamp(t / shot.dur, 0, 1);
-  const focus = (wraps * TALK_SHOTS.length + idx) % n;
-  const a = robots[focus];
-  const b = robots[(focus + 1) % n] || a;
-  const far = robots[(focus + Math.max(1, Math.floor(n / 2))) % n] || a;
+function talkFrame(robots, clock, cx, cz, radius, space, eye, look, floorY = 0) {
+  const wreckedBots = robots.filter((r) => r.wrecked);
+  const livingBots = robots.filter((r) => !r.wrecked);
+  const pool = livingBots.length ? livingBots : robots;
+  const shots = talkCycleShots(TALK_SHOTS, wreckedBots.length > 0);
+  const n = Math.max(1, pool.length);
+  const cycle = shots.reduce((s, x) => s + x.dur, 0);
+  const wraps = Math.floor(Math.max(0, clock) / cycle);
+  const shot = talkShotAt(clock, shots);
+  const shotI = Math.max(0, shots.findIndex((s) => s === shot));
+  let t = Math.max(0, clock) - wraps * cycle;
+  for (let i = 0; i < shotI; i++) t -= shots[i].dur;
+  const u = THREE.MathUtils.clamp(t / Math.max(0.01, shot.dur), 0, 1);
+  const focus = (wraps * shots.length + shotI) % n;
+  const a = pool[focus];
+  const b = pool[(focus + 1) % n] || a;
+  const far = pool[(focus + Math.max(1, Math.floor(n / 2))) % n] || a;
   const out = ringOut(radius, space);
   const r = radius + out;
   /*
@@ -161,7 +164,7 @@ function talkFrame(robots, clock, cx, cz, radius, space, eye, look) {
    * the group instead of looping one arc forever.
    */
   let walked = wraps * 1.15;
-  for (let i = 0; i < idx; i++) walked += TALK_SHOTS[i].span;
+  for (let i = 0; i < shotI; i++) walked += shots[i].span;
   walked += shot.span * u;
   const ang = walked + focus * ((Math.PI * 2) / n) * 0.08;
   const bob = Math.sin(clock * 0.21) * 0.07;
@@ -196,6 +199,20 @@ function talkFrame(robots, clock, cx, cz, radius, space, eye, look) {
     const pushR = THREE.MathUtils.lerp(r, radius + 1.25, u);
     eye.set(cx + Math.sin(pang) * pushR, EYE_Y - u * 0.08, cz + Math.cos(pang) * pushR);
     look.set(ax, 1.16, az);
+  } else if (shot.name === WRECK_SHOT.name && wreckedBots.length) {
+    /*
+     * Same low look B used on the hit. After setExecute('','') the phase is off
+     * and last-look C is gone — this plate is how Recap / Debrief / later
+     * Casting / Reunion still find the floor body and the toppled chair.
+     */
+    const w = wreckedBots[wraps % wreckedBots.length];
+    const cam = wreckLook({
+      sitAt: w.sitAt, seat: w.chair, face: w.face, cx, cz, floorY,
+    });
+    eye.set(cam.eye.x, cam.eye.y, cam.eye.z);
+    look.set(cam.look.x, cam.look.y, cam.look.z);
+    clampInSpace(eye, space);
+    return { index: robots.indexOf(w), shot: shot.name, ang, r };
   } else {
     /* Across: look at the robot opposite. Their face, because they look inward. */
     const pang = Math.atan2(ax - cx, az - cz);
@@ -203,7 +220,7 @@ function talkFrame(robots, clock, cx, cz, radius, space, eye, look) {
     look.set(fx * 0.78 + ax * 0.22, 1.18, fz * 0.78 + az * 0.22);
   }
   clampInSpace(eye, space);
-  return { index: focus, shot: shot.name, ang, r };
+  return { index: robots.indexOf(a), shot: shot.name, ang, r };
 }
 
 /** Walk the camera along the outside arc at human speed; never lerp through the ring. */
@@ -381,7 +398,8 @@ export function ballroomOf(room) {
  * @param {object} [o.avatar]    the runner's already-loaded Meshy body, cloned per seat
  * @param {(eye,at)=>void} [o.reelSight]  `follow-bed.js`'s sight reel — see its use below
  */
-export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight, talk } = {}) {
+export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight, talk, wrecked } = {}) {
+  const wreckWant = new Set((wrecked || []).map((id) => String(id)).filter(Boolean));
   const scene = engine.scene;
   const rng = engine.rng;
   const space = ballroomOf(room);
@@ -514,13 +532,20 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
      * Talk beats skip the walk-in: the circle is already the picture. Casting intros still
      * process in from outside so the colour-and-flair beat has a beginning.
      */
-    if (talk) {
+    const deadAtSpawn = wreckWant.has(String(seat.id));
+    if (talk && !deadAtSpawn) {
       body.pos.copy(sitAt);
       body.facing = face;
       body.aimYaw = face;
       body.sitLock = true;
       body.root.visible = true;
       body.avatar?.playSit?.({ seatIndex: i, phase: sitPhase(i) });
+    } else if (deadAtSpawn) {
+      body.pos.copy(sitAt);
+      body.facing = face;
+      body.aimYaw = face;
+      body.sitLock = true;
+      body.root.visible = true;
     } else {
       body.pos.copy(start);
       const inward = Math.atan2(via.x - start.x, via.z - start.z);
@@ -545,12 +570,12 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       at,
       sitAt,
       via,
-      cleared: !!talk,
-      seated: !!talk,
+      cleared: !!(talk && !deadAtSpawn),
+      seated: !!(talk && !deadAtSpawn),
       eye,
       face,
-      arrived: !!talk,
-      t0: talk ? 0 : i * STAGGER,
+      arrived: !!(talk && !deadAtSpawn),
+      t0: (talk || deadAtSpawn) ? 0 : i * STAGGER,
     };
   });
 
@@ -655,7 +680,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
   }
 
   function fillTalkEye() {
-    return talkFrame(robots, clock, cx, cz, radius, space, _eye, _look);
+    return talkFrame(robots, clock, cx, cz, radius, space, _eye, _look, room.floorY ?? 0);
   }
 
   function fillIntroEye(r, hold) {
@@ -770,21 +795,18 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     const b = exec.victim;
     const floorY = room.floorY ?? 0;
     if (exec.hit && b) {
-      const bx = b.body.pos.x, bz = b.body.pos.z;
       const chair = exec.looseChairs.find((c) => c.index === b.seatIndex)?.mesh
         || exec.looseChairs[exec.looseChairs.length - 1]?.mesh;
-      const kx = chair ? chair.position.x : (b.chair?.x ?? bx);
-      const kz = chair ? chair.position.z : (b.chair?.z ?? bz);
-      _look.set((bx + kx) * 0.5, floorY + 0.42, (bz + kz) * 0.5);
-      const mx = _look.x - cx, mz = _look.z - cz;
-      const mlen = Math.hypot(mx, mz) || 1;
-      const ux = mx / mlen, uz = mz / mlen;
-      const tx = -uz, tz = ux;
-      _eye.set(
-        _look.x - ux * 2.35 + tx * 0.85,
-        floorY + 0.78,
-        _look.z - uz * 2.35 + tz * 0.85,
-      );
+      const cam = wreckCam({
+        body: { x: b.body.pos.x, z: b.body.pos.z },
+        chair: {
+          x: chair ? chair.position.x : (b.chair?.x ?? b.body.pos.x),
+          z: chair ? chair.position.z : (b.chair?.z ?? b.body.pos.z),
+        },
+        cx, cz, floorY,
+      });
+      _look.set(cam.look.x, cam.look.y, cam.look.z);
+      _eye.set(cam.eye.x, cam.eye.y, cam.eye.z);
       clampInSpace(_eye, space);
       return;
     }
@@ -1017,16 +1039,40 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     exec.hit = true;
     exec.hitAt = exec.t;
     exec.lastLook = stepLastLook(exec.lastLook, { armed: true, dead: true });
-    const v = exec.victim;
-    v.wrecked = true;
-    v.seated = false;
-    v.body.sitLock = true;
-    v.body.avatar?.playLoco?.();
-    smashLook(v);
-    breakChairOut(v.seatIndex);
-    setNomineeBang(v.bang, false);
-    if (v.tag) v.tag.visible = false;
+    applyWreck([exec.victim.seat.id], { live: true });
     void t;
+  }
+
+  /**
+   * Standing set dressing. Public-dead ids stay limp + broken chair after the
+   * execute plate, across dispose/rebuild. Skip the live execute target so the
+   * walk-up still has a seated accused until contact.
+   */
+  function applyWreck(ids, { live = false } = {}) {
+    const liveTarget = (!live && exec.phase !== 'off' && exec.victim)
+      ? String(exec.victim.seat.id) : null;
+    for (const raw of ids || []) {
+      const id = String(raw || '');
+      if (!id || id === liveTarget) continue;
+      const r = robotById(id);
+      if (!r) continue;
+      if (!r.wrecked) {
+        r.wrecked = true;
+        r.seated = false;
+        r.arrived = true;
+        r.cleared = true;
+        r.body.sitLock = true;
+        r.body.avatar?.playLoco?.();
+        smashLook(r);
+        breakChairOut(r.seatIndex);
+        setNomineeBang(r.bang, false);
+        if (r.tag) r.tag.visible = false;
+      }
+      r.wreckAge = Math.max(r.wreckAge || 0, 0.72);
+      for (const ch of exec.looseChairs) {
+        if (ch.index === r.seatIndex) ch.t = Math.max(ch.t, 0.62);
+      }
+    }
   }
 
   function stepWreck(r, dt, t) {
@@ -1283,6 +1329,8 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     mark: (targets) => { nominatedIds = targets; repaintTags(); },
   });
 
+  if (wreckWant.size) applyWreck([...wreckWant]);
+
   return {
     /** Which robot the camera is on, and what it is doing — for the lower-third and the drive. */
     focus() {
@@ -1482,6 +1530,12 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       skinned: [...nominatedIds],
     }),
 
+    /**
+     * Public-dead ids become standing wreckage. Safe after the plate
+     * (`exec.phase === 'off'`); skips the live accused so the walk-up still sits.
+     */
+    applyWreck: (ids) => applyWreck(ids),
+
     /** Harness hook: who is walking, whether they have swung, which phase. */
     executionReport: () => {
       const snap = contactSnapshot();
@@ -1506,6 +1560,15 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
         wreckedIds: robots.filter((r) => r.wrecked).map((r) => String(r.seat.id)),
         chairLoose: exec.looseChairs.length > 0,
         chairToppled: exec.looseChairs.some((c) => c.t > 0.15),
+        wreckHeld: robots.some((r) => r.wrecked) && exec.phase === 'off',
+        wreckTalk: (() => {
+          const w = robots.find((r) => r.wrecked);
+          if (!w) return null;
+          const cam = wreckLook({
+            sitAt: w.sitAt, seat: w.chair, face: w.face, cx, cz, floorY: room.floorY ?? 0,
+          });
+          return { lookY: cam.look.y, eyeY: cam.eye.y, shot: WRECK_SHOT.name };
+        })(),
         lastLook: exec.lastLook,
         cam: execCamMode({ showrunner: exec.showrunner }),
         contact: snap,

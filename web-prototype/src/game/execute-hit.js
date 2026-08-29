@@ -34,6 +34,17 @@ export const SHOW_CONTACT_S = 1.20;
 /** How long the wreck holds before it is only a plate. */
 export const WRECK_HOLD_S = 2.40;
 
+/**
+ * The wreck plate after the execute cue goes empty. Same low pair B used on
+ * the hit: look at limp body + loose chair, not a living visor (~1.16 m).
+ * Metres above the floor.
+ */
+export const WRECK_LOOK_Y = 0.42;
+export const WRECK_EYE_Y = 0.78;
+
+/** Talk-cycle plate. Only scheduled when someone on the bed is wrecked. */
+export const WRECK_SHOT = Object.freeze({ name: 'wreck', dur: 10.0, span: 0.70 });
+
 export const LAST_LOOK = Object.freeze({
   OFF: 'off',
   LIVE: 'live',
@@ -170,6 +181,69 @@ export function chairEyeline({ chair, cx = 0, cz = 0, height = 1.14 } = {}) {
     y,
     z: z + (iz / ilen) * 0.18,
   };
+}
+
+/**
+ * B's settled wreck camera, and the talk plate after `setExecute('','')`.
+ * `body` / `chair` are world XZ (live mesh or finished wreckPose / chairTopple).
+ */
+export function wreckCam({ body, chair, cx = 0, cz = 0, floorY = 0 } = {}) {
+  const bx = body?.x ?? 0;
+  const bz = body?.z ?? 0;
+  const kx = chair?.x ?? bx;
+  const kz = chair?.z ?? bz;
+  const look = {
+    x: (bx + kx) * 0.5,
+    y: floorY + WRECK_LOOK_Y,
+    z: (bz + kz) * 0.5,
+  };
+  const mx = look.x - cx;
+  const mz = look.z - cz;
+  const mlen = Math.hypot(mx, mz) || 1;
+  const ux = mx / mlen;
+  const uz = mz / mlen;
+  const tx = -uz;
+  const tz = ux;
+  return {
+    look,
+    eye: {
+      x: look.x - ux * 2.35 + tx * 0.85,
+      y: floorY + WRECK_EYE_Y,
+      z: look.z - uz * 2.35 + tz * 0.85,
+    },
+  };
+}
+
+/**
+ * Finished wreck + the plate that holds it. Used when the execute phase is
+ * off — a late watcher, Recap / Debrief / Casting / Reunion — so the director
+ * finds the floor body instead of an empty chair gap.
+ */
+export function wreckLook({ sitAt, seat, face = 0, cx = 0, cz = 0, floorY = 0 } = {}) {
+  const body = wreckPose({ sitAt, face, u: 1, cx, cz, floorY });
+  const chair = chairTopple({ seat: seat || sitAt, u: 1, cx, cz });
+  return { ...wreckCam({ body, chair, cx, cz, floorY }), body, chair };
+}
+
+/** Talk cycle: append the wreck plate only when there is wreckage to hold. */
+export function talkCycleShots(base, hasWreck) {
+  const shots = Array.isArray(base) ? base : [];
+  if (!hasWreck) return shots;
+  if (shots.some((s) => s?.name === WRECK_SHOT.name)) return shots;
+  return [...shots, WRECK_SHOT];
+}
+
+/** Which named plate is on at `clock`. THREE-free so the gate can prove wreck is visited. */
+export function talkShotAt(clock, shots) {
+  const list = Array.isArray(shots) && shots.length ? shots : [WRECK_SHOT];
+  const cycle = list.reduce((s, x) => s + (Number(x.dur) || 0), 0) || 1;
+  let t = Math.max(0, Number(clock) || 0) % cycle;
+  for (let i = 0; i < list.length; i++) {
+    const dur = Number(list[i].dur) || 0;
+    if (t < dur) return list[i];
+    t -= dur;
+  }
+  return list[list.length - 1];
 }
 
 /** Fallback seated torso/head when the Head bone is missing (unit4h). */

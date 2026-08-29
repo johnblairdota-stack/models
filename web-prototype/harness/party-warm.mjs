@@ -246,6 +246,11 @@ console.log('\nparty-warm — the lobby-warm night');
     && FANOUT_KEYS.lynchResult.includes('executioner')
     && FANOUT_KEYS.lynchResult.includes('executed')
     && cueViolations({ kind: 'execute', executioner: 'p1', target: 'p2', role: 'PLANT' }).length > 0);
+  t('W3k · intros may name public-dead wreckage — ids, never a role',
+    cueViolations({ kind: 'intros', cast: CAST, wrecked: ['p8'] }).length === 0
+    && CUE_KEYS.intros.includes('wrecked')
+    && cueViolations({ kind: 'intros', cast: CAST, wrecked: ['p8'], alignment: 'evil' }).length > 0
+    && cueViolations({ kind: 'intros', cast: CAST, wrecked: [1] }).length > 0);
 }
 
 // ---- W4 · the pad and the world report -------------------------------------------------------
@@ -2511,6 +2516,15 @@ console.log('\nparty-warm — the lobby-warm night');
     && /dead-watch/.test(phoneSrc)
     && /iAmDead/.test(phoneSrc)
     && /seatedLivingIds\(\)/.test(hostSrc));
+  t('W33v · wreck is standing set dressing — talk plate + persist across dispose',
+    /WRECK_SHOT/.test(introSrc)
+    && /function applyWreck/.test(introSrc)
+    && /wreckedSeen/.test(bedSrc)
+    && /function sendIntros/.test(hostSrc)
+    && /wreckedCueIds/.test(hostSrc)
+    && /deadIdsFromPublic/.test(hostSrc)
+    && /wrecked: \[\.\.\.wreckedSeen\]/.test(bedSrc)
+    && !/function restoreLooseChair/.test(introSrc));
 }
 
 // ---- W34 · NO DOORWAY INTO VOID, AND NOTHING OCCUPIES THE APERTURE --------------------------

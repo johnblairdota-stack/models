@@ -669,7 +669,7 @@ export const CUE_KINDS = ['intros', 'run', 'move', 'shot', 'idle', 'noms', 'pair
 
 /** Per-kind closed allow-lists. A key not listed for its kind is a violation, not a pass. */
 export const CUE_KEYS = {
-  intros: ['kind', 'cast', 'talk'],
+  intros: ['kind', 'cast', 'talk', 'wrecked'],
   run: ['kind', 'runner', 'name', 'shell', 'accent', 'episode'],
   move: ['kind', 'x', 'y', 'lookX', 'lookY', 'run', 'swing', 'act'],
   shot: ['kind', 'shot'],
@@ -712,6 +712,13 @@ export function cueViolations(cue) {
     const cast = cue.cast;
     if (!Array.isArray(cast)) bad.push('cue.intros.cast:<not an array>');
     else cast.forEach((s, i) => scanKeys(s, CUE_CAST_KEYS, `cue.intros.cast[${i}]`, bad));
+    /* Public-dead ids — same facts as `player.executed` / `players[].alive`. Not a role. */
+    if (cue.wrecked != null) {
+      if (!Array.isArray(cue.wrecked)) bad.push('cue.intros.wrecked:<not an array>');
+      else if (cue.wrecked.some((id) => id != null && typeof id !== 'string')) {
+        bad.push('cue.intros.wrecked:<not strings>');
+      }
+    }
   }
   if (kind === 'noms') {
     const standing = cue.standing;

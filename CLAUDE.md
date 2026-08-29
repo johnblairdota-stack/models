@@ -149,9 +149,11 @@ decision, not a refactor.
   camera holds on the accused from outside the ring. Gate: `accusation-stage` E0–E6, `party-warm`
   W3j / W33o.
 - **Dead stay wreckage.** After the hit, the victim is not `parkSit`'d living, their chair
-  instance stays broken out, and episode-2 CASTING does not restore them. Alignment still hidden
-  until Reunion. Sofa 29 Aug: Ada sat back in chair 7, nameplate up, status READING. Gates:
-  `execute-hit` H11, `party-warm` W33u.
+  instance stays broken out, and episode-2 CASTING does not restore them. The wreck is standing
+  set dressing: public-dead ids re-apply across dispose, and a talk plate uses the same low look
+  as the hit so Recap / Debrief / later Casting / Reunion still find the floor body. Alignment
+  still hidden until Reunion. Sofa 29 Aug: Ada sat back; dusk sit-down never saw the floor body
+  after the plate. Gates: `execute-hit` H11 / H12, `party-warm` W33u / W33v.
 - **TV visual direction is B — "Rundown Rail"**: the night's schedule across the top, shrinking to
   a 22px ribbon during the Expedition.
 
