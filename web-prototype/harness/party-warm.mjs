@@ -1855,7 +1855,7 @@ console.log('\nparty-warm — the lobby-warm night');
     && /name: 'wide'/.test(introSrc)
     && /name: 'push'/.test(introSrc)
     && /function talkFrame/.test(introSrc)
-    && /if \(talk\)/.test(introSrc));
+    && /if \(talk && !deadAtSpawn\)/.test(introSrc));
   t('W31c · casting intros keep the snap-to-new-robot path; talk does not steal it',
     /if \(i !== focusI\)/.test(introSrc) && /INTRO_FOV/.test(introSrc)
     && /talking \? TALK_FOV : INTRO_FOV/.test(introSrc));
