@@ -28,7 +28,7 @@ import {
 } from '../party/show.js';
 import { NO_ONE, SHOWRUNNER } from '../party/vote.js';
 import { outcomeLine } from '../party/win.js';
-import { describeCastTiebreaks, previewCastTiebreaks, shouldArmCastSend } from '../party/ballot.js';
+import { describeCastTiebreaks, livingFromPublic, previewCastTiebreaks, shouldArmCastSend } from '../party/ballot.js';
 import { MAX_PAIRS } from '../party/link.js';
 
 /** TV chrome 3·2·1 after every living ballot (or the 20s backstop), then `{ t: 'episode' }`. */
@@ -1230,8 +1230,11 @@ export default async function partyHost({ params }) {
   }
 
   function seatedLivingIds() {
-    const dead = new Set((client.frame?.players || []).filter((p) => p.alive === false).map((p) => p.id));
-    return phones().map((s) => s.playerId).filter((id) => id && !dead.has(id));
+    return livingFromPublic({
+      ids: phones().map((s) => s.playerId),
+      players: client.frame?.players,
+      events: client.events,
+    });
   }
 
   function castTiebreaks(votes, episode) {
@@ -1475,7 +1478,7 @@ export default async function partyHost({ params }) {
         body += castStage({
           votes, names,
           tiebreaks: castTiebreaks(votes, episode),
-          board: counting ? '' : castBoard(client.lobby, votes, castWarm()),
+          board: counting ? '' : castBoard(client.lobby, votes, castWarm(), seatedLivingIds()),
         });
       } else {
         /*
@@ -1489,7 +1492,7 @@ export default async function partyHost({ params }) {
          * sent one"; this board is the answer to "what did they send", and it has nothing to say
          * until they have.
          */
-        body += castBoard(client.lobby, votes, castWarm());
+        body += castBoard(client.lobby, votes, castWarm(), seatedLivingIds());
         if (votes.length) body += ballotBoard(votes, names, recap, episode, castTiebreaks(votes, episode));
       }
       body += `<div class="actions">`;
@@ -2433,20 +2436,25 @@ function tallyBoard(tally) {
  * first cut doing exactly that — a progress line that could never progress. John's own note on
  * the load was that it had "no loading indicator"; this is that window, so this is where it goes.
  * ============================================================================================= */
-function castBoard(lobby, votes, warm) {
+function castBoard(lobby, votes, warm, livingIds) {
   const seats = (lobby?.seats || []).filter((s) => !s.isTV);
   if (!seats.length) return '';
   const baking = !!warm && warm.stage !== 'ready';
   const sent = new Set((votes || []).map((v) => v.voter));
-  const done = seats.filter((s) => sent.has(s.playerId)).length;
-  const all = done >= seats.length && seats.length > 0;
+  const living = Array.isArray(livingIds) ? new Set(livingIds.map(String)) : null;
+  const liveSeats = living
+    ? seats.filter((s) => s.playerId && living.has(String(s.playerId)))
+    : seats;
+  const done = liveSeats.filter((s) => sent.has(s.playerId)).length;
+  const all = done >= liveSeats.length && liveSeats.length > 0;
   const lamps = seats.map((s) => {
     const look = cleanLook(s) || DEFAULT_LOOK;
-    const on = sent.has(s.playerId);
-    return `<div class="cast-lamp${on ? ' on' : ''}">
+    const out = !!(living && s.playerId && !living.has(String(s.playerId)));
+    const on = !out && sent.has(s.playerId);
+    return `<div class="cast-lamp${on ? ' on' : ''}${out ? ' out' : ''}">
       <span class="seat-chip" style="background:${esc(look.accent)}">${esc(String((s.seat ?? 0) + 1))}</span>
       <div class="who">${esc(s.name)}</div>
-      <div class="meta">${on ? 'ballot in' : 'reading'}</div>
+      <div class="meta">${out ? 'out' : on ? 'ballot in' : 'reading'}</div>
     </div>`;
   }).join('');
   /*

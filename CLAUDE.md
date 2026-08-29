@@ -115,8 +115,10 @@ decision, not a refactor.
 - **Casting has a server-side backstop** (`CASTING_BACKSTOP_MS`, 45s) so a dead TV tab cannot hang
   the room, but an **empty ballot box still waits** — the net re-arms and never invents a pair.
   Gate: `party-night` N20a–e.
-- **The 3·2·1 arms on all ballots in, or a ~20s backstop** — never on the first ballot
-  (`CAST_BACKSTOP_MS`, gate `cast-ballot.mjs` B12b–B12e). Regressing this crushes big tables.
+- **The 3·2·1 arms on all *living* ballots in, or a ~20s backstop** — never the first ballot,
+  never a dead phone (`CAST_BACKSTOP_MS`, gate `cast-ballot.mjs` B12b–B12e / B14, `party-night`
+  N24). Sofa 29 Aug: Ada lynched in episode 1 still locked episode-2 CASTING on
+  "PHONES ARE PICKING".
 - **Empty ballots at capacity wait; they never invent a runner/guide pair** (gate
   `party-night.mjs:366`). Found live at N=8.
 - **No self-vote on the lynch ballot** — server coerces a self-pick to NO ONE (gate
@@ -146,6 +148,10 @@ decision, not a refactor.
   (clone `mountProp` / `playAttack`, grip lock untouched). Showrunner has no ninth body — the
   camera holds on the accused from outside the ring. Gate: `accusation-stage` E0–E6, `party-warm`
   W3j / W33o.
+- **Dead stay wreckage.** After the hit, the victim is not `parkSit`'d living, their chair
+  instance stays broken out, and episode-2 CASTING does not restore them. Alignment still hidden
+  until Reunion. Sofa 29 Aug: Ada sat back in chair 7, nameplate up, status READING. Gates:
+  `execute-hit` H11, `party-warm` W33u.
 - **TV visual direction is B — "Rundown Rail"**: the night's schedule across the top, shrinking to
   a 22px ribbon during the Expedition.
 

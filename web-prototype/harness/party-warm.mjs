@@ -2489,6 +2489,28 @@ console.log('\nparty-warm — the lobby-warm night');
     && /setLimbVisible\(socket, visible\)/.test(cloneFn)
     && !/^\s*setLimbVisible\(\) \{\s*\}/m.test(cloneFn)
     && !/settleClip/.test(introSrc.slice(introSrc.indexOf('function stepExecute'), introSrc.indexOf('function afterBodies'))));
+  /*
+   * John, sofa, 29 Aug. Episode-2 CASTING sat Ada back in chair 7 and waited
+   * on her empty ballot. W33u is the persist: clearExecute must not parkSit
+   * the victim, the chair stays broken out, and the living list that arms
+   * 3·2·1 reads public deaths. Alignment still hidden until Reunion.
+   */
+  const clearFn = introSrc.slice(introSrc.indexOf('function clearExecute'), introSrc.indexOf('function clearExecute') + 900);
+  const parkFn = introSrc.slice(introSrc.indexOf('function parkSit'), introSrc.indexOf('function parkSit') + 280);
+  const ballotSrc = await readFile(new URL('../src/party/ballot.js', import.meta.url), 'utf8');
+  t('W33u · executed stay wreckage; episode-2 casting living excludes them',
+    /if \(r\.wrecked\) return;/.test(parkFn)
+    && !/parkSit\(exec\.victim\)/.test(clearFn)
+    && !/wrecked\s*=\s*false/.test(clearFn)
+    && !/restoreLooseChair/.test(clearFn)
+    && /looseChairs:\s*\[\]/.test(introSrc)
+    && /function livingFromPublic/.test(ballotSrc)
+    && /function deadIdsFromPublic/.test(ballotSrc)
+    && /livingFromPublic\(\{/.test(hostSrc)
+    && /paintDeadWatch/.test(phoneSrc)
+    && /dead-watch/.test(phoneSrc)
+    && /iAmDead/.test(phoneSrc)
+    && /seatedLivingIds\(\)/.test(hostSrc));
 }
 
 // ---- W34 · NO DOORWAY INTO VOID, AND NOTHING OCCUPIES THE APERTURE --------------------------
@@ -2631,7 +2653,7 @@ console.log('\nparty-warm — the lobby-warm night');
    */
   t('W35c · casting draws the room while every player is head-down on a card',
     /function castBoard/.test(hostSrc)
-      && /body \+= castBoard\(client\.lobby, votes, castWarm\(\)\)/.test(hostSrc)
+      && /body \+= castBoard\(client\.lobby, votes, castWarm\(\), seatedLivingIds\(\)\)/.test(hostSrc)
       && SHOW_CHROME_CSS.includes('.cast-lamp'));
   /*
    * ⚠️ **THE FOOT OF THAT BOARD MUST BE A NUMBER THAT CAN MOVE.** The first cut printed

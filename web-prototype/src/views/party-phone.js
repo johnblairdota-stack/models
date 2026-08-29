@@ -14,7 +14,7 @@ import { injectNightSkin, markPartyReady, playerName } from '../party/night-skin
 import { ACCENTS, DEFAULT_LOOK, SHELLS, cleanLook, paintLook, robotFaceSvg } from '../party/look.js';
 import { REACTIONS, REACT_COOLDOWN_MS, REACT_MOOD, cleanReaction } from '../party/react.js';
 import { applyCastLock, applyCastTap, ballotFromCast, CAST_BLOCK_WHY, castPrompt, castRowBlock, castRowMark, freshCast, mergePublicNames, nominationPlayers, padlockSvg } from '../party/cast-ui.js';
-import { historyFromCastEvents } from '../party/ballot.js';
+import { deadIdsFromPublic, historyFromCastEvents } from '../party/ballot.js';
 import { linkBlock, mergeName, WHISPER_MAX, MAX_PAIRS, pairRemaining, isDone } from '../party/link.js';
 import { cardFor, faceDownHtml, mountRoleCard, premiereHtml } from '../party/rolecard.js';
 import { EVIL } from '../party/cast.js';
@@ -603,6 +603,10 @@ export default async function partyPhone({ params }) {
       // and the beat that opens casting has usually already arrived.
       body += premiereHtml();
     } else if (beat === 'casting' && !pair.runner) {
+      if (iAmDead(me, frame?.players, c.events)) {
+        paintDeadWatch(me, players);
+        return;
+      }
       paintCasting(nominees, me, frame?.airingEpisode || c.lobby?.airingEpisode || frame?.episode || 1);
       return;
     } else if (isTalkBeat(beat)) {
@@ -1277,6 +1281,30 @@ export default async function partyPhone({ params }) {
     if (jam) return 'The feed is being eaten. Call what you remember, not what you can see.';
     if (hunterMark) return 'A camera has the hunter. The red mark is live.';
     return 'No camera has the hunter. You are calling this one blind.';
+  }
+
+  /**
+   * Dead do not lock a runner. `me` is the welcome handshake — it has no `alive` —
+   * so this reads public facts: `players[].alive` and `player.executed` / `player.taken`.
+   * A missing frame falls back to lobby seats as alive:true; the log is what still
+   * keeps Ada off the episode-2 ballot. Nameplate stays face-down; no READING sheet.
+   */
+  function iAmDead(me, players, events) {
+    const id = me?.playerId;
+    if (!id) return false;
+    return deadIdsFromPublic({ players, events }).has(String(id));
+  }
+
+  function paintDeadWatch(me, players) {
+    stopPad();
+    const who = playerName(players, me.playerId) || me.name || 'You';
+    root.innerHTML = `
+      <div class="phone-top"><span>${esc(state.code.toUpperCase())}</span><span>${esc(who)} · out</span></div>
+      <div class="cast-step">
+        <h1>You are out.</h1>
+        <p class="hint">Your nameplate is face-down. Watch the TV. The living pick the next pair — you do not lock a ballot.</p>
+      </div>`;
+    root.dataset.castUi = 'dead-watch';
   }
 
   function paintCasting(players, me, episode) {

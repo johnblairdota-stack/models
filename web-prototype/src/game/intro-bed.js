@@ -270,6 +270,8 @@ export function scaleBallroomRug(room, space, radius) {
 }
 
 function parkSit(r) {
+  // Dead stay wreckage. Episode-2 casting used to sit Ada back in chair 7.
+  if (r.wrecked) return;
   r.body.pos.copy(r.sitAt);
   r.body.facing = r.face;
   r.body.aimYaw = r.face;
@@ -701,7 +703,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     hit: false,
     hitAt: 0,
     lastLook: LAST_LOOK.OFF,
-    looseChair: null,
+    looseChairs: [],
     sledgeLocal: null,
     smashed: false,
   };
@@ -769,7 +771,8 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     const floorY = room.floorY ?? 0;
     if (exec.hit && b) {
       const bx = b.body.pos.x, bz = b.body.pos.z;
-      const chair = exec.looseChair?.mesh;
+      const chair = exec.looseChairs.find((c) => c.index === b.seatIndex)?.mesh
+        || exec.looseChairs[exec.looseChairs.length - 1]?.mesh;
       const kx = chair ? chair.position.x : (b.chair?.x ?? bx);
       const kz = chair ? chair.position.z : (b.chair?.z ?? bz);
       _look.set((bx + kx) * 0.5, floorY + 0.42, (bz + kz) * 0.5);
@@ -880,7 +883,8 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
   }
 
   function breakChairOut(i) {
-    if (exec.looseChair || i == null || !circle.mesh) return;
+    if (i == null || !circle.mesh) return;
+    if (exec.looseChairs.some((c) => c.index === i)) return;
     const seat = circle.seats[i];
     if (!seat) return;
     hideChairInstance(i);
@@ -894,27 +898,16 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     mesh.position.set(seat.x, seat.y ?? 0, seat.z);
     mesh.rotation.set(0, seat.rotY || 0, 0);
     group.add(mesh);
-    exec.looseChair = { mesh, index: i, t: 0, seat };
-  }
-
-  function restoreLooseChair() {
-    if (!exec.looseChair) return;
-    const { mesh, index } = exec.looseChair;
-    mesh.removeFromParent();
-    showChairInstance(index);
-    restoreCollider(index);
-    exec.looseChair = null;
+    exec.looseChairs.push({ mesh, index: i, t: 0, seat });
   }
 
   function stepLooseChair(dt) {
-    if (!exec.looseChair) return;
-    exec.looseChair.t += dt;
-    const pose = chairTopple({
-      seat: exec.looseChair.seat, u: exec.looseChair.t / 0.62, cx, cz,
-    });
-    const mesh = exec.looseChair.mesh;
-    mesh.position.set(pose.x, pose.y, pose.z);
-    mesh.rotation.set(pose.rotX, pose.rotY, pose.rotZ);
+    for (const ch of exec.looseChairs) {
+      ch.t += dt;
+      const pose = chairTopple({ seat: ch.seat, u: ch.t / 0.62, cx, cz });
+      ch.mesh.position.set(pose.x, pose.y, pose.z);
+      ch.mesh.rotation.set(pose.rotX, pose.rotY, pose.rotZ);
+    }
   }
 
   function smashLook(r) {
@@ -1032,11 +1025,13 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     smashLook(v);
     breakChairOut(v.seatIndex);
     setNomineeBang(v.bang, false);
+    if (v.tag) v.tag.visible = false;
     void t;
   }
 
   function stepWreck(r, dt, t) {
-    const u = (exec.t - exec.hitAt) / 0.72;
+    r.wreckAge = (r.wreckAge || 0) + dt;
+    const u = r.wreckAge / 0.72;
     const limp = wreckPose({
       sitAt: r.sitAt, face: r.face, u, cx, cz, floorY: room.floorY ?? 0,
     });
@@ -1181,19 +1176,18 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
   }
 
   function clearExecute() {
-    if (exec.swinger) {
+    /*
+     * ⚠️ THE WRECK STAYS. Episode-2 casting used to send an empty execute cue, which
+     * parkSit'd Ada back into chair 7 with her nameplate up. Dead stay limp/smashed;
+     * the toppled chair stays a separate object. Alignment still hidden until Reunion.
+     */
+    if (exec.swinger && !exec.swinger.wrecked) {
       exec.swinger.body.avatar?.unmountProp?.();
       exec.swinger.body.sledge?.forget?.();
       restoreChair(exec.swinger.seatIndex);
       parkSit(exec.swinger);
     }
-    if (exec.victim && exec.victim !== exec.swinger) {
-      setNomineeBang(exec.victim.bang, false);
-      restoreSmash(exec.victim);
-      exec.victim.wrecked = false;
-      parkSit(exec.victim);
-    }
-    restoreLooseChair();
+    if (exec.victim) setNomineeBang(exec.victim.bang, false);
     exec.key = '';
     exec.phase = 'off';
     exec.t = 0;
@@ -1208,7 +1202,6 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     exec.hitAt = 0;
     exec.lastLook = LAST_LOOK.OFF;
     exec.sledgeLocal = null;
-    exec.smashed = false;
   }
 
   /*
@@ -1285,7 +1278,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     },
     rest: (seatIndex) => {
       const r = robots[seatIndex];
-      if (r) parkSit(r);
+      if (r && !r.wrecked) parkSit(r);
     },
     mark: (targets) => { nominatedIds = targets; repaintTags(); },
   });
@@ -1510,8 +1503,9 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
         wrecked: !!exec.victim?.wrecked,
         limp: !!(exec.hit && exec.victim && !exec.victim.seated),
         damaged: !!(exec.smashed || exec.victim?.smashed),
-        chairLoose: !!exec.looseChair,
-        chairToppled: !!(exec.looseChair && exec.looseChair.t > 0.15),
+        wreckedIds: robots.filter((r) => r.wrecked).map((r) => String(r.seat.id)),
+        chairLoose: exec.looseChairs.length > 0,
+        chairToppled: exec.looseChairs.some((c) => c.t > 0.15),
         lastLook: exec.lastLook,
         cam: execCamMode({ showrunner: exec.showrunner }),
         contact: snap,

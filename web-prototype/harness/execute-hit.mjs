@@ -13,6 +13,8 @@
  * H9–H11 B is the main camera; Showrunner degrades to A; C still plays
  * H12–H15 victim is limp/damaged, not a sit-idle; that chair is a separate toppled object
  * H16–H18 grip lock and Attack stay; clone setLimbVisible is real
+ * H11+   the wreck STAYS after the empty execute cue — Ada is not parkSit'd living
+ *        in episode-2 casting; her chair instance stays broken out of the InstancedMesh.
  *
  * Pure node. `src/game/execute-hit.js` is THREE-free. Picture files are source-read:
  * CI has no `npm install`.
@@ -220,6 +222,43 @@ t('H9c · accusation SETTLE still exists for Reckoning — only Execution stoppe
 /* ── H10 · seated aim fallback ──────────────────────────────────────────────────────────── */
 t('H10 · seatedAim is a visor-height torso when Head is missing',
   seatedAim({ sitAt: { x: 0, y: 0, z: 0 }, cx: 0, cz: 1 }).y === 1.12);
+
+/* ── H11 · the wreck survives the empty execute cue ─────────────────────────────────────── */
+{
+  /*
+   * John, sofa, 29 Aug, episode 2 of an 8-player night. Ada was lynched in episode 1
+   * (nameplate face-down, "Ada is out"). CASTING sat her back in chair 7, plate up,
+   * status READING, picking a runner. Cause: `clearExecute` restored smash, set
+   * wrecked=false, parkSit'd the victim, and put the chair instance back. The empty
+   * execute cue after the hit plate undid the wreck. Dead stay wreckage.
+   */
+  const clearFn = introSrc.slice(
+    introSrc.indexOf('function clearExecute'),
+    introSrc.indexOf('function clearExecute') + 1600,
+  );
+  const parkFn = introSrc.slice(
+    introSrc.indexOf('function parkSit'),
+    introSrc.indexOf('function parkSit') + 480,
+  );
+  t('H11 · clearExecute does not sit the victim back as living',
+    /function clearExecute/.test(clearFn)
+    && !/parkSit\(exec\.victim\)/.test(clearFn)
+    && !/wrecked\s*=\s*false/.test(clearFn)
+    && !/restoreSmash/.test(clearFn)
+    && !/restoreLooseChair/.test(clearFn));
+  t('H11b · parkSit itself refuses a wrecked robot',
+    /if \(r\.wrecked\) return;/.test(parkFn));
+  t('H11c · loose chairs persist as an array — the toppled instance is not restored',
+    /looseChairs:\s*\[\]/.test(introSrc)
+    && /function breakChairOut/.test(introSrc)
+    && /exec\.looseChairs\.push/.test(introSrc)
+    && /function stepLooseChair/.test(introSrc)
+    && !/function restoreLooseChair/.test(introSrc));
+  t('H11d · wreck age lives on the robot, so a cleared clock cannot sit them up',
+    /r\.wreckAge/.test(introSrc)
+    && /wreckedIds/.test(introSrc)
+    && /chairLoose: exec\.looseChairs\.length > 0/.test(introSrc));
+}
 
 if (fail) {
   console.log(`\nFAIL ${fail}  pass ${pass}\n`);

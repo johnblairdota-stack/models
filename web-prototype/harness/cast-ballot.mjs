@@ -15,7 +15,7 @@
  * decision rather than re-deriving it.
  */
 
-import { tallyCasting, refuse, seededPick, describeCastTiebreaks, historyFromCastEvents, previewCastTiebreaks, shouldArmCastSend, CAST_BACKSTOP_MS, castLockoutId } from '../src/party/ballot.js';
+import { tallyCasting, refuse, seededPick, describeCastTiebreaks, historyFromCastEvents, previewCastTiebreaks, shouldArmCastSend, CAST_BACKSTOP_MS, castLockoutId, deadIdsFromPublic, livingFromPublic } from '../src/party/ballot.js';
 
 let pass = 0, fail = 0;
 const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' · ' + d : ''}`); } else { fail++; console.log(`  FAIL ${n}${d ? ' · ' + d : ''}`); } return c; };
@@ -216,6 +216,42 @@ const NO_LOCK = { runner: null, guide: null };
       && castLockoutId({ runner: 'p1', guide: 'p2' }, 6, 'guide') === 'p2'
       && castLockoutId({ runner: 'p1', guide: 'p2' }, 3, 'runner') == null
       && castLockoutId({ runner: 'p1', guide: 'p2' }, 6, 'swap') == null);
+}
+
+// ---------------------------------------------------------------- B14 · dead phones are not the backstop
+{
+  /*
+   * John, sofa, 29 Aug, episode 2 / N=8. Ada was executed in episode 1. CASTING
+   * stuck on "PHONES ARE PICKING" because all eight phones — including Ada —
+   * were asked to lock a runner. Living majority / all-living-sent must arm
+   * 3·2·1. Ada's empty ballot is not the denominator.
+   */
+  const seated = ids(8);
+  const players = seated.map((id, i) => ({ id, alive: id !== 'p8' }));
+  const events = [{ type: 'player.executed', data: { id: 'p8' } }];
+  const living = livingFromPublic({ ids: seated, players, events });
+  const dead = deadIdsFromPublic({ players, events });
+  t('B14 · episode-2 living excludes the executed seat',
+    living.length === 7 && !living.includes('p8') && dead.has('p8'));
+  t('B14b · events alone still drop them when the frame is stale',
+    livingFromPublic({
+      ids: seated,
+      players: seated.map((id) => ({ id, alive: true })),
+      events,
+    }).length === 7);
+  t('B14c · player.taken is the same door as player.executed',
+    livingFromPublic({
+      ids: seated,
+      players: [],
+      events: [{ type: 'player.taken', data: { id: 'p8' } }],
+    }).join(',') === living.join(','));
+  const seven = living.map((v, i) => ({
+    voter: v, runner: living[(i + 1) % 7], guide: living[(i + 2) % 7],
+  }));
+  t('B14d · 7 living ballots arm 3·2·1 — a dead phone is not required',
+    shouldArmCastSend({ livingIds: living, votes: seven, firstBallotAt: 1000, now: 1000 }) === true);
+  t('B14e · counting the corpse as living is what stalls "PHONES ARE PICKING"',
+    shouldArmCastSend({ livingIds: seated, votes: seven, firstBallotAt: 1000, now: 1000 }) === false);
 }
 
 console.log(`\ncast-ballot: ${pass} passed, ${fail} failed`);

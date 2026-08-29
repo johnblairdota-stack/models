@@ -21,7 +21,7 @@ import {
 import { PHASE, SECONDS, EPISODE_CAP } from '../src/party/phases.js';
 import { missionFor, MISSION_PAINTING, MISSION_TABLE } from '../src/party/mission.js';
 import { RUN_END, CASTING_BACKSTOP_MS, readyNeeded } from '../src/party/show.js';
-import { CAST_BACKSTOP_MS } from '../src/party/ballot.js';
+import { CAST_BACKSTOP_MS, livingFromPublic, shouldArmCastSend } from '../src/party/ballot.js';
 import { ACCENTS, SHELLS, cleanLook } from '../src/party/look.js';
 import { applyCastLock, applyCastTap, ballotFromCast, CAST_BLOCK_WHY, castPrompt, castRowBlock, castRowMark, freshCast, mergePublicNames, nominationPlayers, publicName } from '../src/party/cast-ui.js';
 import { createRoom } from '../src/party/room.js';
@@ -222,6 +222,49 @@ t('N1c5 · episode 1 is the gallery painting; episode 2+ is the chapel table',
     otherVote.ok && otherVote.choice === living[1]
       && r.state.lynchVotes[living[0]] === living[1],
     JSON.stringify(otherVote));
+}
+
+{
+  /*
+   * John, sofa, 29 Aug, episode 2 / N=8. Ada lynched in episode 1 still sat in
+   * the living ballot. After execute, episodeLiving and the public living list
+   * must drop them, and 3·2·1 must arm on the living ballots alone.
+   */
+  const r = createRoom({ count: 8, castSeed: 1, worldSeed: 1, send: () => {}, emit: () => {} });
+  r.start();
+  r.playEpisode();
+  const seated = r.state.players.map((p) => p.id);
+  t('N24 · episode 1 opens with eight living', seated.length === 8 && r.episodeLiving().length === 8);
+  r.enterReckoning(seated);
+  const victim = seated[7];
+  r.nominatePlayer(seated[0], victim, seated);
+  r.nominatePlayer(seated[1], victim, seated);
+  r.enterVote(seated);
+  for (const id of seated) r.castLynchVote(id, victim, seated);
+  const result = r.closeVote();
+  const after = r.episodeLiving();
+  t('N24a · execute drops the victim from episodeLiving',
+    result.executed === victim && after.length === 7 && !after.includes(victim)
+      && r.state.players.find((p) => p.id === victim)?.alive === false,
+    JSON.stringify({ executed: result.executed, living: after }));
+  r.beginCasting();
+  const publicLiving = livingFromPublic({
+    ids: seated,
+    players: r.state.players,
+    events: r.log.all(),
+  });
+  t('N24b · episode-2 casting living excludes executed from public facts',
+    r.state.phase === 'CASTING'
+      && publicLiving.length === 7 && !publicLiving.includes(victim)
+      && r.episodeLiving().join(',') === publicLiving.join(','));
+  const votes = publicLiving.map((v, i) => ({
+    voter: v,
+    runner: publicLiving[(i + 1) % 7],
+    guide: publicLiving[(i + 2) % 7],
+  }));
+  t('N24c · 3·2·1 arms on all-living-sent — a dead phone is not the backstop',
+    shouldArmCastSend({ livingIds: publicLiving, votes, firstBallotAt: 1000, now: 1000 }) === true
+      && shouldArmCastSend({ livingIds: seated, votes, firstBallotAt: 1000, now: 1000 }) === false);
 }
 
 const host = await open(`${base}&host=1`);
