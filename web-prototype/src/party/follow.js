@@ -491,6 +491,25 @@ export const FOLLOW_CHROME_CSS = `
     /* No production graphic during warm/intros — a dim WARM · WALK lied on air. */
     #fl.pre .slug { opacity:0; }
     #fl .rec, #fl .third { transition: opacity .5s ease; }
+    /* C — last-look popup. THEIR EYES / victim name while live; OFF AIR / DEAD on the cut.
+       Hard-cut only: no fade, no linger. Token border, black matte. Never the full frame. */
+    #fl .lastlook { position:absolute; right:2.8%; bottom:11%; width:22%; aspect-ratio:16/9;
+      display:none; border:3px solid var(--night-bad); box-sizing:border-box;
+      background:rgba(0,0,0,0); overflow:hidden; }
+    #fl .lastlook.on, #fl .lastlook.cut { display:block; }
+    #fl .lastlook.cut { background:rgba(0,0,0,1); }
+    #fl .lastlook .ll-top { position:absolute; top:6px; left:8px; right:8px;
+      display:flex; align-items:center; gap:7px;
+      letter-spacing:.22em; text-transform:uppercase; font-size:10px; font-weight:800;
+      color:var(--night-ink); text-shadow:0 2px 8px rgba(0,0,0,.95); }
+    #fl .lastlook .ll-dot { width:8px; height:8px; border-radius:50%; background:var(--night-bad);
+      box-shadow:0 0 10px var(--night-bad); }
+    #fl .lastlook.cut .ll-dot { background:var(--night-soft); box-shadow:none; }
+    #fl .lastlook .ll-name { margin-left:auto; letter-spacing:.18em; }
+    #fl .lastlook .ll-dead { display:none; position:absolute; inset:0;
+      align-items:center; justify-content:center; font-size:clamp(18px, 2.4vw, 32px);
+      font-weight:800; letter-spacing:.28em; color:var(--night-ink); }
+    #fl .lastlook.cut .ll-dead { display:flex; }
     @keyframes fl-rec { 0%,100% { opacity:.25; } 50% { opacity:1; } }`;
 
 /** What the camera calls itself on air. One camera for now; the unlock ladder is a later slice. */

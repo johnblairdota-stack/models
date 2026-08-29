@@ -1,0 +1,188 @@
+/**
+ * execute-hit — THE LYNCH CONNECTS, in bare node.
+ *
+ * John, 29 Aug, after the dusk sit-down + LastLook board:
+ *
+ *   B is the show. C is a last-look box. The swing CONNECTS. The victim goes limp
+ *   and looks smashed. That chair instance topples on its own. The box hard-cuts
+ *   the instant they are dead.
+ *
+ * This file is the PLAN, not the picture. `intro-bed.js` owns the meshes, the
+ * retarget and the cameras. Gates import this without THREE — `.github/workflows/gates.yml`
+ * never `npm install`s.
+ *
+ * ⚠️ NO THREE, NO DOM, NO ENGINE.
+ *
+ * Why retarget the prop rather than swap Attack: `SWINGS[0]` is a floor chop
+ * (`contact: 0.381`, head ~0.37 m under the floor). Swapping the clip would
+ * restale the grip lock and invent a second hammer. Sliding the already-mounted
+ * sledge head onto the seated torso/head on the contact frame keeps `GRIP_MOUNT`
+ * and `Attack`. A miss is a bug; `occupies()` is the instrument.
+ */
+
+import { SHOWRUNNER } from '../party/vote.js';
+
+/** Attack clip's measured contact phase — must stay equal to `SWINGS[0].contact`. */
+export const HIT_CONTACT = 0.381;
+
+/** Metres. Same world point, not a kiss-through. */
+export const HIT_SLACK = 0.22;
+
+/** Showrunner has no body: fire the hit this long after rise, no ninth robot. */
+export const SHOW_CONTACT_S = 1.20;
+
+/** How long the wreck holds before it is only a plate. */
+export const WRECK_HOLD_S = 2.40;
+
+export const LAST_LOOK = Object.freeze({
+  OFF: 'off',
+  LIVE: 'live',
+  CUT: 'cut',
+  GONE: 'gone',
+});
+
+/**
+ * 0 at the start of the swing, 1 at/after contact. The bed lerps the sledge
+ * head toward the seated aim by this amount so the Attack floor-chop still
+ * plays and the HEAD still arrives on the visor.
+ */
+export function contactMix(phase, contact = HIT_CONTACT) {
+  const p = Number(phase);
+  const c = Number(contact);
+  if (!Number.isFinite(p) || p <= 0) return 0;
+  if (!Number.isFinite(c) || c <= 0) return p >= 1 ? 1 : 0;
+  if (p >= c) return 1;
+  return p / c;
+}
+
+/** World lerp of the sledge head toward the seated torso/head. */
+export function retargetHead(head, aim, mix) {
+  const m = Math.min(1, Math.max(0, Number(mix) || 0));
+  return {
+    x: head.x + (aim.x - head.x) * m,
+    y: head.y + (aim.y - head.y) * m,
+    z: head.z + (aim.z - head.z) * m,
+  };
+}
+
+export function occupies(head, torso, slack = HIT_SLACK) {
+  if (!head || !torso) return false;
+  const dx = head.x - torso.x;
+  const dy = head.y - torso.y;
+  const dz = head.z - torso.z;
+  return Math.hypot(dx, dy, dz) <= slack;
+}
+
+/**
+ * B is the main picture when a nominator walks. Showrunner (first nominator
+ * already taken — no ninth robot) degrades B to A: hold the accused from
+ * outside the ring. C still plays for the contact frame either way.
+ */
+export function execCamMode({ showrunner, executionerId } = {}) {
+  const id = executionerId == null ? '' : String(executionerId);
+  if (showrunner === true || id === SHOWRUNNER) return 'A';
+  return 'B';
+}
+
+/**
+ * Last-look C. Armed the moment the accused is on the block (walk-up + hit).
+ * HARD-CUTS on death — no fade, no linger. Off-air / black is one frame
+ * (`cut`), then the box is gone. `consumeCut` is the renderer's one-frame tick.
+ */
+export function stepLastLook(state, { armed = false, dead = false, consumeCut = false } = {}) {
+  const cur = state || LAST_LOOK.OFF;
+  if (cur === LAST_LOOK.GONE) return LAST_LOOK.GONE;
+  if (cur === LAST_LOOK.CUT) return consumeCut ? LAST_LOOK.GONE : LAST_LOOK.CUT;
+  if (cur === LAST_LOOK.LIVE) {
+    if (dead) return LAST_LOOK.CUT;
+    if (!armed) return LAST_LOOK.OFF;
+    return LAST_LOOK.LIVE;
+  }
+  if (armed && !dead) return LAST_LOOK.LIVE;
+  return LAST_LOOK.OFF;
+}
+
+export function lastLookLive(state) {
+  return state === LAST_LOOK.LIVE;
+}
+
+export function lastLookOnAir(state) {
+  return state === LAST_LOOK.LIVE || state === LAST_LOOK.CUT;
+}
+
+/**
+ * Kinematic un-sit. Body skids tangent + outward so the chair can go the
+ * other way. `u` is 0 at contact, 1 when the wreck has read.
+ */
+export function wreckPose({ sitAt, face = 0, u = 0, cx = 0, cz = 0, floorY = 0 } = {}) {
+  const k = Math.min(1, Math.max(0, Number(u) || 0));
+  const ease = k * k * (3 - 2 * k);
+  const ox = (sitAt?.x ?? 0) - cx;
+  const oz = (sitAt?.z ?? 0) - cz;
+  const olen = Math.hypot(ox, oz) || 1;
+  const ux = ox / olen;
+  const uz = oz / olen;
+  const tx = -uz;
+  const tz = ux;
+  return {
+    x: (sitAt?.x ?? 0) + ux * 0.52 * ease + tx * 0.38 * ease,
+    y: floorY,
+    z: (sitAt?.z ?? 0) + uz * 0.52 * ease + tz * 0.38 * ease,
+    facing: face + 1.35 * ease,
+    pitch: 0.28 * ease,
+    roll: 1.32 * ease,
+  };
+}
+
+/**
+ * Separate object. Outward + topple, no shared motion with the body.
+ * `u` is 0 at breakout, 1 when the chair has finished falling.
+ */
+export function chairTopple({ seat, u = 0, cx = 0, cz = 0 } = {}) {
+  const k = Math.min(1, Math.max(0, Number(u) || 0));
+  const ease = k * k * (3 - 2 * k);
+  const ox = (seat?.x ?? 0) - cx;
+  const oz = (seat?.z ?? 0) - cz;
+  const olen = Math.hypot(ox, oz) || 1;
+  const ux = ox / olen;
+  const uz = oz / olen;
+  const y0 = seat?.y ?? 0;
+  return {
+    x: (seat?.x ?? 0) + ux * 0.62 * ease,
+    y: y0 + 0.06 * Math.sin(Math.PI * ease) * (1 - ease),
+    z: (seat?.z ?? 0) + uz * 0.62 * ease,
+    rotX: 1.18 * ease,
+    rotY: (seat?.rotY ?? 0) + 0.55 * ease,
+    rotZ: 0.42 * ease,
+  };
+}
+
+/** Seated visor above the cushion, looking into the ring. C's eyeline. */
+export function chairEyeline({ chair, cx = 0, cz = 0, height = 1.14 } = {}) {
+  const x = chair?.x ?? 0;
+  const z = chair?.z ?? 0;
+  const y = (chair?.y ?? 0) + height;
+  const ix = cx - x;
+  const iz = cz - z;
+  const ilen = Math.hypot(ix, iz) || 1;
+  return {
+    x: x + (ix / ilen) * 0.18,
+    y,
+    z: z + (iz / ilen) * 0.18,
+  };
+}
+
+/** Fallback seated torso/head when the Head bone is missing (unit4h). */
+export function seatedAim({ sitAt, chair, cx = 0, cz = 0, height = 1.12 } = {}) {
+  const x = sitAt?.x ?? chair?.x ?? 0;
+  const z = sitAt?.z ?? chair?.z ?? 0;
+  const y0 = sitAt?.y ?? chair?.y ?? 0;
+  const ix = cx - x;
+  const iz = cz - z;
+  const ilen = Math.hypot(ix, iz) || 1;
+  return {
+    x: x + (ix / ilen) * 0.06,
+    y: y0 + height,
+    z: z + (iz / ilen) * 0.06,
+  };
+}

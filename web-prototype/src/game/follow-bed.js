@@ -1972,6 +1972,11 @@ export async function buildFollowBed(engine, opts = {}) {
      */
     accusationReport: () => intro?.accusationReport?.() ?? null,
 
+    /** 🔨 Execution hit: walk, contact, wreck, last-look. Public picture only. */
+    executionReport: () => intro?.executionReport?.() ?? null,
+    lastLook: () => intro?.lastLook?.() ?? { state: 'off', name: null, eye: null, at: null },
+    consumeLastLookCut: () => intro?.consumeLastLookCut?.() ?? 'off',
+
     /**
      * 🪑 **THE SEATED CIRCLE, ROW PER ROBOT — WITH THE PERFORMANCE ON THE ROW.**
      *

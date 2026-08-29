@@ -1410,8 +1410,9 @@ export async function createMeshAvatar(opts = {}) {
  *
  * Intros need idle + walk + sit. Execution reuses the SAME `mountInHand` / `SWINGS` /
  * `GRIP_MOUNT` the runner already has — completing the clone's avatar API, not a second
- * hammer. Limb collapse stays on the original. Materials are cloned before tinting so a
- * red seat cannot recolour the runner.
+ * hammer. Limb collapse used to be a no-op on the clone (`setLimbVisible() {}`); the
+ * lynch hit needs it so a smashed body can keep a socket collapsed after the mixer.
+ * Materials are cloned before tinting so a red seat cannot recolour the runner.
  *
  * @param {object} source  a `createMeshAvatar()` result
  * @param {object} [opts]
@@ -1458,6 +1459,10 @@ export function cloneMeshAvatar(source, opts = {}) {
   const hips = bones.Hips || null;
   const hipsRest = hips ? hips.position.clone() : null;
   const CLONE_H = 1.7;
+  const collapsed = new Set();
+  const applyCollapsed = () => {
+    for (const name of collapsed) bones[name]?.scale.setScalar(1e-4);
+  };
 
   /*
    * 🔨 **THE RUNNER'S SWING, ON THE TWIN — not a second rig.** `SWINGS` and `mountInHand`
@@ -1736,7 +1741,13 @@ export function cloneMeshAvatar(source, opts = {}) {
       walk.setEffectiveWeight(0);
       a.play();
     },
-    setLimbVisible() {},
+    setLimbVisible(socket, visible) {
+      for (const name of SOCKET_BONES[socket] ?? []) {
+        if (!bones[name]) continue;
+        if (visible) collapsed.delete(name); else collapsed.add(name);
+      }
+      applyCollapsed();
+    },
     /**
      * Leave the chair clip and become a walking body. Execution calls this AFTER the
      * stand transition and AFTER `body.pos` has been copied to the stand-mark, so
@@ -1907,6 +1918,7 @@ export function cloneMeshAvatar(source, opts = {}) {
           }
         }
         applyLean(1 - reactAmt);
+        applyCollapsed();
         return;
       }
       const speed = state.speed ?? 0;
@@ -1917,6 +1929,7 @@ export function cloneMeshAvatar(source, opts = {}) {
       if (swingAct && swingAct.getEffectiveWeight() > 0.05) {
         mixer.update(dt);
         if (hips && hipsRest) { hips.position.x = hipsRest.x; hips.position.z = hipsRest.z; }
+        applyCollapsed();
         return;
       }
       for (const a of Object.values(swingActions)) a.setEffectiveWeight(0);
@@ -1930,6 +1943,7 @@ export function cloneMeshAvatar(source, opts = {}) {
       walk.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / (ref || 1), 0.55, 1.65));
       mixer.update(dt);
       if (hips && hipsRest) { hips.position.x = hipsRest.x; hips.position.z = hipsRest.z; }
+      applyCollapsed();
     },
     dispose() {
       mixer.stopAllAction();

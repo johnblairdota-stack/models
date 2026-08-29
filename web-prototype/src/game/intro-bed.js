@@ -16,8 +16,13 @@ import { SHOWRUNNER } from '../party/vote.js';
 import { SWING_DUR } from './sledge.js';
 import {
   ACCUSE, ACCUSE_CLIPS, EXECUTE,
-  createAccusationStage, planExecute, settleClip,
+  createAccusationStage, planExecute,
 } from './accusation-stage.js';
+import {
+  HIT_CONTACT, HIT_SLACK, SHOW_CONTACT_S,
+  LAST_LOOK, contactMix, retargetHead, occupies, execCamMode,
+  stepLastLook, wreckPose, chairTopple, chairEyeline, seatedAim,
+} from './execute-hit.js';
 
 export {
   ACCUSE, ACCUSE_CLIPS, EXECUTE,
@@ -582,8 +587,21 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     }
     body.root.visible = true;
 
+    if (r.wrecked) {
+      stepWreck(r, dt, t);
+      return;
+    }
+
     if (exec.phase !== 'off' && exec.swinger === r) {
       driveExecute(r, dt, t);
+      if (exec.phase === 'swing' || exec.phase === 'hold') {
+        retargetSledge();
+        const sledge = r.body.sledge;
+        const clockPhase = (exec.t - exec.swingAt) / Math.max(0.01, SWING_DUR);
+        const phase = (sledge?.phase ?? 0) > 0 ? sledge.phase : clockPhase;
+        const contact = sledge?.contactPhase ?? HIT_CONTACT;
+        if (!exec.hit && phase >= contact) beginHit(t);
+      }
       return;
     }
 
@@ -678,10 +696,21 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     walked: false,
     swung: false,
     swingAt: 0,
-    victimSettled: false,
     chairDropped: false,
     showrunner: false,
+    hit: false,
+    hitAt: 0,
+    lastLook: LAST_LOOK.OFF,
+    looseChair: null,
+    sledgeLocal: null,
+    smashed: false,
   };
+  const _headW = new THREE.Vector3();
+  const _aimW = new THREE.Vector3();
+  const _deltaW = new THREE.Vector3();
+  const _tmpW = new THREE.Vector3();
+  const _hideM = new THREE.Matrix4();
+  const _seatM = new THREE.Matrix4();
 
   function robotById(id) {
     if (!id || id === SHOWRUNNER) return null;
@@ -689,17 +718,12 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
   }
 
   function dropChair(i) {
-    const box = chairBoxes[i];
-    if (!box || !space?.colliders) return;
-    const idx = space.colliders.indexOf(box);
-    if (idx >= 0) space.colliders.splice(idx, 1);
+    dropCollider(i);
     exec.chairDropped = true;
   }
 
   function restoreChair(i) {
-    const box = chairBoxes[i];
-    if (!box || !space?.colliders) return;
-    if (!space.colliders.includes(box)) space.colliders.push(box);
+    restoreCollider(i);
     exec.chairDropped = false;
   }
 
@@ -732,6 +756,335 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       cz + uz * (radius + out) + tz * 1.15,
     );
     clampInSpace(_eye, space);
+  }
+
+  /**
+   * B — one unbroken ride: crane off the talk arc, walk-up inside the ring,
+   * time-dip + whip a few degrees off impact, settle wide-low on limp body
+   * one way and loose chair the other. A (Showrunner) stays on fillExecuteEye.
+   */
+  function fillExecuteB() {
+    const a = exec.swinger;
+    const b = exec.victim;
+    const floorY = room.floorY ?? 0;
+    if (exec.hit && b) {
+      const bx = b.body.pos.x, bz = b.body.pos.z;
+      const chair = exec.looseChair?.mesh;
+      const kx = chair ? chair.position.x : (b.chair?.x ?? bx);
+      const kz = chair ? chair.position.z : (b.chair?.z ?? bz);
+      _look.set((bx + kx) * 0.5, floorY + 0.42, (bz + kz) * 0.5);
+      const mx = _look.x - cx, mz = _look.z - cz;
+      const mlen = Math.hypot(mx, mz) || 1;
+      const ux = mx / mlen, uz = mz / mlen;
+      const tx = -uz, tz = ux;
+      _eye.set(
+        _look.x - ux * 2.35 + tx * 0.85,
+        floorY + 0.78,
+        _look.z - uz * 2.35 + tz * 0.85,
+      );
+      clampInSpace(_eye, space);
+      return;
+    }
+    if ((exec.phase === 'swing' || exec.phase === 'hold') && a && b) {
+      const px = a.body.pos.x, pz = a.body.pos.z;
+      const qx = b.body.pos.x, qz = b.body.pos.z;
+      _look.set((px + qx) * 0.5, 1.05, (pz + qz) * 0.5);
+      const dx = qx - px, dz = qz - pz;
+      const d = Math.hypot(dx, dz) || 1;
+      const fx = dx / d, fz = dz / d;
+      const tx = -fz, tz = fx;
+      const swingU = Math.min(1, Math.max(0, (exec.t - exec.swingAt) / Math.max(0.12, SWING_DUR)));
+      const dip = 0.55 * (1 - swingU);
+      const whip = exec.hit ? 0.22 : 0.08;
+      _eye.set(
+        (px + qx) * 0.5 + tx * 2.05 + fx * whip,
+        0.92 + dip,
+        (pz + qz) * 0.5 + tz * 2.05 + fz * whip,
+      );
+      clampInSpace(_eye, space);
+      return;
+    }
+    if (a && b) {
+      const px = a.body.pos.x, pz = a.body.pos.z;
+      const qx = b.body.pos.x, qz = b.body.pos.z;
+      _look.set((px + qx) * 0.5, LOOK_Y - 0.15, (pz + qz) * 0.5);
+      const dx = qx - px, dz = qz - pz;
+      const d = Math.hypot(dx, dz) || 1;
+      const fx = dx / d, fz = dz / d;
+      const tx = -fz, tz = fx;
+      _eye.set(
+        (px + qx) * 0.5 + tx * 2.40 - fx * 0.35,
+        EYE_Y - 0.25,
+        (pz + qz) * 0.5 + tz * 2.40 - fz * 0.35,
+      );
+      clampInSpace(_eye, space);
+      return;
+    }
+    fillExecuteEye();
+  }
+
+  function whipCam(dt) {
+    const k = exec.hit ? (1 - Math.exp(-7.2 * dt)) : (1 - Math.exp(-3.1 * dt));
+    engine.camera.position.lerp(_eye, k);
+    _lookLive.lerp(_look, k);
+  }
+
+  function boneWorld(root, name, out) {
+    if (!root) return null;
+    let found = null;
+    root.traverse?.((o) => { if (o.isBone && o.name === name) found = o; });
+    if (!found) return null;
+    root.updateWorldMatrix(true, true);
+    found.getWorldPosition(out);
+    return out;
+  }
+
+  function victimAim(v) {
+    if (!v) return null;
+    if (boneWorld(v.body?.root, 'Head', _aimW) || boneWorld(v.body?.root, 'Neck', _aimW)) {
+      return _aimW;
+    }
+    const aim = seatedAim({ sitAt: v.sitAt, chair: v.chair, cx, cz });
+    _aimW.set(aim.x, aim.y, aim.z);
+    return _aimW;
+  }
+
+  function hideChairInstance(i) {
+    if (!circle.mesh || i == null) return;
+    _hideM.makeScale(0, 0, 0);
+    circle.mesh.setMatrixAt(i, _hideM);
+    circle.mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  function showChairInstance(i) {
+    if (!circle.mesh || i == null) return;
+    const seat = circle.seats[i];
+    if (!seat) return;
+    _seatM.makeRotationY(seat.rotY || 0);
+    _seatM.setPosition(seat.x, seat.y ?? 0, seat.z);
+    circle.mesh.setMatrixAt(i, _seatM);
+    circle.mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  function dropCollider(i) {
+    const box = chairBoxes[i];
+    if (!box || !space?.colliders) return;
+    const idx = space.colliders.indexOf(box);
+    if (idx >= 0) space.colliders.splice(idx, 1);
+  }
+
+  function restoreCollider(i) {
+    const box = chairBoxes[i];
+    if (!box || !space?.colliders) return;
+    if (!space.colliders.includes(box)) space.colliders.push(box);
+  }
+
+  function breakChairOut(i) {
+    if (exec.looseChair || i == null || !circle.mesh) return;
+    const seat = circle.seats[i];
+    if (!seat) return;
+    hideChairInstance(i);
+    dropCollider(i);
+    const mat = circle.mesh.material?.clone?.() ?? circle.mesh.material;
+    if (mat && mat !== circle.mesh.material) ownedMaterials.push(mat);
+    const mesh = new THREE.Mesh(circle.mesh.geometry, mat);
+    mesh.name = `exec-chair-${i}`;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.position.set(seat.x, seat.y ?? 0, seat.z);
+    mesh.rotation.set(0, seat.rotY || 0, 0);
+    group.add(mesh);
+    exec.looseChair = { mesh, index: i, t: 0, seat };
+  }
+
+  function restoreLooseChair() {
+    if (!exec.looseChair) return;
+    const { mesh, index } = exec.looseChair;
+    mesh.removeFromParent();
+    showChairInstance(index);
+    restoreCollider(index);
+    exec.looseChair = null;
+  }
+
+  function stepLooseChair(dt) {
+    if (!exec.looseChair) return;
+    exec.looseChair.t += dt;
+    const pose = chairTopple({
+      seat: exec.looseChair.seat, u: exec.looseChair.t / 0.62, cx, cz,
+    });
+    const mesh = exec.looseChair.mesh;
+    mesh.position.set(pose.x, pose.y, pose.z);
+    mesh.rotation.set(pose.rotX, pose.rotY, pose.rotZ);
+  }
+
+  function smashLook(r) {
+    if (!r?.body?.root || r.smashed) return;
+    r.smashed = true;
+    exec.smashed = true;
+    r.body.root.traverse((o) => {
+      if (!o.isMesh && !o.isSkinnedMesh) return;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      const next = mats.map((m) => {
+        if (!m) return m;
+        if (!m.userData._preSmash) {
+          m.userData._preSmash = {
+            color: m.color?.clone?.() ?? null,
+            emissive: m.emissive?.clone?.() ?? null,
+            roughness: m.roughness,
+            metalness: m.metalness,
+            emissiveIntensity: m.emissiveIntensity,
+          };
+        }
+        if (m.color) m.color.multiplyScalar(0.42);
+        if (m.emissive) m.emissive.multiplyScalar(0.12);
+        if ('roughness' in m) m.roughness = Math.min(1, (m.roughness ?? 0.5) + 0.38);
+        if ('metalness' in m) m.metalness = Math.max(0, (m.metalness ?? 0.2) - 0.18);
+        if ('emissiveIntensity' in m) m.emissiveIntensity = (m.emissiveIntensity ?? 1) * 0.15;
+        return m;
+      });
+      o.material = Array.isArray(o.material) ? next : next[0];
+    });
+    r.body.avatar?.setLimbVisible?.('shoulderL', false);
+  }
+
+  function restoreSmash(r) {
+    if (!r?.body?.root || !r.smashed) return;
+    r.smashed = false;
+    r.body.avatar?.setLimbVisible?.('shoulderL', true);
+    r.body.root.traverse((o) => {
+      if (!o.isMesh && !o.isSkinnedMesh) return;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) {
+        const pre = m?.userData?._preSmash;
+        if (!pre) continue;
+        if (pre.color && m.color) m.color.copy(pre.color);
+        if (pre.emissive && m.emissive) m.emissive.copy(pre.emissive);
+        if ('roughness' in m && pre.roughness != null) m.roughness = pre.roughness;
+        if ('metalness' in m && pre.metalness != null) m.metalness = pre.metalness;
+        if ('emissiveIntensity' in m && pre.emissiveIntensity != null) {
+          m.emissiveIntensity = pre.emissiveIntensity;
+        }
+        delete m.userData._preSmash;
+      }
+    });
+    r.body.root.rotation.x = 0;
+    r.body.root.rotation.z = 0;
+  }
+
+  function applySmashBones(r, u) {
+    const k = Math.min(1, Math.max(0, u));
+    r.body?.root?.traverse?.((o) => {
+      if (!o.isBone) return;
+      if (o.name === 'Head') {
+        o.rotation.x += 0.42 * k;
+        o.rotation.z += 0.55 * k;
+      } else if (o.name === 'RightUpLeg') {
+        o.rotation.z -= 0.62 * k;
+      } else if (o.name === 'LeftUpLeg') {
+        o.rotation.x += 0.28 * k;
+      }
+    });
+  }
+
+  function retargetSledge() {
+    const sledge = exec.swinger?.body?.sledge;
+    const v = exec.victim;
+    if (!sledge?.head || !sledge.root || !v || exec.hit) return;
+    const root = sledge.root;
+    const gripped = exec.swinger.body.avatar?.setGrip?.();
+    if (!gripped) {
+      if (!exec.sledgeLocal && root.parent) {
+        exec.sledgeLocal = { pos: root.position.clone(), quat: root.quaternion.clone() };
+      }
+      if (exec.sledgeLocal) {
+        root.position.copy(exec.sledgeLocal.pos);
+        root.quaternion.copy(exec.sledgeLocal.quat);
+      }
+    }
+    root.updateWorldMatrix(true, true);
+    sledge.head.updateWorldMatrix(true, false);
+    _headW.setFromMatrixPosition(sledge.head.matrixWorld);
+    const aim = victimAim(v);
+    if (!aim) return;
+    const clockPhase = (exec.t - exec.swingAt) / Math.max(0.01, SWING_DUR);
+    const phase = sledge.phase > 0 ? sledge.phase : clockPhase;
+    const mix = contactMix(phase, sledge.contactPhase ?? HIT_CONTACT);
+    const want = retargetHead(_headW, aim, mix);
+    _deltaW.set(want.x - _headW.x, want.y - _headW.y, want.z - _headW.z);
+    if (_deltaW.lengthSq() < 1e-8 || !root.parent) return;
+    _tmpW.setFromMatrixPosition(root.matrixWorld).add(_deltaW);
+    root.parent.worldToLocal(_tmpW);
+    root.position.copy(_tmpW);
+    root.updateWorldMatrix(true, true);
+    sledge.head.updateWorldMatrix(true, false);
+  }
+
+  function beginHit(t) {
+    if (exec.hit || !exec.victim) return;
+    exec.hit = true;
+    exec.hitAt = exec.t;
+    exec.lastLook = stepLastLook(exec.lastLook, { armed: true, dead: true });
+    const v = exec.victim;
+    v.wrecked = true;
+    v.seated = false;
+    v.body.sitLock = true;
+    v.body.avatar?.playLoco?.();
+    smashLook(v);
+    breakChairOut(v.seatIndex);
+    setNomineeBang(v.bang, false);
+    void t;
+  }
+
+  function stepWreck(r, dt, t) {
+    const u = (exec.t - exec.hitAt) / 0.72;
+    const limp = wreckPose({
+      sitAt: r.sitAt, face: r.face, u, cx, cz, floorY: room.floorY ?? 0,
+    });
+    const body = r.body;
+    body.sitLock = true;
+    body.pos.set(limp.x, limp.y, limp.z);
+    body.facing = limp.facing;
+    body.aimYaw = limp.facing;
+    body.update(dt, t, { move: { x: 0, y: 0 }, run: false, aimYaw: limp.facing, aimPitch: 0 });
+    body.root.rotation.x = limp.pitch;
+    body.root.rotation.z = limp.roll;
+    applySmashBones(r, Math.min(1, Math.max(0, u)));
+  }
+
+  function lastLookPose() {
+    const v = exec.victim;
+    if (!v) return null;
+    const eye = chairEyeline({ chair: v.chair, cx, cz });
+    let at = { x: cx, y: 1.35, z: cz };
+    const head = exec.swinger?.body?.sledge?.head;
+    if (head) {
+      head.updateWorldMatrix(true, false);
+      _tmpW.setFromMatrixPosition(head.matrixWorld);
+      at = { x: _tmpW.x, y: _tmpW.y, z: _tmpW.z };
+    } else if (exec.swinger) {
+      at = { x: exec.swinger.body.pos.x, y: 1.45, z: exec.swinger.body.pos.z };
+    }
+    return {
+      eye, at, fov: 46,
+      name: String(v.seat.name || 'THEM'),
+    };
+  }
+
+  function contactSnapshot() {
+    const sledge = exec.swinger?.body?.sledge;
+    const v = exec.victim;
+    if (!sledge?.head || !v) {
+      return { head: null, aim: null, ok: false, slack: HIT_SLACK };
+    }
+    sledge.head.updateWorldMatrix(true, false);
+    _headW.setFromMatrixPosition(sledge.head.matrixWorld);
+    const aim = victimAim(v);
+    const head = { x: _headW.x, y: _headW.y, z: _headW.z };
+    const torso = aim ? { x: aim.x, y: aim.y, z: aim.z } : null;
+    return {
+      head, aim: torso, slack: HIT_SLACK,
+      ok: !!(torso && occupies(head, torso, HIT_SLACK)),
+    };
   }
 
   function driveExecute(r, dt, t) {
@@ -803,16 +1156,12 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     body.sledge.owned = true;
     body.sledge.equip();
     body.sledge.swing(t);
+    exec.sledgeLocal = null;
   }
 
   function stepExecute(dt, t) {
     if (exec.phase === 'off') return;
     exec.t += dt;
-    if (exec.victim && exec.t >= ACCUSE.SETTLE && !exec.victimSettled) {
-      exec.victimSettled = true;
-      const held = settleClip(exec.victim.seatIndex);
-      if (held) exec.victim.body.avatar?.playSeated?.(held, { hold: true, fade: ACCUSE.FADE });
-    }
     if (exec.phase === 'rise' && exec.t >= EXECUTE.RISE_DUR) beginWalk();
     if (exec.phase === 'walk') {
       const waited = exec.t - EXECUTE.RISE_DUR;
@@ -822,6 +1171,13 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     if (exec.phase === 'swing' && exec.t >= exec.swingAt + SWING_DUR + 0.12) {
       exec.phase = 'hold';
     }
+    if (exec.showrunner && !exec.hit && exec.victim && exec.t >= EXECUTE.RISE_DUR + SHOW_CONTACT_S) {
+      beginHit(t);
+    }
+  }
+
+  function afterBodies(dt) {
+    stepLooseChair(dt);
   }
 
   function clearExecute() {
@@ -833,8 +1189,11 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     }
     if (exec.victim && exec.victim !== exec.swinger) {
       setNomineeBang(exec.victim.bang, false);
+      restoreSmash(exec.victim);
+      exec.victim.wrecked = false;
       parkSit(exec.victim);
     }
+    restoreLooseChair();
     exec.key = '';
     exec.phase = 'off';
     exec.t = 0;
@@ -844,8 +1203,12 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     exec.walked = false;
     exec.swung = false;
     exec.swingAt = 0;
-    exec.victimSettled = false;
     exec.showrunner = false;
+    exec.hit = false;
+    exec.hitAt = 0;
+    exec.lastLook = LAST_LOOK.OFF;
+    exec.sledgeLocal = null;
+    exec.smashed = false;
   }
 
   /*
@@ -959,6 +1322,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
         for (const r of robots) {
           if (heldRunner != null && String(r.seat.id) === String(heldRunner)) continue;
           if (exec.phase !== 'off' && exec.swinger === r) continue;
+          if (r.wrecked) continue;
           r.body.root.visible = true;
           parkSit(r);
         }
@@ -981,7 +1345,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       for (const r of robots) {
         const mine = heldRunner != null && String(r.seat.id) === String(heldRunner);
         r.body.root.visible = !mine;
-        if (!mine && !(exec.phase !== 'off' && exec.swinger === r)) parkSit(r);
+        if (!mine && !(exec.phase !== 'off' && exec.swinger === r) && !r.wrecked) parkSit(r);
       }
     },
 
@@ -991,6 +1355,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       for (const r of robots) {
         r.body.root.visible = true;
         if (exec.phase !== 'off' && exec.swinger === r) continue;
+        if (r.wrecked) continue;
         parkSit(r);
       }
       // Same reason as `setTalk`: this sweep re-idles the circle, and a live accusation has to
@@ -1050,7 +1415,11 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       exec.walked = false;
       exec.swung = false;
       exec.swingAt = 0;
-      exec.victimSettled = false;
+      exec.hit = false;
+      exec.hitAt = 0;
+      exec.sledgeLocal = null;
+      exec.smashed = false;
+      exec.lastLook = exec.victim ? LAST_LOOK.LIVE : LAST_LOOK.OFF;
       exec.strike = (exec.swinger && exec.victim)
         ? strikeMark(exec.swinger, exec.victim)
         : (exec.swinger ? exec.swinger.at.clone() : null);
@@ -1121,17 +1490,55 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     }),
 
     /** Harness hook: who is walking, whether they have swung, which phase. */
-    executionReport: () => ({
-      phase: exec.phase,
-      key: exec.key,
-      walked: exec.walked,
-      swung: exec.swung,
-      showrunner: exec.showrunner,
-      actor: exec.swinger ? String(exec.swinger.seat.id) : null,
-      target: exec.victim ? String(exec.victim.seat.id) : null,
-      sitLock: exec.swinger ? !!exec.swinger.body.sitLock : null,
-      seated: exec.swinger ? !!exec.swinger.seated : null,
-    }),
+    executionReport: () => {
+      const snap = contactSnapshot();
+      const limp = wreckPose({
+        sitAt: exec.victim?.sitAt, face: exec.victim?.face ?? 0,
+        u: exec.hit ? (exec.t - exec.hitAt) / 0.72 : 0, cx, cz, floorY: room.floorY ?? 0,
+      });
+      return {
+        phase: exec.phase,
+        key: exec.key,
+        walked: exec.walked,
+        swung: exec.swung,
+        showrunner: exec.showrunner,
+        actor: exec.swinger ? String(exec.swinger.seat.id) : null,
+        target: exec.victim ? String(exec.victim.seat.id) : null,
+        sitLock: exec.swinger ? !!exec.swinger.body.sitLock : null,
+        seated: exec.swinger ? !!exec.swinger.seated : null,
+        hit: exec.hit,
+        wrecked: !!exec.victim?.wrecked,
+        limp: !!(exec.hit && exec.victim && !exec.victim.seated),
+        damaged: !!(exec.smashed || exec.victim?.smashed),
+        chairLoose: !!exec.looseChair,
+        chairToppled: !!(exec.looseChair && exec.looseChair.t > 0.15),
+        lastLook: exec.lastLook,
+        cam: execCamMode({ showrunner: exec.showrunner }),
+        contact: snap,
+        wreck: exec.hit ? { x: limp.x, y: limp.y, z: limp.z, roll: limp.roll } : null,
+      };
+    },
+
+    /**
+     * C — the accused's chair eyeline while they live. Hard-cut one frame, then gone.
+     * The follow view scissors this into a small popup; it is never the main picture.
+     */
+    lastLook() {
+      const pose = lastLookPose();
+      return {
+        state: exec.lastLook,
+        name: pose?.name ?? null,
+        fov: pose?.fov ?? 46,
+        eye: pose?.eye ?? null,
+        at: pose?.at ?? null,
+        label: 'THEIR EYES',
+      };
+    },
+
+    consumeLastLookCut() {
+      exec.lastLook = stepLastLook(exec.lastLook, { consumeCut: true });
+      return exec.lastLook;
+    },
 
     /** Harness snapshot — logical sit flags, pelvis, clip names. */
     sitReport() {
@@ -1174,6 +1581,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       stage.step(dt);
       stepExecute(dt, t);
       for (const r of robots) driveOne(r, dt, t);
+      afterBodies(dt);
       stream.step(dt, engine.camera);
     },
 
@@ -1182,19 +1590,25 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       stage.step(dt);
       stepExecute(dt, t);
       for (const r of robots) driveOne(r, dt, t);
+      afterBodies(dt);
       stream.step(dt, engine.camera);
 
       /*
-       * 🎥 THE CAMERA STANDS OUTSIDE THE RING looking in. #39 sat inside (faces, not chair
-       * backs); the playtest asked for the opposite — chairs as a readable circle, robots
-       * smaller. Talk beats sweep; a live walk-in still snaps to the arriving robot.
-       * Execution cranes onto the pair from the same outside arc — never a cut, never a lid.
+       * 🎥 Talk still walks the outside arc. Execution is a different picture:
+       * B rides the walk-up inside the ring and whips to the wreck; Showrunner
+       * degrades to A (fillExecuteEye, outside hold). Never a lid.
        */
       const useTalk = talking || done;
       if (exec.phase !== 'off') {
-        fillExecuteEye();
+        const cam = execCamMode({ showrunner: exec.showrunner });
+        if (cam === 'A') fillExecuteEye();
+        else fillExecuteB();
         reelSight?.(_eye, _look);
-        walkCamOnRing(engine.camera, _lookLive, _eye, _look, cx, cz, dt);
+        if (cam === 'A') {
+          walkCamOnRing(engine.camera, _lookLive, _eye, _look, cx, cz, dt);
+        } else {
+          whipCam(dt);
+        }
         engine.camera.up.set(0, 1, 0);
         engine.camera.lookAt(_lookLive);
         engine.camera.rotateZ(Math.sin(t * 0.47) * 0.008);

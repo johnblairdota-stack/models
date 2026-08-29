@@ -194,6 +194,51 @@ export default async function partyFollow({ params }) {
     }
   });
 
+  /*
+   * C — last-look popup AFTER the graded B picture. Scissor a small bottom-right
+   * feed from the accused's chair eyeline. One black frame on the cut, then gone.
+   * Never the full frame. DOM labels live in `#fl .lastlook`.
+   */
+  const camC = engine.camera.clone();
+  const rawRender = engine.pipeline.render.bind(engine.pipeline);
+  engine.pipeline.render = (ms) => {
+    rawRender(ms);
+    const ll = bed.lastLook?.();
+    if (!ll || (ll.state !== 'live' && ll.state !== 'cut')) return;
+    const r = engine.renderer;
+    const canvas = r.domElement;
+    const w = canvas.width;
+    const h = canvas.height;
+    const bw = Math.max(96, Math.round(w * 0.22));
+    const bh = Math.max(54, Math.round(bw * 9 / 16));
+    const x = w - bw - Math.round(w * 0.028);
+    const y = Math.round(h * 0.11);
+    const prevAuto = r.autoClear;
+    r.autoClear = false;
+    r.setScissorTest(true);
+    r.setViewport(x, y, bw, bh);
+    r.setScissor(x, y, bw, bh);
+    r.setClearColor(0x000000, 1);
+    r.clear(true, true, true);
+    if (ll.state === 'live' && ll.eye && ll.at) {
+      camC.fov = ll.fov || 46;
+      camC.aspect = bw / Math.max(1, bh);
+      camC.near = 0.08;
+      camC.far = 40;
+      camC.position.set(ll.eye.x, ll.eye.y, ll.eye.z);
+      camC.up.set(0, 1, 0);
+      camC.lookAt(ll.at.x, ll.at.y, ll.at.z);
+      camC.updateProjectionMatrix();
+      r.render(engine.scene, camC);
+    } else if (ll.state === 'cut') {
+      bed.consumeLastLookCut?.();
+    }
+    r.setScissorTest(false);
+    r.setViewport(0, 0, w, h);
+    r.autoClear = prevAuto;
+    void ms;
+  };
+
   engine.markReady();
   engine.start();
 
@@ -237,6 +282,8 @@ export default async function partyFollow({ params }) {
      */
     accusation: () => bed.accusationReport?.() ?? null,
     sit: () => bed.sitReport?.() ?? [],
+    execution: () => bed.executionReport?.() ?? null,
+    lastLook: () => bed.lastLook?.() ?? null,
     /*
      * 🚦 **THE GATE'S CONTROL, AND IT IS THE ONE SWITCH HERE THAT CHANGES THE PICTURE.**
      * `accusation-beat` AB2d-ctl flips this on to restore the unbounded hips accumulation the
@@ -294,7 +341,11 @@ function buildChrome({ name, look, warm }) {
         <div class="sub">live · expedition</div>
       </div>
     </div>
-    <div class="slug"><b data-shot>chase</b> · <span data-thr>walk</span></div>`;
+    <div class="slug"><b data-shot>chase</b> · <span data-thr>walk</span></div>
+    <div class="lastlook" hidden>
+      <div class="ll-top"><span class="ll-dot"></span><span class="ll-tag">THEIR EYES</span><span class="ll-name"></span></div>
+      <div class="ll-dead">DEAD</div>
+    </div>`;
   document.body.appendChild(el);
 
   /*
@@ -310,7 +361,11 @@ function buildChrome({ name, look, warm }) {
   const thrEl = el.querySelector('[data-thr]');
   const whoEl = el.querySelector('.who');
   const subEl = el.querySelector('.sub');
+  const lookEl = el.querySelector('.lastlook');
+  const lookName = el.querySelector('.lastlook .ll-name');
+  const lookTag = el.querySelector('.lastlook .ll-tag');
   let last = '';
+  let lastLookKey = '';
   return {
     tick(read, t, bed) {
       const mode = bed?.mode ?? 'run';
@@ -323,12 +378,26 @@ function buildChrome({ name, look, warm }) {
        */
       const who = mode === 'intros' ? 'the cast' : (bed?.runnerName ?? name);
       const key = `${mode}|${read.shot}|${read.throttle}|${who}`;
-      if (key === last) return;                 // a DOM write a frame is a DOM write too many
-      last = key;
-      shotEl.textContent = read.shot;
-      thrEl.textContent = String(read.throttle).toLowerCase();
-      whoEl.textContent = who;
-      subEl.textContent = mode === 'run' ? 'live · expedition' : `live · ${mode}`;
+      if (key !== last) {
+        last = key;
+        shotEl.textContent = read.shot;
+        thrEl.textContent = String(read.throttle).toLowerCase();
+        whoEl.textContent = who;
+        subEl.textContent = mode === 'run' ? 'live · expedition' : `live · ${mode}`;
+      }
+      /*
+       * C is its own clock. A shared early-return used to leave THEIR EYES up after
+       * death because the lower-third key had not changed. Hard-cut, no fade.
+       */
+      const ll = bed?.lastLook?.() ?? { state: 'off' };
+      const lk = `${ll.state}|${ll.name || ''}`;
+      if (lk === lastLookKey) return;
+      lastLookKey = lk;
+      lookEl.hidden = ll.state !== 'live' && ll.state !== 'cut';
+      lookEl.classList.toggle('on', ll.state === 'live');
+      lookEl.classList.toggle('cut', ll.state === 'cut');
+      lookTag.textContent = ll.state === 'cut' ? 'OFF AIR' : 'THEIR EYES';
+      lookName.textContent = ll.name || '';
     },
   };
 }

@@ -2459,6 +2459,29 @@ console.log('\nparty-warm — the lobby-warm night');
     && /cueSitDown\(\{ retry: true \}\)/.test(hostSrc)
     && /if \(show === 'expedition'\) ui\.sitCued = false/.test(hostSrc)
     && /talk:\s*true/.test(hostSrc));
+  /*
+   * John, 29 Aug, LastLook board. The walk-up already existed. The HIT did not:
+   * Attack chopped the floor, Sit_Dodge sat back at t=2s, the chair instance
+   * never toppled, and C was not a picture. W33t is that picture: sledge head
+   * on the seated torso, limp/damaged victim, loose chair, B (or A) as the
+   * main lens, C live then hard-cut gone.
+   */
+  const hitSrc = await readFile(new URL('../src/game/execute-hit.js', import.meta.url), 'utf8');
+  const chromeSrc = await readFile(new URL('../src/party/follow.js', import.meta.url), 'utf8');
+  const viewSrc = await readFile(new URL('../src/views/party-follow.js', import.meta.url), 'utf8');
+  t('W33t · Execution hit — retarget, wreck, loose chair, last-look C, camera B/A',
+    /function retargetSledge/.test(introSrc)
+    && /function beginHit/.test(introSrc)
+    && /function breakChairOut/.test(introSrc)
+    && /function fillExecuteB/.test(introSrc)
+    && /function lastLook/.test(introSrc)
+    && /HIT_CONTACT = 0\.381/.test(hitSrc)
+    && /THEIR EYES/.test(chromeSrc)
+    && /setScissorTest\(true\)/.test(viewSrc)
+    && /lastLook: \(\) => intro\?\.lastLook/.test(bedSrc)
+    && /setLimbVisible\(socket, visible\)/.test(meshSrc)
+    && !/setLimbVisible\(\) \{\}/.test(meshSrc)
+    && !/settleClip/.test(introSrc.slice(introSrc.indexOf('function stepExecute'), introSrc.indexOf('function afterBodies'))));
 }
 
 // ---- W34 · NO DOORWAY INTO VOID, AND NOTHING OCCUPIES THE APERTURE --------------------------
