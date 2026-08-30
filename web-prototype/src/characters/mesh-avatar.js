@@ -1633,10 +1633,12 @@ export function cloneMeshAvatar(source, opts = {}) {
    * never per frame.
    */
   function publishPose() {
-    rig.userData.clip = pose === 'sit'
-      ? (sitClipName || sitIdle?.getClip?.().name || 'sit')
-      : null;
-    rig.userData.seatedAction = reactName;
+    rig.userData.clip = pose === 'dead'
+      ? 'dead'
+      : pose === 'sit'
+        ? (sitClipName || sitIdle?.getClip?.().name || 'sit')
+        : null;
+    rig.userData.seatedAction = pose === 'dead' ? null : reactName;
   }
 
   function captureLean() {
@@ -1663,6 +1665,7 @@ export function cloneMeshAvatar(source, opts = {}) {
     sourceFile: source.sourceFile,
     cloned: true,
     get clip() {
+      if (pose === 'dead') return 'dead';
       if (pose === 'sit') return sitClipName || (sitIdle?.getClip?.().name ?? 'sit');
       if (activeSwing && swingActions[activeSwing.clip]?.getEffectiveWeight() > 0.5) {
         return activeSwing.clip;
@@ -1670,6 +1673,7 @@ export function cloneMeshAvatar(source, opts = {}) {
       return walk.getEffectiveWeight() > 0.5 ? 'walk' : 'idle';
     },
     get seated() { return pose === 'sit'; },
+    get dead() { return pose === 'dead'; },
     /**
      * The performance on top of the seat, or null. Deliberately NOT folded into `clip`:
      * `assertSeatedPose` reads that to ask whether the seat's resting pose is a sanctioned sit
@@ -1753,7 +1757,41 @@ export function cloneMeshAvatar(source, opts = {}) {
      * stand transition and AFTER `body.pos` has been copied to the stand-mark, so
      * unlocking `sitLock` cannot reintroduce the crouch-in-front-of-seat bug.
      */
+    /**
+     * ☠️ HEAT · A CORPSE DOES NOT LOOP IDLE. Stop every action, reset to bind,
+     * and never mixer.update(dt) again. Sit idle / loco idle / Idle_M on a
+     * floor body is the elbow-up prone John watched. Gate: execute-hit H14.
+     */
+    holdDead() {
+      unfixHips();
+      clearReaction();
+      pose = 'dead';
+      sitClipName = null;
+      sitIdle = null;
+      mixer.stopAllAction();
+      idle.enabled = false;
+      walk.enabled = false;
+      idle.setEffectiveWeight(0);
+      walk.setEffectiveWeight(0);
+      for (const a of [sitIdleM, sitIdleF, sitDown]) {
+        if (!a) continue;
+        a.enabled = false;
+        a.setEffectiveWeight(0);
+      }
+      for (const a of Object.values(swingActions)) {
+        a.enabled = false;
+        a.setEffectiveWeight(0);
+      }
+      rig.traverse((o) => {
+        if (o.isSkinnedMesh && o.skeleton) o.skeleton.pose();
+      });
+      if (hips && hipsRest) hips.position.copy(hipsRest);
+      applyCollapsed();
+      publishPose();
+      return true;
+    },
     playLoco() {
+      if (pose === 'dead') return false;
       unfixHips();
       clearReaction();
       pose = 'loco';
@@ -1778,6 +1816,7 @@ export function cloneMeshAvatar(source, opts = {}) {
      * transition is not played at the sit attach.
      */
     playSit({ seatIndex = 0, skipDown: _skipDown = false, phase = 0 } = {}) {
+      if (pose === 'dead') return false;
       sitIdle = sitIdleM || sitIdleF;
       if (!sitIdle) return false;
       pose = 'sit';
@@ -1866,6 +1905,10 @@ export function cloneMeshAvatar(source, opts = {}) {
        * away between frames must not carry a seated chair's correction into the run.
        */
       unfixHips();
+      if (pose === 'dead') {
+        applyCollapsed();
+        return;
+      }
       if (pose === 'sit') {
         if (sitDown && sitIdle && sitDown.getEffectiveWeight() > 0.05) {
           const done = sitDown.time >= sitDown.getClip().duration - 0.08;

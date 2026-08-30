@@ -135,13 +135,17 @@ export function wreckPose({ sitAt, face = 0, u = 0, cx = 0, cz = 0, floorY = 0 }
   const uz = oz / olen;
   const tx = -uz;
   const tz = ux;
+  /*
+   * 📺 HEAT · ON THE BACK, NOT A PLANK. Pitch ~1.52 lays them supine. A small
+   * roll is slack, not a crawl. Tangent skid keeps the torso off the chair.
+   */
   return {
-    x: (sitAt?.x ?? 0) + ux * 0.52 * ease + tx * 0.38 * ease,
+    x: (sitAt?.x ?? 0) + ux * 0.28 * ease + tx * 0.82 * ease,
     y: floorY,
-    z: (sitAt?.z ?? 0) + uz * 0.52 * ease + tz * 0.38 * ease,
-    facing: face + 1.35 * ease,
-    pitch: 0.28 * ease,
-    roll: 1.32 * ease,
+    z: (sitAt?.z ?? 0) + uz * 0.28 * ease + tz * 0.82 * ease,
+    facing: face + 0.40 * ease,
+    pitch: 1.52 * ease,
+    roll: 0.22 * ease,
   };
 }
 
@@ -157,12 +161,18 @@ export function chairTopple({ seat, u = 0, cx = 0, cz = 0 } = {}) {
   const olen = Math.hypot(ox, oz) || 1;
   const ux = ox / olen;
   const uz = oz / olen;
+  const tx = -uz;
+  const tz = ux;
   const y0 = seat?.y ?? 0;
+  /*
+   * Further out, slight opposite tangent — not under the torso. Sofa HEAT:
+   * the old 0.62 m outward sat the chair where a prone idle read as a push-up.
+   */
   return {
-    x: (seat?.x ?? 0) + ux * 0.62 * ease,
+    x: (seat?.x ?? 0) + ux * 1.18 * ease - tx * 0.22 * ease,
     y: y0 + 0.06 * Math.sin(Math.PI * ease) * (1 - ease),
-    z: (seat?.z ?? 0) + uz * 0.62 * ease,
-    rotX: 1.18 * ease,
+    z: (seat?.z ?? 0) + uz * 1.18 * ease - tz * 0.22 * ease,
+    rotX: 1.35 * ease,
     rotY: (seat?.rotY ?? 0) + 0.55 * ease,
     rotZ: 0.42 * ease,
   };

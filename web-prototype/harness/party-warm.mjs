@@ -2528,6 +2528,16 @@ console.log('\nparty-warm — the lobby-warm night');
     && /deadIdsFromPublic/.test(hostSrc)
     && /wrecked: \[\.\.\.wreckedSeen\]/.test(bedSrc)
     && !/function restoreLooseChair/.test(introSrc));
+  t('W33y · executed wreck is frozen dead — no Idle_M / loco idle, chair offset from torso',
+    /holdDead/.test(introSrc)
+    && /pose = 'dead'/.test(meshSrc)
+    && /if \(pose === 'dead'\)/.test(meshSrc)
+    && /mixer\.stopAllAction/.test(meshSrc)
+    && !/playLoco/.test(introSrc.slice(introSrc.indexOf('function applyWreck'), introSrc.indexOf('function stepWreck')))
+    && !/body\.update\(/.test(introSrc.slice(introSrc.indexOf('function stepWreck'), introSrc.indexOf('function lastLookPose')))
+    && /pitch: 1\.52/.test(hitSrc)
+    && /ux \* 1\.18/.test(hitSrc)
+    && !/function restoreLooseChair/.test(introSrc));
   /*
    * John, 30 Aug, Episode 3 VERDICT after Fox. The follow iframe remounted
    * (CAM DARK / CAMERA WARMING). introCast was still null. Verdict sit sends

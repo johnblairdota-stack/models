@@ -1067,9 +1067,16 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
         r.arrived = true;
         r.cleared = true;
         r.body.sitLock = true;
-        r.body.avatar?.playLoco?.();
+        /*
+         * 📺 HEAT · FREEZE, DO NOT playLoco. Loco idle on a pitched root is the
+         * elbow-up prone John watched. holdDead stops the mixer on bind; smash
+         * bones land once. Gate: execute-hit H14.
+         */
+        r.body.avatar?.holdDead?.();
         smashLook(r);
         breakChairOut(r.seatIndex);
+        applySmashBones(r, 1);
+        r.smashBones = true;
         setNomineeBang(r.bang, false);
         if (r.tag) r.tag.visible = false;
       }
@@ -1091,10 +1098,16 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     body.pos.set(limp.x, limp.y, limp.z);
     body.facing = limp.facing;
     body.aimYaw = limp.facing;
-    body.update(dt, t, { move: { x: 0, y: 0 }, run: false, aimYaw: limp.facing, aimPitch: 0 });
+    /*
+     * Do not body.update — that re-enables gait + mixer idle on the corpse.
+     * Root pose is kinematic; the mixer stays frozen from holdDead.
+     */
+    if (!body.avatar?.dead) body.avatar?.holdDead?.();
+    body.root.rotation.y = limp.facing;
     body.root.rotation.x = limp.pitch;
     body.root.rotation.z = limp.roll;
-    applySmashBones(r, Math.min(1, Math.max(0, u)));
+    hideChairInstance(r.seatIndex);
+    void t;
   }
 
   function lastLookPose() {

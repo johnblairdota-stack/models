@@ -16,6 +16,7 @@
  * H11+   the wreck STAYS after the empty execute cue — Ada is not parkSit'd living
  *        in episode-2 casting; her chair instance stays broken out of the InstancedMesh.
  * H13    a null `.image` after execute cannot white the TV; live follow does not keep `#err`
+ * H14    the corpse mixer FREEZES (holdDead) — no Idle_M / loco idle / elbow-up prone
  *
  * Pure node. `src/game/execute-hit.js` is THREE-free. Picture files are source-read:
  * CI has no `npm install`.
@@ -108,7 +109,7 @@ t('H3 · stepExecute no longer plays settleClip / sits them back at ACCUSE.SETTL
 t('H3b · contact fires beginHit — limp, not a sit-idle',
   /function beginHit/.test(introSrc)
   && /wrecked = true/.test(introSrc)
-  && /playLoco/.test(introSrc)
+  && /holdDead/.test(introSrc)
   && /smashLook/.test(introSrc)
   && /function stepWreck/.test(introSrc));
 
@@ -171,10 +172,12 @@ t('H6c · Showrunner still fires a contact so C can die — no ninth robot',
   const sitAt = { x: 3, y: 0, z: 0 };
   const limp = wreckPose({ sitAt, face: 0, u: 1, cx: 0, cz: 0, floorY: 0 });
   const chair = chairTopple({ seat: { x: 3, y: 0, z: 0, rotY: 0 }, u: 1, cx: 0, cz: 0 });
-  t('H7 · a finished wreck is on the floor, rolled, away from the sit-root',
-    limp.y === 0 && limp.roll > 1 && Math.hypot(limp.x - sitAt.x, limp.z - sitAt.z) > 0.4);
-  t('H7b · the chair topples as a separate object, the other way',
+  t('H7 · a finished wreck is on its back on the floor, away from the sit-root',
+    limp.y === 0 && limp.pitch > 1 && limp.roll < 0.5
+    && Math.hypot(limp.x - sitAt.x, limp.z - sitAt.z) > 0.4);
+  t('H7b · the chair topples as a separate object, offset from the torso',
     chair.rotX > 1 && chair.x !== limp.x
+    && Math.hypot(chair.x - limp.x, chair.z - limp.z) > 0.9
     && Math.hypot(chair.x - 3, chair.z - 0) > 0.4);
   t('H7c · C\'s eyeline is the chair visor, not a ringside hold',
     (() => {
@@ -288,7 +291,7 @@ t('H10 · seatedAim is a visor-height torso when Head is missing',
     && held.look.y < 0.7
     && held.eye.y < 1.0
     && held.look.y < visorTalkY
-    && Math.hypot(held.body.x - held.chair.x, held.body.z - held.chair.z) > 0.3,
+    && Math.hypot(held.body.x - held.chair.x, held.body.z - held.chair.z) > 0.9,
     `look.y=${held.look.y} eye.y=${held.eye.y} visor=${visorTalkY}`);
   t('H12b · B\'s settled hit camera is that same pair — one look, not a second system',
     (() => {
@@ -342,6 +345,40 @@ t('H10 · seatedAim is a visor-height torso when Head is missing',
     && /function liveTexture/.test(followSrc)
     && /picture failed/.test(viewSrc)
     && !/function restoreLooseChair/.test(introSrc));
+}
+
+{
+  /*
+   * John, live HEAT: executed robots played a living idle on the floor —
+   * prone on their elbows, still moving, chair under the torso like a
+   * push-up. Cause: applyWreck called playLoco and stepWreck kept
+   * body.update() (mixer + gait) running. Freeze is explicit: holdDead
+   * stops every action, bind pose, no mixer.update(dt). Late noms of
+   * a corpse cannot sit them. restoreLooseChair stays gone.
+   */
+  const applyFn = introSrc.slice(
+    introSrc.indexOf('function applyWreck'),
+    introSrc.indexOf('function stepWreck'),
+  );
+  const stepWreckFn = introSrc.slice(
+    introSrc.indexOf('function stepWreck'),
+    introSrc.indexOf('function lastLookPose'),
+  );
+  t('H14 · a wreck freezes the mixer — no Idle_M / loco idle on a corpse',
+    /holdDead\(\)/.test(cloneFn)
+    && /pose = 'dead'/.test(cloneFn)
+    && /if \(pose === 'dead'\)/.test(cloneFn)
+    && /mixer\.stopAllAction/.test(cloneFn)
+    && /skeleton\.pose\(\)/.test(cloneFn)
+    && /holdDead/.test(applyFn)
+    && !/playLoco/.test(applyFn)
+    && !/body\.update\(/.test(stepWreckFn)
+    && /hideChairInstance/.test(stepWreckFn)
+    && !/function restoreLooseChair/.test(introSrc)
+    && !/parkSit\(exec\.victim\)/.test(introSrc));
+  t('H14b · playSit / playLoco refuse a frozen corpse',
+    /playSit\([\s\S]*?if \(pose === 'dead'\) return false/.test(cloneFn)
+    && /playLoco\(\) \{\s*if \(pose === 'dead'\) return false/.test(cloneFn));
 }
 
 if (fail) {

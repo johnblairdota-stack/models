@@ -168,8 +168,10 @@ decision, not a refactor.
   instance stays broken out, and episode-2 CASTING does not restore them. The wreck is standing
   set dressing: public-dead ids re-apply across dispose, and a talk plate uses the same low look
   as the hit so Recap / Debrief / later Casting / Reunion still find the floor body. Alignment
-  still hidden until Reunion. Sofa 29 Aug: Ada sat back; dusk sit-down never saw the floor body
-  after the plate. Gates: `execute-hit` H11 / H12, `party-warm` W33u / W33v.
+  still hidden until Reunion. The mixer **freezes** (`holdDead`) — never Idle_M / sit idle /
+  loco idle on a corpse. On-back slack, chair toppled away from the torso. Sofa 29 Aug: Ada sat
+  back; dusk sit-down never saw the floor body after the plate; live HEAT: prone idle on elbows.
+  Gates: `execute-hit` H11 / H12 / H14, `party-warm` W33u / W33v / W33y.
 - **Idle after a remount must not throw.** Verdict sit sends `{kind:'idle'}` while `cuedRunner`
   is set; a CAM DARK remount leaves `introCast` null. Guard: `idleRebuildCast` — never read
   `.length` on a null last-cast. Episode 3 VERDICT after Fox, 30 Aug. Gate: `party-warm` W33w.
