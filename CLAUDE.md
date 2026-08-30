@@ -154,6 +154,9 @@ decision, not a refactor.
   as the hit so Recap / Debrief / later Casting / Reunion still find the floor body. Alignment
   still hidden until Reunion. Sofa 29 Aug: Ada sat back; dusk sit-down never saw the floor body
   after the plate. Gates: `execute-hit` H11 / H12, `party-warm` W33u / W33v.
+- **Idle after a remount must not throw.** Verdict sit sends `{kind:'idle'}` while `cuedRunner`
+  is set; a CAM DARK remount leaves `introCast` null. Guard: `idleRebuildCast` — never read
+  `.length` on a null last-cast. Episode 3 VERDICT after Fox, 30 Aug. Gate: `party-warm` W33w.
 - **TV visual direction is B — "Rundown Rail"**: the night's schedule across the top, shrinking to
   a 22px ribbon during the Expedition.
 

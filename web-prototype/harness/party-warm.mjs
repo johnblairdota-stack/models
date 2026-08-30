@@ -31,6 +31,7 @@ import {
   IDENTITY_SECRETS, INTRO_FOV, INTRO_FRAME_PCT, MISSION_PHASES, MOVE_KEYS, RING_OUT, SPATIAL_WORDS,
   STICK_DEADZONE, STICK_RELEASE, STICK_TURN, TALK_FOV, TV_FRAME_PCT,
   WARM_KEYS, WARM_STAGES, WORLD_KEYS, chaseOrbitOffset, cueViolations, followParams, followUrl,
+  idleRebuildCast,
   followViolations,
   liveRunShot, runPerspective, LOOK_PITCH_MAX, LOOK_PITCH_MIN, lookYaw, moveViolations, stepLookOrbit,
   stickCamMove, stickHeading, stickMag, stickRef, warmLabel, warmPct,
@@ -2456,7 +2457,7 @@ console.log('\nparty-warm — the lobby-warm night');
     && !/look\.set\(cx, LOOK_Y, cz\)/.test(introSrc));
   t('W33r · idle with no intro rebuilds the seated circle, it does not fall into warm',
     /IDLE IS "SIT THE RUNNER BACK DOWN"/.test(bedSrc)
-    && /introCast\.length/.test(bedSrc)
+    && /idleRebuildCast\(intro, introCast\)/.test(bedSrc)
     && /talk: true/.test(bedSrc)
     && /mode = intro \? 'intros' : 'warm'/.test(bedSrc));
   t('W33s · the TV retries sit on follow ready, same shape as cueRun',
@@ -2525,6 +2526,21 @@ console.log('\nparty-warm — the lobby-warm night');
     && /deadIdsFromPublic/.test(hostSrc)
     && /wrecked: \[\.\.\.wreckedSeen\]/.test(bedSrc)
     && !/function restoreLooseChair/.test(introSrc));
+  /*
+   * John, 30 Aug, Episode 3 VERDICT after Fox. The follow iframe remounted
+   * (CAM DARK / CAMERA WARMING). introCast was still null. Verdict sit sends
+   * idle first because cuedRunner is set. `introCast.length` threw and painted
+   * VIEW "party.follow" FAILED over a live show. Eight phones kept going.
+   * The overlay said `.length` (John recalled `.image`). Same hole.
+   */
+  t('W33w · idle with a null last-cast does not throw — Verdict after execute',
+    idleRebuildCast(null, null) === null
+    && idleRebuildCast(null, undefined) === null
+    && idleRebuildCast(null, []) === null
+    && idleRebuildCast({ ok: 1 }, [{ id: 'p1' }]) === null
+    && idleRebuildCast(null, [{ id: 'p1' }])?.length === 1
+    && /idleRebuildCast\(intro, introCast\)/.test(bedSrc)
+    && /cue failed/.test(viewSrc));
 }
 
 // ---- W34 · NO DOORWAY INTO VOID, AND NOTHING OCCUPIES THE APERTURE --------------------------

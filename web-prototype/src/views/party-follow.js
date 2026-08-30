@@ -160,7 +160,16 @@ export default async function partyFollow({ params }) {
       console.error(`[follow] refused a cue: ${violations.join(', ')}`);
       return;
     }
-    bed.cue(cue.cue);
+    try {
+      bed.cue(cue.cue);
+    } catch (err) {
+      /*
+       * A cue throw used to paint VIEW "party.follow" FAILED over a live Verdict.
+       * Episode 3 after Fox, 30 Aug: idle read `.length` on a null last-cast.
+       * The show stays up; the next intros cue still dresses the ballroom.
+       */
+      console.error('[follow] cue failed', err);
+    }
   });
 
   let first = true;

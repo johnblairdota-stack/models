@@ -684,6 +684,19 @@ export const CUE_KEYS = {
   execute: ['kind', 'executioner', 'target'],
 };
 
+/**
+ * Idle may rebuild the seated circle from the last intros cast.
+ *
+ * `introCast` starts null on a remount (CAM DARK / a new follow iframe). Verdict
+ * after a run sends `{kind:'idle'}` first because `cuedRunner` is still set.
+ * Reading `.length` on that null whites the TV — Episode 3 VERDICT after Fox,
+ * 30 Aug. Null / empty → do not rebuild; the next intros cue dresses the room.
+ */
+export function idleRebuildCast(intro, introCast) {
+  if (intro) return null;
+  return (Array.isArray(introCast) && introCast.length) ? introCast : null;
+}
+
 /** What one seat may contribute to an `intros` cue. `FANOUT_KEYS.lobbySeat`'s public subset. */
 export const CUE_CAST_KEYS = ['id', 'seat', 'name', 'shell', 'accent'];
 /** Public standing noms — the same pair `FANOUT_KEYS.nomRow` already fans to every socket. */

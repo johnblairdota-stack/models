@@ -10,7 +10,7 @@ import {
   CUT_SHOTS, DROP_SECONDS, PERSPECTIVES, PERSPECTIVE_RIG, PLAN_YAW, RISE_SECONDS, SHOT_NAMES,
   BALLROOM_PERSPECTIVE, chaseOrbitOffset, isOverhead, isPlanLocked, lerpRig, liveRunShot, lookYaw,
   perspectiveEye, rigMapness, runPerspective, smootherstep, stepBallroomView, stepLookOrbit,
-  stickCamMove, stickMag,
+  stickCamMove, stickMag, idleRebuildCast,
 } from '../party/follow.js';
 import { bleedCoolPos, bleedKeyAngle, facingPortal } from '../lighting/door-bleed.js';
 import { HOME_ROOM, MISSION_ROOM, PLAN_OPTS } from '../party/mansion.js';
@@ -1294,7 +1294,7 @@ export async function buildFollowBed(engine, opts = {}) {
   /** `warm` · `intros` · `run`. See the header. */
   let mode = opts.warm ? 'warm' : 'run';
   let intro = null;
-  let introCast = null;
+  let introCast = [];
   let runnerName = null;
   /*
    * Wrecked public ids survive dispose. The hit is a one-beat stunt on the
@@ -2052,9 +2052,10 @@ export async function buildFollowBed(engine, opts = {}) {
         intro?.setExecute?.('', '');
         intro?.releaseRun?.();
         intro?.setTalk?.(true);
-        if (!intro && introCast.length) {
+        const idleCast = idleRebuildCast(intro, introCast);
+        if (idleCast) {
           intro = buildIntroBed(engine, {
-            room, cast: introCast, materials: botMats, avatar, reelSight: reelToSight,
+            room, cast: idleCast, materials: botMats, avatar, reelSight: reelToSight,
             talk: true, wrecked: [...wreckedSeen],
           });
         }
