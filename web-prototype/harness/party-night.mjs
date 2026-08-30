@@ -1002,6 +1002,17 @@ t('N13c · a refresh resumes the server show beat, not casting',
       rule: roomc.game.log.all().filter((e) => e.type === 'win.checked').at(-1)?.data?.rule,
     }));
 
+  /*
+   * H277 / DUSK6. Overnight chrome printed CANCELLED then offered another Casting
+   * because `t:'casting'` and the `]` walk opened `enterNextCasting` without
+   * asking the fold. The door now refuses. Gate: this send.
+   */
+  tvc.send({ t: 'casting' });
+  await sleep(40);
+  t('N17p · a casting verb after the cap does not open another Casting',
+    roomc.show === 'reunion' && roomc.game.outcome() === OUTCOME.CANCELLED,
+    JSON.stringify({ show: roomc.show, outcome: roomc.game.outcome() }));
+
   for (const c of [tvc, ...phonesc]) c.close();
   srvc.close();
 }

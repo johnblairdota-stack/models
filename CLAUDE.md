@@ -186,6 +186,11 @@ Every bug above that has a gate name beside it is locked in. `.github/workflows/
 the full `gates:party` chain on every push and PR. **A playtest finding is not finished until it is
 a gate** — five agents' findings were lost in August because they lived in transcripts.
 
+**H277 / DUSK6 · cap miss is Reunion, not another Casting.** At `EPISODE_CAP`, cameras/feed short
+of `WIN_TARGETS` is Production + Reunion. `enterNextCasting` (the `t:'casting'` / `]` door) now
+asks the fold the same way `progressShow` does. Execution kicker says Reunion at the cap, not
+Casting. Gate: `party-night` N17p.
+
 **The TV can now make a sound, and sound leaks differently from pixels.** An audio cue may only
 be a function of state already painted on the current beat's HTML — never a pre-reveal internal,
 never anything on `FOLLOW_FORBIDDEN`. Sound leaks through **timing and magnitude**, not just

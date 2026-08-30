@@ -1692,6 +1692,9 @@ console.log('\nparty-warm — the lobby-warm night');
     && /function enterNextCasting/.test(localSrc)
     && /scheduleShowProgress\(room\)/.test(localSrc)
     && /function endRunOnMission/.test(localSrc));
+  t('W27b2 · enterNextCasting asks the fold before opening another Casting (H277)',
+    /function enterNextCasting[\s\S]{0,500}seasonOver\(room\)/.test(localSrc)
+    && /function seasonOver/.test(localSrc));
   t('W27c · mission done still posts SMASHED and then schedules the walk, not a soft end',
     /setShow\(room, 'recap', RUN_END\.SMASHED\)/.test(localSrc)
     && /scheduleShowProgress\(room\)/.test(localSrc));
@@ -3737,7 +3740,9 @@ console.log('\nparty-warm — the lobby-warm night');
   t('W37c · the Execution says each of its facts exactly once',
     /function executionSwing/.test(hostSrc)
     && /verdict: executionSwing\(/.test(hostSrc)
-    && /kicker: client\.lynchResult \? 'Casting is next\.' : 'Counting the ballot\.'/.test(hostSrc)
+    && /kicker: client\.lynchResult \? executionNextLine\(episode\) : 'Counting the ballot\.'/.test(hostSrc)
+    && /The Reunion is next/.test(hostSrc)
+    && /Casting is next/.test(hostSrc)
     // the tell for the old defect: `kicker` and `verdict` fed the SAME builder
     && !/kicker: executionLine\(/.test(hostSrc));
 
@@ -3755,7 +3760,7 @@ console.log('\nparty-warm — the lobby-warm night');
    * one had said nothing. Every element on this beat is now result-gated in the same direction.
    */
   t('W37c2 · with no result on the wire the beat says so, rather than pointing at the next one',
-    /kicker: client\.lynchResult \? 'Casting is next\.' : 'Counting the ballot\.'/.test(hostSrc)
+    /kicker: client\.lynchResult \? executionNextLine\(episode\) : 'Counting the ballot\.'/.test(hostSrc)
     && /if \(!result\) return '';/.test(hostSrc));
 
   t('W37d · every tappable list on the phone carries the seat, the link list included',

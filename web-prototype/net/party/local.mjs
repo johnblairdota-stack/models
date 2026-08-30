@@ -603,7 +603,7 @@ export function progressShow(room) {
      * RENEWED means play on. Anything else — FINALE, CANCELLED, ABANDONED — is the night over,
      * and the Reunion is the payoff D5 says the whole silent-death design is borrowing against.
      * ========================================================================================= */
-    if (room.game?.outcome?.() && room.game.outcome() !== OUTCOME.RENEWED) {
+    if (seasonOver(room)) {
       enterReunionLive(room);
       return 'reunion';
     }
@@ -810,7 +810,23 @@ function reunionPayload(room) {
   };
 }
 
+function seasonOver(room) {
+  const out = room.game?.outcome?.();
+  return !!(out && out !== OUTCOME.RENEWED);
+}
+
 function enterNextCasting(room) {
+  /*
+   * 🏁 H277 / DUSK6. `progressShow` already overrules Verdict → Casting when the
+   * fold is not RENEWED. `t:'casting'`, `t:'show' beat:casting`, and the TV `]`
+   * walk (`nextShowBeat('verdict') === 'casting'`) all come through this door
+   * and used to open another Casting anyway — chrome said CANCELLED, the TV
+   * offered "Casting is next." At EPISODE_CAP a miss is Production + Reunion.
+   */
+  if (seasonOver(room)) {
+    enterReunionLive(room);
+    return;
+  }
   clearShowClock(room);
   room.ballots.clear();
   room.game.beginCasting();

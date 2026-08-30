@@ -32,6 +32,7 @@ import { deadIdsFromPublic, describeCastTiebreaks, livingFromPublic, previewCast
 import { MAX_PAIRS } from '../party/link.js';
 import { missionFor } from '../party/mission.js';
 import { FAIL_CHROME, JOB, SMASH_CHROME, toolLabel } from '../party/jobs.js';
+import { EPISODE_CAP } from '../party/phases.js';
 
 /** TV chrome 3·2·1 after every living ballot (or the 20s backstop), then `{ t: 'episode' }`. */
 const SEND_COUNTDOWN_MS = 3000;
@@ -1471,7 +1472,7 @@ export default async function partyHost({ params }) {
          * said anything at all. `executionLine`'s old `!result` fallback ("The vote is in.") was
          * covering that window, and deleting the duplicate deleted the cover with it.
          */
-        kicker: client.lynchResult ? 'Casting is next.' : 'Counting the ballot.', beat: 'execution',
+        kicker: client.lynchResult ? executionNextLine(episode) : 'Counting the ballot.', beat: 'execution',
         who: executed ? joinedName(names, executed, 'A player') : 'Nobody',
         whoSub: executed ? 'out' : 'no eviction',
         whoId: executed,
@@ -2293,6 +2294,11 @@ function executionLine(result, names) {
  * their seat and their face, so a table with two Sams can tell which), and this line names the
  * hand. `executionLine` is untouched — the phone and the log still want the whole sentence.
  */
+/** At the cap the season ends — chrome must not offer another Casting (H277 / DUSK6). */
+function executionNextLine(episode) {
+  return Number(episode) >= EPISODE_CAP ? 'The Reunion is next.' : 'Casting is next.';
+}
+
 function executionSwing(result, names) {
   if (!result) return '';
   if (!result.executed) return 'Nobody reached the threshold.';
