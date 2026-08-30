@@ -680,10 +680,8 @@ t('N13c · a refresh resumes the server show beat, not casting',
     JSON.stringify(last(host, 'show')));
   phases.push(night.show);
 
-  const emptyHold = expireShowHold(night);
-  t('N17d2 · empty Reckoning timer does not jump to Vote on first expiry',
-    emptyHold === 'reckoning' && night.show === 'reckoning'
-      && (night.game.state.nominations || []).length === 0
+  t('N17d2 · the live Reckoning is still open — one clock, a name can still stand before zero',
+    night.show === 'reckoning' && (night.game.state.nominations || []).length === 0
       && night.game.state.phase === 'RECKONING',
     JSON.stringify({ show: night.show, n: night.game.state.nominations.length }));
 
@@ -1051,30 +1049,38 @@ function showRoom() {
 
 {
   t('N19 · late-debrief window is the last 20s of the 75s talk hold',
-    LATE_DEBRIEF_MS === 20000 && EMPTY_RECKONING_EXTEND_CAP === 3);
+    LATE_DEBRIEF_MS === 20000 && EMPTY_RECKONING_EXTEND_CAP === 0);
   const early = showRoom();
   t('N19a · progressShow still walks recap → debrief → reckoning',
     progressShow(early) === 'debrief' && progressShow(early) === 'reckoning'
       && early.show === 'reckoning' && early.game.state.phase === 'RECKONING');
-  t('N19b · empty Reckoning timer stays (extends) on first expiry',
-    expireShowHold(early) === 'reckoning' && early.show === 'reckoning'
-      && early.reckoningEmptyExtends === 1
-      && (early.game.state.nominations || []).length === 0);
-  expireShowHold(early);
-  expireShowHold(early);
-  t('N19c · three empty extensions still hold Reckoning',
-    early.show === 'reckoning' && early.reckoningEmptyExtends === 3);
-  t('N19d · after the cap, empty Reckoning progresses so a table cannot softlock',
-    expireShowHold(early) === 'vote' && early.show === 'vote'
-      && (early.game.state.nominations || []).length === 0);
+  /*
+   * ⚠️ INVERTED HEAT6. Empty expiry used to re-arm 3× (N19b/c) then walk to Vote (N19d).
+   * One clock: nobody standing skips Vote and Execution. A late name after zero
+   * does not stand. Two names that lock before zero still go to Vote (N19e).
+   */
+  t('N19b · empty Reckoning at zero skips the vote — no execution this episode',
+    expireShowHold(early) === 'verdict' && early.show === 'verdict'
+      && (early.game.state.nominations || []).length === 0
+      && early.game.state.phase !== 'VOTE' && early.game.state.phase !== 'EXECUTION',
+    JSON.stringify({ show: early.show, phase: early.game.state.phase, n: early.game.state.nominations.length }));
+  t('N19c · a second expire does not re-enter Reckoning or Vote',
+    expireShowHold(early) !== 'reckoning' && early.show !== 'reckoning'
+      && early.show !== 'vote');
+  early.showUntil = Date.now() - 1;
+  early.show = 'reckoning';
+  const late = applyNominate(early, early.game.episodeLiving()[0], early.game.episodeLiving()[1]);
+  t('N19d · a name after zero does not stand',
+    late.ok === false && late.why === 'clock'
+      && (early.game.state.nominations || []).length === 0,
+    JSON.stringify(late));
 
   const named = showRoom();
   progressShow(named);
   progressShow(named);
-  expireShowHold(named);
   const living = named.game.episodeLiving();
   const nom = named.game.nominatePlayer(living[0], living[1], living);
-  t('N19e · after one nominate, the clock can proceed to Vote',
+  t('N19e · after one nominate before zero, the clock proceeds to Vote',
     nom.ok && named.game.state.nominations.length === 1
       && expireShowHold(named) === 'vote' && named.show === 'vote');
 

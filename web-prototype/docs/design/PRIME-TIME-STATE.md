@@ -52,7 +52,7 @@ at the top of the episode. Gates: `episode-order` E6/E6b, `party-night` N17n.
 | Expedition | live | TV world report `mission.phase==='done'` (`show.js:171`); 8-min backstop | ok |
 | Recap | live | 10s timer (`holdMsFor`, `show.js:134`) | ok |
 | Debrief | live | 75s timer; a late nominate short-circuits into Reckoning (`local.mjs:272`) | ok |
-| Reckoning | live | 45s + 15s/nom, cap 90 (`phases.js:61`); empty re-arms 3× then walks | ok |
+| Reckoning | live | 45s + 15s/nom, cap 90 (`phases.js:61`); **one clock** — empty at zero skips vote + execution | ok · HEAT6 inverted the 3× re-arm |
 | Vote | live | 25s or `result.closed` (`local.mjs:295`) | ok |
 | Execution | live | 20s | ok |
 | **Verdict** | **live** | 15s (`VERDICT_HOLD_MS` from `SECONDS[PHASE.VERDICT]`) | ✅ **Fixed 2026-08-28.** `AFTER_RUN_NEXT` is `execution → verdict → casting`; `enterVerdictLive` airs status / cameras / episode. The rail chip lit with no change to `rundownRailHtml` — `live` was already `SHOW_BEATS.includes(id)`. The fold was **extracted** out of `playEpisode` rather than copied, so both machines fold one win. `foldWin` returns `fed` and it does not reach the plate: gate `party-night` N17h0b. |

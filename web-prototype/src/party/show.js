@@ -125,10 +125,12 @@ export function readyMet(readyCount, living) {
 export const READY_COUNTDOWN_MS = 3000;
 
 /**
- * Empty Reckoning may re-arm this many times. Then the clock walks (nobody nominated)
- * so a broken table cannot softlock forever.
+ * ⚠️ INVERTED HEAT6. Empty Reckoning used to re-arm this many times (3), which is
+ * the loop John watched: the 3rd countdown reset, then two names locked. One clock.
+ * Zero standing skips the vote. This is 0 so a future "give them another 45s" has
+ * to change the constant AND `progressShow` AND the gates (`party-night` N19).
  */
-export const EMPTY_RECKONING_EXTEND_CAP = 3;
+export const EMPTY_RECKONING_EXTEND_CAP = 0;
 
 /**
  * 🪑 **THE BEATS THE ROOM SPENDS IN ITS CHAIRS — ballroom is the picture, chase is off.**

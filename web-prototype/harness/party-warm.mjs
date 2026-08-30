@@ -1809,11 +1809,13 @@ console.log('\nparty-warm — the lobby-warm night');
   t('W28f · talk/lynch beats are matched before the lobby sheet',
     talkIdx >= 0 && lobbyIdx >= 0 && talkIdx < lobbyIdx,
     `talk@${talkIdx} lobby@${lobbyIdx}`);
-  t('W28g · empty Reckoning hold is the timer path — progressShow still walks for gates',
+  t('W28g · empty Reckoning is one clock — zero standing skips the vote, it does not re-arm',
     /export function expireShowHold/.test(localSrc)
-    && /reckoningEmptyExtends/.test(localSrc)
-    && /EMPTY_RECKONING_EXTEND_CAP/.test(localSrc)
-    && /export function applyNominate/.test(localSrc));
+    && /export function applyNominate/.test(localSrc)
+    && /why: 'clock'/.test(localSrc)
+    && /nominations\?\.length \?\? 0\) === 0/.test(localSrc)
+    && /enterVerdictLive\(room\)/.test(localSrc)
+    && !/reckoningEmptyExtends = used \+ 1/.test(localSrc));
   t('W28h · Reckoning buzzes the pad so a face-down phone wakes',
     /beat === 'reckoning'/.test(phoneSrc)
     && /padFx\('Reckoning\.'/.test(phoneSrc)

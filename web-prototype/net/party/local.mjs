@@ -43,7 +43,7 @@ import { WARM_STAGES, moveViolations, warmPct, worldViolations } from '../../src
 import {
   isShowBeat, missionEndsRun, recapAfterMs, nextShowBeat, holdMsFor, remainingMs,
   CASTING_BACKSTOP_MS,
-  RUN_END, LATE_DEBRIEF_MS, EMPTY_RECKONING_EXTEND_CAP,
+  RUN_END, LATE_DEBRIEF_MS,
   isReadyBeat, readyNeeded, readyMet, READY_COUNTDOWN_MS,
 } from '../../src/party/show.js';
 import { reckoningSeconds } from '../../src/party/phases.js';
@@ -138,7 +138,7 @@ function getRoom(code, opts) {
     /** Epoch ms deadline for the current timed beat. Fanned as `show.until`. */
     showUntil: null,
     reckoningStartedAt: null,
-    /** How many times an empty Reckoning window has been re-armed. Capped. */
+    /** Leftover field. Empty Reckoning no longer re-arms (HEAT6); the skip is in progressShow. */
     reckoningEmptyExtends: 0,
   };
   rooms.set(code, r);
@@ -570,6 +570,15 @@ export function progressShow(room) {
     return 'reckoning';
   }
   if (next === 'vote') {
+    /*
+     * 📺 HEAT6 · ONE RECKON / NOM CLOCK. Zero standing means nobody accused — skip
+     * the vote and the execution this episode. Re-arming the 45s (the old
+     * EMPTY_RECKONING_EXTEND_CAP path) is what looped the 3rd Reckoning. Gate: N19.
+     */
+    if ((room.game?.state?.nominations?.length ?? 0) === 0) {
+      enterVerdictLive(room);
+      return 'verdict';
+    }
     enterVoteLive(room);
     return 'vote';
   }
@@ -621,27 +630,13 @@ function scheduleShowProgress(room, waitOpt = null) {
 /**
  * What the shooting-schedule timer does when it fires.
  *
- * 🚨 **AN EMPTY RECKONING MUST NOT SILENTLY DENY THE LYNCH.** John's playtest after #32:
- * Debrief said phones down, Reckoning lasted 45s with zero noms, and the clock walked
- * Vote → Execution → Casting. From the sofa that is "there was no way to nominate."
- *
- * `progressShow` is still the gate walk — tests call it to skip holds. This is only
- * the timeout path. With ≥1 standing nom the existing timer-to-vote stays.
+ * ⚠️ INVERTED HEAT6. This used to re-arm empty Reckoning up to
+ * `EMPTY_RECKONING_EXTEND_CAP` (then 3). One clock now: `progressShow` skips
+ * Vote + Execution when nobody is standing. A name that lands before zero
+ * still walks to Vote. Gate: `party-night` N19 / N17d2.
  */
 export function expireShowHold(room) {
   if (!room) return null;
-  if (room.show === 'reckoning') {
-    const n = room.game?.state?.nominations?.length ?? 0;
-    if (n === 0) {
-      const used = room.reckoningEmptyExtends || 0;
-      if (used < EMPTY_RECKONING_EXTEND_CAP) {
-        room.reckoningEmptyExtends = used + 1;
-        room.reckoningStartedAt = Date.now();
-        scheduleShowProgress(room, holdMsFor('reckoning', 0));
-        return room.show;
-      }
-    }
-  }
   return progressShow(room);
 }
 
@@ -664,6 +659,7 @@ export function applyNominate(room, playerId, target) {
     enterReckoningLive(room);
   }
   if (room.show !== 'reckoning') return { ok: false, why: 'not reckoning' };
+  if (remainingMs(room.showUntil) === 0) return { ok: false, why: 'clock' };
   const living = livingSeatedIds(room);
   const result = room.game.nominatePlayer(playerId, target, living.length ? living : null);
   if (!result.ok) return result;

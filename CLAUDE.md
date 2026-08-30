@@ -118,6 +118,9 @@ decision, not a refactor.
   mounts; blind still counts as `camera_lit`; a dark mount retries DRILL. Voice is in the room
   (GO/HOLD, CLOSE/LATE/GOING); pad buttons do not send the call. Fail chrome names no person.
   Gate: `expedition-jobs`.
+- **One Reckoning clock.** If it hits zero with nobody standing, skip the vote — nobody
+  accused, no execution this episode. Do not re-arm the countdown. A name after zero does
+  not stand. Two accused who lock before zero still vote. Gate: `party-night` N19 / N17d2.
 - **The TV seat is held by a living host socket, not a sticky `tvTaken`.** Bind sets the
   flag; `dropIfMine` clears it when that host sock actually drops (and a destroyed ghost
   does not hold the seat). Two living hosts are still refused. Gate: `party-night` N2b–N2h.
