@@ -1069,11 +1069,11 @@ function showRoom() {
       && early.show !== 'vote');
   early.showUntil = Date.now() - 1;
   early.show = 'reckoning';
-  const late = applyNominate(early, early.game.episodeLiving()[0], early.game.episodeLiving()[1]);
+  const afterZero = applyNominate(early, early.game.episodeLiving()[0], early.game.episodeLiving()[1]);
   t('N19d · a name after zero does not stand',
-    late.ok === false && late.why === 'clock'
+    afterZero.ok === false && afterZero.why === 'clock'
       && (early.game.state.nominations || []).length === 0,
-    JSON.stringify(late));
+    JSON.stringify(afterZero));
 
   const named = showRoom();
   progressShow(named);
