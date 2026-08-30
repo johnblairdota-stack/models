@@ -489,6 +489,42 @@ t('N9 · live Send-them-in vis log is honest zeros until the mansion reports',
     JSON.stringify({ alarms: raw.state.incident.alarms, unlocked: raw.state.cameras.unlocked, rawCard }));
 }
 
+{
+  /*
+   * John, 8-player grind 30 Aug: Recap printed CAM DARK after almost every
+   * execute. recap.cameraLit is true only if the vis log has run.camera_lit.
+   * Live Send-them-in never emits it (N9 / N9c). Smash landing is mission.return.
+   */
+  const smash = createRoom({ count: 8, castSeed: 1, worldSeed: 1, send: () => {} });
+  smash.start();
+  smash.playEpisode({ scaffold: false });
+  const before = smash.state.cameras.unlocked;
+  smash.setWorld({
+    runner: { room: 'gallery', x: 1, z: 1 }, hunter: null,
+    mission: { phase: 'seek', room: 'gallery' },
+  });
+  t('N25 · seek does not light a camera',
+    recapFromEvents(smash.log.all()).cameraLit === false
+    && smash.state.cameras.unlocked === before);
+  smash.setWorld({
+    runner: { room: 'gallery', x: 1, z: 1 }, hunter: null,
+    mission: { phase: 'return', room: 'ballroom' },
+  });
+  const lit = recapFromEvents(smash.log.all());
+  t('N25b · smash (mission.return) emits run.camera_lit — Recap reads CAM LIT',
+    lit.cameraLit === true
+    && smash.state.cameras.unlocked === before + 1
+    && smash.log.all().some((e) => e.type === 'run.camera_lit'),
+    JSON.stringify({ lit, unlocked: smash.state.cameras.unlocked }));
+  smash.setWorld({
+    runner: { room: 'ballroom', x: 2, z: 2 }, hunter: null,
+    mission: { phase: 'done', room: 'ballroom' },
+  });
+  t('N25c · done does not light a second camera',
+    smash.state.cameras.unlocked === before + 1
+    && smash.log.all().filter((e) => e.type === 'run.camera_lit').length === 1);
+}
+
 t('N10 · TV never received a role card or a flyover',
   !hostEvs.some((e) => e.type === 'role.card')
     && host.msgs.filter((m) => m.t === 'state').every((m) => m.frame?.flyover == null));

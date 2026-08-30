@@ -51,7 +51,7 @@ it `believedTheyWere`, which is its name in the design and not a synonym invente
 list. A second name for the same secret is how a blocklist stops meaning anything.
 
 **3. The camera target is ambiguous in the codebase, and the build did not resolve it.**
-`COMPOSITION[8].cameras` is **3**. `WIN_TARGETS[8].cameraTarget` is **4**. Both files describe
+`COMPOSITION[8].cameras` is **4**. `WIN_TARGETS[8].cameraTarget` is **4**. Both files describe
 theirs as how many cameras must be lit to win; the running state counts against the first and
 `foldWin` decides W2 against the second. The Verdict plate reports the **fold's** number, because
 the plate is a report on the fold, and the number travels on the wire so the two cannot drift on

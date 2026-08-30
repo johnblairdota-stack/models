@@ -212,10 +212,9 @@ All three verified to fail when reverted. Full suite after: **`npm run build` cl
      The Klutz and The Liar in the Ear — need events nothing writes yet.
    - **The chat beat is empty** until something posts `chat.posted`. `chatUnmixed` is wired and
      will fill in the day it does.
-   - **`COMPOSITION[n].cameras` and `WIN_TARGETS[n].cameraTarget` disagree** — 3 against 4 at
-     eight players, and both files call theirs "how many must be unlocked to win". The Verdict
-     plate reports the fold's number because the plate is a report on the fold. **Which one is
-     the objective is a design call for John, not a refactor.**
+   - ✅ ~~**`COMPOSITION[n].cameras` and `WIN_TARGETS[n].cameraTarget` disagree**~~ **8p locked
+     2026-08-30** — both 4. Chrome `needed` and W2 `cameraTarget` match at eight. The Verdict
+     plate still reports the fold's `need`.
 7. **Delete the dead `room.js:34` `PHASES`** — five stale phases, imported nowhere, beside a
    `setPhase` that validates nothing.
 

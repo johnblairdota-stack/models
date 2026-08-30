@@ -3886,9 +3886,9 @@ console.log('\nparty-warm — the lobby-warm night');
 
   /*
    * ⚠️ The camera count on the plate is measured against the target THE FOLD USED, not the one
-   * the running state carries. `COMPOSITION[8].cameras` is 3 and `WIN_TARGETS[8].cameraTarget`
-   * is 4 — a real divergence, flagged rather than quietly picked — so a plate that read
-   * `frame.cameras.needed` would print a target the rule never used.
+   * the running state carries. At eight, `COMPOSITION[8].cameras` and
+   * `WIN_TARGETS[8].cameraTarget` are both 4 (locked 30 Aug). A plate that read
+   * `frame.cameras.needed` would still be a second table — the wire carries `need`.
    */
   t('W47d · the plate counts cameras against the fold\'s own target, carried on the wire',
     FANOUT_KEYS.verdict.includes('need') && FANOUT_KEYS.verdict.includes('camerasLit')
@@ -3897,6 +3897,10 @@ console.log('\nparty-warm — the lobby-warm night');
       && !/frame\?\.cameras/.test(hostSrc.slice(hostSrc.indexOf("show === 'verdict'"),
         hostSrc.indexOf("show === 'casting'"))),
     FANOUT_KEYS.verdict.join(','));
+  t('W47d2 · 8p chrome needed is WIN_TARGETS 4; smash return lights the camera',
+    COMPOSITION[8].cameras === 4
+    && /function lightCameraFromSmash/.test(await readFile(new URL('../src/party/room.js', import.meta.url), 'utf8'))
+    && /phase === 'return'/.test(await readFile(new URL('../src/party/room.js', import.meta.url), 'utf8')));
 
   /*
    * 🛑 **SKIP TO REUNION.** One control, one call site, and both of its guards are behavioural

@@ -735,18 +735,28 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       status: state.outcome, camerasLit: w.camerasLit, alarms: state.incident.alarms,
     }));
     /*
-     * 📷 **THE TARGET TRAVELS WITH THE COUNT, because the plate must not be able to disagree with
-     * the rule.** `state.cameras.needed` is `COMPOSITION[n].cameras` and the TV's run chrome
-     * counts against it; `foldWin` decides W2 against `WIN_TARGETS[n].cameraTarget`. **At eight
-     * players those are 3 and 4** — a real divergence, flagged to John rather than quietly picked,
-     * because which one is the objective is a design call. A Verdict plate is a report on THIS
-     * fold, so it reports the number this fold measured against and no other.
+     * 📷 **THE TARGET TRAVELS WITH THE COUNT.** `foldWin` decides W2 against
+     * `WIN_TARGETS[n].cameraTarget`. Chrome `needed` is `COMPOSITION[n].cameras`.
+     * At eight those used to be 4 and 3; 30 Aug locked them both at 4.
+     * The plate still reports THIS fold's `need`, never a second table.
      */
     return {
       outcome: state.outcome, rule: w.rule,
       camerasLit: w.camerasLit, need: WIN_TARGETS[count]?.cameraTarget ?? null,
       episode: aired,
     };
+  }
+
+  /**
+   * Smash landed (`mission.return`). Public camera unlock. Recap reads
+   * `run.camera_lit`. Live nights never hit the playEpisode scaffold.
+   */
+  function lightCameraFromSmash() {
+    state.cameras.unlocked += 1;
+    record(makeEvent('run.camera_lit', VIS.PUBLIC, {
+      camera: state.cameras.unlocked,
+      episode: state.airingEpisode ?? state.episode,
+    }));
   }
 
   return {
@@ -1019,6 +1029,14 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
          * the pair is already public on `pair`.
          */
         record(makeEvent(`mission.${phase}`, VIS.PUBLIC, { room: mission?.room ?? null }));
+        /*
+         * Smash landed. Recap CAM LIT reads `run.camera_lit` from the vis log.
+         * Live Send-them-in never emitted it (scaffold-only in playEpisode), so
+         * every execute recap printed CAM DARK after cameras 1/3. party-loop.md:
+         * cameras unlock as the goods' public reward when the task lands; a
+         * take leaves that terminal dark. `return` is the smash. `done` is home.
+         */
+        if (phase === 'return') lightCameraFromSmash();
         if (phase === 'done') setPhase('RECAP');
       }
       broadcast();
