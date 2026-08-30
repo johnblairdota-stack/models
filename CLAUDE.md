@@ -118,6 +118,9 @@ decision, not a refactor.
   mounts; blind still counts as `camera_lit`; a dark mount retries DRILL. Voice is in the room
   (GO/HOLD, CLOSE/LATE/GOING); pad buttons do not send the call. Fail chrome names no person.
   Gate: `expedition-jobs`.
+- **The TV seat is held by a living host socket, not a sticky `tvTaken`.** Bind sets the
+  flag; `dropIfMine` clears it when that host sock actually drops (and a destroyed ghost
+  does not hold the seat). Two living hosts are still refused. Gate: `party-night` N2b–N2h.
 - **Expedition reacts last ~10s, float up, and survive the 2 Hz world tick.** A tap is a new
   chip with `--dx`/`--dy`. A stable expedition does not `paint()` — `t:react` and `t:state`
   patch in place, because reinserting a chip restarts `react-float`. Gate: `react-pad` R42c / R43,

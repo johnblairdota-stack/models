@@ -995,19 +995,53 @@ function lookupToken(room, token) {
   return null;
 }
 
+/**
+ * 📺 **THE TV SEAT IS HELD BY A LIVING HOST SOCKET, NOT A STICKY FLAG.**
+ *
+ * HEAT5 / H229: `tvTaken` was set on bind and never cleared. `dropIfMine` only deleted
+ * `room.conns`. After a host tab died, F5, or a ghost websocket (`destroyed` / not writable),
+ * the next `host=1` painted "The TV seat is taken" with one Chrome left. The flag is still
+ * the lobby's "joined" bit; it must track a live host, and a second living host is still
+ * refused. Gate: `party-night` N2b–N2h.
+ */
+function tvSocketId(room) {
+  return room.game.sockets.find((s) => s.isTV)?.id ?? null;
+}
+
+export function tvHostLive(room) {
+  const id = tvSocketId(room);
+  if (!id) return false;
+  const c = room.conns.get(id);
+  const sock = c?.sock;
+  if (!sock) return false;
+  if (sock.destroyed) return false;
+  if (sock.writable === false) return false;
+  return true;
+}
+
+function claimTvSeat(room) {
+  room.tvTaken = true;
+}
+
+function releaseTvSeat(room) {
+  room.tvTaken = tvHostLive(room);
+}
+
 export function bindConnection(room, { token, wantTV = false }) {
   const found = lookupToken(room, token);
   if (found) {
     // A phone token must not become the TV, and a TV token must not sit as a robot.
     if (wantTV !== found.isTV) return { mismatch: wantTV ? 'phone-token-as-tv' : 'tv-token-as-phone' };
+    if (found.isTV) claimTvSeat(room);
     return found;
   }
   if (wantTV) {
     const tv = room.game.sockets.find((s) => s.isTV);
-    if (!tv || room.tvTaken) return null;
+    if (!tv) return null;
+    if (tvHostLive(room)) return null;
     const fresh = crypto.randomBytes(8).toString('hex');
     tv.token = fresh;
-    room.tvTaken = true;
+    claimTvSeat(room);
     return { id: tv.id, token: fresh, resumed: false, isTV: true };
   }
   // Phones fill first. The last free socket may still be the TV — party-sockets seats
@@ -1407,6 +1441,7 @@ export function startServer({ port = 5181, count = 8, castSeed = null, worldSeed
     const dropIfMine = () => {
       if (room.conns.get(bound.id)?.sock === sock) {
         room.conns.delete(bound.id);
+        if (self?.isTV || room.conns.size === 0) releaseTvSeat(room);
         fanout(room, lobbySnapshot(room));
       }
     };

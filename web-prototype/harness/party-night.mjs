@@ -8,7 +8,7 @@
  * This one proves a reviewer can open a host, two phones, see the lobby, and advance.
  */
 
-import { startServer, fanoutViolations, lobbySnapshot, progressShow, expireShowHold, applyNominate, castingBackstop, applyReady, readyCountdownNow, MAX_PHONES } from '../net/party/local.mjs';
+import { startServer, fanoutViolations, lobbySnapshot, progressShow, expireShowHold, applyNominate, castingBackstop, applyReady, readyCountdownNow, MAX_PHONES, bindConnection, tvHostLive } from '../net/party/local.mjs';
 import { recapFromEvents } from '../src/party/recap.js';
 import { qrMatrix } from '../src/party/qr.js';
 import {
@@ -271,6 +271,68 @@ const host = await open(`${base}&host=1`);
 t('N2 · host=1 is the TV spectator, not a robot',
   host.welcome?.t === 'welcome' && host.welcome.id === 'tv' && host.welcome.isTV === true,
   JSON.stringify({ id: host.welcome?.id, isTV: host.welcome?.isTV }));
+
+/*
+ * 📺 HEAT5 / H229. `tvTaken` used to stick after the host sock died, so F5 / a ghost
+ * websocket / a second Chrome painted "The TV seat is taken" with one host left.
+ * A living second host is still refused. Same room `tvseat`, not `night`.
+ */
+{
+  const tvBase = `ws://localhost:${PORT}/?room=tvseat`;
+  const h1 = await open(`${tvBase}&host=1`);
+  t('N2b · the first host sits',
+    h1.welcome?.t === 'welcome' && h1.welcome?.isTV === true);
+  const living = await open(`${tvBase}&host=1`);
+  t('N2c · a second simultaneous host is refused · two living TVs are still illegal',
+    living.welcome?.t === 'full' && (living.welcome?.reason === 'full' || !living.welcome?.isTV),
+    JSON.stringify(living.welcome));
+  living.close();
+  h1.close();
+  await sleep(80);
+  const h2 = await open(`${tvBase}&host=1`);
+  t('N2d · after the host sock drops, one new host of the same room sits again',
+    h2.welcome?.t === 'welcome' && h2.welcome?.isTV === true && h2.welcome?.id === 'tv',
+    JSON.stringify({ t: h2.welcome?.t, id: h2.welcome?.id, isTV: h2.welcome?.isTV }));
+  const again = await open(`${tvBase}&host=1`);
+  t('N2e · and a second host is still refused once that one is in',
+    again.welcome?.t === 'full', JSON.stringify(again.welcome));
+  again.close();
+  const tok = h2.welcome.token;
+  h2.close();
+  await sleep(80);
+  const reclaimed = await open(`${tvBase}&host=1&token=${tok}`);
+  t('N2f · host token reclaim sits as the TV',
+    reclaimed.welcome?.t === 'welcome' && reclaimed.welcome?.isTV === true
+      && reclaimed.welcome?.resumed === true);
+  const steal = await open(`${tvBase}&host=1`);
+  t('N2g · reclaim still holds the seat against a second host',
+    steal.welcome?.t === 'full', JSON.stringify(steal.welcome));
+  reclaimed.close();
+  steal.close();
+}
+
+{
+  const game = createRoom({ count: 4, castSeed: 1, worldSeed: 1, send() {}, emit() {} });
+  const room = { game, conns: new Map(), seatsTaken: new Set(), tvTaken: false };
+  const first = bindConnection(room, { wantTV: true });
+  t('N2h · first TV bind claims the seat',
+    first?.isTV === true && first?.id === 'tv' && room.tvTaken === true);
+  room.conns.set(first.id, { sock: { destroyed: false, writable: true }, token: first.token });
+  t('N2h1 · a second TV bind is refused while the host sock is live',
+    bindConnection(room, { wantTV: true }) == null && tvHostLive(room) === true);
+  room.conns.delete(first.id);
+  room.tvTaken = true;
+  const afterLeak = bindConnection(room, { wantTV: true });
+  t('N2h2 · a leaked tvTaken with no live sock does not block the next host',
+    afterLeak?.isTV === true && afterLeak?.resumed === false, JSON.stringify(afterLeak));
+  room.conns.set(afterLeak.id, { sock: { destroyed: true, writable: false }, token: afterLeak.token });
+  room.tvTaken = true;
+  t('N2h3 · a destroyed ghost sock does not count as a living host',
+    tvHostLive(room) === false);
+  const afterGhost = bindConnection(room, { wantTV: true });
+  t('N2h4 · and the next host sits over that ghost',
+    afterGhost?.isTV === true && afterGhost?.resumed === false);
+}
 
 const a = await open(base);
 const b = await open(base);
