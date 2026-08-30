@@ -1068,7 +1068,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
         r.cleared = true;
         r.body.sitLock = true;
         /*
-         * 📺 HEAT · FREEZE, DO NOT playLoco. Loco idle on a pitched root is the
+         * 📺 HEAT · FREEZE. A looping loco clip on a pitched root is the
          * elbow-up prone John watched. holdDead stops the mixer on bind; smash
          * bones land once. Gate: execute-hit H14.
          */
