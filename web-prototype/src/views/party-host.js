@@ -1697,8 +1697,6 @@ export default async function partyHost({ params }) {
       beat: show, phase, episode,
       runner: pair.runner || recap.runner || null,
       runnerName: joinedName(names, pair.runner || recap.runner, null),
-      guide: pair.guide || recap.guide || null,
-      taken: (recap.taken || []).map((t) => t.id).filter(Boolean),
       followSrc: follow.src,
       followLive: follow.live,
       // The three the warm slice added, so `party-follow-drive` can assert the lobby really is
