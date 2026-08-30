@@ -977,8 +977,8 @@ t('N13c · a refresh resumes the server show beat, not casting',
     });
     await sleep(60);
     episodes++;
-    // Skip the holds the way every other gate in this file does. Nobody nominates, so the
-    // Reckoning extends its cap and walks with an empty box; nobody dies all night.
+    // Skip the holds. Nobody nominates, so empty Reckoning skips Vote + Execution
+    // (HEAT6 / N19) and the night still decides nothing; nobody dies.
     for (let g = 0; g < 12 && roomc.show !== 'casting' && roomc.show !== 'reunion'; g++) {
       progressShow(roomc);
       await sleep(20);
@@ -1018,6 +1018,15 @@ t('N13c · a refresh resumes the server show beat, not casting',
   const renewed = showRoom();
   const walked = [renewed.show];
   for (let i = 0; i < 6 && walked.length < 8; i++) {
+    /*
+     * 📺 HEAT6. Empty Reckoning now skips Vote + Execution (N19). This gate is the
+     * other side of the fold — RENEWED → Casting — so stand a name before leaving
+     * Reckoning. The accused walk is still the seven beats; the empty skip is N19.
+     */
+    if (renewed.show === 'reckoning' && (renewed.game.state.nominations || []).length === 0) {
+      const living = renewed.game.episodeLiving();
+      renewed.game.nominatePlayer(living[0], living[1], living);
+    }
     const to = progressShow(renewed);
     if (!to || to === walked[walked.length - 1]) break;
     walked.push(to);
