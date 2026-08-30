@@ -3,7 +3,7 @@ import { buildFollowBed } from '../game/follow-bed.js';
 import { SEAT_ANCHOR_CONTROL } from '../characters/mesh-avatar.js';
 import {
   CAM_LABEL, FOLLOW_CHROME_CSS, cleanCampose, cleanThrottle, cueViolations, followViolations,
-  warmViolations,
+  warmViolations, liveTexture, dropDeadMaps,
 } from '../party/follow.js';
 import { DEFAULT_LOOK, cleanLook, robotFaceSvg } from '../party/look.js';
 import { pickPlanSeed } from '../party/mansion.js';
@@ -162,6 +162,7 @@ export default async function partyFollow({ params }) {
     }
     try {
       bed.cue(cue.cue);
+      guardSceneTextures(engine.scene);
     } catch (err) {
       /*
        * A cue throw used to paint VIEW "party.follow" FAILED over a live Verdict.
@@ -169,37 +170,43 @@ export default async function partyFollow({ params }) {
        * The show stays up; the next intros cue still dresses the ballroom.
        */
       console.error('[follow] cue failed', err);
+      window.__rrrClearViewFail?.();
     }
   });
 
   let first = true;
   let told = 0;
   engine.onUpdate((dt, t) => {
-    // `Engine._liveLoop` already clamps dt to 0.1. Do not clamp harder: on a slow TV (or a
-    // software rasteriser) a tighter clamp does not protect anything, it just makes the runner
-    // crawl — the simulation falls behind the wall clock in proportion to the clamp.
-    bed.step(dt, t);
-    chrome.tick(bed.readout(), t, bed);
-    if (first) {
-      first = false;
-      report('ready');
-      // The host cross-fades its slate off this, and `harness/party-follow-drive.mjs` waits on it.
-      document.body.dataset.rrrFollow = 'live';
-      try { parent.postMessage({ t: 'follow', ready: true, shot: bed.readout().shot }, '*'); } catch { /* standalone */ }
-    }
-    /*
-     * 🌍 TWICE A SECOND, AND ONLY DURING THE RUN. `src/party/room.js` `setWorld` broadcasts on
-     * every report, so this rate is the intel's refresh rate as well as its cost; 2 Hz is fast
-     * enough for a guide to call a room and far too slow to be a position feed anyone could aim
-     * with. Nothing is reported during `warm` or `intros` — there is no expedition to report on,
-     * and a hunter mark on a lobby screen would be a leak with no game behind it.
-     */
-    if (bed.mode === 'run' && t - told >= 0.5) {
-      told = t;
-      try { parent.postMessage({ t: 'follow', world: bed.world() }, '*'); } catch { /* standalone */ }
-    }
-    if (bed.mode === 'intros' && bed.introsDone()) {
-      try { parent.postMessage({ t: 'follow', intros: 'done' }, '*'); } catch { /* standalone */ }
+    try {
+      // `Engine._liveLoop` already clamps dt to 0.1. Do not clamp harder: on a slow TV (or a
+      // software rasteriser) a tighter clamp does not protect anything, it just makes the runner
+      // crawl — the simulation falls behind the wall clock in proportion to the clamp.
+      bed.step(dt, t);
+      chrome.tick(bed.readout(), t, bed);
+      if (first) {
+        first = false;
+        report('ready');
+        // The host cross-fades its slate off this, and `harness/party-follow-drive.mjs` waits on it.
+        document.body.dataset.rrrFollow = 'live';
+        try { parent.postMessage({ t: 'follow', ready: true, shot: bed.readout().shot }, '*'); } catch { /* standalone */ }
+      }
+      /*
+       * 🌍 TWICE A SECOND, AND ONLY DURING THE RUN. `src/party/room.js` `setWorld` broadcasts on
+       * every report, so this rate is the intel's refresh rate as well as its cost; 2 Hz is fast
+       * enough for a guide to call a room and far too slow to be a position feed anyone could aim
+       * with. Nothing is reported during `warm` or `intros` — there is no expedition to report on,
+       * and a hunter mark on a lobby screen would be a leak with no game behind it.
+       */
+      if (bed.mode === 'run' && t - told >= 0.5) {
+        told = t;
+        try { parent.postMessage({ t: 'follow', world: bed.world() }, '*'); } catch { /* standalone */ }
+      }
+      if (bed.mode === 'intros' && bed.introsDone()) {
+        try { parent.postMessage({ t: 'follow', intros: 'done' }, '*'); } catch { /* standalone */ }
+      }
+    } catch (err) {
+      console.error('[follow] tick failed', err);
+      window.__rrrClearViewFail?.();
     }
   });
 
@@ -210,44 +217,85 @@ export default async function partyFollow({ params }) {
    */
   const camC = engine.camera.clone();
   const rawRender = engine.pipeline.render.bind(engine.pipeline);
-  engine.pipeline.render = (ms) => {
-    rawRender(ms);
-    const ll = bed.lastLook?.();
-    if (!ll || (ll.state !== 'live' && ll.state !== 'cut')) return;
-    const r = engine.renderer;
+  const restoreCanvas = (r) => {
     const canvas = r.domElement;
-    const w = canvas.width;
-    const h = canvas.height;
-    const bw = Math.max(96, Math.round(w * 0.22));
-    const bh = Math.max(54, Math.round(bw * 9 / 16));
-    const x = w - bw - Math.round(w * 0.028);
-    const y = Math.round(h * 0.11);
-    const prevAuto = r.autoClear;
-    r.autoClear = false;
-    r.setScissorTest(true);
-    r.setViewport(x, y, bw, bh);
-    r.setScissor(x, y, bw, bh);
-    r.setClearColor(0x000000, 1);
-    r.clear(true, true, true);
-    if (ll.state === 'live' && ll.eye && ll.at) {
-      camC.fov = ll.fov || 46;
-      camC.aspect = bw / Math.max(1, bh);
-      camC.near = 0.08;
-      camC.far = 40;
-      camC.position.set(ll.eye.x, ll.eye.y, ll.eye.z);
-      camC.up.set(0, 1, 0);
-      camC.lookAt(ll.at.x, ll.at.y, ll.at.z);
-      camC.updateProjectionMatrix();
-      r.render(engine.scene, camC);
-    } else if (ll.state === 'cut') {
-      bed.consumeLastLookCut?.();
-    }
     r.setScissorTest(false);
-    r.setViewport(0, 0, w, h);
-    r.autoClear = prevAuto;
-    void ms;
+    r.setViewport(0, 0, canvas.width, canvas.height);
+    r.setRenderTarget(null);
+  };
+  engine.pipeline.render = (ms) => {
+    try {
+      rawRender(ms);
+    } catch (err) {
+      /*
+       * A missing map `.image` after execute/wreck used to paint VIEW FAILED
+       * and leave it up. Drop the dead texture, keep the ballroom.
+       */
+      console.error('[follow] picture failed', err);
+      window.__rrrClearViewFail?.();
+      guardSceneTextures(engine.scene);
+      try {
+        rawRender(ms);
+      } catch {
+        try {
+          const r = engine.renderer;
+          restoreCanvas(r);
+          r.render(engine.scene, engine.camera);
+        } catch (fallbackErr) {
+          console.error('[follow] fallback picture failed', fallbackErr);
+        }
+      }
+      return;
+    }
+    try {
+      const ll = bed.lastLook?.();
+      if (!ll || (ll.state !== 'live' && ll.state !== 'cut')) return;
+      const r = engine.renderer;
+      r.setRenderTarget(null);
+      const canvas = r.domElement;
+      const w = canvas.width;
+      const h = canvas.height;
+      const bw = Math.max(96, Math.round(w * 0.22));
+      const bh = Math.max(54, Math.round(bw * 9 / 16));
+      const x = w - bw - Math.round(w * 0.028);
+      const y = Math.round(h * 0.11);
+      const prevAuto = r.autoClear;
+      r.autoClear = false;
+      r.setScissorTest(true);
+      r.setViewport(x, y, bw, bh);
+      r.setScissor(x, y, bw, bh);
+      r.setClearColor(0x000000, 1);
+      r.clear(true, true, true);
+      if (ll.state === 'live' && ll.eye && ll.at) {
+        camC.fov = ll.fov || 46;
+        camC.aspect = bw / Math.max(1, bh);
+        camC.near = 0.08;
+        camC.far = 40;
+        camC.position.set(ll.eye.x, ll.eye.y, ll.eye.z);
+        camC.up.set(0, 1, 0);
+        camC.lookAt(ll.at.x, ll.at.y, ll.at.z);
+        camC.updateProjectionMatrix();
+        r.render(engine.scene, camC);
+      } else if (ll.state === 'cut') {
+        bed.consumeLastLookCut?.();
+      }
+      r.setScissorTest(false);
+      r.setViewport(0, 0, w, h);
+      r.autoClear = prevAuto;
+      void ms;
+    } catch (err) {
+      console.error('[follow] last-look failed', err);
+      try { restoreCanvas(engine.renderer); } catch { /* keep last frame */ }
+    }
   };
 
+  /*
+   * Live before the first rAF so a verdict-frame throw cannot paint `#err`.
+   * Last-look C is still the corner PIP; this only stops a null `.image`
+   * from owning the show.
+   */
+  document.body.dataset.rrrFollow = 'live';
+  guardSceneTextures(engine.scene);
   engine.markReady();
   engine.start();
 
@@ -415,4 +463,20 @@ function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[c]));
+}
+
+/**
+ * Drop maps / env / cube faces whose `.image` is null so three cannot throw
+ * on the live TV. Meshes stay — a wreck stays on the floor.
+ */
+function guardSceneTextures(scene) {
+  if (!scene) return;
+  if (scene.environment && liveTexture(scene.environment) == null) scene.environment = null;
+  if (scene.background && scene.background.isTexture && liveTexture(scene.background) == null) {
+    scene.background = null;
+  }
+  scene.traverse?.((o) => {
+    const mats = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
+    for (const m of mats) dropDeadMaps(m);
+  });
 }

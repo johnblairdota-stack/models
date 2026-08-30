@@ -697,6 +697,71 @@ export function idleRebuildCast(intro, introCast) {
   return (Array.isArray(introCast) && introCast.length) ? introCast : null;
 }
 
+/**
+ * A texture three can sample. Null tex / null `.image` / null `.images` /
+ * a cube with a missing face → drop it.
+ *
+ * Episode 3 VERDICT after Fox (30 Aug): the follow path threw
+ * `Cannot read properties of null (reading 'image')` (John also saw
+ * `.images`) as the verdict plate painted RENEWED. Same hole as a
+ * disposed nameplate map or an unfinished cube face after execute /
+ * wreck / last-look. Reading `.image` on null whites the TV.
+ */
+export function liveTexture(tex) {
+  if (tex == null || typeof tex !== 'object') return null;
+  const image = tex.image !== undefined ? tex.image : tex.images;
+  if (image == null) return null;
+  if (Array.isArray(image)) {
+    for (let i = 0; i < image.length; i++) {
+      const face = image[i];
+      if (face == null) return null;
+      if (typeof face === 'object' && face.isDataTexture && face.image == null) return null;
+    }
+  }
+  return tex;
+}
+
+const MAP_KEYS = [
+  'map', 'envMap', 'emissiveMap', 'normalMap', 'roughnessMap', 'metalnessMap',
+  'aoMap', 'alphaMap', 'bumpMap', 'displacementMap', 'lightMap', 'specularMap',
+];
+
+/** Drop maps three would throw on. Leaves the mesh in the scene — a wreck stays a wreck. */
+export function dropDeadMaps(mat) {
+  if (mat == null || typeof mat !== 'object') return 0;
+  let n = 0;
+  for (const key of MAP_KEYS) {
+    const tex = mat[key];
+    if (tex == null) continue;
+    if (liveTexture(tex) == null) {
+      mat[key] = null;
+      if ('needsUpdate' in mat) mat.needsUpdate = true;
+      n++;
+    }
+  }
+  return n;
+}
+
+/**
+ * After party.follow is live, a render throw must not own the TV.
+ * Boot failures still paint. Other views still paint.
+ */
+export function paintViewFail({ viewId, live } = {}) {
+  return !(String(viewId || '') === 'party.follow' && live);
+}
+
+/** Hide `#err` so a caught follow throw cannot leave the red plate up through Reckoning. */
+export function clearViewFail(dom = {}) {
+  const errEl = dom.errEl;
+  if (errEl) {
+    errEl.style.display = 'none';
+    errEl.textContent = '';
+  }
+  if (dom.body?.dataset) delete dom.body.dataset.rrrError;
+  if (typeof dom.clearError === 'function') dom.clearError();
+  return true;
+}
+
 /** What one seat may contribute to an `intros` cue. `FANOUT_KEYS.lobbySeat`'s public subset. */
 export const CUE_CAST_KEYS = ['id', 'seat', 'name', 'shell', 'accent'];
 /** Public standing noms — the same pair `FANOUT_KEYS.nomRow` already fans to every socket. */

@@ -3,7 +3,7 @@ import { Player } from './player.js';
 import { chairCircle } from '../world/props.js';
 import { unit4hMaterials } from '../materials/surfaces/robot.js';
 import { cloneMeshAvatar } from '../characters/mesh-avatar.js';
-import { INTRO_FOV, RING_OUT, TALK_FOV } from '../party/follow.js';
+import { INTRO_FOV, RING_OUT, TALK_FOV, dropDeadMaps } from '../party/follow.js';
 import { attachHeadNameTag, attachNomineeBang, setNomineeBang, setNameTagLabel } from '../characters/chest-nameplate.js';
 import { LINK_INK, LINK_CHROME } from '../party/link.js';
 import { buildLinkStream } from '../characters/link-stream.js';
@@ -955,6 +955,11 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
         if ('roughness' in m) m.roughness = Math.min(1, (m.roughness ?? 0.5) + 0.38);
         if ('metalness' in m) m.metalness = Math.max(0, (m.metalness ?? 0.2) - 0.18);
         if ('emissiveIntensity' in m) m.emissiveIntensity = (m.emissiveIntensity ?? 1) * 0.15;
+        /*
+         * Verdict after execute threw on null `.image` while smashLook walked
+         * the limp body. Drop a disposed / unfinished map; keep the mesh.
+         */
+        dropDeadMaps(m);
         return m;
       });
       o.material = Array.isArray(o.material) ? next : next[0];

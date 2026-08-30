@@ -31,7 +31,7 @@ import {
   IDENTITY_SECRETS, INTRO_FOV, INTRO_FRAME_PCT, MISSION_PHASES, MOVE_KEYS, RING_OUT, SPATIAL_WORDS,
   STICK_DEADZONE, STICK_RELEASE, STICK_TURN, TALK_FOV, TV_FRAME_PCT,
   WARM_KEYS, WARM_STAGES, WORLD_KEYS, chaseOrbitOffset, cueViolations, followParams, followUrl,
-  idleRebuildCast,
+  idleRebuildCast, liveTexture, dropDeadMaps, paintViewFail, clearViewFail,
   followViolations,
   liveRunShot, runPerspective, LOOK_PITCH_MAX, LOOK_PITCH_MIN, lookYaw, moveViolations, stepLookOrbit,
   stickCamMove, stickHeading, stickMag, stickRef, warmLabel, warmPct,
@@ -2541,6 +2541,42 @@ console.log('\nparty-warm — the lobby-warm night');
     && idleRebuildCast(null, [{ id: 'p1' }])?.length === 1
     && /idleRebuildCast\(intro, introCast\)/.test(bedSrc)
     && /cue failed/.test(viewSrc));
+  /*
+   * John, same CAST6 table, 30 Aug ~4:09pm. The `.length` hole was the first
+   * throw. The overlay that stayed through Reckoning said `.image`. A render
+   * throw painted `#err` and never hid it. Phones moved on; the TV stayed red.
+   * liveTexture drops a null `.image` / `.images` / missing cube face.
+   * paintViewFail is false once the follow is live. smashLook calls dropDeadMaps
+   * so a wreck still sits on the floor for a late watcher.
+   */
+  const mainSrc = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
+  const dead = { image: null };
+  const cubeMiss = { image: [null, {}, {}, {}, {}, {}] };
+  const ok = { image: { width: 4, height: 4 } };
+  const wiped = { map: dead, envMap: ok, needsUpdate: false };
+  const plate = { style: { display: 'block' }, textContent: 'VIEW FAILED' };
+  t('W33x · verdict after execute cannot throw on null .image; live follow never keeps the red plate',
+    liveTexture(null) === null
+    && liveTexture({ image: null }) === null
+    && liveTexture({ images: null }) === null
+    && liveTexture(cubeMiss) === null
+    && liveTexture(ok) === ok
+    && dropDeadMaps(wiped) === 1
+    && wiped.map === null
+    && wiped.envMap === ok
+    && paintViewFail({ viewId: 'party.follow', live: true }) === false
+    && paintViewFail({ viewId: 'party.follow', live: false }) === true
+    && paintViewFail({ viewId: 'mat.marble', live: true }) === true
+    && clearViewFail({ errEl: plate }) === true
+    && plate.style.display === 'none'
+    && plate.textContent === ''
+    && /paintViewFail\(\{ viewId, live \}\)/.test(mainSrc)
+    && /__rrrClearViewFail/.test(mainSrc)
+    && /dropDeadMaps\(m\)/.test(introSrc)
+    && /picture failed/.test(viewSrc)
+    && /guardSceneTextures/.test(viewSrc)
+    && /dataset\.rrrFollow = 'live'/.test(viewSrc)
+    && !/function restoreLooseChair/.test(introSrc));
 }
 
 // ---- W34 · NO DOORWAY INTO VOID, AND NOTHING OCCUPIES THE APERTURE --------------------------

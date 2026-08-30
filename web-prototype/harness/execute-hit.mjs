@@ -15,6 +15,7 @@
  * H16–H18 grip lock and Attack stay; clone setLimbVisible is real
  * H11+   the wreck STAYS after the empty execute cue — Ada is not parkSit'd living
  *        in episode-2 casting; her chair instance stays broken out of the InstancedMesh.
+ * H13    a null `.image` after execute cannot white the TV; live follow does not keep `#err`
  *
  * Pure node. `src/game/execute-hit.js` is THREE-free. Picture files are source-read:
  * CI has no `npm install`.
@@ -27,6 +28,7 @@ import {
   wreckPose, chairTopple, chairEyeline, seatedAim,
   wreckLook, wreckCam, talkCycleShots, talkShotAt, WRECK_SHOT, WRECK_LOOK_Y, WRECK_EYE_Y,
 } from '../src/game/execute-hit.js';
+import { liveTexture, dropDeadMaps, paintViewFail } from '../src/party/follow.js';
 import { SHOWRUNNER } from '../src/party/vote.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -323,6 +325,23 @@ t('H10 · seatedAim is a visor-height torso when Head is missing',
     && /wrecked: \[\.\.\.wreckedSeen\]/.test(bedSrc)
     && !/function restoreLooseChair/.test(introSrc)
     && !/parkSit\(exec\.victim\)/.test(introSrc));
+  /*
+   * John, CAST6, 30 Aug. Verdict after Fox: TypeError reading null `.image`
+   * (or `.images`) on the follow path, then the red plate stayed through
+   * Reckoning. smashLook drops a dead map; the wreck mesh stays. A live
+   * follow throw must not paint VIEW FAILED.
+   */
+  t('H13 · smashLook drops a null .image; live follow does not paint a permanent fail plate',
+    liveTexture(null) === null
+    && liveTexture({ image: null }) === null
+    && liveTexture({ images: [null, 1, 1, 1, 1, 1] }) === null
+    && dropDeadMaps({ map: { image: null } }) === 1
+    && paintViewFail({ viewId: 'party.follow', live: true }) === false
+    && /dropDeadMaps\(m\)/.test(introSrc)
+    && /function smashLook/.test(introSrc)
+    && /function liveTexture/.test(followSrc)
+    && /picture failed/.test(viewSrc)
+    && !/function restoreLooseChair/.test(introSrc));
 }
 
 if (fail) {
