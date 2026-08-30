@@ -3557,14 +3557,21 @@ console.log('\nparty-warm — the lobby-warm night');
   // `\r?\n`, for the same reason W17a-pre carries it: a Windows checkout writes `}\r\n`.
   const painter = host.match(/function paintReactStrip\(\)[\s\S]*?\r?\n {2}\}\r?\n/)?.[0] ?? '';
   t('W45-pre · the strip painter was extracted', painter.length > 400, `${painter.length} chars`);
-  t('W45 · one arrival is one chip keyed on the EVENT, not the player · spam stacks with --dx',
+  t('W45 · one arrival is one chip keyed on the EVENT, not the player · spam stacks with --dx/--dy',
     !/mount\.innerHTML\s*=/.test(painter)
       && /dataset\.rk = rk/.test(painter)
       && !/dataset\.rk === e\.from/.test(painter)
       && /--dx/.test(painter)
+      && /--dy/.test(painter)
       && /\(\(e\.at % 11\) - 5\) \* 12/.test(painter)
+      && /\(\(e\.at % 7\) - 3\) \* 8/.test(painter)
       && /b\.at - a\.at/.test(painter)
-      && /el\.remove\(\)/.test(painter));
+      && /el\.remove\(\)/.test(painter)
+      && /childElementCount === live\.length/.test(painter));
+  t('W45b · paint hoists the strip across innerHTML so a 2 Hz world tick cannot kill the rise',
+    /savedStrip/.test(host)
+    && /replaceWith\(savedStrip\)/.test(host)
+    && /m\.t === 'react'[\s\S]{0,80}paintReactStrip\(\)/.test(host));
 
   /*
    * MOTION. Every loop rests at both ends and none alternate, so a chip replaced mid-flight

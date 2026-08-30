@@ -237,6 +237,8 @@ export default async function partyHost({ params }) {
     /** Which plate / which of the four beats the special is on. Keyed so the ticker repaints
      *  on the step rather than four times a second — see `startClockTick`. */
     reunionKey: '',
+    /** Live reaction chips, keyed per EVENT so a 2 Hz world tick cannot remount the rise. */
+    reactKey: '',
     nomsKey: '',
     execKey: '',
     /** Refusals still on air. Transient — an event, not a fact. See REFUSAL_HOLD_MS. */
@@ -340,6 +342,13 @@ export default async function partyHost({ params }) {
         ui.warm = m.stage; ui.warmPct = m.pct ?? warmPct(m.stage);
       }
       if (m.t === 'lobby' && patchLobby(root, client, ui, m)) return;
+      /*
+       * 👏 A react is a new chip, not a new television. `paint()` rewrites `root.innerHTML`
+       * and the world report already does that twice a second — if a tap also rebuilt the
+       * night, the rise would restart (or, with `reactKey` matching, the empty mount would
+       * stay empty). Patch the strip in place. Gate: `react-pad` R42c.
+       */
+      if (m.t === 'react') { paintReactStrip(); return; }
       paint();
     },
     onClose: () => { ui.err = ui.err || 'Disconnected from the room server.'; paint(); },
@@ -1040,8 +1049,13 @@ export default async function partyHost({ params }) {
    * `onAir()` decides what is still up — newest first, capped, every tap its own chip so spam
    * stacks. Keyed on `{from, at}` so an unchanged strip is not rewritten four times a second
    * (that would restart every rise) and a second tap from the same seat is a new node, not a
-   * face-swap. `--dx` is a small spawn offset from the timestamp so stacked taps do not ride
-   * the same path. Gate: `react-pad` R8 / `party-warm` W45.
+   * face-swap. `--dx` / `--dy` are a small spawn offset from the timestamp so stacked taps do
+   * not sit on one pixel. Gate: `react-pad` R8 / `party-warm` W45.
+   *
+   * ⚠️ **EMPTY MOUNT + SAME KEY MEANS THE RISE WAS WIPED.** `paint()` used to rewrite
+   * `root.innerHTML` on every `t:state` (the mansion reports at ~2 Hz) and leave `reactKey`
+   * set, so the next tick saw a match and refused to refill — one lucky spawn frame, then
+   * gone. Hoist the node across the rewrite; if the mount is still empty, rebuild.
    */
   function paintReactStrip() {
     const mount = root.querySelector('[data-react-strip]');
@@ -1049,7 +1063,7 @@ export default async function partyHost({ params }) {
     const live = onAir(client.reacts || [], Date.now());
     const eventKey = (e) => `${e.from}:${e.at}`;
     const key = live.map((e) => `${eventKey(e)}:${e.r}`).join(',');
-    if (key === ui.reactKey) return;
+    if (key === ui.reactKey && mount.childElementCount === live.length) return;
     ui.reactKey = key;
     const names = mergePublicNames(client.lobby, client.links?.pairs);
     const seatOf = (id) => (client.lobby?.seats || []).find((s) => s.playerId === id)?.seat ?? 99;
@@ -1071,6 +1085,7 @@ export default async function partyHost({ params }) {
         el.className = 'react-chip';
         el.dataset.rk = rk;
         el.style.setProperty('--dx', `${((e.at % 11) - 5) * 12}px`);
+        el.style.setProperty('--dy', `${((e.at % 7) - 3) * 8}px`);
         el.innerHTML = `${robotFaceSvg(look.shell, look.accent, { size: 56, mood })}
           <span class="react-who">${esc(joinedName(names, e.from, 'Someone'))}</span>`;
         if (prev) prev.after(el); else mount.prepend(el);
@@ -1268,6 +1283,14 @@ export default async function partyHost({ params }) {
   }
 
   function paint() {
+    /*
+     * 👏 HOIST THE STRIP BEFORE THE REWRITE. `setWorld` broadcasts `t:state` at ~2 Hz for
+     * the whole expedition. `root.innerHTML` would destroy every chip and restart (or, with
+     * `reactKey` still set, refuse to refill). Detach the live node, write the night, put
+     * it back. Same reason the follow camera is a body layer. Gate: `react-pad` R42c.
+     */
+    const savedStrip = root.querySelector('[data-react-strip]');
+    savedStrip?.remove();
     const frame = client.frame;
     const phase = frame?.phase || client.lobby?.phase || 'LOBBY';
     /* airingEpisode = episode on the air; frame.episode is already bumped post-playEpisode. */
@@ -1633,6 +1656,14 @@ export default async function partyHost({ params }) {
       ${rundownRailHtml({ beat: show, until: ui.showUntil, holdMs: hold, ribbon })}
       ${onRun || onStage || onRecap || onCards || show === 'lobby' ? '' : `<div class="night-line">${esc(SHOW_LINE)}</div>`}
       <div class="night-main">${body}</div>`;
+
+    const stripMount = root.querySelector('[data-react-strip]');
+    if (savedStrip && stripMount) {
+      stripMount.replaceWith(savedStrip);
+    } else {
+      ui.reactKey = '';
+      paintReactStrip();
+    }
 
     /*
      * A read-only handle for `harness/party-follow-drive.mjs`, and DELIBERATELY A PROJECTION

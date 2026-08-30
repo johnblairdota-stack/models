@@ -221,20 +221,23 @@ export function injectNightSkin() {
     .run-stage .run-facts { text-align:center; color:var(--night-dim); font-size:12px;
       letter-spacing:.16em; text-transform:uppercase; margin-top:2px; }
     /* 👏 THE REACTION STRIP — the people who are not in the mansion, along the bottom.
-       John, live on DUSK: they last ~4x longer than the old 2.6s pop (REACT_HOLD_MS), they
-       RISE (react-float, 56px) rather than the 8px night-rise pop, and a second tap is a new
-       chip with --dx so stacked taps do not ride the same path. night-rise is UNTOUCHED —
-       seats still use it. */
-    .react-strip { display:flex; justify-content:center; align-items:flex-start; gap:18px;
-      min-height:78px; padding:6px 12px 0; }
+       John, live HEAT: they last ~4x the old 2.6s pop (REACT_HOLD_MS 10s), they FLOAT UP
+       from the portrait (react-float, 56px then hang) rather than the 8px night-rise pop
+       or a rise-from-below that overflow:hidden clipped. A second tap is a new chip with
+       --dx/--dy so stacked taps do not sit on one pixel. night-rise is UNTOUCHED — seats
+       still use it. Duration stays locked to REACT_HOLD_MS. */
+    .react-strip { display:flex; justify-content:center; align-items:flex-end; gap:18px;
+      min-height:78px; padding:64px 12px 0; overflow:visible; position:relative; z-index:2; }
     .react-chip { display:flex; flex-direction:column; align-items:center; gap:3px;
-      --dx:0px; transform: translateX(var(--dx));
-      animation: react-float 1.15s ease-out; }
+      --dx:0px; --dy:0px; transform: translate(var(--dx), var(--dy));
+      animation: react-float 10s ease-out forwards; }
     .react-chip .react-who { font-size:11px; letter-spacing:.08em; color:var(--night-soft);
       max-width:96px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     @keyframes react-float {
-      from { opacity:0; transform: translateX(var(--dx)) translateY(56px); }
-      to { opacity:1; transform: translateX(var(--dx)); }
+      0% { opacity:0; transform: translate(var(--dx), var(--dy)); }
+      8% { opacity:1; transform: translate(var(--dx), calc(var(--dy) - 56px)); }
+      78% { opacity:1; transform: translate(var(--dx), calc(var(--dy) - 64px)); }
+      100% { opacity:0; transform: translate(var(--dx), calc(var(--dy) - 80px)); }
     }
     /* 🏷️ THE BADGE MOVES; THE FACE NEVER DOES.
        John's partner asked for "slightly animated", and slightly is the whole spec — about one

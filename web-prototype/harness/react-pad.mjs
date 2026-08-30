@@ -190,15 +190,30 @@ const OK = { reaction: 'CLAP', beat: 'expedition', alive: true, lastAt: null, no
     /e\.from\}:\$\{e\.at/.test(hostSrc)
     && !/dataset\.rk === e\.from/.test(hostSrc)
     && /--dx/.test(hostSrc)
+    && /--dy/.test(hostSrc)
     && /\(\(e\.at % 11\) - 5\) \* 12/.test(hostSrc)
+    && /\(\(e\.at % 7\) - 3\) \* 8/.test(hostSrc)
     && /b\.at - a\.at/.test(hostSrc));
+  /*
+   * John, live HEAT: chips spawned and vanished before they floated. `setWorld` fans
+   * `t:state` at ~2 Hz; `paint()` rewrote innerHTML; `reactKey` still matched so the
+   * empty mount stayed empty. The strip is hoisted across the rewrite, a react message
+   * patches without painting, and an empty mount with a stale key refills.
+   */
+  t('R42c · paint hoists the live strip across innerHTML, and a react does not rebuild the night',
+    /savedStrip/.test(hostSrc)
+    && /savedStrip\?\.remove\(\)/.test(hostSrc)
+    && /replaceWith\(savedStrip\)/.test(hostSrc)
+    && /m\.t === 'react'[\s\S]{0,80}paintReactStrip\(\)/.test(hostSrc)
+    && /childElementCount === live\.length/.test(hostSrc));
 
   const skinSrc = await readFile(new URL('../src/party/night-skin.js', import.meta.url), 'utf8');
-  t('R43 · chips rise with react-float (56px), they do not pop 8px via night-rise',
+  t('R43 · chips rise with react-float (56px up, 10s hang), they do not pop 8px via night-rise',
     /@keyframes react-float \{/.test(skinSrc)
-    && /animation:\s*react-float 1\.15s ease-out/.test(skinSrc)
-    && /translateY\(56px\)/.test(skinSrc)
+    && /animation:\s*react-float 10s ease-out forwards/.test(skinSrc)
+    && /calc\(var\(--dy\) - 56px\)/.test(skinSrc)
     && /--dx:0px/.test(skinSrc)
+    && /--dy:0px/.test(skinSrc)
     && !/\.react-chip \{[^}]*animation:\s*night-rise/.test(skinSrc)
     && /@keyframes night-rise/.test(skinSrc));
 }
