@@ -186,6 +186,12 @@ Every bug above that has a gate name beside it is locked in. `.github/workflows/
 the full `gates:party` chain on every push and PR. **A playtest finding is not finished until it is
 a gate** — five agents' findings were lost in August because they lived in transcripts.
 
+**loop8** (`harness/_loop8/`) is the overnight 8-phone driver: a trust matrix that moves only on
+observed actions, evils spend real `[data-link]` / `#whisper-send` pads, noms without a matrix
+reason are a sim hole, and expedition is skipped (`LOOP8_SKIP_EXPEDITION=1`, TV `]`) because the
+driver still cannot walk the pair. Node gate: `influence-gate.mjs` (I1–I9). The Playwright drive
+is **not** in `gates:party`.
+
 **The TV can now make a sound, and sound leaks differently from pixels.** An audio cue may only
 be a function of state already painted on the current beat's HTML — never a pre-reveal internal,
 never anything on `FOLLOW_FORBIDDEN`. Sound leaks through **timing and magnitude**, not just

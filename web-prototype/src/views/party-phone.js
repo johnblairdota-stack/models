@@ -284,15 +284,25 @@ export default async function partyPhone({ params }) {
      * phone never has `?dev=1`.
      */
     if (params.get('dev') === '1') {
-      window.__phone = () => ({
-        step: state.step,
-        lookLocked: state.lookLocked,
-        id: client.welcome?.playerId ?? null,
-        beat: client.beat,
-        ready: client.ready,
-        myReady: state.ready,
-        links: client.links,
-      });
+      window.__phone = () => {
+        const you = client.frame?.you || {};
+        const me = (client.frame?.players || []).find((p) => p.id === client.welcome?.playerId);
+        return {
+          step: state.step,
+          lookLocked: state.lookLocked,
+          id: client.welcome?.playerId ?? null,
+          name: me?.name || state.name || null,
+          alive: me ? me.alive !== false : true,
+          beat: client.beat,
+          ready: client.ready,
+          myReady: state.ready,
+          links: client.links,
+          role: you.role || null,
+          alignment: you.alignment || null,
+          teammates: you.teammates || [],
+          pair: client.frame?.pair || null,
+        };
+      };
       /*
        * A probe's way of pressing a button this phone owns. It is NOT a bypass of the rules —
        * everything still goes through the server, which re-checks `linkBlock`. It exists because
