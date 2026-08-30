@@ -200,12 +200,12 @@ const OK = { reaction: 'CLAP', beat: 'expedition', alive: true, lastAt: null, no
    * empty mount stayed empty. The strip is hoisted across the rewrite, a react message
    * patches without painting, and an empty mount with a stale key refills.
    */
-  t('R42c · paint hoists the live strip across innerHTML, and a react does not rebuild the night',
-    /savedStrip/.test(hostSrc)
-    && /savedStrip\?\.remove\(\)/.test(hostSrc)
-    && /replaceWith\(savedStrip\)/.test(hostSrc)
+  t('R42c · a stable expedition does not paint — react and the 2 Hz world tick patch in place',
+    /prevBeat === 'expedition' && ui\.beat === 'expedition'/.test(hostSrc)
     && /m\.t === 'react'[\s\S]{0,80}paintReactStrip\(\)/.test(hostSrc)
-    && /childElementCount === live\.length/.test(hostSrc));
+    && /function patchRunChrome/.test(hostSrc)
+    && /childElementCount === live\.length/.test(hostSrc)
+    && !/savedStrip/.test(hostSrc));
 
   const skinSrc = await readFile(new URL('../src/party/night-skin.js', import.meta.url), 'utf8');
   t('R43 · chips rise with react-float (56px up, 10s hang), they do not pop 8px via night-rise',

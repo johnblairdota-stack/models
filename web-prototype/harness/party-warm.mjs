@@ -3568,10 +3568,11 @@ console.log('\nparty-warm — the lobby-warm night');
       && /b\.at - a\.at/.test(painter)
       && /el\.remove\(\)/.test(painter)
       && /childElementCount === live\.length/.test(painter));
-  t('W45b · paint hoists the strip across innerHTML so a 2 Hz world tick cannot kill the rise',
-    /savedStrip/.test(host)
-    && /replaceWith\(savedStrip\)/.test(host)
-    && /m\.t === 'react'[\s\S]{0,80}paintReactStrip\(\)/.test(host));
+  t('W45b · a stable expedition does not paint — world ticks patch facts, reacts patch the strip',
+    /prevBeat === 'expedition' && ui\.beat === 'expedition'/.test(host)
+    && /function patchRunChrome/.test(host)
+    && /m\.t === 'react'[\s\S]{0,80}paintReactStrip\(\)/.test(host)
+    && !/savedStrip/.test(host));
 
   /*
    * MOTION. Every loop rests at both ends and none alternate, so a chip replaced mid-flight

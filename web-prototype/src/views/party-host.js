@@ -294,6 +294,7 @@ export default async function partyHost({ params }) {
   const client = new PartyNightClient({
     url: wsUrl,
     onMessage: (m) => {
+      const prevBeat = ui.beat;
       if (m.t === 'welcome') sessionStorage.setItem(tokenKey(code, 'tv'), m.token);
       // `end` rides with `beat` and is cleared whenever a `show` message omits it (an expedition
       // start never carries one) — the TV must not keep showing SMASHED/TIME from a past run.
@@ -343,12 +344,17 @@ export default async function partyHost({ params }) {
       }
       if (m.t === 'lobby' && patchLobby(root, client, ui, m)) return;
       /*
-       * 👏 A react is a new chip, not a new television. `paint()` rewrites `root.innerHTML`
-       * and the world report already does that twice a second — if a tap also rebuilt the
-       * night, the rise would restart (or, with `reactKey` matching, the empty mount would
-       * stay empty). Patch the strip in place. Gate: `react-pad` R42c.
+       * 👏 A react is a new chip, not a new television. `paint()` rewrites `root.innerHTML`.
+       * Detaching the strip and putting it back RESTARTS `react-float` — measured: a mid-rise
+       * chip snapped back to --dy. So we do not hoist, and we do not paint at all while the
+       * expedition is already on air. `setWorld` fans `t:state` at ~2 Hz; a tap is `t:react`.
+       * Both patch in place. Gate: `react-pad` R42c.
        */
       if (m.t === 'react') { paintReactStrip(); return; }
+      if (prevBeat === 'expedition' && ui.beat === 'expedition') {
+        if (m.t === 'state' || m.t === 'event') patchRunChrome();
+        return;
+      }
       paint();
     },
     onClose: () => { ui.err = ui.err || 'Disconnected from the room server.'; paint(); },
@@ -1052,10 +1058,10 @@ export default async function partyHost({ params }) {
    * face-swap. `--dx` / `--dy` are a small spawn offset from the timestamp so stacked taps do
    * not sit on one pixel. Gate: `react-pad` R8 / `party-warm` W45.
    *
-   * ⚠️ **EMPTY MOUNT + SAME KEY MEANS THE RISE WAS WIPED.** `paint()` used to rewrite
-   * `root.innerHTML` on every `t:state` (the mansion reports at ~2 Hz) and leave `reactKey`
-   * set, so the next tick saw a match and refused to refill — one lucky spawn frame, then
-   * gone. Hoist the node across the rewrite; if the mount is still empty, rebuild.
+   * ⚠️ **EMPTY MOUNT + SAME KEY MEANS THE RISE WAS WIPED.** A full `paint()` during the
+   * run used to rewrite `root.innerHTML` on every `t:state` and leave `reactKey` set, so
+   * the next tick saw a match and refused to refill. Stable expedition no longer paints;
+   * if a rewrite still empties the mount, rebuild.
    */
   function paintReactStrip() {
     const mount = root.querySelector('[data-react-strip]');
@@ -1282,15 +1288,35 @@ export default async function partyHost({ params }) {
     });
   }
 
+  function patchRunChrome() {
+    const cams = client.frame?.cameras;
+    const facts = root.querySelector('.run-facts');
+    if (facts) {
+      facts.textContent = `Cameras ${cams?.unlocked ?? '—'} / ${cams?.needed ?? '—'} · alarms ${client.frame?.incident?.alarms ?? 0}`;
+    }
+    const frame = client.frame;
+    const recap = recapFromEvents(client.events);
+    const line = followLine({
+      events: client.events,
+      episode: frame?.airingEpisode ?? frame?.episode ?? 1,
+      cameras: cams,
+      runEnd: ui.runEnd,
+      recap,
+    });
+    let el = root.querySelector('.run-follow-line');
+    if (line) {
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'run-follow-line';
+        facts?.before(el);
+      }
+      el.textContent = line;
+    } else if (el) {
+      el.remove();
+    }
+  }
+
   function paint() {
-    /*
-     * 👏 HOIST THE STRIP BEFORE THE REWRITE. `setWorld` broadcasts `t:state` at ~2 Hz for
-     * the whole expedition. `root.innerHTML` would destroy every chip and restart (or, with
-     * `reactKey` still set, refuse to refill). Detach the live node, write the night, put
-     * it back. Same reason the follow camera is a body layer. Gate: `react-pad` R42c.
-     */
-    const savedStrip = root.querySelector('[data-react-strip]');
-    savedStrip?.remove();
     const frame = client.frame;
     const phase = frame?.phase || client.lobby?.phase || 'LOBBY';
     /* airingEpisode = episode on the air; frame.episode is already bumped post-playEpisode. */
@@ -1657,13 +1683,8 @@ export default async function partyHost({ params }) {
       ${onRun || onStage || onRecap || onCards || show === 'lobby' ? '' : `<div class="night-line">${esc(SHOW_LINE)}</div>`}
       <div class="night-main">${body}</div>`;
 
-    const stripMount = root.querySelector('[data-react-strip]');
-    if (savedStrip && stripMount) {
-      stripMount.replaceWith(savedStrip);
-    } else {
-      ui.reactKey = '';
-      paintReactStrip();
-    }
+    ui.reactKey = '';
+    paintReactStrip();
 
     /*
      * A read-only handle for `harness/party-follow-drive.mjs`, and DELIBERATELY A PROJECTION

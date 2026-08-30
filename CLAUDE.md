@@ -119,8 +119,9 @@ decision, not a refactor.
   (GO/HOLD, CLOSE/LATE/GOING); pad buttons do not send the call. Fail chrome names no person.
   Gate: `expedition-jobs`.
 - **Expedition reacts last ~10s, float up, and survive the 2 Hz world tick.** A tap is a new
-  chip with `--dx`/`--dy`; `paint()` hoists the strip across `innerHTML` and a `react` message
-  does not rebuild the night. Gate: `react-pad` R42c / R43, `party-warm` W45b.
+  chip with `--dx`/`--dy`. A stable expedition does not `paint()` — `t:react` and `t:state`
+  patch in place, because reinserting a chip restarts `react-float`. Gate: `react-pad` R42c / R43,
+  `party-warm` W45b.
 - **Casting has a server-side backstop** (`CASTING_BACKSTOP_MS`, 45s) so a dead TV tab cannot hang
   the room, but an **empty ballot box still waits** — the net re-arms and never invents a pair.
   Gate: `party-night` N20a–e.
