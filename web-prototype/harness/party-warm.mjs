@@ -2575,7 +2575,9 @@ console.log('\nparty-warm — the lobby-warm night');
     && /dropDeadMaps\(m\)/.test(introSrc)
     && /picture failed/.test(viewSrc)
     && /guardSceneTextures/.test(viewSrc)
-    && /dataset\.rrrFollow = 'live'/.test(viewSrc)
+    && /function goLive/.test(viewSrc)
+    && /__rrrClearViewFail\?\.\(\)/.test(viewSrc)
+    && /goLive\(\)/.test(viewSrc)
     && !/function restoreLooseChair/.test(introSrc));
 }
 

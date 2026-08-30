@@ -187,7 +187,7 @@ export default async function partyFollow({ params }) {
         first = false;
         report('ready');
         // The host cross-fades its slate off this, and `harness/party-follow-drive.mjs` waits on it.
-        document.body.dataset.rrrFollow = 'live';
+        goLive();
         try { parent.postMessage({ t: 'follow', ready: true, shot: bed.readout().shot }, '*'); } catch { /* standalone */ }
       }
       /*
@@ -292,9 +292,10 @@ export default async function partyFollow({ params }) {
   /*
    * Live before the first rAF so a verdict-frame throw cannot paint `#err`.
    * Last-look C is still the corner PIP; this only stops a null `.image`
-   * from owning the show.
+   * from owning the show. goLive also HIDES a plate that already painted —
+   * CAST6 4:09pm left VIEW FAILED up through Reckoning after the verdict throw.
    */
-  document.body.dataset.rrrFollow = 'live';
+  goLive();
   guardSceneTextures(engine.scene);
   engine.markReady();
   engine.start();
@@ -469,6 +470,11 @@ function esc(s) {
  * Drop maps / env / cube faces whose `.image` is null so three cannot throw
  * on the live TV. Meshes stay — a wreck stays on the floor.
  */
+function goLive() {
+  document.body.dataset.rrrFollow = 'live';
+  window.__rrrClearViewFail?.();
+}
+
 function guardSceneTextures(scene) {
   if (!scene) return;
   if (scene.environment && liveTexture(scene.environment) == null) scene.environment = null;
