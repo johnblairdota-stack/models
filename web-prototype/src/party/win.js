@@ -62,10 +62,10 @@ export const TICK_ORDER = ['W1', 'W3', 'W2', 'W4', 'W5'];
  * Fold the log into a verdict.
  *
  * @param {Array<{seq:number,type:string,data:object}>} log
- * @param {{count:number, alignmentOf:(id:string)=>string}} ctx
+ * @param {{count:number, alignmentOf:(id:string)=>string, aired?:number}} ctx
  * @returns {{outcome:string, rule:string|null, atSeq:number|null, camerasLit:number, fed:number, livingGood:number, livingEvil:number, episode:number}}
  */
-export function foldWin(log, { count, alignmentOf }) {
+export function foldWin(log, { count, alignmentOf, aired } = {}) {
   const targets = WIN_TARGETS[count];
   if (!targets) throw new Error(`no win targets for ${count} players`);
 
@@ -81,10 +81,18 @@ export function foldWin(log, { count, alignmentOf }) {
 
   let hit = null;
   const fire = (rule, outcome, seq) => { if (!hit) hit = { rule, outcome, atSeq: seq }; };
+  const missedTargets = () => camerasLit < targets.cameraTarget || fed < targets.feedTarget;
 
   for (const e of log) {
     if (hit) break;
-    if (e.type === 'phase.CASTING') episode = e.data?.episode ?? episode;
+    /*
+     * ⚠️ `setPhase` used to write `phase.CASTING` with `{}`. W5 then saw episode=1
+     * all night and foldWin returned RENEWED at the cap. `cast.ballot` has always
+     * carried the number; read it. `aired` is what the live Verdict is folding.
+     */
+    if (e.type === 'phase.CASTING' || e.type === 'cast.ballot' || e.type === 'phase.VERDICT') {
+      if (e.data?.episode != null) episode = e.data.episode;
+    }
     if (e.type === 'host.skip') { fire('W6', OUTCOME.ABANDONED, e.seq); break; }
 
     if (e.type === 'run.camera_lit') camerasLit++;
@@ -100,16 +108,27 @@ export function foldWin(log, { count, alignmentOf }) {
     if (e.type === 'run.camera_lit' && camerasLit >= targets.cameraTarget) {
       fire('W2', OUTCOME.FINALE, e.seq); break;
     }
-    if (e.type === 'phase.VERDICT' && episode >= EPISODE_CAP && camerasLit < targets.cameraTarget) {
+    if (e.type === 'phase.VERDICT' && episode >= EPISODE_CAP && missedTargets()) {
       fire('W5', OUTCOME.CANCELLED, e.seq); break;
     }
+  }
+
+  /*
+   * H278 · DUSK6. Chrome printed RENEWED / "The season continues" while the
+   * driver wrote CANCELLED: W5 only fired on a CASTING row that carried
+   * `episode`, and live `setPhase` did not. At EPISODE_CAP a miss on cameras
+   * or feed is Production — never RENEWED. `aired` is the episode on the air.
+   */
+  if (!hit) {
+    const atCap = Math.max(episode, aired ?? 0) >= EPISODE_CAP;
+    if (atCap && missedTargets()) fire('W5', OUTCOME.CANCELLED, null);
   }
 
   return {
     outcome: hit ? hit.outcome : OUTCOME.RENEWED,
     rule: hit ? hit.rule : null,
     atSeq: hit ? hit.atSeq : null,
-    camerasLit, fed, episode,
+    camerasLit, fed, episode: Math.max(episode, aired ?? 0),
     livingGood: alive('good'), livingEvil: alive('evil'),
   };
 }

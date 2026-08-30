@@ -372,7 +372,14 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
   function setPhase(p) {
     state.phase = p;
     state.tick += 1;
-    record(makeEvent(`phase.${p}`, VIS.PUBLIC, {}));
+    /*
+     * H278. CASTING / VERDICT carry the episode on the air so foldWin's W5
+     * can see the cap. Empty `{}` left episode at 1 and the fold said RENEWED.
+     */
+    const data = (p === 'CASTING' || p === 'VERDICT')
+      ? { episode: state.airingEpisode ?? state.episode }
+      : {};
+    record(makeEvent(`phase.${p}`, VIS.PUBLIC, data));
     broadcast();
   }
 
@@ -709,7 +716,6 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
    * ============================================================================================= */
   function foldVerdict() {
     const align = Object.fromEntries(deal.seats.map((s) => [s.id, s.alignment]));
-    const w = foldWin(log.all(), { count, alignmentOf: (id) => align[id] });
     /*
      * 🚨 **`airingEpisode`, NOT `episode` — AND THIS IS THE SECOND HALF OF THE DOUBLE-BUMP BUG.**
      *
@@ -727,6 +733,11 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
      * here, so nothing about the gates' existing behaviour moves.
      */
     const aired = state.airingEpisode ?? state.episode;
+    const w = foldWin(log.all(), { count, alignmentOf: (id) => align[id], aired });
+    /*
+     * Belt: foldWin now refuses RENEWED at the cap when targets are missed (H278).
+     * Keep the coerce so a future W5 hole cannot air "the season continues".
+     */
     state.outcome = w.outcome === OUTCOME.RENEWED && aired >= EPISODE_CAP ? OUTCOME.CANCELLED : w.outcome;
     /*
      * 🚨 `fed` IS SEALED AND MUST STAY SEALED. `win.checked` is VIS.SEALED and carries it;

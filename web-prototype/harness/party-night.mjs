@@ -26,7 +26,7 @@ import { ACCENTS, SHELLS, cleanLook } from '../src/party/look.js';
 import { applyCastLock, applyCastTap, ballotFromCast, CAST_BLOCK_WHY, castPrompt, castRowBlock, castRowMark, freshCast, mergePublicNames, nominationPlayers, publicName } from '../src/party/cast-ui.js';
 import { createRoom } from '../src/party/room.js';
 import { NO_ONE } from '../src/party/vote.js';
-import { OUTCOME } from '../src/party/win.js';
+import { OUTCOME, outcomeLine } from '../src/party/win.js';
 
 const PORT = 5198;
 let pass = 0, fail = 0;
@@ -994,9 +994,9 @@ t('N13c · a refresh resumes the server show beat, not casting',
     JSON.stringify({ show: roomc.show, outcome: roomc.game.outcome(), episodes,
       cap: EPISODE_CAP, episode: roomc.game.state.episode }));
 
-  t('N17n2 · and nobody died on the way there — the cap is what ended it, not a rule',
+  t('N17n2 · and nobody died on the way there — W5 (the cap) is what ended it',
     roomc.game.state.players.every((p) => p.alive !== false)
-      && roomc.game.log.all().filter((e) => e.type === 'win.checked').at(-1)?.data?.rule == null,
+      && roomc.game.log.all().filter((e) => e.type === 'win.checked').at(-1)?.data?.rule === 'W5',
     JSON.stringify({
       dead: roomc.game.state.players.filter((p) => p.alive === false).map((p) => p.id),
       rule: roomc.game.log.all().filter((e) => e.type === 'win.checked').at(-1)?.data?.rule,
@@ -1012,6 +1012,14 @@ t('N13c · a refresh resumes the server show beat, not casting',
   t('N17p · a casting verb after the cap does not open another Casting',
     roomc.show === 'reunion' && roomc.game.outcome() === OUTCOME.CANCELLED,
     JSON.stringify({ show: roomc.show, outcome: roomc.game.outcome() }));
+
+  const lastVerdict = last(tvc, 'verdict');
+  t('N17q · H278 the aired verdict at the cap is CANCELLED — chrome never says the season continues',
+    lastVerdict?.status === OUTCOME.CANCELLED
+      && roomc.game.log.all().filter((e) => e.type === 'verdict.aired').at(-1)?.data?.status === OUTCOME.CANCELLED
+      && outcomeLine(lastVerdict?.status).includes('Production wins')
+      && !outcomeLine(lastVerdict?.status).includes('continues'),
+    JSON.stringify({ verdict: lastVerdict, line: outcomeLine(lastVerdict?.status) }));
 
   for (const c of [tvc, ...phonesc]) c.close();
   srvc.close();

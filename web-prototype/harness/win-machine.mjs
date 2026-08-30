@@ -10,7 +10,7 @@
  * the same two events in both orders and requires the winner to swap.
  */
 
-import { foldWin, WIN_TARGETS, OUTCOME, TICK_ORDER } from '../src/party/win.js';
+import { foldWin, WIN_TARGETS, OUTCOME, TICK_ORDER, outcomeLine } from '../src/party/win.js';
 import { EPISODE_CAP } from '../src/party/phases.js';
 import { createRoom } from '../src/party/room.js';
 
@@ -160,6 +160,36 @@ const fold = (evts, count = 8, alignmentOf = align8) => foldWin(mk(evts), { coun
   t('W10c · a night where nothing happens still ends at EPISODE_CAP, and evil takes it',
     quiet.state.outcome === OUTCOME.CANCELLED && quiet.state.episode > EPISODE_CAP,
     `${quiet.state.outcome} after ${quiet.state.episode - 1} episodes, cap ${EPISODE_CAP}`);
+  t('W10d · and the last aired verdict is CANCELLED — never RENEWED at the cap (H278)',
+    quiet.log.all().filter((e) => e.type === 'verdict.aired').at(-1)?.data?.status === OUTCOME.CANCELLED
+      && quiet.log.all().filter((e) => e.type === 'win.checked').at(-1)?.data?.rule === 'W5',
+    JSON.stringify(quiet.log.all().filter((e) => e.type === 'verdict.aired').at(-1)?.data));
+}
+
+// ---------------------------------------------------------------- W11 · H278 · cap miss is never RENEWED
+{
+  const dusk = foldWin(mk([DEAL, { type: 'phase.VERDICT', data: {} }]), {
+    count: 8, alignmentOf: align8, aired: EPISODE_CAP,
+  });
+  t('W11 · at the cap with 0 of 4 cameras the fold is CANCELLED, never RENEWED',
+    dusk.outcome === OUTCOME.CANCELLED && dusk.rule === 'W5' && dusk.camerasLit === 0,
+    `${dusk.outcome} · ${dusk.rule} · ${dusk.camerasLit} cam`);
+  t('W11b · chrome for that fold is Production, not "the season continues"',
+    outcomeLine(dusk.outcome).includes('Production wins')
+      && !outcomeLine(dusk.outcome).includes('continues'));
+
+  const short = fold([
+    DEAL,
+    ...Array(WIN_TARGETS[8].cameraTarget - 1).fill({ type: 'run.camera_lit' }),
+    { type: 'phase.VERDICT', data: { episode: EPISODE_CAP } },
+  ]);
+  t('W11c · one camera short at the cap is still a miss — CANCELLED',
+    short.outcome === OUTCOME.CANCELLED && short.rule === 'W5' && short.camerasLit === 3,
+    `${short.camerasLit} lit · ${short.outcome}`);
+
+  const mid = fold([DEAL, { type: 'phase.VERDICT', data: { episode: 2 } }]);
+  t('W11d control · before the cap, 0 cameras is still RENEWED',
+    mid.outcome === OUTCOME.RENEWED && mid.rule === null);
 }
 
 console.log(`\nwin-machine: ${pass} passed, ${fail} failed`);

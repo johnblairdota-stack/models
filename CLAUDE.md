@@ -191,6 +191,12 @@ of `WIN_TARGETS` is Production + Reunion. `enterNextCasting` (the `t:'casting'` 
 asks the fold the same way `progressShow` does. Execution kicker says Reunion at the cap, not
 Casting. Gate: `party-night` N17p.
 
+**H278 · the fold itself is never RENEWED at the cap on a miss.** DUSK6 chrome printed RENEWED /
+"The season continues" while the driver wrote CANCELLED: W5 only fired when `phase.CASTING`
+carried `episode`, and live `setPhase` wrote `{}`. `foldWin` now takes `aired`, reads
+`cast.ballot`, and after the walk a cap miss on cameras or feed is W5 / CANCELLED. Gates:
+`win-machine` W11–W11d, `party-night` N17q.
+
 **The TV can now make a sound, and sound leaks differently from pixels.** An audio cue may only
 be a function of state already painted on the current beat's HTML — never a pre-reveal internal,
 never anything on `FOLLOW_FORBIDDEN`. Sound leaks through **timing and magnitude**, not just
