@@ -17,6 +17,7 @@
  *        in episode-2 casting; her chair instance stays broken out of the InstancedMesh.
  * H13    a null `.image` after execute cannot white the TV; live follow does not keep `#err`
  * H14    the corpse mixer FREEZES (holdDead) — no Idle_M / loco idle / elbow-up prone
+ * H15    wreck shell stays living albedo — death is visor crashed + face lamp off
  *
  * Pure node. `src/game/execute-hit.js` is THREE-free. Picture files are source-read:
  * CI has no `npm install`.
@@ -28,6 +29,7 @@ import {
   stepLastLook, lastLookLive, lastLookOnAir,
   wreckPose, chairTopple, chairEyeline, seatedAim,
   wreckLook, wreckCam, talkCycleShots, talkShotAt, WRECK_SHOT, WRECK_LOOK_Y, WRECK_EYE_Y,
+  isFaceScreenName,
 } from '../src/game/execute-hit.js';
 import { liveTexture, dropDeadMaps, paintViewFail } from '../src/party/follow.js';
 import { SHOWRUNNER } from '../src/party/vote.js';
@@ -191,9 +193,8 @@ t('H7d · the bed breaks that instance out of the InstancedMesh',
   && /exec-chair-/.test(introSrc)
   && /new THREE\.Mesh\(circle\.mesh\.geometry/.test(introSrc)
   && /function stepLooseChair/.test(introSrc));
-t('H7e · smashLook dents the shell and setLimbVisible is no longer a no-op on the clone',
+t('H7e · smashLook still exists; clone setLimbVisible is still real (not used to hide a wreck limb)',
   /function smashLook/.test(introSrc)
-  && /setLimbVisible\?\.\('shoulderL', false\)/.test(introSrc)
   && /setLimbVisible\(socket, visible\)/.test(cloneFn)
   && /collapsed\.add/.test(cloneFn)
   && !/^\s*setLimbVisible\(\) \{\s*\}/m.test(cloneFn));
@@ -379,6 +380,33 @@ t('H10 · seatedAim is a visor-height torso when Head is missing',
   t('H14b · playSit / playLoco refuse a frozen corpse',
     /playSit\([\s\S]*?if \(pose === 'dead'\) return false/.test(cloneFn)
     && /playLoco\(\) \{\s*if \(pose === 'dead'\) return false/.test(cloneFn));
+}
+
+{
+  /*
+   * John, live HEAT: wrecked robots must NOT be darkened or re-tinted.
+   * Same shell/albedo as the living sit. Death read is only the face:
+   * visor/screen crashed, face lamp off. No grayscale, no dim multiply,
+   * no darker overlay, no missing shoulder.
+   */
+  const smashFn = introSrc.slice(
+    introSrc.indexOf('function smashLook'),
+    introSrc.indexOf('function restoreSmash'),
+  );
+  t('H15 · wreck death is the face only — visor crashed, lamp off, shell untouched',
+    isFaceScreenName('faceplate')
+    && isFaceScreenName('unit4h.faceplate')
+    && !isFaceScreenName('visorBezel')
+    && !isFaceScreenName('shell')
+    && !isFaceScreenName('mintCapL')
+    && /isFaceScreenName/.test(smashFn)
+    && /emissiveIntensity = 0/.test(smashFn)
+    && /setRGB\(0, 0, 0\)/.test(smashFn)
+    && !/multiplyScalar\(0\.42\)/.test(smashFn)
+    && !/multiplyScalar\(0\.12\)/.test(smashFn)
+    && !/roughness \+ 0\.38/.test(smashFn)
+    && !/setLimbVisible/.test(smashFn)
+    && /dropDeadMaps/.test(smashFn));
 }
 
 if (fail) {

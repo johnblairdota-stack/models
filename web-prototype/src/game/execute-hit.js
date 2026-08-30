@@ -256,6 +256,18 @@ export function talkShotAt(clock, shots) {
   return list[list.length - 1];
 }
 
+/**
+ * 📺 HEAT · DEATH IS THE FACE ONLY. Shell / mint / bezel keep living albedo.
+ * The visor screen and the face lamp go out. Bezel is the white frame, not the
+ * screen — do not crash it. Gate: execute-hit H15.
+ */
+export function isFaceScreenName(name) {
+  const s = String(name || '').toLowerCase();
+  if (/bezel/.test(s)) return false;
+  return /faceplate|unit4h\.face|facescreen|facelamp|face.?lamp|face.?light|eyelight/.test(s)
+    || (/\bvisor\b/.test(s) && !/bezel/.test(s));
+}
+
 /** Fallback seated torso/head when the Head bone is missing (unit4h). */
 export function seatedAim({ sitAt, chair, cx = 0, cz = 0, height = 1.12 } = {}) {
   const x = sitAt?.x ?? chair?.x ?? 0;

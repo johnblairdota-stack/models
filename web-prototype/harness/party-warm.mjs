@@ -2538,6 +2538,12 @@ console.log('\nparty-warm — the lobby-warm night');
     && /pitch: 1\.52/.test(hitSrc)
     && /ux \* 1\.18/.test(hitSrc)
     && !/function restoreLooseChair/.test(introSrc));
+  t('W33z · wreck smashLook does not dim the shell — face lamp off only',
+    /isFaceScreenName/.test(introSrc)
+    && /emissiveIntensity = 0/.test(introSrc)
+    && !/multiplyScalar\(0\.42\)/.test(introSrc)
+    && !/setLimbVisible\?\.\('shoulderL', false\)/.test(introSrc)
+    && /function smashLook/.test(introSrc));
   /*
    * John, 30 Aug, Episode 3 VERDICT after Fox. The follow iframe remounted
    * (CAM DARK / CAMERA WARMING). introCast was still null. Verdict sit sends

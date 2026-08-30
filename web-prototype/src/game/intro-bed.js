@@ -23,6 +23,7 @@ import {
   LAST_LOOK, contactMix, retargetHead, occupies, execCamMode,
   stepLastLook, wreckPose, chairTopple, chairEyeline, seatedAim,
   wreckCam, wreckLook, talkCycleShots, talkShotAt, WRECK_SHOT,
+  isFaceScreenName,
 } from './execute-hit.js';
 
 export {
@@ -936,35 +937,36 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     if (!r?.body?.root || r.smashed) return;
     r.smashed = true;
     exec.smashed = true;
+    /*
+     * 📺 HEAT · NO BODY TINT. Same shell/albedo as a living sit. Death is the
+     * face only: visor/screen crashed, face lamp off (emissive = 0). No
+     * grayscale, no dim multiply, no missing shoulder. dropDeadMaps stays —
+     * that is a disposed-texture guard, not a look. Gate: H15.
+     */
     r.body.root.traverse((o) => {
+      if (o.isLight && isFaceScreenName(o.name)) {
+        o.intensity = 0;
+        o.visible = false;
+      }
       if (!o.isMesh && !o.isSkinnedMesh) return;
       const mats = Array.isArray(o.material) ? o.material : [o.material];
+      const face = isFaceScreenName(o.name)
+        || mats.some((m) => isFaceScreenName(m?.name));
       const next = mats.map((m) => {
         if (!m) return m;
-        if (!m.userData._preSmash) {
-          m.userData._preSmash = {
-            color: m.color?.clone?.() ?? null,
-            emissive: m.emissive?.clone?.() ?? null,
-            roughness: m.roughness,
-            metalness: m.metalness,
-            emissiveIntensity: m.emissiveIntensity,
-          };
+        if (face) {
+          const mine = m.userData._faceCrashed ? m : m.clone();
+          mine.userData._faceCrashed = true;
+          if (mine.emissive) mine.emissive.setRGB(0, 0, 0);
+          if ('emissiveIntensity' in mine) mine.emissiveIntensity = 0;
+          dropDeadMaps(mine);
+          return mine;
         }
-        if (m.color) m.color.multiplyScalar(0.42);
-        if (m.emissive) m.emissive.multiplyScalar(0.12);
-        if ('roughness' in m) m.roughness = Math.min(1, (m.roughness ?? 0.5) + 0.38);
-        if ('metalness' in m) m.metalness = Math.max(0, (m.metalness ?? 0.2) - 0.18);
-        if ('emissiveIntensity' in m) m.emissiveIntensity = (m.emissiveIntensity ?? 1) * 0.15;
-        /*
-         * Verdict after execute threw on null `.image` while smashLook walked
-         * the limp body. Drop a disposed / unfinished map; keep the mesh.
-         */
         dropDeadMaps(m);
         return m;
       });
       o.material = Array.isArray(o.material) ? next : next[0];
     });
-    r.body.avatar?.setLimbVisible?.('shoulderL', false);
   }
 
   function restoreSmash(r) {
