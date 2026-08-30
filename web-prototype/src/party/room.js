@@ -31,6 +31,8 @@ import { cleanLook } from './look.js';
 import { STALE_MAX, intelFor } from './intel.js';
 import { coverageRoomOf } from './mansion.js';
 import { mapFeed } from './mapfeed.js';
+import { missionFor } from './mission.js';
+import { drillShotFor, FAIL_CHROME, JOB } from './jobs.js';
 
 export const PHASES = ['LOBBY', 'CASTING', 'EXPEDITION', 'DEBRIEF', 'VERDICT'];
 
@@ -90,7 +92,10 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     // guide nobody can ever catch lying. One establishing camera puts episode one at 33%
     // coverage (deliberately above T3's band) and the broadcast has something to cut to on
     // frame one, which the Director needs anyway.
-    cameras: { unlocked: 1, needed: deal.cameras },
+    cameras: { unlocked: 1, needed: deal.cameras, tool: null },
+    /** Hall/floor from a finished drill. Revealed on the NEXT casting, not tonight's recap. */
+    pendingTool: null,
+    failChromeSent: false,
     incident: { alarms: 0 },
     /**
      * 🌍 **WHERE THE BODIES ARE, AS LAST REPORTED BY THE TV.**
@@ -748,15 +753,25 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
   }
 
   /**
-   * Smash landed (`mission.return`). Public camera unlock. Recap reads
+   * Job landed (`mission.return`). Public camera unlock. Recap reads
    * `run.camera_lit`. Live nights never hit the playEpisode scaffold.
+   * Smash always returns on a hit. Drill only returns when the mount finished
+   * — a dark mount never enters return, so it never lights.
    */
-  function lightCameraFromSmash() {
+  function lightCameraFromJob(job) {
     state.cameras.unlocked += 1;
     record(makeEvent('run.camera_lit', VIS.PUBLIC, {
       camera: state.cameras.unlocked,
       episode: state.airingEpisode ?? state.episode,
+      job: job ?? null,
     }));
+  }
+
+  function revealPendingTool() {
+    if (!state.pendingTool) return;
+    state.cameras.tool = state.pendingTool;
+    record(makeEvent('run.cam_tool', VIS.PUBLIC, { shot: state.pendingTool }));
+    state.pendingTool = null;
   }
 
   return {
@@ -795,6 +810,8 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       state.pair = { runner: null, guide: null };
       state.liveLiving = null;
       state.lynchVotes = {};
+      state.failChromeSent = false;
+      revealPendingTool();
       for (const s of sockets) {
         if (s.isTV) continue;
         s.seatRole = null;
@@ -1030,14 +1047,34 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
          */
         record(makeEvent(`mission.${phase}`, VIS.PUBLIC, { room: mission?.room ?? null }));
         /*
-         * Smash landed. Recap CAM LIT reads `run.camera_lit` from the vis log.
+         * Job landed. Recap CAM LIT reads `run.camera_lit` from the vis log.
          * Live Send-them-in never emitted it (scaffold-only in playEpisode), so
          * every execute recap printed CAM DARK after cameras 1/3. party-loop.md:
          * cameras unlock as the goods' public reward when the task lands; a
-         * take leaves that terminal dark. `return` is the smash. `done` is home.
+         * take leaves that terminal dark. `return` is the smash or a finished
+         * mount. `done` is home. A drill that never mounted never returns.
          */
-        if (phase === 'return') lightCameraFromSmash();
-        if (phase === 'done') setPhase('RECAP');
+        if (phase === 'return') {
+          const spec = missionFor(state.airingEpisode ?? state.episode);
+          const job = mission?.job === JOB.DRILL || mission?.job === JOB.SMASH
+            ? mission.job
+            : spec.job;
+          lightCameraFromJob(job);
+          if (job === JOB.DRILL) {
+            state.pendingTool = drillShotFor(state.worldSeed, state.airingEpisode ?? state.episode);
+          }
+        }
+        if (phase === 'done') {
+          const nail = mission?.emptyNail;
+          if (nail === 'left' || nail === 'right') {
+            record(makeEvent('run.wall_still', VIS.PUBLIC, { emptyNail: nail, job: JOB.SMASH }));
+          }
+          setPhase('RECAP');
+        }
+      }
+      if (mission?.heard && !state.failChromeSent) {
+        state.failChromeSent = true;
+        record(makeEvent('run.fail_chrome', VIS.PUBLIC, { line: FAIL_CHROME.take }));
       }
       broadcast();
       return moved;

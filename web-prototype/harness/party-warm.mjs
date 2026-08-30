@@ -80,7 +80,7 @@ import {
   remainingMs, rundownRibbon, RUN_END, isTalkBeat,
   REUNION_PLAN, reunionBeatAt, rollCallRevealed,
 } from '../src/party/show.js';
-import { missionFor, MISSION_TABLE } from '../src/party/mission.js';
+import { missionFor, MISSION_DRILL } from '../src/party/mission.js';
 import { ROOMS, hunterVisibleToGuide } from '../src/party/coverage.js';
 import { buildPlan } from './genspike.mjs';
 import { DROP_RATE, GRADES, STALE_MAX, gradeFor, intelFor, intelLine } from '../src/party/intel.js';
@@ -1713,17 +1713,17 @@ console.log('\nparty-warm — the lobby-warm night');
     && !isTalkBeat('recap') && !isTalkBeat('expedition') && !isTalkBeat('casting')
     && /!pair\.runner/.test(hostSrc)
     && /show === 'debrief'/.test(hostSrc));
-  t('W27f · episode 2+ smashes the chapel catalog table-round, not a invented GLB',
-    missionFor(1).target === 'painting' && missionFor(2).target === 'table-round'
-      && missionFor(2).room === 'chapel'
-      && missionFor(undefined).target === 'painting'
-      && MISSION_TABLE.catalogId === 'table-round'
-      && FURN_SMASH_ASSETS.some((a) => a.id === 'table-round' && a.file === 'rrr_prop_table-round_v1.glb')
-      && CATALOG_ROOM_ASSIGN['table-round'].rooms[0] === 'chapel');
+  t('W27f · episode 1 is the twin smash; episode 2+ is the gallery drill, not a chapel table',
+    missionFor(1).target === 'twin-painting' && missionFor(2).target === 'wall-cam'
+      && missionFor(2).room === 'gallery'
+      && missionFor(undefined).target === 'twin-painting'
+      && MISSION_DRILL.job === 'drill'
+      && missionFor(3) === MISSION_DRILL);
   const bedSrc = await readFile(new URL('../src/game/follow-bed.js', import.meta.url), 'utf8');
-  t('W27g · the follow bed finds the dressed table-round and keeps the ep1 painting',
-    /function findTableRound/.test(bedSrc)
-    && /buildPainting\(gallery/.test(bedSrc)
+  t('W27g · the follow bed builds twin paintings and a wall cam, and re-arms per episode',
+    /function buildTwinPaintings/.test(bedSrc)
+    && /function buildWallCam/.test(bedSrc)
+    && /buildTwinPaintings\(gallery/.test(bedSrc)
     && /armMission/.test(bedSrc)
     && /missionFor/.test(bedSrc));
   t('W27h · beginCasting clears the last pair so episode 2 can ballot',
@@ -3897,9 +3897,9 @@ console.log('\nparty-warm — the lobby-warm night');
       && !/frame\?\.cameras/.test(hostSrc.slice(hostSrc.indexOf("show === 'verdict'"),
         hostSrc.indexOf("show === 'casting'"))),
     FANOUT_KEYS.verdict.join(','));
-  t('W47d2 · 8p chrome needed is WIN_TARGETS 4; smash return lights the camera',
+  t('W47d2 · 8p chrome needed is WIN_TARGETS 4; a finished job return lights the camera',
     COMPOSITION[8].cameras === 4
-    && /function lightCameraFromSmash/.test(await readFile(new URL('../src/party/room.js', import.meta.url), 'utf8'))
+    && /function lightCameraFromJob/.test(await readFile(new URL('../src/party/room.js', import.meta.url), 'utf8'))
     && /phase === 'return'/.test(await readFile(new URL('../src/party/room.js', import.meta.url), 'utf8')));
 
   /*

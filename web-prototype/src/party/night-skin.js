@@ -641,6 +641,34 @@ export function injectNightSkin() {
       border:1px solid rgba(var(--night-accent-rgb), .28); }
     .stick-btn.on { background:var(--night-accent); color:var(--night-deep); }
     .stick-btn.swing.on { background:var(--night-bad); }
+    .stick-btn.drill { border-color: rgba(232, 92, 58, .55); color:#f3b39a; }
+    .stick-btn.drill span { display:block; font-size:9px; letter-spacing:.16em; margin-top:4px; }
+    .stick-btn.drill.on { background:#c4472a; color:#fff7f2; }
+    .twin-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:10px 0 4px; }
+    .twin-row .twin-note, .twin-row .voice-know { grid-column:1 / -1; margin:0; }
+    .twin-face { position:relative; min-height:88px; border:2px solid #6b4a22; border-radius:4px;
+      background: linear-gradient(180deg, #7a4e28 0%, #3a2414 100%); display:flex; align-items:flex-end;
+      justify-content:center; padding:8px; }
+    .twin-face.real { box-shadow: 0 0 0 2px #6ec8d4; }
+    .twin-canvas { position:absolute; inset:10px 12px 22px; background: linear-gradient(160deg, #8a5a30, #3d2616); }
+    .twin-lab { position:relative; font-size:11px; letter-spacing:.22em; font-weight:800; color:#f3ece3; }
+    .twin-face.real .twin-lab { color:#6ec8d4; }
+    .twin-stamp { position:absolute; top:28px; left:50%; transform:translateX(-50%) rotate(-12deg);
+      font-size:18px; font-weight:900; letter-spacing:.18em; color:#6ec8d4;
+      border:2px solid #6ec8d4; padding:2px 8px; background:rgba(10,18,20,.45); }
+    .voice-pad { margin:10px 0 4px; }
+    .voice-row { display:flex; gap:8px; }
+    .voice-btn { flex:1; appearance:none; border:1px solid rgba(232,220,200,.28); background:var(--night-panel);
+      color:var(--night-ink); font:inherit; font-weight:800; letter-spacing:.16em; text-transform:uppercase;
+      min-height:52px; border-radius:10px; }
+    .voice-btn.on { background:var(--night-accent); color:var(--night-deep); }
+    .voice-btn.hold { border-color: rgba(232, 92, 58, .55); color:#f3b39a; }
+    .voice-btn.hold.on { background:#c4472a; color:#fff7f2; }
+    .voice-btn.go { border-color: rgba(110, 200, 212, .55); color:#6ec8d4; }
+    .voice-btn.go.on { background:#6ec8d4; color:#102226; }
+    .voice-cue { margin-top:8px; padding:8px 10px; border:1px solid rgba(232,220,200,.18);
+      min-height:36px; font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:#c9b8a4; }
+    .voice-know { margin:8px 0 0; padding:8px 10px; border:1px solid #6ec8d4; color:#9be0e8; font-size:13px; }
     /* 🔨 THE PAD'S OWN ANSWER TO A SWING. The button's .on flash is under the thumb that is
        covering it, so it confirms nothing to the person who tapped it — this line sits clear of
        both the stick and the buttons.

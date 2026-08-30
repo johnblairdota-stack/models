@@ -1,25 +1,33 @@
 /**
- * Night smash missions — episode → room / target / copy.
+ * Night expedition jobs — episode → room / target / copy.
  *
- * Episode 1 is the gallery painting (a framed plane; there is no painting GLB).
- * Episode 2+ is the chapel round table (`rrr_prop_table-round_v1.glb`), already
- * in `furn-catalog.js` and already assigned to chapel in `furn-layout.js`.
+ * Episode 1 is the twin-painting smash (WALL_CALL). Every later expedition is
+ * the same noisy wall-camera install (DRILL / TALLY) until a camera actually
+ * mounts. A failed mount stays dark; the next pair drills again. Do not add
+ * TILT. Chapel table-round stays furniture, not a job.
  *
  * No THREE, no DOM. Phones, the guide map, and the follow bed all read this so
  * the copy and the smash cannot disagree.
  */
 
+import { JOB } from './jobs.js';
+
 export const MISSION_PAINTING = {
-  id: 'gallery-painting',
+  id: 'gallery-twin',
+  job: JOB.SMASH,
+  task: 'WALL_CALL',
   room: 'gallery',
-  target: 'painting',
+  target: 'twin-painting',
   catalogId: null,
-  seek: 'Find the gallery. Break the painting.',
-  home: 'The painting is down. Get back to the ballroom.',
+  seek: 'Find the gallery. Hit one painting.',
+  home: 'One is down. Get back to the ballroom.',
 };
 
+/** @deprecated chapel smash is retired; kept so a stale import fails loudly on `.job`. */
 export const MISSION_TABLE = {
   id: 'chapel-table',
+  job: JOB.SMASH,
+  task: 'WALL_CALL',
   room: 'chapel',
   target: 'table-round',
   catalogId: 'table-round',
@@ -27,9 +35,20 @@ export const MISSION_TABLE = {
   home: 'The table is down. Get back to the ballroom.',
 };
 
-/** Episode 1 is the painting; every later expedition is the chapel table. */
+export const MISSION_DRILL = {
+  id: 'gallery-drill',
+  job: JOB.DRILL,
+  task: 'TALLY',
+  room: 'gallery',
+  target: 'wall-cam',
+  catalogId: null,
+  seek: 'Find the gallery. Mount the wall camera.',
+  home: 'The mount is in. Get back to the ballroom.',
+};
+
+/** Episode 1 is the twin smash. Every later expedition is DRILL. */
 export function missionFor(episode) {
   const ep = Number(episode);
-  // Missing / NaN / 0 / 1 stay on the premiere smash. Only 2+ is the table.
-  return Number.isFinite(ep) && ep >= 2 ? MISSION_TABLE : MISSION_PAINTING;
+  // Missing / NaN / 0 / 1 stay on the premiere smash. Only 2+ is the drill.
+  return Number.isFinite(ep) && ep >= 2 ? MISSION_DRILL : MISSION_PAINTING;
 }

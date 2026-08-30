@@ -583,6 +583,23 @@ export const SHOW_CHROME_CSS = `
       gap:10px; margin-bottom:2px; }
     .talk-chrome-bot .recap.talk-facts .k { font-size:12px; letter-spacing:.26em; }
     .talk-chrome-bot .recap.talk-facts .v { font-size:clamp(28px, 4vw, 56px); }
+    .prod-still { margin-top:8px; padding:8px 10px; background:rgba(0,0,0,.55);
+      border:1px solid rgba(232,220,200,.2); border-radius:8px; max-width:420px; }
+    .prod-k { font-size:10px; letter-spacing:.22em; text-transform:uppercase; color:#c9b8a4; }
+    .prod-wall { display:flex; gap:18px; justify-content:center; padding:10px 8px 6px; }
+    .prod-hang { width:72px; height:54px; position:relative; }
+    .prod-hang b { display:block; width:100%; height:100%; background:linear-gradient(160deg,#8a5a30,#3d2616);
+      border:3px solid #6b4a22; }
+    .prod-hang.empty i { display:block; width:8px; height:8px; border-radius:50%; background:#f3ece3;
+      margin:8px auto 0; box-shadow:0 0 0 1px #111; }
+    .prod-hang.empty::after { content:''; position:absolute; inset:6px; border:1px dashed rgba(243,236,227,.35); }
+    .prod-s { font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:#8a7d70; }
+    .prod-arch { height:48px; margin:6px 0; border:2px solid #6ec8d4; border-bottom:0; border-radius:28px 28px 0 0;
+      position:relative; overflow:hidden; }
+    .prod-still.floor .prod-arch { border-color:#e07a3a; }
+    .prod-arch .depth { position:absolute; inset:10px 18px 0; background:linear-gradient(#1a2228,#0c0a08); }
+    .prod-arch .boards { position:absolute; inset:0; background:repeating-linear-gradient(90deg,#3a2a1c 0 8px,#2a1c12 8px 12px); }
+    .run-follow-line { margin:6px 0 0; font-size:18px; font-weight:800; letter-spacing:.04em; color:#f3ece3; }
     /* 🔢 Which SAM. The player's own accent, carrying their seat number. */
     .seat-chip { flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center;
       min-width:30px; height:30px; padding:0 6px; border-radius:15px; color:var(--night-panel);

@@ -53,6 +53,12 @@ export const TASKS = [
     runner: ['firstPerson', 'faceChoice', 'automatedSledge'],
     guide: ['flyover', 'whatIsBehindEachFace'],
     lie: 'which of two identical dark faces',
+    /**
+     * Night-one smash. Two identical paintings, same loudness, no mark on either.
+     * Guide knows REAL and says left wall / far wall out loud. Pad buttons do not
+     * send the call. TV follow does not say which she hit; the empty-nail still is
+     * the delayed check.
+     */
     contract: { T1: true, T2: true, T3: true, T4: true, T5: true, T6: true },
     // 3 blows at the shipped sledge cadence.
     /**
@@ -77,9 +83,15 @@ export const TASKS = [
   },
   {
     id: 'TALLY', shape: SHAPE.SYNC, episode: 'any',
-    runner: ['interactHold'],
-    guide: ['armControl'],
-    lie: 'being 0.4 s late',
+    runner: ['interactHold', 'footstepsCue'],
+    guide: ['armControl', 'aimTruth'],
+    lie: 'the seated aim — hall versus a floor shot',
+    /**
+     * Later-night DRILL. Recap says CAM LIT / seated for both a useful hall shot
+     * and a floor shot. Next night the public tool picture is HALL or FLOOR.
+     * Unique lie is the spoken aim ("she's seated"). Runner says CLOSE / LATE /
+     * GOING out loud from a local footsteps cue; those buttons send nothing.
+     */
     contract: { T1: true, T2: true, T3: true, T4: true, T5: true, T6: true },
     noise: { successPeak: 0.3, failurePeak: 1.4, source: 'emit on short (noiseplan.js)', built: true },
     numbers: { honestError: null, medianSeconds: null, measured: false },

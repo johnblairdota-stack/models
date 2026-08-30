@@ -121,6 +121,8 @@ export const MATRIX = [
   ['pair.guide',               'all'],
   ['cameras.unlocked',         'all'],
   ['cameras.needed',           'all'],
+  // Next night's public tool picture (HALL / FLOOR). Not a person. Not tonight's recap.
+  ['cameras.tool',             'all'],
 
   // ---- the guide's map. party-loop.md puts this under "Do not" in its own words.
   ['flyover.marks[].x',        'guide'],

@@ -185,7 +185,8 @@ import { PLAN_OPTS, pickPlanSeed, MISSION_ROOM } from '../src/party/mansion.js';
 import { catalogPlacements, walkHalf } from '../src/game/furn-layout.js';
 import { FURN_SMASH_ASSETS, FURN_FIT_BOOST } from '../src/game/furn-catalog.js';
 import { MOVE, WEAPON_RANGE } from '../src/game/rules.js';
-import { MISSION_PAINTING, MISSION_TABLE, missionFor } from '../src/party/mission.js';
+import { MISSION_PAINTING, MISSION_DRILL, missionFor } from '../src/party/mission.js';
+import { TWIN, WALL_CAM, twinHang, camHang } from '../src/party/jobs.js';
 
 let pass = 0, fail = 0;
 const t = (n, c, d = '') => {
@@ -279,52 +280,43 @@ function rayBox(o, dir, far, B) {
  * ============================================================================================= */
 
 /**
- * `follow-bed.js` `buildPainting`, in plan. Longest wall, 0.22 m off it, 1.85 m up, and the
- * frame is `BoxGeometry(1.46, 1.86, 0.09)` — so a half of 0.73 across, 0.93 up, 0.045 deep.
+ * `follow-bed.js` twin hang, in plan. Longest wall, `jobs.js` `twinHang`, frame
+ * `BoxGeometry(TWIN.frameW, TWIN.frameH, TWIN.frameD)`.
  */
-function paintingTarget(space, floorY = 0) {
-  if (!space) return null;
-  const w = space.x1 - space.x0, d = space.z1 - space.z0;
-  const alongX = w >= d;
-  const cx = (space.x0 + space.x1) / 2, cz = (space.z0 + space.z1) / 2;
-  const x = alongX ? cx : space.x0 + 0.22;
-  const z = alongX ? space.z0 + 0.22 : cz;
-  const hw = alongX ? 0.73 : 0.045;
-  const hd = alongX ? 0.045 : 0.73;
+function paintingTarget(space, face = 'left', floorY = 0) {
+  const hang = space ? twinHang(space, face, floorY) : null;
+  if (!hang) return null;
+  const hw = hang.alongX ? TWIN.frameW / 2 : TWIN.frameD / 2;
+  const hd = hang.alongX ? TWIN.frameD / 2 : TWIN.frameW / 2;
   return {
-    kind: 'painting', episode: 1, spec: MISSION_PAINTING, space, x, z,
-    /** Which way it faces into the room — `rotY` 0 puts the canvas at local +z. */
-    normal: alongX ? [0, 1] : [1, 0],
-    /** Lateral half, for the head-on band in T3. */
-    lateral: 0.73,
+    kind: 'painting', episode: 1, spec: MISSION_PAINTING, space, face,
+    x: hang.x, z: hang.z,
+    normal: hang.alongX ? [0, 1] : [1, 0],
+    lateral: TWIN.frameW / 2,
     body: {
-      x0: x - hw, x1: x + hw, z0: z - hd, z1: z + hd,
-      y0: floorY + 1.85 - 0.93, y1: floorY + 1.85 + 0.93,
+      x0: hang.x - hw, x1: hang.x + hw, z0: hang.z - hd, z1: hang.z + hd,
+      y0: hang.y - TWIN.frameH / 2, y1: hang.y + TWIN.frameH / 2,
     },
     channel: 'mission',
   };
 }
 
-/**
- * `findTableRound` — the dressed `table-round` `FurnProp`, preferring the chapel's. The body is
- * its COLLIDER, because that is what `_swingCast` traces and `isShattered` is what `missionTick`
- * actually reads.
- */
-function tableTarget(placements, chapel, floorY = 0) {
-  const inChapel = chapel ? placements.find((p) => p.catalogId === 'table-round' && p.spaceId === chapel.id) : null;
-  const slot = inChapel ?? placements.find((p) => p.catalogId === 'table-round') ?? null;
-  if (!slot) return null;
-  const spec = SPEC.get('table-round');
-  const half = visHalf(spec);
-  const space = chapel && slot.spaceId === chapel.id ? chapel : null;
+/** Opposite-wall camera the later nights hold-drill. */
+function camTarget(space, floorY = 0) {
+  const hang = space ? camHang(space, floorY) : null;
+  if (!hang) return null;
+  const hw = hang.alongX ? WALL_CAM.w / 2 : WALL_CAM.d / 2;
+  const hd = hang.alongX ? WALL_CAM.d / 2 : WALL_CAM.w / 2;
   return {
-    kind: 'table', episode: 2, spec: MISSION_TABLE, space, slot,
-    x: slot.x, z: slot.z, normal: null, lateral: half,
+    kind: 'cam', episode: 2, spec: MISSION_DRILL, space,
+    x: hang.x, z: hang.z,
+    normal: hang.alongX ? [0, -1] : [-1, 0],
+    lateral: WALL_CAM.w / 2,
     body: {
-      x0: slot.x - half, x1: slot.x + half, z0: slot.z - half, z1: slot.z + half,
-      y0: floorY, y1: floorY + Math.max(visHeight(spec), spec.targetH ?? 0, FURN_MIN_BOX_H),
+      x0: hang.x - hw, x1: hang.x + hw, z0: hang.z - hd, z1: hang.z + hd,
+      y0: hang.y - WALL_CAM.h / 2, y1: hang.y + WALL_CAM.h / 2,
     },
-    channel: 'furn',
+    channel: 'mission',
   };
 }
 
@@ -546,7 +538,7 @@ function nightFor(ws) {
   const picked = pickPlanSeed(ws);
   const tables = generatedTables(picked.seed, PLAN_OPTS);
   const gallery = tables.spaces.find((s) => s.roomType === MISSION_ROOM) ?? null;
-  const chapel = tables.spaces.find((s) => s.roomType === MISSION_TABLE.room) ?? null;
+  const chapel = tables.spaces.find((s) => s.roomType === 'chapel') ?? null;
   const placements = catalogPlacements(tables.spaces, { portals: tables.portals });
   return { ws, planSeed: picked.seed, tables, gallery, chapel, placements };
 }
@@ -596,8 +588,9 @@ const t0 = Date.now();
 for (let ws = 0; ws < SEEDS; ws++) {
   const night = nightFor(ws);
   for (const built of [
-    night.gallery ? paintingTarget(night.gallery, 0) : null,
-    tableTarget(night.placements, night.chapel, 0),
+    night.gallery ? paintingTarget(night.gallery, 'left') : null,
+    night.gallery ? paintingTarget(night.gallery, 'right') : null,
+    night.gallery ? camTarget(night.gallery) : null,
   ]) {
     if (!built) { rows.push({ ws, missing: true }); continue; }
     const space = built.space ?? night.gallery;
@@ -609,9 +602,7 @@ for (let ws = 0; ws < SEEDS; ws++) {
     rows.push({
       ws, planSeed: night.planSeed, kind: built.kind, episode: built.episode,
       room: space?.id ?? null, wantRoom: built.spec.room,
-      inNamedRoom: built.kind === 'table'
-        ? !!(night.chapel && built.slot?.spaceId === night.chapel.id)
-        : space?.roomType === built.spec.room,
+      inNamedRoom: space?.roomType === built.spec.room,
       propN: props.length, ...m,
     });
     if (VERBOSE) {
@@ -624,7 +615,7 @@ for (let ws = 0; ws < SEEDS; ws++) {
 const elapsed = ((Date.now() - t0) / 1000).toFixed(2);
 
 const paintings = rows.filter((r) => r.kind === 'painting');
-const tablesR = rows.filter((r) => r.kind === 'table');
+const camsR = rows.filter((r) => r.kind === 'cam');
 
 /* =============================================================================================
  * G · GROUND TRUTH FIRST. "Every target is visible" is trivially TRUE of zero targets.
@@ -637,8 +628,8 @@ const tablesR = rows.filter((r) => r.kind === 'table');
 
 console.log(`\n  ground truth · ${SEEDS} world seeds in ${elapsed}s`);
 
-t('G1 · every world seed builds a plan carrying BOTH mission rooms',
-  rows.filter((r) => r.missing).length === 0 && rows.length === SEEDS * 2,
+t('G1 · every world seed builds a gallery carrying BOTH twins and the wall cam',
+  rows.filter((r) => r.missing).length === 0 && rows.length === SEEDS * 3,
   `${rows.length} targets over ${SEEDS} seeds, ${rows.filter((r) => r.missing).length} missing`);
 
 t('G2 · every mission room is DRESSED — a placer that stopped placing would make T vacuous',
@@ -647,17 +638,17 @@ t('G2 · every mission room is DRESSED — a placer that stopped placing would m
   `gallery props ${Math.min(...paintings.map((r) => r.propN))}–${Math.max(...paintings.map((r) => r.propN))}`
   + `, ${paintings.reduce((a, r) => a + r.propN, 0)} total`);
 
-t('G3 · both episodes have a target, in the room their own mission copy names',
-  paintings.length === SEEDS && tablesR.length === SEEDS
+t('G3 · both jobs have a target, in the room their own mission copy names',
+  paintings.length === SEEDS * 2 && camsR.length === SEEDS
   && rows.every((r) => r.inNamedRoom)
-  && missionFor(1) === MISSION_PAINTING && missionFor(2) === MISSION_TABLE,
-  `${paintings.length} paintings in ${MISSION_PAINTING.room}, ${tablesR.length} tables in ${MISSION_TABLE.room}`);
+  && missionFor(1) === MISSION_PAINTING && missionFor(2) === MISSION_DRILL,
+  `${paintings.length} twin faces in ${MISSION_PAINTING.room}, ${camsR.length} cams in ${MISSION_DRILL.room}`);
 
-t('G4 · this file\'s painting matches `buildPainting` — it re-derives it, so it must be checked',
-  /const alongX = w >= d;/.test(src('src/game/follow-bed.js'))
-  && /new THREE\.Vector3\(cx, floorY \+ 1\.85, space\.z0 \+ 0\.22\)/.test(src('src/game/follow-bed.js'))
-  && /new THREE\.Vector3\(space\.x0 \+ 0\.22, floorY \+ 1\.85, cz\)/.test(src('src/game/follow-bed.js'))
-  && /new THREE\.BoxGeometry\(1\.46, 1\.86, 0\.09\)/.test(src('src/game/follow-bed.js')));
+t('G4 · this file\'s hang matches `jobs.js` / follow-bed twins — it re-derives it, so it must be checked',
+  /function twinHang/.test(src('src/party/jobs.js'))
+  && /function buildTwinPaintings/.test(src('src/game/follow-bed.js'))
+  && /function buildOneFace/.test(src('src/game/follow-bed.js'))
+  && /TWIN\.frameW/.test(src('src/game/follow-bed.js')));
 
 t('G5 · ...and the swing: eye, body, the fixed pitch, both reaches, and the 1.25 m collider',
   /this\.radius = this\.height \* 0\.20/.test(src('src/game/player.js'))
@@ -720,7 +711,7 @@ const pierced = rows.filter((r) => r.intersects.length);
 let piercedRaw = 0;
 for (let ws = 0; ws < SEEDS; ws++) {
   const night = nightFor(ws);
-  const built = night.gallery ? paintingTarget(night.gallery, 0) : null;
+  const built = night.gallery ? paintingTarget(night.gallery, 'left') : null;
   if (!built) continue;
   const near = night.placements.filter((p) => p.spaceId === night.gallery.id);
   if (near.some((p) => boxesOverlap(propBody(p, { boost: 1 }), built.body))) piercedRaw++;
@@ -791,7 +782,7 @@ function controlSweep(kind, n = Math.min(SEEDS, 16)) {
   const out = [];
   for (let ws = 0; ws < n; ws++) {
     const night = nightFor(ws);
-    const built = night.gallery ? paintingTarget(night.gallery, 0) : null;
+    const built = night.gallery ? paintingTarget(night.gallery, 'left') : null;
     if (!built) continue;
     const props = night.placements.filter((p) => p.spaceId === night.gallery.id);
     const c = applyControl(kind, night, built, props);
@@ -823,7 +814,7 @@ t('C3 control · a target under the floor is never entered by the swing ray',
 {
   const room = { id: 'ctl.gallery', roomType: 'gallery', x0: 0, x1: 12, z0: 0, z1: 8 };
   const portals = [{ id: 'p', a: 'ctl.gallery', b: 'x', x: 6, z: 8, w: 1.9, axis: 'x' }];
-  const bare = survey(room, [], paintingTarget(room, 0), portals);
+  const bare = survey(room, [], paintingTarget(room, 'left'), portals);
   t('C4 control · an undressed gallery sights its whole painting from hundreds of cells',
     bare.sighted > 100 && bare.frontal > 0 && bare.occluded === 0 && bare.faceVis === 1,
     `${bare.sighted} sighted of ${bare.inReach} in reach, ${bare.frontal} head-on,`
@@ -832,14 +823,14 @@ t('C3 control · a target under the floor is never entered by the swing ray',
   const low = survey(room, [
     { id: 'c.ott', catalogId: 'ottoman', spaceId: room.id, x: 6, z: 1.0 },
     { id: 'c.rug', catalogId: 'rug-circle', spaceId: room.id, x: 6, z: 1.6 },
-  ], paintingTarget(room, 0), portals);
+  ], paintingTarget(room, 'left'), portals);
   // At the SHIPPED inset. `candidatesFor` gives the vitrine `max(0.62, halfSpan + 0.18)` = 0.62,
   // and its drawn half is 0.651 — so the case's own body reaches 3 cm BEHIND the wall line and
   // straight through a painting hung 22 cm off it. This is not a contrived number; it is the
   // arithmetic of seeds 1, 6, 7, 8, 14, 27, 32, 35, 45, 47, 52 and 54.
   const tall = survey(room, [
     { id: 'c.vit', catalogId: 'vitrine', spaceId: room.id, x: 6, z: room.z0 + 0.62 },
-  ], paintingTarget(room, 0), portals);
+  ], paintingTarget(room, 'left'), portals);
   t('C5 control · a 0.52 m ottoman never occludes an eye-height ray; the shipped vitrine slot buries the frame',
     low.occluded === 0 && low.sighted > 0 && low.faceVis === 1
     && tall.intersects.includes('vitrine') && tall.faceVis < 0.5,
@@ -853,7 +844,7 @@ t('C3 control · a target under the floor is never entered by the swing ray',
 
 const sum = (f) => rows.reduce((a, r) => a + f(r), 0);
 console.log(`\n  reading · ${rows.length} targets over ${SEEDS} world seeds`
-  + ` (${paintings.length} paintings, ${tablesR.length} chapel tables)`);
+  + ` (${paintings.length} twin faces, ${camsR.length} wall cams)`);
 console.log(`  reading · ${sum((r) => r.propN)} dressed props modelled as occluders`
   + `, ${sum((r) => r.standN)} standable floor cells at ${GRID} m`);
 console.log(`  reading · sighted cells per target: `

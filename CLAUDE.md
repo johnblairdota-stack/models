@@ -112,6 +112,12 @@ decision, not a refactor.
 - **Every episode runs the full order, premiere included** — episode 1 votes and evicts like any
   other. Decided 2026-08-25; `phases.js` `orderFor` carries the argument, the 105s it costs the
   night, and the line to change back if a real premiere feels arbitrary. Gate: `episode-order`.
+- **Two expedition jobs, locked 30 Aug.** Night one is the twin-painting smash (`WALL_CALL`) —
+  identical faces, same loudness, guide says the REAL wall out loud, TV follow does not say
+  which, empty-nail still is the delayed check. Later nights are one noisy DRILL until a camera
+  mounts; blind still counts as `camera_lit`; a dark mount retries DRILL. Voice is in the room
+  (GO/HOLD, CLOSE/LATE/GOING); pad buttons do not send the call. Fail chrome names no person.
+  Gate: `expedition-jobs`.
 - **Casting has a server-side backstop** (`CASTING_BACKSTOP_MS`, 45s) so a dead TV tab cannot hang
   the room, but an **empty ballot box still waits** — the net re-arms and never invents a pair.
   Gate: `party-night` N20a–e.

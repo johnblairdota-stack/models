@@ -15,6 +15,9 @@ import {
 import { bleedCoolPos, bleedKeyAngle, facingPortal } from '../lighting/door-bleed.js';
 import { HOME_ROOM, MISSION_ROOM, PLAN_OPTS } from '../party/mansion.js';
 import { missionFor } from '../party/mission.js';
+import { camHang, DRILL, JOB, TWIN, twinHang, WALL_CAM } from '../party/jobs.js';
+import { NoiseBus, NOISE_KIND } from './noise.js';
+import { PARTY_NOISE, emitTallyShort } from '../party/noiseplan.js';
 import { createMeshAvatar } from '../characters/mesh-avatar.js';
 import { unit4hMaterials } from '../materials/surfaces/robot.js';
 import { buildIntroBed, ballroomOf } from './intro-bed.js';
@@ -782,31 +785,63 @@ class FollowOperator {
  * plain mesh with a proximity test (`missionTick` below), it breaks in one blow, and the swap to a
  * real `FurnProp` is a local change to this function and its hit test when the asset exists.
  */
-function buildPainting(space, floorY) {
-  if (!space) return null;
-  const w = space.x1 - space.x0, d = space.z1 - space.z0;
-  const alongX = w >= d;
-  // The long wall, on the side furthest from the room's own centre, at gallery hanging height.
-  const cx = (space.x0 + space.x1) / 2, cz = (space.z0 + space.z1) / 2;
-  const pos = alongX
-    ? new THREE.Vector3(cx, floorY + 1.85, space.z0 + 0.22)
-    : new THREE.Vector3(space.x0 + 0.22, floorY + 1.85, cz);
-  const rotY = alongX ? 0 : Math.PI / 2;
-
+function buildOneFace(space, face, floorY) {
+  const hang = twinHang(space, face, floorY);
+  if (!hang) return null;
   const group = new THREE.Group();
-  group.name = 'mission-painting';
+  group.name = `mission-painting-${face}`;
+  // IDENTICAL · SAME LOUDNESS · NO MARK ON EITHER. The REAL stamp lives on the guide's pad.
   const frame = new THREE.Mesh(
-    new THREE.BoxGeometry(1.46, 1.86, 0.09),
+    new THREE.BoxGeometry(TWIN.frameW, TWIN.frameH, TWIN.frameD),
     new THREE.MeshStandardMaterial({ color: 0x6b4a22, roughness: 0.42, metalness: 0.55 }));
   const canvas = new THREE.Mesh(
     new THREE.PlaneGeometry(1.22, 1.62),
     new THREE.MeshStandardMaterial({ color: 0x2b2118, roughness: 0.86, metalness: 0.0 }));
-  canvas.position.z = 0.052;
+  canvas.position.z = TWIN.frameD / 2 + 0.007;
   frame.castShadow = true; frame.receiveShadow = true;
-  group.add(frame, canvas);
-  group.position.copy(pos);
-  group.rotation.y = rotY;
-  return { group, pos, intact: true };
+  const nail = new THREE.Mesh(
+    new THREE.SphereGeometry(0.035, 8, 6),
+    new THREE.MeshStandardMaterial({ color: 0xc9c2b4, roughness: 0.35, metalness: 0.7 }));
+  nail.name = `empty-nail-${face}`;
+  nail.visible = false;
+  group.add(frame, canvas, nail);
+  group.position.set(hang.x, hang.y, hang.z);
+  group.rotation.y = hang.rotY;
+  return { group, pos: new THREE.Vector3(hang.x, hang.y, hang.z), intact: true, face, nail };
+}
+
+/**
+ * 🖼️ **THE TWIN PAINTINGS — night one's WALL_CALL, two identical faces on the long wall.**
+ *
+ * Same framed plane as the old single smash, twice, same loudness either way. The runner's pad
+ * says LEFT / RIGHT with no mark. The guide knows which is REAL and says it out loud.
+ */
+function buildTwinPaintings(space, floorY) {
+  if (!space) return null;
+  const left = buildOneFace(space, 'left', floorY);
+  const right = buildOneFace(space, 'right', floorY);
+  if (!left || !right) return null;
+  return { left, right, faces: { left, right } };
+}
+
+function buildWallCam(space, floorY) {
+  const hang = camHang(space, floorY);
+  if (!hang) return null;
+  const group = new THREE.Group();
+  group.name = 'mission-wall-cam';
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(WALL_CAM.w, WALL_CAM.h, WALL_CAM.d),
+    new THREE.MeshStandardMaterial({ color: 0x1c2228, roughness: 0.55, metalness: 0.35 }));
+  const lens = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.06, 0.07, 0.08, 10),
+    new THREE.MeshStandardMaterial({ color: 0x6ec8d4, roughness: 0.25, metalness: 0.45 }));
+  lens.rotation.x = Math.PI / 2;
+  lens.position.z = WALL_CAM.d / 2 + 0.03;
+  body.castShadow = true;
+  group.add(body, lens);
+  group.position.set(hang.x, hang.y, hang.z);
+  group.rotation.y = hang.rotY;
+  return { group, pos: new THREE.Vector3(hang.x, hang.y, hang.z), mount: 0, lit: false };
 }
 
 function spaceOfType(spaces, type) {
@@ -1151,8 +1186,17 @@ export async function buildFollowBed(engine, opts = {}) {
   const operator = new FollowOperator(room, rng);
   const hunter = buildHunterToken(room);
 
-  const painting = buildPainting(gallery, room.floorY ?? 0);
-  if (painting) scene.add(painting.group);
+  const twins = buildTwinPaintings(gallery, room.floorY ?? 0);
+  if (twins) {
+    scene.add(twins.left.group);
+    scene.add(twins.right.group);
+  }
+  const wallCam = buildWallCam(gallery, room.floorY ?? 0);
+  if (wallCam) {
+    wallCam.group.visible = false;
+    scene.add(wallCam.group);
+  }
+  const noise = new NoiseBus();
 
   let table = findTableRound(room, chapel);
   let tableFallback = null;
@@ -1284,6 +1328,8 @@ export async function buildFollowBed(engine, opts = {}) {
     run: false,
     /** Set when a swing lands; read once by `missionTick`. `sledge.swingHit` is consumed by Player. */
     contactAt: -1,
+    act: 0,
+    heardFor: 0,
   };
   if (opts.pinShot && SHOTS.includes(opts.pinShot)) {
     operator.shot = opts.pinShot;
@@ -1311,9 +1357,13 @@ export async function buildFollowBed(engine, opts = {}) {
     intro.applyWreck?.([...wreckedSeen]);
   }
   const mission = {
-    phase: painting ? 'seek' : 'none',
+    phase: twins ? 'seek' : 'none',
     room: gallery?.id ?? null,
     spec: missionFor(1),
+    job: JOB.SMASH,
+    emptyNail: null,
+    heard: false,
+    mount: 0,
   };
   runner.root.visible = mode === 'run';
 
@@ -1475,66 +1525,122 @@ export async function buildFollowBed(engine, opts = {}) {
 
   function smashCurrentTarget() {
     const spec = mission.spec ?? missionFor(1);
-    if (spec.target === 'painting') {
-      if (!painting?.intact) return false;
-      if (!swingHitObject(painting.group)) return false;
-      painting.intact = false;
-      painting.group.visible = false;
+    if (spec.job !== JOB.SMASH || !twins) return false;
+    for (const face of ['left', 'right']) {
+      const faceObj = twins.faces[face];
+      if (!faceObj?.intact) continue;
+      if (!swingHitObject(faceObj.group)) continue;
+      faceObj.intact = false;
+      // Empty nail stays. The other canvas stays hanging. Scenery, not a map.
+      for (const child of faceObj.group.children) {
+        if (child === faceObj.nail) child.visible = true;
+        else child.visible = false;
+      }
+      mission.emptyNail = face;
+      // Same loudness either face — that is the WALL_CALL point.
+      noise.emit(faceObj.pos, PARTY_NOISE.prop, NOISE_KIND.dig);
       return true;
     }
-    const mesh = table?.mesh ?? tableFallback?.group;
-    if (!mesh) return false;
-    const already = table?.prop?.isShattered || (tableFallback && !tableFallback.intact);
-    if (already) return true;
-    if (!swingHitObject(mesh) && !table?.prop?.isShattered) return false;
-    if (table?.prop && !table.prop.isShattered) {
-      table.prop.applyHit?.(runner.eye?.clone?.() ?? runner.pos, 8);
+    return false;
+  }
+
+  function resetTwins() {
+    if (!twins) return;
+    for (const face of ['left', 'right']) {
+      const faceObj = twins.faces[face];
+      faceObj.intact = true;
+      for (const child of faceObj.group.children) {
+        child.visible = child !== faceObj.nail;
+      }
+      faceObj.group.visible = true;
     }
-    if (tableFallback) {
-      tableFallback.intact = false;
-      tableFallback.group.visible = false;
-    }
-    return true;
   }
 
   /**
-   * Arm the smash for this expedition. Episode 1 is the gallery painting; 2+ is
-   * the chapel table. Must reset `done` or the next Send-them-in reports home
-   * on the first world tick and the clock yanks recap again.
+   * Arm this expedition. Episode 1 is the twin smash; 2+ is the wall-cam drill.
+   * Must reset `done` or the next Send-them-in reports home on the first world
+   * tick and the clock yanks recap again.
    */
   function armMission(episode) {
     const spec = missionFor(episode);
     mission.spec = spec;
-    if (spec.target === 'painting') {
-      mission.phase = painting ? 'seek' : 'none';
+    mission.job = spec.job;
+    mission.emptyNail = null;
+    mission.heard = false;
+    mission.mount = 0;
+    perf.heardFor = 0;
+    perf.act = 0;
+    if (spec.job === JOB.SMASH) {
+      resetTwins();
+      if (wallCam) {
+        wallCam.mount = 0;
+        wallCam.lit = false;
+        wallCam.group.visible = false;
+      }
+      mission.phase = twins ? 'seek' : 'none';
       mission.room = gallery?.id ?? spec.room;
       return;
     }
-    if (table?.prop?.isShattered) table.prop.reset?.();
-    if (tableFallback) {
-      tableFallback.intact = true;
-      tableFallback.group.visible = true;
+    resetTwins();
+    if (twins) {
+      twins.left.group.visible = true;
+      twins.right.group.visible = true;
     }
-    const ready = !!(table?.mesh || tableFallback?.group);
-    mission.phase = ready ? 'seek' : 'none';
-    mission.room = chapel?.id ?? table?.prop?.spaceId ?? spec.room;
+    if (wallCam) {
+      wallCam.mount = 0;
+      wallCam.lit = false;
+      wallCam.group.visible = true;
+    }
+    mission.phase = wallCam ? 'seek' : 'none';
+    mission.room = gallery?.id ?? spec.room;
+  }
+
+  function nearWallCam() {
+    if (!wallCam) return false;
+    const dx = runner.pos.x - wallCam.pos.x;
+    const dz = runner.pos.z - wallCam.pos.z;
+    return Math.hypot(dx, dz) < 1.85;
   }
 
   /**
    * 🖼️ The mission, in three states.
    *
-   * `seek` -> the armed target is up. A swing AIMED at it breaks it; a swing at anything else does not.
-   * `return` -> the smash is down and the runner is told to go home.
+   * `seek` -> the armed target is up. Smash: a swing AIMED at one twin breaks it.
+   *           Drill: a held DRILL near the wall cam fills the mount; HOLD is spoken
+   *           and the runner lets go (the pad HOLD button sends nothing).
+   * `return` -> the job landed and the runner is told to go home.
    * `done` -> the runner is inside the ballroom. `src/party/room.js` `setWorld` turns that into
    *           the RECAP phase, and `net/party/local.mjs` `endRunOnMission` turns it into the
    *           recap beat — which is the ONLY thing that ends an episode short of the backstop
    *           clock in `src/party/show.js`. The clock then walks Recap → Debrief → Casting.
    */
-  function missionTick(t) {
-    if (mission.phase === 'seek') {
-      const spec = mission.spec ?? missionFor(1);
-      const smashed = spec.target === 'table-round' && table?.prop?.isShattered;
-      if (smashed || (perf.contactAt >= 0 && t >= perf.contactAt && smashCurrentTarget())) {
+  function missionTick(t, dt = 0.016) {
+    const spec = mission.spec ?? missionFor(1);
+    if (mission.phase === 'seek' && spec.job === JOB.DRILL && wallCam) {
+      const holding = perf.act > 0.5 && nearWallCam() && !mission.heard;
+      if (holding) {
+        wallCam.mount = Math.min(1, wallCam.mount + DRILL.rate * dt);
+        mission.mount = wallCam.mount;
+        if (Math.floor(t * 4) !== Math.floor((t - dt) * 4)) {
+          noise.emit(wallCam.pos, DRILL.loudness, NOISE_KIND.dig);
+        }
+        const hunterHere = (roomIdAt(hunter.pos) ?? hunter.roomId()) === (gallery?.id ?? mission.room);
+        if (hunterHere) perf.heardFor += dt;
+        else perf.heardFor = Math.max(0, perf.heardFor - dt * 0.5);
+        if (perf.heardFor >= DRILL.heardSeconds) {
+          mission.heard = true;
+          emitTallyShort(noise, wallCam.pos);
+        }
+      }
+      if (wallCam.mount >= 1 && !wallCam.lit) {
+        wallCam.lit = true;
+        mission.phase = 'return';
+        mission.room = ballroom?.id ?? null;
+        return;
+      }
+    }
+    if (mission.phase === 'seek' && spec.job === JOB.SMASH) {
+      if (perf.contactAt >= 0 && t >= perf.contactAt && smashCurrentTarget()) {
         perf.contactAt = -1;
         mission.phase = 'return';
         mission.room = ballroom?.id ?? null;
@@ -1612,7 +1718,7 @@ export async function buildFollowBed(engine, opts = {}) {
         run: perf.run,
         aimYaw: operator.basisYaw(),
       });
-      missionTick(t);
+      missionTick(t, dt);
       afterBody(dt, t);
       return;
     }
@@ -1651,7 +1757,7 @@ export async function buildFollowBed(engine, opts = {}) {
       aimYaw: perf.heading + perf.glance,
     });
 
-    missionTick(t);
+    missionTick(t, dt);
     afterBody(dt, t);
   }
 
@@ -1688,6 +1794,7 @@ export async function buildFollowBed(engine, opts = {}) {
 
   /** Everything the camera and the house do after the body has moved, on either drive. */
   function afterBody(dt, t) {
+    noise.update(dt);
     // The last doorway the runner came through is where the `doorway` shot parks.
     if (route.legs.length) {
       const head = route.legs[0];
@@ -2161,6 +2268,7 @@ export async function buildFollowBed(engine, opts = {}) {
         perf.look.x = Math.max(-1, Math.min(1, +c.lookX || 0));
         perf.look.y = Math.max(-1, Math.min(1, +c.lookY || 0));
         perf.run = !!c.run;
+        perf.act = +c.act || 0;
         if (c.swing) {
           const res = runner.attack(engine.elapsed ?? 0);
           /*
@@ -2187,7 +2295,13 @@ export async function buildFollowBed(engine, opts = {}) {
         room: roomIdAt(hunter.pos) ?? hunter.roomId(),
         x: +hunter.pos.x.toFixed(2), z: +hunter.pos.z.toFixed(2),
       },
-      mission: { phase: mission.phase, room: mission.room },
+      mission: {
+        phase: mission.phase,
+        room: mission.room,
+        job: mission.job,
+        ...(mission.phase === 'done' && mission.emptyNail ? { emptyNail: mission.emptyNail } : {}),
+        ...(mission.heard ? { heard: true } : {}),
+      },
       // The camera the show is actually on, so the pad can match it. `appliedRig` and not the
       // live blend: a crane is 1.35 s and this channel is 2 Hz, so reporting the destination
       // means the sheet swaps once, at the start, rather than chattering through the move.

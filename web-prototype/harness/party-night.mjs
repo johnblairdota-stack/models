@@ -19,7 +19,7 @@ import {
   remainingMs, formatRemain, normalizeCodeDisplay, normalizeCodeWire,
 } from '../src/party/night-client.js';
 import { PHASE, SECONDS, EPISODE_CAP } from '../src/party/phases.js';
-import { missionFor, MISSION_PAINTING, MISSION_TABLE } from '../src/party/mission.js';
+import { missionFor, MISSION_PAINTING, MISSION_DRILL } from '../src/party/mission.js';
 import { RUN_END, CASTING_BACKSTOP_MS, readyNeeded } from '../src/party/show.js';
 import { CAST_BACKSTOP_MS, livingFromPublic, shouldArmCastSend } from '../src/party/ballot.js';
 import { ACCENTS, SHELLS, cleanLook } from '../src/party/look.js';
@@ -185,9 +185,9 @@ t('N1c4 · after a finished run the clock is Recap → Debrief → Reckoning →
     && formatRemain(0) === '0s' && formatRemain(65000) === '1:05'
     && remainingMs(1000, 1000) === 0
     && remainingMs(null) === null && remainingMs('') === null);
-t('N1c5 · episode 1 is the gallery painting; episode 2+ is the chapel table',
-  missionFor(1) === MISSION_PAINTING && missionFor(2) === MISSION_TABLE
-    && missionFor(3).target === 'table-round' && MISSION_TABLE.catalogId === 'table-round'
+t('N1c5 · episode 1 is the twin-painting smash; episode 2+ is the wall-cam drill',
+  missionFor(1) === MISSION_PAINTING && missionFor(2) === MISSION_DRILL
+    && missionFor(3).target === 'wall-cam' && MISSION_DRILL.job === 'drill'
     && missionFor(undefined) === MISSION_PAINTING);
 
 {

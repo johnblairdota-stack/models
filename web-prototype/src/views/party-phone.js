@@ -21,6 +21,9 @@ import { EVIL } from '../party/cast.js';
 import { guideMapSvg } from '../party/guidemap.js';
 import { pickPlanSeed, planRoomLabels, roomLabel } from '../party/mansion.js';
 import { missionFor } from '../party/mission.js';
+import {
+  JOB, RUNNER_VOICE, GUIDE_VOICE, realFaceFor, drillShotFor, footstepsCue, wallWord, toolLabel,
+} from '../party/jobs.js';
 import { intelLine } from '../party/intel.js';
 import { STICK_DEADZONE, warmLabel } from '../party/follow.js';
 import { formatRemain, isTalkBeat, LATE_DEBRIEF_MS, remainingMs } from '../party/show.js';
@@ -57,7 +60,9 @@ export default async function partyPhone({ params }) {
      * thing put on the wire, which is what makes the 20 Hz tick change-gated rather than a
      * metronome. See `startPad`.
      */
-    pad: { x: 0, y: 0, lookX: 0, lookY: 0, run: false, swing: false, sent: '', timer: 0 },
+    pad: { x: 0, y: 0, lookX: 0, lookY: 0, run: false, swing: false, act: 0, sent: '', timer: 0 },
+    /** Local voice prompt only. Never put on the wire — T2, buttons send nothing. */
+    voice: { runner: '', guide: '' },
     /**
      * 📳 The pad's answer to the last thing the thumb did. `label` is the word under the stick,
      * `kind` is the CSS modifier, `timer` wipes it. See `padFx`.
@@ -581,7 +586,7 @@ export default async function partyPhone({ params }) {
      */
     const camStamp = iAmRunner ? `:${frame?.you?.view || 'chase'}` : '';
     const liveStamp = beat === 'expedition' && !state.stage
-      ? `${beat}:${iAmRunner ? 'run' : iAmGuide ? 'guide' : 'watch'}:${missionPhase}`
+      ? `${beat}:${iAmRunner ? 'run' : iAmGuide ? 'guide' : 'watch'}:${missionPhase}:${missionFor(frame?.airingEpisode ?? 1).job}`
         + `:${hasCard() ? 'card' : 'nocard'}${camStamp}`
       : null;
     if (liveStamp && root.dataset.liveUi === liveStamp && patchLive(frame)) {
@@ -723,13 +728,17 @@ export default async function partyPhone({ params }) {
          * between the emote pad and the card tab, and watchers do not get a house line. Production
          * guides still get their feed.
          */
-        body += `<h1>You walk.</h1>
+        const job = missionFor(frame?.airingEpisode ?? 1).job;
+        body += `<h1>${job === JOB.DRILL ? 'You drill.' : 'You smash.'}</h1>
           <p class="hint">${topDown
             ? 'Eyes on the TV. The stick is the room — push where you want to go. Hold RUN, tap SWING.'
             : 'Eyes on the TV. Left stick walks into the shot. Right stick looks. Hold RUN, tap SWING.'}</p>
-          <p class="hint">Listen to your guide — they have the map, you have the hammer.</p>
+          <p class="hint">${job === JOB.DRILL
+            ? 'No map. Say CLOSE, LATE or GOING out loud from the cue, then hold DRILL. HOLD from your guide means let go. Clock still runs.'
+            : 'Listen to your guide — they have the map, you have the hammer. Two identical faces. No mark on either.'}</p>
           ${missionLine(frame)}
           ${hereLine(frame)}
+          ${job === JOB.SMASH ? runnerSmashFaces() : runnerDrillPad(c.worldSeed, frame?.airingEpisode ?? 1)}
           <div class="stick-wrap${topDown ? ' top' : ''}">
             <div class="stick-col">
               <div class="stick" id="stick"><div class="nub" data-nub></div></div>
@@ -737,7 +746,8 @@ export default async function partyPhone({ params }) {
             </div>
             <div class="stick-side">
               <button class="stick-btn" id="run-btn" type="button">Run</button>
-              <button class="stick-btn swing" id="swing-btn" type="button">Swing</button>
+              <button class="stick-btn swing" id="swing-btn" type="button">${job === JOB.SMASH ? 'Hit' : 'Swing'}</button>
+              ${job === JOB.DRILL ? '<button class="stick-btn drill" id="drill-btn" type="button">Drill<span>loud while down</span></button>' : ''}
             </div>
             ${topDown ? '' : `<div class="stick-col">
               <div class="stick stick-look" id="stick-look"><div class="nub" data-nub-look></div></div>
@@ -776,6 +786,7 @@ export default async function partyPhone({ params }) {
          * guide would call it as "no camera" — the wrong sentence for a screen full of static.
          */
         const jam = !!frame?.flyover?.jam;
+        const job = missionFor(frame?.airingEpisode ?? 1).job;
         body += `<h1>You talk.</h1>
           <p class="hint">The map is yours. The TV does not get it — call the rooms out loud.</p>
           ${seed == null
@@ -788,6 +799,7 @@ export default async function partyPhone({ params }) {
               jam,
             })}
           <p class="hint ${hunterMark ? '' : 'gm-blind'}" data-gm-note>${esc(mapNote(jam, hunterMark))}</p>
+          ${guideJobPad(job, c.worldSeed, frame?.airingEpisode ?? 1)}
           ${missionLine(frame)}
           <p class="hint">Cameras live ${frame?.cameras?.unlocked ?? '—'}.</p>
           ${intelBlock(frame, { productionOnly: true })}`;
@@ -985,10 +997,31 @@ export default async function partyPhone({ params }) {
         // Straight after the send, so the buzz dates the message rather than the render. 18 ms is
         // a tick, not a rumble: this fires as fast as the player can tap and a long pattern would
         // queue up behind itself into one continuous drone.
-        padFx('Swing', '', 18);
+        padFx(swingBtn.textContent?.trim() === 'Hit' ? 'Hit' : 'Swing', '', 18);
         setTimeout(() => swingBtn.classList.remove('on'), 220);
       });
     }
+    const drillBtn = root.querySelector('#drill-btn');
+    if (drillBtn) {
+      const down = () => {
+        if (!state.voice.runner) {
+          padFx('Say it first', '', 18);
+          return;
+        }
+        state.pad.act = 1;
+        drillBtn.classList.add('on');
+        sendPad();
+      };
+      const up = () => {
+        state.pad.act = 0;
+        drillBtn.classList.remove('on');
+        sendPad();
+      };
+      drillBtn.addEventListener('pointerdown', down);
+      drillBtn.addEventListener('pointerup', up);
+      drillBtn.addEventListener('pointercancel', up);
+    }
+    bindVoicePad();
     startPad();
   }
 
@@ -1056,8 +1089,9 @@ export default async function partyPhone({ params }) {
       lookY: Math.round(p.lookY * 100) / 100,
       run: !!p.run,
       swing: !!swing,
+      act: +p.act || 0,
     };
-    const key = `${msg.x}|${msg.y}|${msg.lookX}|${msg.lookY}|${msg.run}`;
+    const key = `${msg.x}|${msg.y}|${msg.lookX}|${msg.lookY}|${msg.run}|${msg.act}`;
     if (!swing && key === p.sent) return;
     p.sent = key;
     state.client?.send(msg);
@@ -1074,6 +1108,9 @@ export default async function partyPhone({ params }) {
     clearTimeout(state.padFx.timer);
     state.padFx.label = '';
     state.padFx.kind = '';
+    state.pad.act = 0;
+    state.voice.runner = '';
+    state.voice.guide = '';
     if (!state.pad.timer) return;
     clearInterval(state.pad.timer);
     state.pad.timer = 0;
@@ -1106,6 +1143,67 @@ export default async function partyPhone({ params }) {
 
   function hereLine(frame) {
     return '<p class="here">You are in <strong data-here>' + esc(hereLabel(frame?.you?.here)) + '</strong></p>';
+  }
+
+  function twinFaceHtml(face, { real = false } = {}) {
+    return `<div class="twin-face${real ? ' real' : ''}" data-face="${face}">
+      <div class="twin-canvas"></div>
+      <span class="twin-lab">${face.toUpperCase()}</span>
+      ${real ? '<span class="twin-stamp">REAL</span>' : ''}
+    </div>`;
+  }
+
+  function runnerSmashFaces() {
+    return `<div class="twin-row" data-job-pad="smash">
+      ${twinFaceHtml('left')}
+      ${twinFaceHtml('right')}
+      <p class="hint twin-note">Identical · same loudness · no mark on either</p>
+    </div>`;
+  }
+
+  function runnerDrillPad(seed, episode) {
+    const cue = footstepsCue(Date.now(), seed ?? 0);
+    const said = state.voice.runner;
+    return `<div class="voice-pad" data-job-pad="drill">
+      <p class="hint">You say it. Out loud. Buttons send nothing.</p>
+      <div class="voice-row" data-voice-role="runner">
+        ${RUNNER_VOICE.map((w) => `<button type="button" class="voice-btn${said === w ? ' on' : ''}" data-voice="${w}">${w}</button>`).join('')}
+      </div>
+      <div class="voice-cue" data-foot-cue>FOOTSTEPS · ${esc(cue)}</div>
+    </div>`;
+  }
+
+  function guideJobPad(job, seed, episode) {
+    if (job === JOB.SMASH) {
+      const real = realFaceFor(seed, episode);
+      return `<div class="twin-row guide" data-job-pad="smash-guide">
+        ${twinFaceHtml('left', { real: real === 'left' })}
+        ${twinFaceHtml('right', { real: real === 'right' })}
+        <p class="voice-know">She cannot see this. Say <strong>${esc(wallWord(real))}</strong> out loud.</p>
+      </div>`;
+    }
+    const shot = drillShotFor(seed, episode);
+    const said = state.voice.guide;
+    return `<div class="voice-pad" data-job-pad="drill-guide">
+      <p class="hint">You talk. Say GO when you think he cannot hear it. Say HOLD to freeze the drill. Out loud · buttons send nothing.</p>
+      <div class="voice-row" data-voice-role="guide">
+        ${GUIDE_VOICE.map((w) => `<button type="button" class="voice-btn ${w === 'HOLD' ? 'hold' : 'go'}${said === w ? ' on' : ''}" data-voice="${w}">${w}</button>`).join('')}
+      </div>
+      <p class="voice-know">REAL aim is <strong>${esc(toolLabel(shot))}</strong>. Recap will say seated either way. She cannot see this.</p>
+    </div>`;
+  }
+
+  function bindVoicePad() {
+    root.querySelectorAll('[data-voice]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const word = String(btn.dataset.voice || '').toUpperCase();
+        const role = btn.closest('[data-voice-role]')?.dataset.voiceRole;
+        if (role === 'runner' && RUNNER_VOICE.includes(word)) state.voice.runner = word;
+        if (role === 'guide' && GUIDE_VOICE.includes(word)) state.voice.guide = word;
+        btn.parentElement?.querySelectorAll('[data-voice]').forEach((b) => b.classList.toggle('on', b === btn));
+        // Local only. Do not send. The six hear it in the room.
+      });
+    });
   }
 
   function missionLine(frame) {
@@ -1216,6 +1314,12 @@ export default async function partyPhone({ params }) {
 
     const hereEl = root.querySelector('[data-here]');
     if (hereEl) hereEl.textContent = hereLabel(frame?.you?.here);
+
+    const foot = root.querySelector('[data-foot-cue]');
+    if (foot) {
+      const cue = footstepsCue(Date.now(), state.client?.worldSeed ?? 0);
+      foot.textContent = `FOOTSTEPS · ${cue}`;
+    }
 
     if (slot) {
       const intel = frame?.you?.intel;

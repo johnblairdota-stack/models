@@ -1162,7 +1162,7 @@ export function moveViolations(msg) {
  */
 export const WORLD_KEYS = ['t', 'runner', 'hunter', 'mission', 'seq', 'view'];
 export const WORLD_SPOT_KEYS = ['room', 'x', 'z'];
-export const WORLD_MISSION_KEYS = ['phase', 'room'];
+export const WORLD_MISSION_KEYS = ['phase', 'room', 'job', 'emptyNail', 'heard'];
 
 /** The mission's four states. `none` before it is placed; `done` when the runner is home. */
 export const MISSION_PHASES = ['none', 'seek', 'return', 'done'];

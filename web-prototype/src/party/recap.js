@@ -14,11 +14,25 @@ export function recapFromEvents(events) {
   const taken = evs.filter((e) => e.type === 'player.taken');
   const alarms = evs.filter((e) => e.type === 'panel.alarm');
   const misses = evs.filter((e) => e.type === 'task.miss');
+  const still = evs.filter((e) => e.type === 'run.wall_still').at(-1);
+  const tool = evs.filter((e) => e.type === 'run.cam_tool').at(-1);
+  const fail = evs.filter((e) => e.type === 'run.fail_chrome').at(-1);
   const pair = evs.filter((e) => e.type === 'cast.pair').at(-1);
   const ballot = evs.filter((e) => e.type === 'cast.ballot').at(-1);
+  const lastLit = cameras.at(-1);
+  const job = lastLit?.data?.job ?? still?.data?.job ?? null;
   return {
     cameraLit: cameras.length > 0,
-    camera: cameras.at(-1)?.data?.camera ?? null,
+    camera: lastLit?.data?.camera ?? null,
+    /**
+     * Drill recap says seated for BOTH a hall shot and a floor shot. Looks like
+     * a win tonight either way. The tool picture is next night's look.
+     */
+    seated: job === 'drill' && cameras.length > 0,
+    job,
+    emptyNail: still?.data?.emptyNail ?? null,
+    tool: tool?.data?.shot ?? null,
+    failLine: fail?.data?.line ?? null,
     taken: taken.map((e) => ({ id: e.data?.id, seat: e.data?.seat })),
     alarmCount: alarms.length,
     missCount: misses.length,

@@ -30,6 +30,8 @@ import { NO_ONE, SHOWRUNNER } from '../party/vote.js';
 import { outcomeLine } from '../party/win.js';
 import { deadIdsFromPublic, describeCastTiebreaks, livingFromPublic, previewCastTiebreaks, shouldArmCastSend } from '../party/ballot.js';
 import { MAX_PAIRS } from '../party/link.js';
+import { missionFor } from '../party/mission.js';
+import { FAIL_CHROME, JOB, SMASH_CHROME, toolLabel } from '../party/jobs.js';
 
 /** TV chrome 3·2·1 after every living ballot (or the 20s backstop), then `{ t: 'episode' }`. */
 const SEND_COUNTDOWN_MS = 3000;
@@ -1319,6 +1321,10 @@ export default async function partyHost({ params }) {
         cameras: frame?.cameras,
         alarms: frame?.incident?.alarms,
         followLive: follow.live,
+        events: client.events,
+        episode: frame?.airingEpisode ?? frame?.episode ?? 1,
+        runEnd: ui.runEnd,
+        recap,
       });
       /*
        * 🗑️ **THE RECAP BUTTON IS GONE, AND IT IS THE AFFORDANCE RATHER THAN THE BEAT THAT WENT.**
@@ -1766,12 +1772,27 @@ function seatChip(lobby, playerId) {
  * never enters this subtree at all. See `syncFollow()` and slice §5.1 for why an empty div here
  * to append into would not have worked.
  */
-function runStage({ names, lobby, runnerId, guideId, cameras, alarms, followLive }) {
+function followLine({ events, episode, cameras, runEnd, recap }) {
+  const evs = events || [];
+  if (runEnd === 'TIME' || recap?.failLine || evs.some((e) => e.type === 'run.fail_chrome')) {
+    return FAIL_CHROME.take;
+  }
+  const spec = missionFor(episode);
+  const last = [...evs].reverse().find((e) => String(e.type ?? '').startsWith('mission.'));
+  const phase = last ? String(last.type).slice('mission.'.length) : 'seek';
+  if (spec.job === JOB.SMASH && (phase === 'return' || phase === 'done')) return SMASH_CHROME.hit;
+  if (spec.job === JOB.DRILL && phase === 'seek') return 'The house can hear a drill.';
+  return '';
+}
+
+function runStage({ names, lobby, runnerId, guideId, cameras, alarms, followLive, events, episode, runEnd, recap }) {
   const runner = joinedName(names, runnerId, 'The runner');
   const guide = joinedName(names, guideId, 'The guide');
   const look = seatLook(lobby, runnerId) || DEFAULT_LOOK;
   const face = robotFaceSvg(look.shell, look.accent, { size: 220 });
   const cams = cameras;
+  const line = followLine({ events, episode, cameras, runEnd, recap });
+  const tool = cameras?.tool ? toolStillHtml(cameras.tool) : '';
   return `
     <div class="run-stage">
       <div class="run-frame" aria-label="${esc(runner)} is running">
@@ -1784,6 +1805,8 @@ function runStage({ names, lobby, runnerId, guideId, cameras, alarms, followLive
         </div>
       </div>
       <div class="pair-hero">${esc(runner)} walks. ${esc(guide)} talks.</div>
+      ${line ? `<div class="run-follow-line">${esc(line)}</div>` : ''}
+      ${tool}
       <div class="run-facts">Cameras ${cams?.unlocked ?? '—'} / ${cams?.needed ?? '—'} · alarms ${alarms ?? 0}</div>
       <!-- 👏 Filled by paintReactStrip on the 250 ms tick, NOT by paint(). A reaction expires by
            wall clock, and repainting the run frame four times a second to age it out would
@@ -2061,10 +2084,14 @@ function recapMini(recap, names, runEnd) {
     ? recap.taken.map((t) => joinedName(names, t.id, 'The runner')).join(', ')
     : 'CAME BACK';
   const outcome = runEnd ? `<span class="mini-v ${runEnd === 'SMASHED' ? 'ok' : 'bad'}">${esc(runEnd)}</span>` : '';
-  const cam = recap.cameraLit ? 'CAM LIT' : 'CAM DARK';
+  const cam = recap.cameraLit
+    ? (recap.seated ? 'CAM LIT · seated' : 'CAM LIT')
+    : 'CAM DARK';
+  const fail = (runEnd === 'TIME' || recap.failLine) ? FAIL_CHROME.take : '';
   return `<div class="recap-mini">${outcome}
     <span class="mini-v ${recap.cameraLit ? 'ok' : 'bad'}">${esc(cam)}</span>
     <span class="mini-v">${esc(taken)}</span>
+    ${fail ? `<span class="mini-v bad">${esc(fail)}</span>` : ''}
   </div>`;
 }
 
@@ -2248,12 +2275,44 @@ function recapFacts(recap, names, runEnd) {
   const outcome = runEnd
     ? `<div class="fact"><div class="k">Outcome</div><div class="v ${runEnd === 'SMASHED' ? 'ok' : 'bad'}">${esc(runEnd)}</div></div>`
     : '';
+  const camWord = recap.cameraLit
+    ? (recap.seated ? 'LIT · seated' : 'LIT')
+    : 'STAYED DARK';
+  const fail = (runEnd === 'TIME' || recap.failLine)
+    ? `<div class="fact"><div class="k">House</div><div class="v bad">${esc(FAIL_CHROME.take)}</div></div>`
+    : '';
+  const still = wallStillHtml(recap.emptyNail);
+  const tool = recap.tool ? toolStillHtml(recap.tool) : '';
   return `<div class="recap talk-facts">
       ${outcome}
-      <div class="fact"><div class="k">Camera</div><div class="v ${recap.cameraLit ? 'ok' : 'bad'}">${recap.cameraLit ? 'LIT' : 'STAYED DARK'}</div></div>
+      <div class="fact"><div class="k">Camera</div><div class="v ${recap.cameraLit ? 'ok' : 'bad'}">${esc(camWord)}</div></div>
       <div class="fact"><div class="k">Runner</div><div class="v ${recap.taken?.length ? 'bad' : 'ok'}">${esc(taken)}</div></div>
       <div class="fact"><div class="k">Alarms</div><div class="v">${esc(String(recap.alarmCount ?? 0))}</div></div>
-    </div>`;
+      ${fail}
+    </div>${still}${tool}`;
+}
+
+function wallStillHtml(emptyNail) {
+  if (emptyNail !== 'left' && emptyNail !== 'right') return '';
+  const leftEmpty = emptyNail === 'left';
+  return `<div class="prod-still" data-prod-still>
+    <div class="prod-k">Next look · produced still</div>
+    <div class="prod-wall">
+      <div class="prod-hang${leftEmpty ? ' empty' : ''}">${leftEmpty ? '<i></i>' : '<b></b>'}</div>
+      <div class="prod-hang${!leftEmpty ? ' empty' : ''}">${!leftEmpty ? '<i></i>' : '<b></b>'}</div>
+    </div>
+    <div class="prod-s">The empty nail is the other one. Scenery, not a map.</div>
+  </div>`;
+}
+
+function toolStillHtml(shot) {
+  if (shot !== 'hall' && shot !== 'floor') return '';
+  const floor = shot === 'floor';
+  return `<div class="prod-still tool ${floor ? 'floor' : 'hall'}" data-prod-tool>
+    <div class="prod-k">${esc(toolLabel(shot))}</div>
+    <div class="prod-arch">${floor ? '<span class="boards"></span>' : '<span class="depth"></span>'}</div>
+    <div class="prod-s">${floor ? 'Blind. Looks like a win last night.' : 'Useful tool.'}</div>
+  </div>`;
 }
 
 /* =============================================================================================
