@@ -829,6 +829,26 @@ function reunionPayload(room) {
     chat: r.chat.map((c) => ({
       seq: c.seq, text: c.text, author: c.author, generated: c.generated,
     })),
+    /*
+     * 🍖 **THE FEED COUNT, AND THIS IS THE ONLY PLACE IN THE WIRE IT IS ALLOWED TO APPEAR.**
+     *
+     * `enterVerdictLive` fifty lines up picks fields off the fold specifically so this number
+     * cannot ride out on the Verdict, and `FANOUT_KEYS.verdict` makes a slip there a gate failure.
+     * That seal was complete and the other end was never built: the reveal had no row for it and
+     * no screen could print one, so "held back until the Reunion" held it back past the last frame
+     * of the season. COUCH-PLAN Rung 4 counts it among the three things the payday owes every pad.
+     *
+     * 🚨 PICKED, NOT SPREAD — same discipline as the seats above. `feedCount` returns exactly four
+     * numbers and `FANOUT_KEYS.revealFeed` is the closed schema for them, so the day someone
+     * reaches for `win.checked`'s `rule` (which is the feed count spelled out in words, W3) it
+     * fails here instead of on a sofa. Gate: `room-ghosts` RG3–RG3d, RG6b.
+     */
+    feed: r.feed
+      ? {
+        fed: r.feed.fed, feedTarget: r.feed.feedTarget,
+        camerasLit: r.feed.camerasLit, cameraTarget: r.feed.cameraTarget,
+      }
+      : null,
   };
 }
 
@@ -1183,17 +1203,24 @@ export const FANOUT_KEYS = {
    */
   verdict: ['t', 'status', 'camerasLit', 'need', 'episode'],
   /*
-   * The reveal, and its three nested shapes. Closed like every other fanout — which here is doing
+   * The reveal, and its four nested shapes. Closed like every other fanout — which here is doing
    * more work than usual: this is the message that is ALLOWED to carry an alignment, so the schema
    * is the only thing standing between "the Reunion" and "the Reunion plus whatever else was on
    * the object". `castSeed` and `state.world` are one careless spread away and neither is here.
    */
-  reveal: ['t', 'seats', 'awards', 'decisive', 'chat'],
+  reveal: ['t', 'seats', 'awards', 'decisive', 'chat', 'feed'],
   revealSeat: ['id', 'seat', 'role', 'alignment', 'believedTheyWere', 'finalClaim', 'death'],
   revealDeath: ['by', 'seq', 'executioner'],
   revealAward: ['award', 'winner', 'why', 'querySeq'],
   revealDecisive: ['episode', 'because', 'atSeq'],
   revealChat: ['seq', 'text', 'author', 'generated'],
+  /*
+   * 🍖 Four numbers and nothing else. The seal on `fed` runs the length of the season (see
+   * `verdict` above, and `enterVerdictLive`), so the one message that opens it is the one that
+   * most needs a closed list — `win.checked` also carries `outcome` and `rule`, and `rule` is the
+   * feed count in words: W3 IS "evil fed the Hunter enough goods". Neither is on this row.
+   */
+  revealFeed: ['fed', 'feedTarget', 'camerasLit', 'cameraTarget'],
   /*
    * 🎬 The season is over. One word, and it is the same word the Verdict plate just aired — the
    * Reunion's own reveals travel on their own payload, once the beat has actually started.
@@ -1281,6 +1308,7 @@ export function fanoutViolations(msg) {
     for (const a of msg.awards || []) extraKeys(a, FANOUT_KEYS.revealAward, 'reveal.award', bad);
     if (msg.decisive) extraKeys(msg.decisive, FANOUT_KEYS.revealDecisive, 'reveal.decisive', bad);
     for (const c of msg.chat || []) extraKeys(c, FANOUT_KEYS.revealChat, 'reveal.chat', bad);
+    if (msg.feed) extraKeys(msg.feed, FANOUT_KEYS.revealFeed, 'reveal.feed', bad);
   } else if (msg.t === 'ballotOk') {
     extraKeys(msg, FANOUT_KEYS.ballotOk, 'ballotOk', bad);
   } else if (msg.t === 'nomOk') {

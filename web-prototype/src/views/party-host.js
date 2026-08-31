@@ -2206,7 +2206,22 @@ function nomBoard(standing, names, lobby, beat) {
    * draw. `party-warm` W37b is the lock.
    */
   if (!rows) return '';
-  return `<div class="nom-board">${rows}</div>`;
+  /*
+   * 🏷️ **`noms-board` IS A HANDLE, NOT A STYLE, AND IT IS HERE BECAUSE ITS ABSENCE COST A GATE.**
+   *
+   * Every other board in this file already carries a modifier — `pair-board`, `lynch-board`,
+   * `roll-board`, `tally-board` — and the nominations board was the one with a bare `.nom-board`.
+   * That was fine while it was also the only board on the Reckoning. Rung 1's scorekeeper put
+   * `tallyBoard` in `aside`, which renders BEFORE this one on the same beat and is also a
+   * `.nom-board`, so `document.querySelector('.nom-board')` silently started returning the
+   * tally: `phone-accusation` PA0b/PA0c read `5 OF 8 CLEARS` where two nomination chips should
+   * have been and went red against green product code. (Masked for a while by a stale `dist/` —
+   * that gate serves the build, so it only turned over on the next `npm run build`.)
+   *
+   * Additive on purpose: `nom-board` stays first, so every existing selector and every CSS rule
+   * keeps matching. This just makes the one board that had no name selectable by name.
+   */
+  return `<div class="nom-board noms-board">${rows}</div>`;
 }
 
 /* =============================================================================================
@@ -2517,10 +2532,29 @@ function reunionCentre(at, current, names, reveal) {
   }
   if (at.beat === 'cut') {
     const d = reveal.decisive;
+    /*
+     * 🍖 **THE FEED COUNT LANDS ON THE CUT PLATE, because the cut beat is the season's ledger.**
+     *
+     * The other three beats are per-seat (roll call), per-award or per-line; this is the only one
+     * that speaks about the season as a whole, which is the right size for a number that was true
+     * all night and sayable on none of it. It is the same `reveal.feed` the pads print, so the
+     * couch and the eight handsets cannot disagree about the score.
+     *
+     * ⚠️ The lesson from the pair board is one commit old: `publicLinks` carried `at` for weeks
+     * and only the phone ever drew it, so the television was missing a third of a public shape
+     * nobody had noticed was public. A payload field with exactly one renderer is that bug
+     * mid-flight. Gate: `room-ghosts` RG3d.
+     */
+    const f = reveal.feed;
+    const bar = (n, of) => (of == null ? String(n) : `${n} of ${of}`);
+    const ledger = f
+      ? `<div class="roll-s ledger">Unsealed: ${esc(bar(f.fed, f.feedTarget))} fed to the Hunter ·
+          ${esc(bar(f.camerasLit, f.cameraTarget))} cameras lit</div>`
+      : '';
     return `<div class="roll-plate"><div class="roll-k">The Director's Cut</div>
       <div class="roll-v">${d ? `Episode ${esc(String(d.episode))}` : 'No single episode'}</div>
       <div class="roll-s">${d ? `${esc(d.because)} · seq ${esc(String(d.atSeq))}` : 'Nothing decided it'}
-        — the footage is not cut yet.</div></div>`;
+        — the footage is not cut yet.</div>${ledger}</div>`;
   }
   if (at.beat === 'awards') {
     const rows = (reveal.awards || []).map((a) => `<div class="award-row">

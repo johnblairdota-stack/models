@@ -1139,7 +1139,17 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
      * =========================================================================================== */
     reunionSpecial() {
       const align = Object.fromEntries(deal.seats.map((s) => [s.id, s.alignment]));
-      return reunion(log.all(), { alignmentOf: (id) => align[id] });
+      /*
+       * 🍖 `targets` is the SAME `WIN_TARGETS[count]` row `foldVerdict` handed `foldWin` — read
+       * off the same `count`, not a second table. The bar the Reunion prints beside the feed
+       * count has to be the bar the season was actually judged against, or the payday explains
+       * the wrong game. This is the `COMPOSITION` / `WIN_TARGETS` disagreement (still John's
+       * call, still 3-against-4 at eight) staying decided in exactly one place.
+       */
+      return reunion(log.all(), {
+        alignmentOf: (id) => align[id],
+        targets: WIN_TARGETS[count] ?? null,
+      });
     },
     /** Ground truth. Belongs to the gate and the Reunion. Never to a socket. */
     truth: () => ({

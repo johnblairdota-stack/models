@@ -2020,6 +2020,27 @@ export default async function partyPhone({ params }) {
     const status = c.season || c.verdict?.status || 'THE SEASON IS OVER';
     let html = `<h1>${esc(status)}</h1>
       <p class="hint">${esc(outcomeLine(c.season || c.verdict?.status))}</p>`;
+    /*
+     * 🍖 **THE SEASON'S LEDGER, ABOVE THE PERSONAL CARD AND OUTSIDE THE `mine` GUARD.**
+     *
+     * The feed count is a ROOM fact, not a seat fact: it is the number the Verdict withheld all
+     * season because *"evil losing a partner looks exactly like evil winning"*, and the Reunion is
+     * where the room finally gets to tell those two apart. So it prints for a pad that has no seat
+     * in the reveal too — a spectator, a phone that joined late, a handset whose player was never
+     * dealt in. COUCH-PLAN Rung 4 is explicit that the payday reaches EVERY living pad; a room
+     * fact hidden behind "did I get a card" would repeat exactly the ghosting the rung is named
+     * for. Gate: `room-ghosts` RG3c.
+     *
+     * Cameras ride beside it because the Verdict aired that number every episode and never this
+     * one, and side by side is the first time the scoreboard has had both halves.
+     */
+    if (c.reveal?.feed) {
+      const f = c.reveal.feed;
+      const bar = (n, of) => (of == null ? String(n) : `${n} of ${of}`);
+      html += `<p class="hint reunion-ledger">The house ledger, unsealed:
+        <b>${esc(bar(f.fed, f.feedTarget))}</b> fed to the Hunter ·
+        <b>${esc(bar(f.camerasLit, f.cameraTarget))}</b> cameras lit.</p>`;
+    }
     const mine = (c.reveal?.seats || []).find((s) => s.id === me?.playerId);
     if (!mine) {
       html += `<p class="hint">The Reunion is on the TV: the roll call, then the awards. Every

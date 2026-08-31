@@ -318,6 +318,50 @@ red reads as real drift in a file that was already correct, and the tempting "fi
 product. H8 now reads the file and normalises to LF, which is what the blob in git holds. Any new
 gate that greps a source file for a pattern crossing a line break needs the same line.
 
+**The seal on the feed count was airtight and had NO OTHER END** (2026-08-31, COUCH-PLAN Rung 4).
+`rrr-social-round.md` §4 holds the feed count back from the Verdict because the gauge is a
+deliberately lossy proxy — evil losing a partner looks exactly like evil winning — and every guard
+on the way in was built: `room.js` writes it `VIS.SEALED`, `enterVerdictLive` picks fields off the
+fold, `FANOUT_KEYS.verdict` closes the schema, `party-night` N17h0b watches the wire, `party-warm`
+W47c watched the screens. **Nothing opened it at the Reunion.** `reunion()` returned four beats and
+none was the number, `FANOUT_KEYS.reveal` had no row, and no screen could print one — so *"held back
+until the Reunion"* held it back past the last frame of the season, and W47c's whole-file `.fed` ban
+had quietly become the ENFORCEMENT of that. A ban is the right gate for *"this does not exist
+downstream"* and the wrong one for *"this is withheld from ONE BEAT"*; W47c is now per-beat (the
+Verdict chrome may not name it, the Reunion chrome is the only thing that may) and W47c2 asserts
+both Reunion screens really print it — the half a ban can never have. New: `feedCount` in
+`reunion.js` (a query over `win.checked`, same shape as `chatUnmixed`; **null, not zero**, when no
+verdict was ever folded), `reveal.feed` with `FANOUT_KEYS.revealFeed` as its closed schema, and a
+ledger line on the pad and on the Director's Cut plate. `reunionSpecial` reads the SAME
+`WIN_TARGETS[count]` row `foldVerdict` handed `foldWin`, so the bar printed is the bar the season
+was judged against. Gate: `room-ghosts` RG3/RG4/RG6, `party-warm` W47c/W47c2.
+
+**The Reunion's reach was gated on ONE phone, and the failure was all eight** (2026-08-31).
+`party-night` N17m sweeps `p1x` by design — its header says *"It sweeps the PHONE, not the TV"* —
+which is the right gate for the reveal's SHAPE and cannot see the blind-play finding, where the
+Reunion reached **0 of 32** pad records across four nights. `harness/room-ghosts.mjs` is
+`whisper-split`'s method pointed at the other end of the night: a real server on 5351, one TV and
+eight handsets, one socket killed mid-casting, then every screen in the room rendered from only the
+frames that reached it. Rung 3 proved a thing reaches exactly two people; this proves a thing
+reaches exactly everybody. Also banked there: a **dropped socket is not a dead player** — it is in
+`livingSeatedIds` and in `livingFromPublic` (which reads `alive:false` / `player.executed` /
+`player.taken`, and a dark handset is none of those), so "wait for every living phone" is not slow,
+it is *unsatisfiable*, and the backstop is the only thing that can ever fire. And `speakerNamed` /
+`selfNamingLines` are a **fail-closed guard placed before the feature**: nothing in `src/` or `net/`
+emits `chat.posted` — the *"Cy is clean," said by Cy* lines are all `_loop8` sim puppets — so RG5b
+states the zero-of-zero out loud rather than letting it read as coverage. `generated` is the filter:
+a human naming themselves is a bluff, not a bug. Gate: `room-ghosts` (33 checks).
+
+**Two boards wore one class, and a stale `dist/` hid it** (2026-08-31). Rung 1's scorekeeper put
+`tallyBoard` in `aside`, which renders AHEAD of the nominations on the same Reckoning beat and is
+also a `.nom-board` — so `phone-accusation`'s `querySelector('.nom-board')` silently started reading
+`5 OF 8 CLEARS` with zero chips, red against a television that was airing both nominations
+correctly. It stayed green for two full-suite runs because that gate serves the BUILD, so it only
+turned over on the next `npm run build`. **A browser gate is only as fresh as `dist/`; build before
+believing one.** The nominations board now carries a `noms-board` handle the way every other board
+in the file already did (`pair-board`, `lynch-board`, `roll-board`, `tally-board`) — additive, so
+existing selectors and CSS keep matching.
+
 Known **undecided**, and it is John's call rather than a refactor: `COMPOSITION[n].cameras` and
 `WIN_TARGETS[n].cameraTarget` disagree — **3 against 4 at eight players** — and both files
 describe theirs as how many cameras must be lit to win. The running state counts against the
