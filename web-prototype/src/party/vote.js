@@ -99,6 +99,36 @@ export function nominatorLockedChoice(nominations, voter) {
 }
 
 /**
+ * What the SERVER would record for a ballot box — the live `enterVote` + `castLynchVote`
+ * rules, applied in one pass so an offline driver cannot write a wish the phones could
+ * not have cast.
+ *
+ * Nominators are locked to their standing target. Self-picks and illegal choices coerce
+ * to NO_ONE, same as the live path. A missing living voter is NO_ONE (timeout / silent).
+ * Dead ids in `votes` do not enter the box.
+ *
+ * @param {{living:string[], nominations:Nomination[]}} state
+ * @param {Record<string,string>|null} [votes]
+ * @returns {Record<string,string>}
+ */
+export function acceptLynchVotes(state, votes = null) {
+  const living = state.living || [];
+  const standing = (state.nominations || []).map((n) => n.target);
+  const locked = assumedLynchVotes(state.nominations, living);
+  const box = {};
+  for (const id of living) {
+    if (locked[id]) {
+      box[id] = locked[id];
+      continue;
+    }
+    const choice = votes && Object.prototype.hasOwnProperty.call(votes, id) ? votes[id] : NO_ONE;
+    const allowed = canLynchVote(id, choice, standing);
+    box[id] = (allowed.ok && choice !== NO_ONE) ? choice : NO_ONE;
+  }
+  return box;
+}
+
+/**
  * One simultaneous ballot. Non-voters and timeouts are `NO_ONE`.
  *
  * @param {{living:string[], nominations:Nomination[]}} state

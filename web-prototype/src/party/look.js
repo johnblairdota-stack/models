@@ -549,6 +549,8 @@ export const SHOW_CHROME_CSS = `
     .nom-board { pointer-events:none; }
     .nom-row.show-nom { display:flex; align-items:center; gap:8px; padding:6px 8px; }
     .nom-row.show-nom .show-third { background:transparent; padding:0; }
+    .nom-row.nominated .nom-who { color:var(--night-ink); }
+    .lynch-board .nom-row { padding:6px 8px; }
     .talk-side .nom-board { margin:0; max-width:none; gap:6px; width:100%; }
     .talk-side .show-third .face, .talk-side .show-third .face .bot-face { width:40px; height:40px; }
     .talk-side .show-third .who { font-size:clamp(16px, 1.8vw, 24px); }

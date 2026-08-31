@@ -186,6 +186,8 @@ Every bug above that has a gate name beside it is locked in. `.github/workflows/
 the full `gates:party` chain on every push and PR. **A playtest finding is not finished until it is
 a gate** — five agents' findings were lost in August because they lived in transcripts.
 
+**Couch Plan Rung 1 · honest scorekeeper.** The DUSK6 ep2 “board lied” was the SIM writing its wish into `votesSent` and ignoring `ballotOk`; the board printed `t:'lynch'`. Season log records receipts + the lynch fanout. TV/pads print `N of M clears` from `t:'tally'.need`. Nominator rows read `Cy → Fox · nominated.` Gate: `vote-table` V10–V12.
+
 **H277 / DUSK6 · cap miss is Reunion, not another Casting.** At `EPISODE_CAP`, cameras/feed short
 of `WIN_TARGETS` is Production + Reunion. `enterNextCasting` (the `t:'casting'` / `]` door) now
 asks the fold the same way `progressShow` does. Execution kicker says Reunion at the cap, not

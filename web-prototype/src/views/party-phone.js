@@ -29,6 +29,7 @@ import { STICK_DEADZONE, warmLabel } from '../party/follow.js';
 import { formatRemain, isTalkBeat, LATE_DEBRIEF_MS, remainingMs } from '../party/show.js';
 import { outcomeLine } from '../party/win.js';
 import { NO_ONE } from '../party/vote.js';
+import { clearsLine } from '../party/scorekeeper.js';
 
 export default async function partyPhone({ params }) {
   injectNightSkin();
@@ -1860,6 +1861,9 @@ export default async function partyPhone({ params }) {
       ? (canTap ? `<p class="hint">Talk's ending — name someone</p>` : '')
       : `<h1>Reckoning.</h1>${phoneClock(c)}${canTap ? '<p class="hint">Tap who you name</p>' : ''}`;
     html += standingBoard(standing, me, c);
+    if (c.tally?.need && c.tally?.living) {
+      html += `<p class="hint" data-clears>${esc(clearsLine({ need: c.tally.need, living: c.tally.living }))}</p>`;
+    }
     if (!iCanAct(players, me)) {
       html += `<p class="hint">The dead do not nominate.</p>`;
       return html;
@@ -1891,6 +1895,9 @@ export default async function partyPhone({ params }) {
     // John (2026-08-24): you shouldn't be able to vote for yourself after being nominated.
     const standing = standingNames(players, c).filter((n) => n.target !== me.playerId);
     let html = `<h1>Vote.</h1>${phoneClock(c)}`;
+    if (c.tally?.need && c.tally?.living) {
+      html += `<p class="hint" data-clears>${esc(clearsLine({ need: c.tally.need, living: c.tally.living }))}</p>`;
+    }
     if (c.lynchResult) {
       html += `<p class="hint">${c.lynchResult.executed ? 'The vote is in.' : 'Nobody cleared.'}</p>`;
       return html;

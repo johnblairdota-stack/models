@@ -466,6 +466,7 @@ export function injectNightSkin() {
       border:1px solid rgba(var(--night-accent-rgb), .2); }
     .nom-n { color:var(--night-accent); font-weight:800; letter-spacing:.16em; font-size:12px; }
     .nom-who { font-size:clamp(16px, 2vw, 24px); font-weight:800; line-height:1.05; }
+    .nom-row.nominated .nom-who { letter-spacing:.01em; }
     .nom-by { color:var(--night-dim); font-size:11px; letter-spacing:.1em; text-transform:uppercase; }
     /* 🎭 THE REUNION. The cast list fills in one plate at a time and the centre carries whichever
        of the four beats is running. A seat the roll call has not reached shows its NAME and its

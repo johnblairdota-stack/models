@@ -27,6 +27,7 @@ import {
   rollCallRevealed, rundownRibbon,
 } from '../party/show.js';
 import { NO_ONE, SHOWRUNNER } from '../party/vote.js';
+import { clearsLine, lynchBoardRows } from '../party/scorekeeper.js';
 import { outcomeLine } from '../party/win.js';
 import { deadIdsFromPublic, describeCastTiebreaks, livingFromPublic, previewCastTiebreaks, shouldArmCastSend } from '../party/ballot.js';
 import { MAX_PAIRS } from '../party/link.js';
@@ -1439,6 +1440,9 @@ export default async function partyHost({ params }) {
         whoSub: client.noms?.length ? 'live · named' : 'live · waiting',
         whoId: client.noms?.[0]?.target,
         standing: client.noms,
+        // Threshold on the wire as `t:'tally'.need` — printed once someone stands, so the
+        // empty-board column does not crop the picture to say a number nobody needed yet.
+        aside: client.noms?.length ? clearsBoard(client.tally) : '',
       });
     } else if (show === 'vote') {
       body += talkStage({
@@ -1448,7 +1452,7 @@ export default async function partyHost({ params }) {
         whoSub: 'live · vote',
         whoId: client.noms?.[0]?.target,
         standing: client.noms,
-        tally: client.lynchResult ? { votes: client.lynchVotes, result: client.lynchResult } : null,
+        tally: client.lynchResult ? { votes: client.lynchVotes, result: client.lynchResult, noms: client.noms } : null,
         // The ballot box filling up, above the nominees. Count and threshold only — see
         // `tallyBoard`. It disappears the moment the result is aired, because the result is
         // then the loudest true thing on the screen.
@@ -1478,7 +1482,7 @@ export default async function partyHost({ params }) {
         whoId: executed,
         verdict: executionSwing(client.lynchResult, names),
         executed: !!executed,
-        tally: client.lynchResult ? { votes: client.lynchVotes, result: client.lynchResult } : null,
+        tally: client.lynchResult ? { votes: client.lynchVotes, result: client.lynchResult, noms: client.noms } : null,
       });
     } else if (show === 'verdict') {
       /* =======================================================================================
@@ -2104,7 +2108,7 @@ function talkStage({
         : ''),
     })
     : '';
-  const side = `${aside || ''}${nomBoard(standing, names, lobby, beat)}${tally ? lynchBoard(tally.votes, tally.result, names) : ''}`;
+  const side = `${aside || ''}${nomBoard(standing, names, lobby, beat)}${tally ? lynchBoard(tally.votes, tally.result, names, tally.noms) : ''}`;
   return `
     <div class="talk-stage${side ? ' has-side' : ''}">
       <div class="talk-chrome-top">
@@ -2253,17 +2257,24 @@ function pairBoard(links, names, lobby, refusals) {
   </div>`;
 }
 
-function lynchBoard(votes, result, names) {
+function lynchBoard(votes, result, names, noms) {
   const counts = result?.counts || {};
-  const tally = Object.entries(counts).map(([id, n]) => `
+  const standing = new Set((noms || []).map((n) => n.target).filter(Boolean));
+  const tally = Object.entries(counts)
+    .filter(([id]) => id && id !== NO_ONE && id !== 'NOBODY')
+    .filter(([id]) => standing.size === 0 || standing.has(id))
+    .map(([id, n]) => `
     <div class="show-tally-row">
       <div class="who">${esc(joinedName(names, id, 'Someone'))}</div>
       <div class="n">${esc(String(n))}</div>
     </div>`).join('');
-  const aired = (votes || []).map((v) => `
-    <div class="nom-row">
-      <div class="nom-who">${esc(joinedName(names, v.voter, 'Someone'))}</div>
-      <div class="nom-by">${v.choice === NO_ONE ? 'NO ONE' : esc(joinedName(names, v.choice, 'Someone'))}</div>
+  const aired = lynchBoardRows({
+    votes,
+    noms: noms || [],
+    names: (id) => joinedName(names, id, id),
+  }).map((v) => `
+    <div class="nom-row${v.nominated ? ' nominated' : ''}">
+      <div class="nom-who">${esc(v.text)}</div>
     </div>`).join('');
   return `<div class="nom-board lynch-board">
     ${tally ? `<div class="show-tally">${tally}</div>` : ''}
@@ -2544,12 +2555,25 @@ function tallyBoard(tally) {
   const inCount = Math.min(t.in | 0, t.living | 0);
   const all = inCount >= t.living;
   const pct = Math.round((inCount / Math.max(1, t.living)) * 100);
-  const note = all ? 'every ballot in — closing' : `needs ${t.need} to carry`;
+  const clears = clearsLine({ need: t.need, living: t.living });
+  const note = all ? 'every ballot in — closing' : `${inCount} of ${t.living} in`;
   return `<div class="nom-board tally-board${all ? ' full' : ''}">
-    <div class="pair-board-k">Ballots in</div>
-    <div class="tally-n"><span class="tally-in">${esc(String(inCount))}</span><span class="tally-of">of ${esc(String(t.living))}</span></div>
+    <div class="pair-board-k" data-clears>${esc(clears)}</div>
+    <div class="tally-n"><span class="tally-in">${esc(String(t.need | 0))}</span><span class="tally-of">of ${esc(String(t.living))} clears</span></div>
     <div class="tally-bar"><div class="tally-fill" style="width:${pct}%"></div></div>
     <p class="hint">${esc(note)}</p>
+  </div>`;
+}
+
+/** Threshold only — Reckoning, before the ballot. Same `t:'tally'` fields, no fill. */
+function clearsBoard(tally) {
+  const t = tally || null;
+  if (!t || !t.living || !t.need) return '';
+  const clears = clearsLine({ need: t.need, living: t.living });
+  if (!clears) return '';
+  return `<div class="nom-board tally-board">
+    <div class="pair-board-k" data-clears>${esc(clears)}</div>
+    <div class="tally-n"><span class="tally-in">${esc(String(t.need | 0))}</span><span class="tally-of">of ${esc(String(t.living))} clears</span></div>
   </div>`;
 }
 
