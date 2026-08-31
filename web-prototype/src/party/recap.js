@@ -17,14 +17,19 @@
 export const GHOST_RUN_LINE = 'Run is in the book';
 
 function sliceThisEpisode(evs) {
-  let start = 0;
+  // Prefer the last `cast.ballot` — playEpisode writes ballot then pair, and episode lives on
+  // the ballot. Starting at pair dropped the ballot and made `recap.episode` null (N9).
+  // A log with only `cast.pair` (N0) still slices from the pair.
+  let start = -1;
   for (let i = evs.length - 1; i >= 0; i--) {
-    if (evs[i].type === 'cast.pair' || evs[i].type === 'cast.ballot') {
-      start = i;
-      break;
+    if (evs[i].type === 'cast.ballot') { start = i; break; }
+  }
+  if (start < 0) {
+    for (let i = evs.length - 1; i >= 0; i--) {
+      if (evs[i].type === 'cast.pair') { start = i; break; }
     }
   }
-  return evs.slice(start);
+  return start < 0 ? evs : evs.slice(start);
 }
 
 /** @param {Array<{type:string, data?:object}>} events  entitled events one socket actually got */
