@@ -339,7 +339,7 @@ try {
     return b ? { in: b.querySelector('.tally-in')?.textContent?.trim(), txt: b.innerText.replace(/\s+/g, ' ').trim() } : null;
   });
   claim('D7/S3 · the Vote shows how full the ballot box is, and what it takes to carry',
-    !!tallyOpen && /of 8/.test(tallyOpen.txt) && /\d+ of 8 clears/.test(tallyOpen.txt),
+    !!tallyOpen && /of 8/.test(tallyOpen.txt) && /needs \d/.test(tallyOpen.txt),
     tallyOpen ? tallyOpen.txt : `no .tally-board (beat was ${beatAtVote})`);
   claim('D8 · never two clocks on the vote screen', (await clocks()) <= 1, `${await clocks()} clock elements`);
 

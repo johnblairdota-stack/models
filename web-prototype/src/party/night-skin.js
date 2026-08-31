@@ -468,6 +468,8 @@ export function injectNightSkin() {
     .nom-who { font-size:clamp(16px, 2vw, 24px); font-weight:800; line-height:1.05; }
     .nom-row.nominated .nom-who { letter-spacing:.01em; }
     .nom-by { color:var(--night-dim); font-size:11px; letter-spacing:.1em; text-transform:uppercase; }
+    .nom-lock { text-transform:none; letter-spacing:.02em; font-weight:700; }
+    .lynch-board .nom-row { grid-template-columns:1fr auto; }
     /* 🎭 THE REUNION. The cast list fills in one plate at a time and the centre carries whichever
        of the four beats is running. A seat the roll call has not reached shows its NAME and its
        fate and nothing else — a dimmed role is still a role. Alignment is spelled out in

@@ -23,6 +23,7 @@ import { tallyVote, nominate, canNominate, canBeNominated, canLynchVote, assumed
 import { createRoom } from '../src/party/room.js';
 import {
   clearsLine, lynchBoardRows, printLynchBoard, seasonEpisodeRecord, seasonEpisodeAgrees,
+  tallyBoardCopy, seasonLogFromWire, chromeTallyCounts,
 } from '../src/party/scorekeeper.js';
 import { readdir, readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -227,6 +228,14 @@ function* distributions(living, choices) {
     printed.rows.filter((r) => r.nominated).map((r) => r.text).join(' | '));
   t('V10g · the bar before the vote is N of M clears',
     printed.line === '5 of 8 clears' && clearsLine({ need: 5, living: 8 }) === '5 of 8 clears');
+  const copyOpen = tallyBoardCopy({ in: 2, living: 8, need: 5 });
+  const copyFull = tallyBoardCopy({ in: 8, living: 8, need: 5 });
+  t('V10h · Vote tallyBoard keeps HEAD copy: Ballots in / {in} of {living} / needs N to carry',
+    copyOpen.header === 'Ballots in' && copyOpen.count === '2 of 8'
+    && copyOpen.note === 'needs 5 to carry' && copyOpen.clears === '5 of 8 clears');
+  t('V10i · and every ballot in — closing, plus the clears ADD',
+    copyFull.note === 'every ballot in — closing' && copyFull.count === '8 of 8'
+    && copyFull.clears === '5 of 8 clears');
 }
 
 {
@@ -292,16 +301,20 @@ function* distributions(living, choices) {
 
 {
   /*
-   * Replay half. A season JSON that still carries `votesSent` (the wish) is scored from
-   * ballotOk + t:'lynch' only. harness/_loop8 is not in this tree; if a season file appears
-   * under harness/seasons or progress/, every episode's board must agree.
+   * Replay half. Season JSON on John's driver has NO `ballotOk` — `_loop8` wrote
+   * `votesSent` at send time (Cy→Gus) and `chromeTally` Gus 4 | Fox 4. The log lied.
+   * The board did not. Old JSON is scored from chromeTally + noms; votesSent is
+   * ignored. New logger writes ballotOk + t:'lynch' and never votesSent.
+   * harness/_loop8 is not in this tree; if a season file appears under
+   * harness/seasons or progress/, every episode's board must agree.
    */
   const names = { p1: 'Cy', p2: 'Fox', p3: 'Ada', p4: 'Gus', p5: 'Ben', p6: 'Dee', p7: 'Eli', p8: 'Sam' };
   const living = ids(8);
   const noms = [{ nominator: 'p1', target: 'p2' }, { nominator: 'p3', target: 'p4' }];
-  const accepted = acceptLynchVotes({ living, nominations: noms }, {
+  const wish = {
     p1: 'p4', p2: 'p4', p3: 'p4', p4: 'p2', p5: 'p2', p6: 'p2', p7: 'p4', p8: 'p4',
-  });
+  };
+  const accepted = acceptLynchVotes({ living, nominations: noms }, wish);
   const result = tallyVote({ living, nominations: noms }, accepted);
   const ep = seasonEpisodeRecord({
     episode: 2,
@@ -324,11 +337,74 @@ function* distributions(living, choices) {
   // Poison: a wish column that would print 5–3 if anyone still read it.
   ep.votesSent = { ...accepted, p1: 'p4' };
   const replay = seasonEpisodeAgrees(ep);
-  t('V12a · DUSK6-shaped replay: board is Fox 4 / Gus 4 and Cy is locked, wish ignored',
+  t('V12a · new logger shape: board is Fox 4 / Gus 4 and Cy is locked, votesSent ignored',
     replay.ok
     && replay.printed.counts.p2 === 4 && replay.printed.counts.p4 === 4
-    && replay.printed.rows.some((row) => row.text === 'Cy → Fox · nominated.'),
+    && replay.printed.rows.some((row) => row.text === 'Cy → Fox · nominated.')
+    && !('votesSent' in seasonEpisodeRecord(ep)),
     replay.ok ? replay.printed.rows.map((row) => row.text).join(' | ') : replay.why);
+
+  const dusk6 = {
+    episode: 2,
+    living,
+    noms,
+    names,
+    votesSent: wish,
+    chromeTally: 'Gus 4 | Fox 4',
+  };
+  const oldReplay = seasonEpisodeAgrees(dusk6);
+  const wishCounts = lynchBoardRows({ votes: wish, noms, living, names });
+  t('V12c · old DUSK6 JSON (votesSent + chromeTally, no ballotOk): chromeTally is the board, Cy locked from noms',
+    oldReplay.ok
+    && chromeTallyCounts(dusk6.chromeTally, names).p2 === 4
+    && chromeTallyCounts(dusk6.chromeTally, names).p4 === 4
+    && oldReplay.printed.counts.p2 === 4 && oldReplay.printed.counts.p4 === 4
+    && oldReplay.printed.rows.some((r) => r.voter === 'p1' && r.nominated && r.choice === 'p2')
+    && !wishCounts.some((r) => r.voter === 'p1' && r.choice === 'p2'),
+    oldReplay.ok
+      ? `Fox ${oldReplay.printed.counts.p2} / Gus ${oldReplay.printed.counts.p4}`
+      : oldReplay.why);
+
+  const msgs = [
+    { t: 'noms', standing: noms },
+    { t: 'tally', in: 8, living: 8, need: 5 },
+    { t: 'ballotOk', voter: 'p1', ok: false, choice: 'p2', why: 'nominator vote locked' },
+    { t: 'ballotOk', voter: 'p2', ok: true, choice: 'p4' },
+    { t: 'ballotOk', voter: 'p3', ok: false, choice: 'p4', why: 'nominator vote locked' },
+    { t: 'ballotOk', voter: 'p4', ok: true, choice: 'p2' },
+    { t: 'ballotOk', voter: 'p5', ok: true, choice: 'p2' },
+    { t: 'ballotOk', voter: 'p6', ok: true, choice: 'p2' },
+    { t: 'ballotOk', voter: 'p7', ok: true, choice: 'p4' },
+    { t: 'ballotOk', voter: 'p8', ok: true, choice: 'p4' },
+    { t: 'lynch', votes: Object.entries(accepted).map(([voter, choice]) => ({ voter, choice })), result },
+  ];
+  const logged = seasonLogFromWire(msgs, { episode: 2, living, noms, names, votesSent: wish });
+  const loggedOk = seasonEpisodeAgrees(logged);
+  t('V12d · seasonLogFromWire records ballotOk + t:lynch and never writes votesSent',
+    !('votesSent' in logged)
+    && Array.isArray(logged.ballotOk) && logged.ballotOk.length === 8
+    && logged.lynch?.votes?.length === 8
+    && loggedOk.ok
+    && loggedOk.printed.counts.p2 === 4 && loggedOk.printed.counts.p4 === 4
+    && logged.ballotOk.find((r) => r.voter === 'p1')?.why === 'nominator vote locked',
+    loggedOk.ok ? `Fox ${loggedOk.printed.counts.p2} / Gus ${loggedOk.printed.counts.p4}` : loggedOk.why);
+
+  const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
+  const phoneSrc = await readFile(new URL('../src/views/party-phone.js', import.meta.url), 'utf8');
+  const tallyFn = hostSrc.slice(hostSrc.indexOf('function tallyBoard'), hostSrc.indexOf('function clearsBoard'));
+  const lynchFn = hostSrc.slice(hostSrc.indexOf('function lynchBoard'), hostSrc.indexOf('function executionLine'));
+  t('V12e · TV chrome is HEAD copy plus the clears ADD — not a rewrite of Ballots in',
+    /tallyBoardCopy\(tally\)/.test(tallyFn)
+    && /copy\.header/.test(tallyFn)
+    && /data-clears/.test(tallyFn)
+    && /named by \$\{joinedName\(names, n\.nominator/.test(hostSrc)
+    && /class="nom-who"/.test(lynchFn) && /class="nom-by"/.test(lynchFn)
+    && /nominated\./.test(lynchFn)
+    && !/CY → FOX/.test(hostSrc));
+  t('V12f · pad lock and standing copy are untouched',
+    /Your nomination of \$\{esc\(myNom\.name\)\} is your vote — locked\. You do not vote again\./.test(phoneSrc)
+    && /named by \$\{seatChip\(c, n\.nominator\)\}/.test(phoneSrc)
+    && /data-clears/.test(phoneSrc));
 
   const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const seasonDirs = [
@@ -353,15 +429,15 @@ function* distributions(living, choices) {
     catch (e) { replayBad = replayBad || `${file}: ${e.message}`; continue; }
     const episodes = Array.isArray(data) ? data : (data.episodes || [data]);
     for (const one of episodes) {
-      if (!one || (!one.lynch && !one.ballotOk)) continue;
+      if (!one || (!one.lynch && !one.ballotOk && !one.chromeTally)) continue;
       replayN++;
       const g = seasonEpisodeAgrees(one);
       if (!g.ok) { replayBad = replayBad || `${file} ep ${one.episode}: ${g.why}`; break; }
     }
   }
-  t('V12b · if a season JSON exists, every episode\'s board equals ballotOk + t:lynch',
+  t('V12b · if a season JSON exists, every episode\'s board equals chromeTally / ballotOk + t:lynch',
     replayBad === null,
-    replayBad || (files.length ? `${replayN} episodes in ${files.length} files` : 'no season JSON in tree — fixture above is the net'));
+    replayBad || (files.length ? `${replayN} episodes in ${files.length} files` : 'no season JSON in tree — fixtures above are the net'));
 }
 
 console.log(`\nvote-table: ${pass} passed, ${fail} failed`);

@@ -27,7 +27,7 @@ import {
   rollCallRevealed, rundownRibbon,
 } from '../party/show.js';
 import { NO_ONE, SHOWRUNNER } from '../party/vote.js';
-import { clearsLine, lynchBoardRows } from '../party/scorekeeper.js';
+import { clearsLine, lynchBoardRows, tallyBoardCopy } from '../party/scorekeeper.js';
 import { outcomeLine } from '../party/win.js';
 import { deadIdsFromPublic, describeCastTiebreaks, livingFromPublic, previewCastTiebreaks, shouldArmCastSend } from '../party/ballot.js';
 import { MAX_PAIRS } from '../party/link.js';
@@ -2268,13 +2268,17 @@ function lynchBoard(votes, result, names, noms) {
       <div class="who">${esc(joinedName(names, id, 'Someone'))}</div>
       <div class="n">${esc(String(n))}</div>
     </div>`).join('');
+  // Two-column chrome (HEAD 4da166e): nom-who = voter, nom-by = choice.
+  // Skip NO_ONE / NOBODY / dead. A locked nominator keeps the columns and
+  // gains ` · nominated.` on nom-by — the nameplate above stays `named by`.
   const aired = lynchBoardRows({
     votes,
     noms: noms || [],
     names: (id) => joinedName(names, id, id),
   }).map((v) => `
     <div class="nom-row${v.nominated ? ' nominated' : ''}">
-      <div class="nom-who">${esc(v.text)}</div>
+      <div class="nom-who">${esc(v.who)}</div>
+      <div class="nom-by">${esc(v.whom)}${v.nominated ? '<span class="nom-lock"> · nominated.</span>' : ''}</div>
     </div>`).join('');
   return `<div class="nom-board lynch-board">
     ${tally ? `<div class="show-tally">${tally}</div>` : ''}
@@ -2550,18 +2554,16 @@ function verdictFacts(v, recap, names, executed) {
  * Execution twenty-five seconds later; putting either here would hand the room the result early.
  * ============================================================================================= */
 function tallyBoard(tally) {
-  const t = tally || null;
-  if (!t || !t.living) return '';
-  const inCount = Math.min(t.in | 0, t.living | 0);
-  const all = inCount >= t.living;
-  const pct = Math.round((inCount / Math.max(1, t.living)) * 100);
-  const clears = clearsLine({ need: t.need, living: t.living });
-  const note = all ? 'every ballot in — closing' : `${inCount} of ${t.living} in`;
-  return `<div class="nom-board tally-board${all ? ' full' : ''}">
-    <div class="pair-board-k" data-clears>${esc(clears)}</div>
-    <div class="tally-n"><span class="tally-in">${esc(String(t.need | 0))}</span><span class="tally-of">of ${esc(String(t.living))} clears</span></div>
-    <div class="tally-bar"><div class="tally-fill" style="width:${pct}%"></div></div>
-    <p class="hint">${esc(note)}</p>
+  // HEAD 4da166e copy, frozen in tallyBoardCopy: `Ballots in` · `{in} of {living}` ·
+  // `needs ${need} to carry` / `every ballot in — closing`. The clears line is ADD.
+  const copy = tallyBoardCopy(tally);
+  if (!copy) return '';
+  return `<div class="nom-board tally-board${copy.all ? ' full' : ''}">
+    <div class="pair-board-k">${esc(copy.header)}</div>
+    <div class="tally-n"><span class="tally-in">${esc(String(copy.inCount))}</span><span class="tally-of">of ${esc(String(copy.living))}</span></div>
+    <div class="tally-bar"><div class="tally-fill" style="width:${copy.pct}%"></div></div>
+    <p class="hint">${esc(copy.note)}</p>
+    ${copy.clears ? `<p class="hint" data-clears>${esc(copy.clears)}</p>` : ''}
   </div>`;
 }
 
