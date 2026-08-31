@@ -3908,12 +3908,55 @@ console.log('\nparty-warm — the lobby-warm night');
    * ⚠️ These match CODE, not prose. A bare `/\bfed\b/` failed on this block's own explanation of
    * why the feed count is withheld — a gate that forbids naming the thing it protects makes the
    * next person delete the argument to get green. `.fed` / `fed:` is the read or the write.
+   *
+   * 🍖 **NARROWED 2026-08-31, AND THE OLD WORDING WAS A SYMPTOM RATHER THAN A RULE.** This used to
+   * ban `.fed` from ANYWHERE in either view, and it stayed green for months because the number
+   * had nowhere to go: `rrr-social-round.md` §4 seals it *"until the Reunion"* and the Reunion end
+   * of that sentence had never been built — no `reveal.feed` on the wire, no `feedCount` query, no
+   * screen able to print one. A whole-file ban is the right gate for "this number does not exist
+   * downstream"; it is the WRONG gate for "this number is withheld from ONE BEAT", and it silently
+   * became the enforcement of a bug (COUCH-PLAN Rung 4: the payday owes every pad the feed count).
+   *
+   * The invariant it was always reaching for is per-BEAT, so it is now measured per-beat: the
+   * VERDICT chrome may not name the number, the REUNION chrome must be the only thing that does,
+   * and no screen anywhere may touch the fold's `rule` — which is the same leak in words, W3 being
+   * *"evil fed the Hunter enough goods."* Gate on the other side: `room-ghosts` RG3/RG6.
    */
-  t('W47c control · no feed count and no fold rule anywhere near either screen',
-    !/\.fed\b|\bfed\s*[:=]/.test(hostSrc) && !/\.fed\b|\bfed\s*[:=]/.test(phoneSrc)
+  const region = (src, from, to) => {
+    const a = src.indexOf(from);
+    if (a < 0) return ' NO-REGION';        // a moved function fails LOUDLY, never vacuously
+    const b = src.indexOf(to, a + from.length);
+    return src.slice(a, b < 0 ? src.length : b);
+  };
+  const FED = /\.fed\b|\bfed\s*[:=]/;
+  const hostVerdict = region(hostSrc, 'function verdictFacts(', '\nfunction ');
+  const phoneVerdict = region(phoneSrc, 'function paintVerdict(', '\n  function ');
+  const hostReunion = region(hostSrc, 'function reunionCentre(', '\nfunction ');
+  const phoneReunion = region(phoneSrc, 'function paintReunion(', '\n  function ');
+  // Every mention in the whole file, minus the ones inside the Reunion chrome, must be zero.
+  const strayFed = (src, reunion) =>
+    (src.match(/\.fed\b|\bfed\s*[:=]/g) || []).length
+    - (reunion.match(/\.fed\b|\bfed\s*[:=]/g) || []).length;
+
+  t('W47c control · the VERDICT names no feed count, and the Reunion is the only place that does',
+    !FED.test(hostVerdict) && !FED.test(phoneVerdict)
+      && strayFed(hostSrc, hostReunion) === 0 && strayFed(phoneSrc, phoneReunion) === 0
       && !/verdict\.rule|v\.rule/.test(hostSrc) && !/verdict\.rule|v\.rule/.test(phoneSrc)
       && !/\.rule\b/.test(clientSrc)
-      && /THERE IS NO `fed` ON THIS/.test(clientSrc));
+      && /THERE IS NO `fed` ON THIS/.test(clientSrc),
+    `verdict chrome clean · ${(hostReunion.match(FED) ? 1 : 0) + (phoneReunion.match(FED) ? 1 : 0)}`
+      + ' of 2 reunion screens print it');
+
+  /*
+   * The other direction, and it is the half a "no `.fed` anywhere" ban could never have: the
+   * Reunion must actually PRINT it. A seal with nothing behind it looks identical to a seal that
+   * works, from the verdict's side, for a whole season.
+   */
+  t('W47c2 · and BOTH reunion screens really print it — the pad and the television',
+    FED.test(hostReunion) && FED.test(phoneReunion)
+      && /reveal\.feed|reveal\?\.feed/.test(hostSrc) && /reveal\.feed|reveal\?\.feed/.test(phoneSrc)
+      && FANOUT_KEYS.reveal.includes('feed'),
+    'reveal.feed on the wire and on both screens');
 
   /*
    * ⚠️ The camera count on the plate is measured against the target THE FOLD USED, not the one

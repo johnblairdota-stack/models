@@ -581,6 +581,91 @@ export function whisperAudience(links, from) {
   return [p.a, p.b];
 }
 
+/* =============================================================================================
+ * 🔒 THE SPLIT, AS TWO FUNCTIONS THE SCREENS ACTUALLY CALL.
+ *
+ * The privacy rule above is enforced on the WIRE — `whisperViolations` closes the schema and
+ * `fanoutViolations` refuses the verb. Nothing enforced the same split on the two CHROMES that
+ * render it, and they had drifted apart in opposite directions:
+ *
+ *   PHONE  `whisperListHtml` built the private half inline in `party-phone.js`, so no gate could
+ *          render it without a DOM. "The partner pad shows the words" was a claim about a
+ *          template literal nobody outside the browser could execute.
+ *   TV     `pairBoard` printed WHO ASKED and WHO SAID YES and stopped there. `publicLinks` has
+ *          carried `at` since the pair clock shipped, with a comment reading *"`at` rides along
+ *          so BOTH screens can draw the countdown"* — and only one screen ever did. The couch
+ *          could see two people paired and had no idea whether that had been going on for four
+ *          seconds or eighty. `COUCH-PLAN.md`'s Fun section names the shape as three facts:
+ *          *"who asked, who said yes, how long they held, who tapped DONE early."* Two of four.
+ *
+ * So both halves are pure functions here, called by both views and by `harness/whisper-split.mjs`
+ * — which is how a node gate can quote three real screens from one second without a browser.
+ *
+ * ⚠️ **`pairShape` TAKES A PAIR AND RETURNS NUMBERS AND IDS. IT MUST NEVER GROW A TEXT FIELD.**
+ * `shapeLeaks` is the fail-closed guard, in the same style as `whisperViolations`: the TV half
+ * is validated by its own closed schema so a future "show the last line on the board" idea fails
+ * a gate instead of ending a game. Gate: `whisper-split` WS5/WS5b.
+ * ============================================================================================= */
+
+/** How many lines the pad keeps. Was a bare `-30` inside the phone's template. */
+export const WHISPER_KEEP = 30;
+
+/**
+ * THE PRIVATE HALF. Everything the partner pad may print, and it exists on exactly two phones.
+ *
+ * ⚠️ **`cleanWhisper` RUNS AGAIN HERE, ON THE RECEIVING SIDE.** The server cleans on the way in,
+ * so this is redundant on the happy path and is not there for the happy path: a hostile frame is
+ * untrusted input at BOTH ends, and `cleanWhisper` refuses a non-string rather than coercing one
+ * (see its header — coercion killed the whole node process once already). An entry that cleans to
+ * nothing is dropped rather than rendered as an empty bubble.
+ */
+export function whisperLines(whispers, me) {
+  return (whispers || [])
+    .slice(-WHISPER_KEEP)
+    .map((w) => ({ text: cleanWhisper(w?.text), mine: w?.from === me }))
+    .filter((l) => l.text.length > 0);
+}
+
+/**
+ * THE PUBLIC HALF. Who asked, who said yes, how long they held, who tapped DONE early — and not
+ * one character a player typed.
+ *
+ * `held` counts UP and `secs` counts DOWN, deliberately, because the two screens want opposite
+ * numbers: the couch is watching how long these two have been at it, and the pair is watching how
+ * much of their ninety seconds is left. Both come off the same public `at`, so they cannot drift.
+ */
+export const SHAPE_KEYS = ['name', 'a', 'b', 'heldMs', 'heldSec', 'secs', 'doneA', 'doneB'];
+
+export function pairShape(pair, now = 0) {
+  if (!pair) return null;
+  const left = pairRemaining(pair, now);
+  const heldMs = left == null ? 0 : Math.max(0, PAIR_MS - left);
+  return {
+    name: String(pair.name || ''),
+    a: pair.a,
+    b: pair.b,
+    heldMs,
+    heldSec: Math.floor(heldMs / 1000),
+    secs: left == null ? null : Math.ceil(left / 1000),
+    doneA: isDone(pair, pair.a),
+    doneB: isDone(pair, pair.b),
+  };
+}
+
+/** Anything on the shape that is not one of `SHAPE_KEYS`, or any value a human could have typed. */
+export function shapeLeaks(shape) {
+  const bad = [];
+  if (!shape || typeof shape !== 'object') return ['<empty>'];
+  for (const k of Object.keys(shape)) if (!SHAPE_KEYS.includes(k)) bad.push(`shape.${k}`);
+  // The merged name is the ONE string here, and it is generated rather than typed — `mergeName`
+  // caps it at NAME_CAP and strips to [A-Z0-9]. A longer or dirtier string means somebody has
+  // put player-authored text on the television.
+  if (typeof shape.name !== 'string') bad.push('shape.name:<not a string>');
+  else if (shape.name.length > NAME_CAP) bad.push(`shape.name:${shape.name.length}>${NAME_CAP}`);
+  else if (/[^A-Z0-9]/.test(shape.name)) bad.push(`shape.name:<not a merge>`);
+  return bad;
+}
+
 /** What the room may know: who is paired, and what they are called now. Never the words. */
 export function publicLinks(links) {
   return {

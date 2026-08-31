@@ -15,7 +15,7 @@ import { ACCENTS, DEFAULT_LOOK, SHELLS, cleanLook, paintLook, robotFaceSvg } fro
 import { REACTIONS, REACT_COOLDOWN_MS, REACT_MOOD, cleanReaction } from '../party/react.js';
 import { applyCastLock, applyCastTap, ballotFromCast, CAST_BLOCK_WHY, castPrompt, castRowBlock, castRowMark, freshCast, mergePublicNames, nominationPlayers, padlockSvg } from '../party/cast-ui.js';
 import { deadIdsFromPublic, historyFromCastEvents } from '../party/ballot.js';
-import { linkBlock, mergeName, WHISPER_MAX, MAX_PAIRS, pairRemaining, isDone } from '../party/link.js';
+import { linkBlock, mergeName, WHISPER_MAX, MAX_PAIRS, pairRemaining, isDone, whisperLines } from '../party/link.js';
 import { cardFor, faceDownHtml, mountRoleCard, premiereHtml } from '../party/rolecard.js';
 import { EVIL } from '../party/cast.js';
 import { guideMapSvg } from '../party/guidemap.js';
@@ -2020,6 +2020,27 @@ export default async function partyPhone({ params }) {
     const status = c.season || c.verdict?.status || 'THE SEASON IS OVER';
     let html = `<h1>${esc(status)}</h1>
       <p class="hint">${esc(outcomeLine(c.season || c.verdict?.status))}</p>`;
+    /*
+     * 🍖 **THE SEASON'S LEDGER, ABOVE THE PERSONAL CARD AND OUTSIDE THE `mine` GUARD.**
+     *
+     * The feed count is a ROOM fact, not a seat fact: it is the number the Verdict withheld all
+     * season because *"evil losing a partner looks exactly like evil winning"*, and the Reunion is
+     * where the room finally gets to tell those two apart. So it prints for a pad that has no seat
+     * in the reveal too — a spectator, a phone that joined late, a handset whose player was never
+     * dealt in. COUCH-PLAN Rung 4 is explicit that the payday reaches EVERY living pad; a room
+     * fact hidden behind "did I get a card" would repeat exactly the ghosting the rung is named
+     * for. Gate: `room-ghosts` RG3c.
+     *
+     * Cameras ride beside it because the Verdict aired that number every episode and never this
+     * one, and side by side is the first time the scoreboard has had both halves.
+     */
+    if (c.reveal?.feed) {
+      const f = c.reveal.feed;
+      const bar = (n, of) => (of == null ? String(n) : `${n} of ${of}`);
+      html += `<p class="hint reunion-ledger">The house ledger, unsealed:
+        <b>${esc(bar(f.fed, f.feedTarget))}</b> fed to the Hunter ·
+        <b>${esc(bar(f.camerasLit, f.cameraTarget))}</b> cameras lit.</p>`;
+    }
     const mine = (c.reveal?.seats || []).find((s) => s.id === me?.playerId);
     if (!mine) {
       html += `<p class="hint">The Reunion is on the TV: the roll call, then the awards. Every
@@ -2261,10 +2282,17 @@ export default async function partyPhone({ params }) {
     return linkBlock(L, from, to, { living, beat });
   }
 
+  /*
+   * 🔒 THE PRIVATE HALF OF THE SPLIT, and the list itself now lives in `link.js` beside the
+   * public half. It used to be built inline here, which meant the one screen that is SUPPOSED to
+   * carry the words could only be quoted from a browser — so "the partner pad shows the words"
+   * was a claim about a template literal no node gate could execute. `whisperLines` is pure, both
+   * ends call it, and `harness/whisper-split.mjs` renders this exact element from real socket
+   * bytes. Escaping stays here, where the HTML is.
+   */
   function whisperListHtml() {
-    const me = meId();
-    return (state.whispers || []).slice(-30).map((w) =>
-      `<p class="whisper${w.from === me ? ' me' : ''}">${esc(w.text)}</p>`).join('');
+    return whisperLines(state.whispers, meId()).map((w) =>
+      `<p class="whisper${w.mine ? ' me' : ''}">${esc(w.text)}</p>`).join('');
   }
 
   /** In place, never through `paint()`. See the block header. */

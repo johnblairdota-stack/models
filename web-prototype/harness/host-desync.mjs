@@ -388,7 +388,18 @@ const shipStuck = measure(A);
 
 // ================================================================= H8 · the stand-in is the file
 {
-  const src = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
+  /*
+   * 🪟 **Newlines are normalised, because two of the assertions below span a line break.**
+   * The `show`-reconcile pattern reads `settleBeatClaim();` then a closing brace then the
+   * `full` line, and a Windows checkout hands this file back with CRLF — so a bare `\n` in
+   * the pattern misses by one invisible character. H8 was RED on Windows and GREEN in CI
+   * against byte-identical content, which is the worst shape a gate can have: the machine
+   * that reddens is not the machine anyone is looking at, so the red reads as a real drift
+   * in `party-host.js` and gets "fixed" by editing a file that was already correct. The blob
+   * in git is LF; this makes the local run agree with the blob instead of with the checkout.
+   */
+  const raw = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
+  const src = raw.split('\r\n').join('\n');
   const optimistic = (src.match(/claimBeat\(/g) || []).length;
   t('H8 · the shipped file routes its local beats through `claimBeat` and reconciles on the clock AND on every `show` — otherwise these rows test a function nothing calls',
     /function claimBeat\(beat\)/.test(src) && /function settleBeatClaim\(\)/.test(src)

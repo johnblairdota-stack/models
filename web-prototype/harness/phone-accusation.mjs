@@ -257,9 +257,20 @@ const readSheet = (page) => page.evaluate(() => {
   };
 });
 
-/** Both nominations, as the TELEVISION is airing them. An independent screen. */
+/**
+ * Both nominations, as the TELEVISION is airing them. An independent screen.
+ *
+ * ⚠️ **`.noms-board`, NOT `.nom-board` — the bare class is now worn by more than one board.**
+ * This read `document.querySelector('.nom-board')` and took whichever came first in the DOM.
+ * Rung 1's scorekeeper added `tallyBoard`, which is also a `.nom-board` and renders in `aside`,
+ * i.e. AHEAD of the nominations on the same Reckoning beat — so this quietly started reading the
+ * clears line and PA0b/PA0c went red with `5 OF 8 CLEARS` and zero chips, against a television
+ * that was airing both nominations correctly. The nominations board now carries its own
+ * `noms-board` handle (`party-host.js`, additive), the way every other board in that file
+ * already did.
+ */
 const readTv = (tv) => tv.evaluate(() => {
-  const b = document.querySelector('.nom-board');
+  const b = document.querySelector('.noms-board');
   return b
     ? { chips: b.querySelectorAll('.seat-chip').length, txt: (b.innerText || '').replace(/\s+/g, ' ').trim() }
     : { chips: 0, txt: '' };
