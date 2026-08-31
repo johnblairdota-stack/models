@@ -452,10 +452,8 @@ function setShow(room, beat, end = null) {
    * back in the room with everyone else and have to decide whether to do it again in front of
    * them. Gate: `link-merge` L20.
    */
-  if (room.show !== beat) {
-    clearLinks(room);
-    (room.beatLog ||= []).push(beat);
-  }
+  if (room.show !== beat) clearLinks(room);
+  if (room.show !== beat) (room.beatLog ||= []).push(beat);
   room.show = beat;
   if (beat === 'expedition' || beat === 'lobby' || beat === 'casting') {
     if (beat === 'expedition') room.runEnd = null;
