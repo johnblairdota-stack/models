@@ -12,7 +12,7 @@
  */
 import { initAudio, playEviction, playNameLanded } from '../audio/audio.js';
 import { PartyNightClient, defaultWsUrl, makeCode, tokenKey } from '../party/night-client.js';
-import { recapFromEvents } from '../party/recap.js';
+import { recapFromEvents, episodeHadRun } from '../party/recap.js';
 import { injectNightSkin, markPartyReady, playerName } from '../party/night-skin.js';
 import { qrSvg } from '../party/qr.js';
 import {
@@ -544,16 +544,13 @@ export default async function partyHost({ params }) {
       toastTimer = setTimeout(() => { badge.textContent = 'DEV · ] BEAT · P CAMERA'; }, 2200);
     };
     /*
-     * ⚠️ `nextShowBeat` DOES NOT COVER THE WHOLE NIGHT, and the first version of this key was
-     * useless because of it. `AFTER_RUN_NEXT` is the post-run chain — it has no entry for lobby,
-     * casting or expedition, because those beats are ended by a thing happening (a ballot pair
-     * locking, the runner reaching the ballroom) rather than by a clock. So `]` did nothing at
-     * casting, which is exactly where a designer heading for the Debrief gets stuck: the only way
-     * past was to cast a real pair and sit through a real expedition.
-     *
-     * These three entries are DEV-ONLY and deliberately jump OVER the expedition. They are not a
-     * second running order — `AFTER_RUN_NEXT` is still the product's chain and this table cannot
-     * be reached without `?dev=1`.
+     * ⚠️ `nextShowBeat` DID NOT COVER THE WHOLE NIGHT, and the first version of this key was
+     * useless because of it. `AFTER_RUN_NEXT` is the post-run chain. Expedition now walks to
+     * Recap (Couch Plan Rung 2 — Recap actually airs). Lobby and casting still have no product
+     * clock: those beats end when a thing happens (a ballot pair locking), so `]` at casting
+     * still needs DEV_SKIP.casting → recap, which jumps OVER the expedition. That jump is
+     * DEV-ONLY. `AFTER_RUN_NEXT` is still the product's chain and this table cannot be reached
+     * without `?dev=1`.
      */
     const DEV_SKIP = { lobby: 'casting', casting: 'recap', expedition: 'recap' };
     window.addEventListener('keydown', (e) => {
@@ -2137,6 +2134,7 @@ function talkStage({
  * clock in another costume. `talkStage` stands it down whenever a `facts` board is on screen.
  */
 function recapMini(recap, names, runEnd) {
+  if (!episodeHadRun(recap, runEnd)) return '';
   const taken = recap.taken?.length
     ? recap.taken.map((t) => joinedName(names, t.id, 'The runner')).join(', ')
     : 'CAME BACK';
@@ -2339,6 +2337,7 @@ function executionSwing(result, names) {
  * was the second clock in a beat that already had one — the D8 defect on the same screen.
  * ============================================================================================= */
 function recapFacts(recap, names, runEnd) {
+  if (!episodeHadRun(recap, runEnd)) return '';
   const taken = recap.taken?.length
     ? recap.taken.map((t) => joinedName(names, t.id, 'The runner')).join(', ')
     : 'CAME BACK';

@@ -45,6 +45,7 @@ import {
   CASTING_BACKSTOP_MS,
   RUN_END, LATE_DEBRIEF_MS,
   isReadyBeat, readyNeeded, readyMet, READY_COUNTDOWN_MS,
+  isBackwardTalkJump,
 } from '../../src/party/show.js';
 import { reckoningSeconds } from '../../src/party/phases.js';
 import { reactCheck } from '../../src/party/react.js';
@@ -140,6 +141,8 @@ function getRoom(code, opts) {
     reckoningStartedAt: null,
     /** Leftover field. Empty Reckoning no longer re-arms (HEAT6); the skip is in progressShow. */
     reckoningEmptyExtends: 0,
+    /** Beats actually entered (setShow change), this session. Recap-airs / no-strobe read this. */
+    beatLog: [],
   };
   rooms.set(code, r);
   return r;
@@ -449,7 +452,10 @@ function setShow(room, beat, end = null) {
    * back in the room with everyone else and have to decide whether to do it again in front of
    * them. Gate: `link-merge` L20.
    */
-  if (room.show !== beat) clearLinks(room);
+  if (room.show !== beat) {
+    clearLinks(room);
+    (room.beatLog ||= []).push(beat);
+  }
   room.show = beat;
   if (beat === 'expedition' || beat === 'lobby' || beat === 'casting') {
     if (beat === 'expedition') room.runEnd = null;
@@ -543,9 +549,7 @@ function startShowClock(room) {
     // The backstop firing means the mission never reached `done` — nobody smashed anything, the
     // clock ran out. That is TIME, not a made-up SMASHED.
     if (room.show === 'expedition') {
-      setShow(room, 'recap', RUN_END.TIME);
-      room.game.enterRecap?.();
-      scheduleShowProgress(room);
+      enterRecapLive(room, RUN_END.TIME);
     }
   }, wait);
   room.showClock.unref?.();
@@ -561,6 +565,10 @@ export function progressShow(room) {
   if (!room) return null;
   const next = nextShowBeat(room.show);
   if (!next) return room.show;
+  if (next === 'recap') {
+    enterRecapLive(room, room.runEnd || RUN_END.TIME);
+    return 'recap';
+  }
   if (next === 'debrief') {
     enterDebriefLive(room);
     return 'debrief';
@@ -667,6 +675,18 @@ export function applyNominate(room, playerId, target) {
   if (result.closed) progressShow(room);
   else extendReckoning(room);
   return result;
+}
+
+function enterRecapLive(room, end = null) {
+  if (end === RUN_END.TIME) setShow(room, 'recap', RUN_END.TIME);
+  else if (end === RUN_END.SMASHED) setShow(room, 'recap', RUN_END.SMASHED);
+  else {
+    // DEV_SKIP casting → recap never ran. Do not reprint yesterday's SMASHED as this recap.
+    if (room.show !== 'expedition') room.runEnd = null;
+    setShow(room, 'recap');
+  }
+  room.game.enterRecap?.();
+  scheduleShowProgress(room);
 }
 
 function enterDebriefLive(room) {
@@ -894,7 +914,7 @@ function enterNextCasting(room) {
  * Gate: `harness/show-beat.mjs`. Its control re-opens this door and must go red.
  * ============================================================================================= */
 const BEAT_DOOR = {
-  recap: (room) => { setShow(room, 'recap'); room.game.enterRecap?.(); scheduleShowProgress(room); },
+  recap: enterRecapLive,
   debrief: enterDebriefLive,
   reckoning: enterReckoningLive,
   vote: enterVoteLive,
@@ -926,6 +946,17 @@ export function enterBeatLive(room, beat) {
   if (!room || !isShowBeat(beat)) return room?.show ?? null;
   // Rule 1. The wire still carries the repeat; the transition does not run twice.
   if (room.show === beat) { fanout(room, showPayload(room)); return room.show; }
+  /*
+   * 🫀 SAME PAGE. A jump that walks BACKWARDS along the talk chain (vote → reckoning, etc.)
+   * is a repaint pretending to be a transition — DUSK6 ep1 strobed those two ~35 times.
+   * `enterReckoningLive` CLEARS standing noms; re-entering it from Vote is not a heal, it is
+   * a wipe. Stay on the later beat and re-broadcast it. The whole room flips together, or
+   * not at all. Recap→expedition (Watch the run) is not on TALK_WALK, so it still recovers.
+   */
+  if (isBackwardTalkJump(room.show, beat)) {
+    fanout(room, showPayload(room));
+    return room.show;
+  }
   const door = BEAT_DOOR[beat];
   if (door) door(room);
   else setShow(room, beat);
@@ -982,9 +1013,7 @@ function endRunOnMission(room, mission) {
   if (!missionEndsRun(mission?.phase)) return;
   if (room.show !== 'expedition') return;
   clearShowClock(room);
-  setShow(room, 'recap', RUN_END.SMASHED);
-  room.game.enterRecap?.();
-  scheduleShowProgress(room);
+  enterRecapLive(room, RUN_END.SMASHED);
 }
 
 /**

@@ -172,13 +172,16 @@ t('N1c3 · recap hold is 10s and debrief hold is 300s — the shooting schedule,
  * `nextShowBeat('verdict')` is 'casting' because that is the DEFAULT edge. Whether the night
  * actually walks there is `progressShow`'s call — it overrules the chain when the win fold says
  * the season is over. A pure function cannot know that, and should not pretend to.
+ *
+ * 🫀 Couch Plan Rung 2: `nextShowBeat('expedition')` is `'recap'`. It used to be null, and
+ * `progressShow` on the run was a no-op that skipped Recap. Recap is in `orderFor`; it airs.
  */
 t('N1c4 · after a finished run the clock is Recap → Debrief → Reckoning → Vote → Execution → Verdict → Casting',
   AFTER_RUN_BEATS.join(',') === 'recap,debrief,reckoning,vote,execution,verdict,casting'
     && nextShowBeat('recap') === 'debrief' && nextShowBeat('debrief') === 'reckoning'
     && nextShowBeat('reckoning') === 'vote' && nextShowBeat('vote') === 'execution'
     && nextShowBeat('execution') === 'verdict' && nextShowBeat('verdict') === 'casting'
-    && nextShowBeat('expedition') == null
+    && nextShowBeat('expedition') === 'recap'
     && holdMsFor('reckoning', 0) === RECKONING_HOLD_MS && holdMsFor('vote') === VOTE_HOLD_MS
     && holdMsFor('execution') === EXECUTION_HOLD_MS
     && holdMsFor('verdict') === VERDICT_HOLD_MS && VERDICT_HOLD_MS === SECONDS[PHASE.VERDICT] * 1000
@@ -963,11 +966,12 @@ t('N13c · a refresh resumes the server show beat, not casting',
     await sleep(160);
     /*
      * ⚠️ **THE RUN HAS TO BE ENDED, AND FORGETTING THAT COST THIS GATE ITS FIRST DRAFT.**
-     * `progressShow` walks the AFTER-run chain; `nextShowBeat('expedition')` is null, so calling
-     * it on the expedition is a no-op that returns the same beat. The first version looped twelve
-     * times on 'expedition' doing nothing and reported eight episodes past a cap of five. In a
-     * real room the mission ending (or the backstop clock) does this — here the TV says so, the
-     * same way N17 does.
+     * `progressShow` walks the AFTER-run chain. Expedition used to be a hole in `nextShowBeat`
+     * (null), so calling it on the expedition was a no-op that returned the same beat — Recap
+     * never aired. Couch Plan Rung 2: `nextShowBeat('expedition') === 'recap'`. The first
+     * version looped twelve times on 'expedition' doing nothing and reported eight episodes
+     * past a cap of five. In a real room the mission ending (or the backstop clock) does this
+     * — here the TV says so, the same way N17 does. Recap still airs either way.
      */
     tvc.send({
       t: 'world',
