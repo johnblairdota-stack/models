@@ -186,6 +186,8 @@ Every bug above that has a gate name beside it is locked in. `.github/workflows/
 the full `gates:party` chain on every push and PR. **A playtest finding is not finished until it is
 a gate** — five agents' findings were lost in August because they lived in transcripts.
 
+**Couch Plan Rung 1 · honest scorekeeper.** DUSK6 ep2: `_loop8` wrote `votesSent` at send time (Cy→Gus); `chromeTally` was Gus 4 | Fox 4. Season JSON has no `ballotOk`. Logger records receipts + `t:'lynch'` and never writes `votesSent` as the tally; old-log replay treats `chromeTally` as the board and locks Cy from `noms`. TV tallyBoard keeps `Ballots in` / `{in} of {living}` / `needs ${need} to carry`; nameplates stay `named by ${nominator}`. Pads keep the nominator lock line. ADDs: `N of M clears` on Reckoning + Vote, ` · nominated.` on the lynch-row `nom-by`. Gate: `vote-table` V10–V12.
+
 **H277 / DUSK6 · cap miss is Reunion, not another Casting.** At `EPISODE_CAP`, cameras/feed short
 of `WIN_TARGETS` is Production + Reunion. `enterNextCasting` (the `t:'casting'` / `]` door) now
 asks the fold the same way `progressShow` does. Execution kicker says Reunion at the cap, not

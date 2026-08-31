@@ -23,7 +23,7 @@ import { createLog, visibleTo } from './log.js';
 import { hunterVisibleToGuide, ROOMS } from './coverage.js';
 import { applyTake, resolveContact, MODE, PLATE } from './taken.js';
 import { tallyCasting } from './ballot.js';
-import { tallyVote, executioner, nominate, reckoningClosed, canLynchVote, assumedLynchVotes, nominatorLockedChoice, NO_ONE } from './vote.js';
+import { tallyVote, executioner, nominate, reckoningClosed, canLynchVote, assumedLynchVotes, nominatorLockedChoice, acceptLynchVotes, NO_ONE } from './vote.js';
 import { foldWin, OUTCOME, WIN_TARGETS } from './win.js';
 import { reunion } from './reunion.js';
 import { PHASE, EPISODE_CAP } from './phases.js';
@@ -670,7 +670,13 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       for (const n of state.nominations) record(makeEvent('nom.made', VIS.PUBLIC, n));
 
       setPhase('VOTE');
-      const ballotBox = votes || Object.fromEntries(living.map((id) => [id, NO_ONE]));
+      /*
+       * 📊 HONEST SCOREKEEPER. The driver used to pass `votes` straight into the log — a
+       * nominator's recast wish counted, `ballotOk` was ignored, and a season JSON could print
+       * 5–3 while the board (the live path, `assumedLynchVotes`) printed 4–4. DUSK6 ep2. The
+       * box we record is the box the SERVER would have accepted.
+       */
+      const ballotBox = acceptLynchVotes({ living, nominations: state.nominations }, votes);
       const result = tallyVote({ living, nominations: state.nominations }, ballotBox);
       // §4: the full vote record is AIRED, attributed. Who you voted for is the cheapest
       // deduction fuel in the game and hiding it would buy nothing.

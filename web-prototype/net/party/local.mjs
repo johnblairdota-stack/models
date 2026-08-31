@@ -686,6 +686,10 @@ function enterReckoningLive(room) {
   setShow(room, 'reckoning');
   fanout(room, nomsPayload(room));
   fanout(room, lynchPayload(room));
+  // Same `t:'tally'` the Vote already fans — `need` / `living`, no names. Printed as
+  // "N of M clears" before the ballot opens. Not a new leak: reconnect already pushed
+  // this payload on Reckoning.
+  fanout(room, tallyPayload(room));
   scheduleShowProgress(room, holdMsFor('reckoning', 0));
 }
 
