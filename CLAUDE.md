@@ -287,6 +287,37 @@ pitch control at all — `follow-bed.js`'s driven branch passes `{move, run, aim
 `aimPitch`, so a phone-driven runner is pinned at −0.06 rad all night. The swing is one shallow
 fan, not a sweepable cone.
 
+**The whisper's privacy was proven on the WIRE and never on a SCREEN** (2026-08-31, COUCH-PLAN
+Rung 3, whisper half). `link-merge` L10–L14 assert the structure — `whisperAudience` returns two
+ids, `fanoutViolations` refuses the verb `whisper` outright, the pair route pushes to socket ids —
+and every one of those is about bytes. Both chromes were template literals inside a browser view,
+so *"the partner pad shows the words and a third pad does not"* had only ever been checked by
+opening six tabs. `harness/whisper-split.mjs` takes the photograph: a real server on 5347, one TV
+and eight handsets, into DEBRIEF through the real beat door, John and Ellie pair into JELLIE, one
+line goes out, and **one second later all nine screens are rendered from only the frames that
+reached them.** Both halves moved into `src/party/link.js` so a node gate can execute the shipped
+chrome — `whisperLines` (the pad's private list) and `pairShape` (the TV's public shape, with
+`shapeLeaks` as its closed schema). Found while wiring it: **the television was missing a third of
+the public shape.** `COUCH-PLAN.md` names it as *"who asked, who said yes, how long they held"*;
+`pairBoard` had the first two, and `publicLinks` has carried `at` since the pair clock shipped with
+a comment reading *"`at` rides along so BOTH screens can draw the countdown"* — only the pad ever
+did. The board now prints `held Ns`, written in place on the existing 250ms tick (a repaint there
+would strobe the TV through a five-minute Debrief). Controls, because six "0 hits" rows are worth
+what the needle is worth: WS4b fires the same scanner where the words provably are, and WS4d has an
+UNPAIRED pad shout a decoy that must reach nobody — the fail-CLOSED direction, live. Gate:
+`whisper-split` (23 checks); fired against a leaky `applyWhisper` it goes red on WS2/WS3/WS4 with
+the arms and controls still green.
+
+**A source-reading gate must normalise newlines, or it reddens on one machine only** (2026-08-31,
+found while landing the above). `host-desync` H8 binds its stand-in to the shipped `party-host.js`
+with multi-line regexes, one of which spans `settleBeatClaim();` → `}` → the `full` line. A Windows
+checkout hands that file back as CRLF, so a bare `\n` in the pattern misses by one invisible
+character: **H8 was RED locally and GREEN in CI against byte-identical content.** That is the worst
+shape a gate can have — the machine that reddens is not the machine anyone is looking at, so the
+red reads as real drift in a file that was already correct, and the tempting "fix" edits the
+product. H8 now reads the file and normalises to LF, which is what the blob in git holds. Any new
+gate that greps a source file for a pattern crossing a line break needs the same line.
+
 Known **undecided**, and it is John's call rather than a refactor: `COMPOSITION[n].cameras` and
 `WIN_TARGETS[n].cameraTarget` disagree — **3 against 4 at eight players** — and both files
 describe theirs as how many cameras must be lit to win. The running state counts against the

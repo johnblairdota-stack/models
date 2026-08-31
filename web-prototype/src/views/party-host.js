@@ -30,7 +30,7 @@ import { NO_ONE, SHOWRUNNER } from '../party/vote.js';
 import { clearsLine, lynchBoardRows, tallyBoardCopy } from '../party/scorekeeper.js';
 import { outcomeLine } from '../party/win.js';
 import { deadIdsFromPublic, describeCastTiebreaks, livingFromPublic, previewCastTiebreaks, shouldArmCastSend } from '../party/ballot.js';
-import { MAX_PAIRS } from '../party/link.js';
+import { MAX_PAIRS, pairShape } from '../party/link.js';
 import { missionFor } from '../party/mission.js';
 import { FAIL_CHROME, JOB, SMASH_CHROME, toolLabel } from '../party/jobs.js';
 import { EPISODE_CAP } from '../party/phases.js';
@@ -1124,6 +1124,17 @@ export default async function partyHost({ params }) {
         const el = Date.now() - (ui.reunionAt || Date.now());
         const key = `${reunionBeatAt(el).beat}|${rollCallRevealed(el, client.reveal?.seats?.length || 0)}`;
         if (key !== ui.reunionKey) { ui.reunionKey = key; paint(); }
+      }
+      /*
+       * ⏱️ The pair board's held-timer, written IN PLACE for the same reason the pad's countdown
+       * is: `paint()` rebuilds `root.innerHTML`, and doing that four times a second through a
+       * whole Debrief would strobe the television. The DONE half only ever changes on a links
+       * fanout, which repaints anyway, so the tick owns the number and nothing else.
+       */
+      for (const el of root.querySelectorAll('[data-pair-held]')) {
+        const p = (client.links?.pairs || []).find((x) => x.a === el.dataset.pairHeld);
+        const s = p ? pairShape(p, Date.now()) : null;
+        if (s) el.textContent = `held ${s.heldSec}s`;
       }
       const left = remainingMs(ui.showUntil);
       const label = formatRemain(left);
@@ -2224,11 +2235,36 @@ function pairBoard(links, names, lobby, refusals) {
   };
   const who = (id) => joinedName(names, id, 'Someone');
 
-  const pairs = (L.pairs || []).map((p, i) => `
+  /*
+   * ⏱️ **HOW LONG THEY HELD — the third fact of the shape, and it was missing.**
+   *
+   * `COUCH-PLAN.md` names the public half as *"who asked, who said yes, how long they held, who
+   * tapped DONE early."* This board carried the first two. `publicLinks` has shipped `at` on the
+   * wire since the pair clock landed, with a comment reading *"`at` rides along so BOTH screens
+   * can draw the countdown"* — and only the phone ever drew it, so the couch could see JOHN and
+   * ELLIE paired with no idea whether that was four seconds old or eighty. A whisper that has run
+   * the full ninety is the conspicuous one; without a number there is nothing to be conspicuous
+   * ABOUT, and the mechanic's whole public cost is the room noticing.
+   *
+   * It counts UP here and DOWN on the pad, from the same `at` — see `pairShape`. Written in place
+   * by `startClockTick` (`[data-pair-held]`), never by a repaint: `paint()` rebuilds
+   * `root.innerHTML` and doing that four times a second during a talk beat would strobe the whole
+   * television. Same idiom as `[data-show-clock]` and the pad's `[data-pair-clock]`.
+   *
+   * 🚫 `pairShape` returns ids, numbers and the MERGED name. There is no text field on it and
+   * `shapeLeaks` refuses one. Gate: `whisper-split` WS4/WS5.
+   */
+  const pairs = (L.pairs || []).map((p, i) => {
+    const s = pairShape(p, Date.now());
+    const done = s.doneA && s.doneB ? ' · done'
+      : (s.doneA || s.doneB) ? ` · ${who(s.doneA ? p.a : p.b)} is done` : '';
+    return `
     <div class="nom-row show-nom pair-row pair-${i}">
       <div class="pair-faces">${face(p.a)}${face(p.b)}</div>
       ${nameplateHtml({ name: p.name, sub: `${who(p.a)} + ${who(p.b)}` })}
-    </div>`).join('');
+      <p class="hint pair-held"><span data-pair-held="${esc(p.a)}">held ${s.heldSec}s</span>${done}</p>
+    </div>`;
+  }).join('');
 
   const waiting = (L.pending || []).map((r) => `
     <div class="nom-row show-nom pair-wait">

@@ -15,7 +15,7 @@ import { ACCENTS, DEFAULT_LOOK, SHELLS, cleanLook, paintLook, robotFaceSvg } fro
 import { REACTIONS, REACT_COOLDOWN_MS, REACT_MOOD, cleanReaction } from '../party/react.js';
 import { applyCastLock, applyCastTap, ballotFromCast, CAST_BLOCK_WHY, castPrompt, castRowBlock, castRowMark, freshCast, mergePublicNames, nominationPlayers, padlockSvg } from '../party/cast-ui.js';
 import { deadIdsFromPublic, historyFromCastEvents } from '../party/ballot.js';
-import { linkBlock, mergeName, WHISPER_MAX, MAX_PAIRS, pairRemaining, isDone } from '../party/link.js';
+import { linkBlock, mergeName, WHISPER_MAX, MAX_PAIRS, pairRemaining, isDone, whisperLines } from '../party/link.js';
 import { cardFor, faceDownHtml, mountRoleCard, premiereHtml } from '../party/rolecard.js';
 import { EVIL } from '../party/cast.js';
 import { guideMapSvg } from '../party/guidemap.js';
@@ -2261,10 +2261,17 @@ export default async function partyPhone({ params }) {
     return linkBlock(L, from, to, { living, beat });
   }
 
+  /*
+   * 🔒 THE PRIVATE HALF OF THE SPLIT, and the list itself now lives in `link.js` beside the
+   * public half. It used to be built inline here, which meant the one screen that is SUPPOSED to
+   * carry the words could only be quoted from a browser — so "the partner pad shows the words"
+   * was a claim about a template literal no node gate could execute. `whisperLines` is pure, both
+   * ends call it, and `harness/whisper-split.mjs` renders this exact element from real socket
+   * bytes. Escaping stays here, where the HTML is.
+   */
   function whisperListHtml() {
-    const me = meId();
-    return (state.whispers || []).slice(-30).map((w) =>
-      `<p class="whisper${w.from === me ? ' me' : ''}">${esc(w.text)}</p>`).join('');
+    return whisperLines(state.whispers, meId()).map((w) =>
+      `<p class="whisper${w.mine ? ' me' : ''}">${esc(w.text)}</p>`).join('');
   }
 
   /** In place, never through `paint()`. See the block header. */
