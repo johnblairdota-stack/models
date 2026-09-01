@@ -48,6 +48,7 @@ import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { createRoom } from '../src/party/room.js';
+import { missionFor } from '../src/party/mission.js';
 import { reunion } from '../src/party/reunion.js';
 import { WIN_TARGETS } from '../src/party/win.js';
 import {
@@ -288,6 +289,149 @@ t('FC4c · every line in the book verifies against the book, from any screen\'s 
   && lines.every((l) => quoteCheck(book, l.line.toUpperCase()).ok)
   && lines.every((l) => quoteCheck(book, `  ${l.line}  `).ok),
   `${lines.length} lines · uppercase and padded both verify (the TV shouts and it wraps)`);
+
+/* =============================================================================================
+ * 🚨 FC4d–FC4f · THE READER AGAINST A **LIVE** LOG, WHICH IS NOT THE SHAPE ABOVE
+ *
+ * Everything from FC4 up is driven by `playEpisode` alone, and that is the OFFLINE machine. A
+ * room driven over a socket enters CASTING through a second door as well — `beginCasting`
+ * (`room.js:836`), which `t:'casting'` / `]` / `enterNextCasting` all reach — so a real night's
+ * log carries **`phase.CASTING` twice per episode**: `1, 1, 2, 2, 3, 3, 4, 4`.
+ *
+ * `episodesFromLog` used to open a fresh record on every one of them and number records by
+ * `eps.length + 1`, so a live four-episode night produced EIGHT records: four real ones filed
+ * under the wrong numbers, and four empty shells with no pair, no nominations and no votes —
+ * each still emitting a scorekeeper bar into `bookLines`. `quoteCheck` is exact membership over
+ * those lines, so *"4 of 5 clears"* would have verified for an episode that never aired. The
+ * module's own header calls that the worst outcome available to it: **a fabricated line that
+ * verifies.** Night one was recorded as a DRILL for the same reason — the job was keyed off the
+ * array length too, and the real premiere was never the zeroth record.
+ *
+ * Nothing here is hand-authored: the doubled log is produced by calling the two shipped doors in
+ * the order a live night calls them, and FC4d asserts the doubling really happened before FC4e
+ * asks what the reader made of it. Found by `harness/_night-table.mjs` on a real socket room.
+ * ============================================================================================= */
+
+console.log('\n  the reader, against a live log');
+
+/** A season driven the way the WIRE drives one: the live casting door, then the episode. */
+function playLiveShaped(seed, episodes = 4) {
+  const r = createRoom({ count: 8, castSeed: seed * 41, worldSeed: seed, send: () => {}, emit: () => {} });
+  r.start();
+  for (let i = 0; i < episodes; i += 1) {
+    r.beginCasting();                       // the live door — `t:'casting'` reaches this
+    const living = r.state.players.filter((p) => p.alive).map((p) => p.id);
+    if (living.length < 3) break;
+    r.playEpisode({                          // ...and the offline walk fires the SAME phase again
+      hunterRoom: 'cellar',
+      nominations: [{ nominator: living[1], target: living[2] }],
+      votes: Object.fromEntries(living.map((id) => [id, living[2]])),
+    });
+  }
+  return r;
+}
+
+const liveRoom = playLiveShaped(3, 4);
+const liveLog = liveRoom.log.all();
+const liveRoster = liveRoom.state.players.map((p) => p.id);
+const castEntries = liveLog.filter((e) => e && e.type === 'phase.CASTING');
+const airedEps = [...new Set(castEntries.map((e) => Number(e?.data?.episode) || 0))].filter(Boolean);
+const pairs = liveLog.filter((e) => e && e.type === 'cast.pair').length;
+
+t('FC4d arm · a live-shaped night really does enter CASTING twice per episode — else FC4e is vacuous',
+  castEntries.length === airedEps.length * 2
+  && airedEps.length >= 3
+  && pairs === airedEps.length,
+  `${castEntries.length} phase.CASTING over ${airedEps.length} episodes`
+  + ` (${castEntries.map((e) => e?.data?.episode).join(',')}) · ${pairs} cast.pair`);
+
+const liveEps = episodesFromLog(liveLog, liveRoster);
+{
+  const numbered = liveEps.map((e) => e.episode).join(',');
+  const shells = liveEps.filter((e) => !e.run.runner && !e.noms.length && !e.lynch.votes.length);
+  t('FC4e · the reader gives a LIVE night one record per episode, numbered off the event, no shells',
+    liveEps.length === airedEps.length
+    && numbered === airedEps.join(',')
+    && shells.length === 0
+    && liveEps.every((e) => !!e.run.runner),
+    `${liveEps.length} records for ${airedEps.length} episodes · numbered ${numbered}`
+    + ` · ${shells.length} empty shells · every record has its pair`);
+
+  /*
+   * The locked two-jobs rule, read back out of the night's own record. `missionFor` owns it.
+   *
+   * ⚠️ **READ THE RECORD THAT HAS THE PAIR, NOT THE FIRST ONE.** On a live log the first CASTING
+   * of each episode is the empty live door and the second is `playEpisode`'s — so under the old
+   * rule the SHELL got `smash` and the real premiere, the one carrying `cast.pair`, got `drill`.
+   * A check on `jobs[0]` reads the shell and passes while the night's own record calls episode
+   * one a drill, which is the bug wearing the answer.
+   */
+  const jobs = liveEps.map((e) => e.run.job);
+  const premiere = liveEps.find((e) => e.run.runner);
+  t('FC4e2 · ...and night one is the SMASH in the book, as `missionFor` says, not a drill',
+    !!premiere && premiere.episode === 1
+    && premiere.run.job === missionFor(1).job && premiere.run.job === 'smash'
+    && liveEps.filter((e) => e.episode >= 2).every((e) => e.run.job === missionFor(2).job),
+    `jobs ${jobs.join(',')} · the first record WITH a pair is episode ${premiere?.episode}`
+    + ` on ${premiere?.run.job} · missionFor(1)=${missionFor(1).job} missionFor(2)=${missionFor(2).job}`);
+}
+
+/*
+ * 🚨 THE CONTROL, and it is the whole reason FC4e is worth its lines. The old rule is a handful
+ * of characters of difference — open on every entry, number by the array length — and it is
+ * re-stated here so the failure is EXECUTED rather than described. The last clause is the one
+ * that matters: a shell episode's scorekeeper bar VERIFIES, which is the outcome the module's
+ * header names as worse than having no line at all.
+ *
+ * ⚠️ Every comparison is against the LOG's own ground truth (`airedEps` / `castEntries`), never
+ * against what the shipped reader returned. A control that measured itself against the thing
+ * under test would go red in lock-step with an ablation and stop being a control.
+ */
+{
+  const roster = liveRoom.state.players.map((p) => ({ id: p.id, name: p.name, seat: p.seat }));
+  const old = episodesFromLogOldWay(liveLog, liveRoster);
+  const oldBook = nightBook({ room: 'control', players: roster, episodes: old });
+  const oldBars = bookLines(oldBook).filter((l) => l.kind === 'clears');
+  const oldPremiere = old.find((e) => e.run.runner);
+
+  t('FC4f control · the old rule doubles the season, misnames night one, and its ghost bars VERIFY',
+    old.length === castEntries.length
+    && old.length === airedEps.length * 2
+    // The real premiere — the record carrying `cast.pair` — is filed as episode 2, on a DRILL.
+    && !!oldPremiere && oldPremiere.episode === 2 && oldPremiere.run.job === 'drill'
+    && oldBars.length === airedEps.length * 2
+    && oldBars.every((l) => quoteCheck(oldBook, l.line).ok),
+    `${old.length} records for ${airedEps.length} episodes · the real premiere filed as`
+    + ` episode ${oldPremiere?.episode} on ${oldPremiere?.run.job} · ${oldBars.length} scorekeeper bars`
+    + ` where the night had ${airedEps.length} · every ghost bar passes quoteCheck, which is the point`);
+}
+
+/** The reader exactly as it read before the fix — the control's arm, and nothing calls it twice. */
+function episodesFromLogOldWay(log, roster) {
+  const all = (roster || []).map(String);
+  const dead = new Set();
+  const eps = [];
+  let cur = null;
+  for (const e of log || []) {
+    const d = e?.data || {};
+    if (e?.type === 'phase.CASTING') {
+      cur = {
+        episode: eps.length + 1,
+        living: all.filter((id) => !dead.has(id)),
+        noms: [], ballotOk: [], lynch: { votes: [], result: null }, tally: null,
+        run: { job: eps.length === 0 ? 'smash' : 'drill', outcome: null, cameraLit: false },
+      };
+      eps.push(cur);
+      continue;
+    }
+    if (!cur) continue;
+    if (e.type === 'cast.pair') { cur.run.runner = d.runner ?? null; cur.run.guide = d.guide ?? null; }
+    if (e.type === 'nom.made') cur.noms.push({ nominator: d.nominator, target: d.target });
+    if (e.type === 'vote.cast') cur.lynch.votes.push({ voter: d.voter, choice: d.choice });
+    if (e.type === 'player.executed') dead.add(String(d.id));
+  }
+  return eps;
+}
 
 /*
  * 🚨 THE CONTROLS. A checker that says yes to everything is not a checker. Three ways of being

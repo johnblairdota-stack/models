@@ -63,6 +63,7 @@
 
 import { clearsLine, executionPlate, lynchBoardRows, tallyBoardCopy } from './scorekeeper.js';
 import { FAIL_CHROME, SMASH_CHROME, wallWord } from './jobs.js';
+import { missionFor } from './mission.js';
 
 export const BOOK_VERSION = 1;
 
@@ -195,6 +196,37 @@ function pickName(names, id) {
  * ⚠️ `tally` is deliberately left null here. `{in, living, need}` is a WIRE message
  * (`t:'tally'`), not a log entry, so a driver that captured the wire passes it in and one that
  * did not gets a book with no ballots board rather than a made-up one. See `episodeChrome`.
+ *
+ * 🚨 **A `phase.CASTING` ENTRY IS NOT AN EPISODE — IT IS AN ENTRY INTO CASTING, AND A LIVE NIGHT
+ * MAKES TWO OF THEM PER EPISODE.**
+ *
+ * `room.js` has two callers of `setPhase('CASTING')`: `playEpisode` (the offline machine walk,
+ * `room.js:529`) and `beginCasting` (the live door behind `t:'casting'` / `]`, `room.js:836`).
+ * A room driven offline by `playEpisode` alone fires it once per episode, which is the only shape
+ * this reader was ever tried against — `friday-couch`'s driver is exactly that. **A room driven
+ * over a socket fires BOTH**, and a real night's log reads `episode 1, 1, 2, 2, 3, 3, 4, 4`.
+ *
+ * Opening a fresh record on every entry therefore gave a live night a book with:
+ *   • **twice as many episode records as episodes aired** — the extra ones empty shells with no
+ *     pair, no nominations and no votes, each still printing a scorekeeper bar into `bookLines`;
+ *   • **the wrong episode numbers**, because records were numbered `eps.length + 1`, so the real
+ *     fourth episode was filed as episode 8;
+ *   • **night one recorded as a DRILL**, because the job was derived from `eps.length` too, and
+ *     the real premiere was never the zeroth record.
+ *
+ * That last one is the locked two-jobs rule mis-stated in the night's own record, and the first
+ * one is the failure this whole module exists to prevent: `quoteCheck` is exact membership over
+ * `bookLines`, so a shell episode's bar is a line that **verifies** for an episode that never
+ * happened — *"a verifier that invents a line is worse than one that has none."*
+ *
+ * The fix is the number the event already carries. H278 put `{ episode }` on `phase.CASTING` so
+ * `foldWin` could see the cap (`win.js` L89); it answers this too. A CASTING entry for the
+ * episode already open is a RE-ENTRY and merges into it. An older log whose `phase.CASTING` has
+ * no episode (`setPhase` used to write `{}`) keeps the previous behaviour rather than collapsing
+ * a whole season into one record — a missing number is not evidence of a repeat.
+ *
+ * The job comes from `missionFor`, which is the rule's one owner, rather than a second copy of
+ * *"the first one is the smash"* keyed off an array length.
  * ============================================================================================== */
 
 export function episodesFromLog(log = [], roster = []) {
@@ -205,13 +237,19 @@ export function episodesFromLog(log = [], roster = []) {
   for (const e of log || []) {
     const d = e?.data || {};
     if (e?.type === 'phase.CASTING') {
+      const aired = Number(d.episode) || 0;
+      // The re-entry. Only ever the episode currently open: a CASTING for an OLDER episode after
+      // a later one has started is not something the room does, and re-pointing at it would file
+      // tonight's events under last night's number, which is worse than an extra record.
+      if (aired && cur && cur.episode === aired) continue;
+      const episode = aired || eps.length + 1;
       cur = {
-        episode: eps.length + 1,
+        episode,
         living: all.filter((id) => !dead.has(id)),
         noms: [], ballotOk: [],
         lynch: { votes: [], result: null },
         tally: null,
-        run: { job: eps.length === 0 ? 'smash' : 'drill', outcome: null, cameraLit: false },
+        run: { job: missionFor(episode).job, outcome: null, cameraLit: false },
       };
       eps.push(cur);
       continue;

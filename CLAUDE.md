@@ -281,6 +281,14 @@ mission room outright: `pickPlanSeed`'s `planPasses` asks the region graph, whic
 door lost one stage later. **Not in `gates:party` until the shipped arm is green** — a red gate in
 the chain reddens every push. Same standing as `tag-census.mjs`.
 
+> ✅ **STATUS, 2026-09-01: that condition is met and this paragraph's RED is history.**
+> `target-sight.mjs` is **in the `gates:party` chain** and its shipped arm is green — T1–T7 read
+> *0/192 targets pierced*, *0 blind*, *worst 100% of the face visible*, *0 prop bodies inside a
+> keep-out*. The measurement above is kept because the DEFINITION below it is still the thing to
+> read before arguing with the gate; only the standing changed. **`tag-census.mjs` did NOT change
+> and is still correctly outside the chain** — T7 reads *worst 100% buried, seat 7 at −55.8°* on
+> the shipped arm, and per John brief overlap is fine, so that one is a finding and not a bug.
+
 The definition it settled on is worth knowing before arguing with it: visibility and reachability
 are ONE question here, because the smash is a ray with a finite `far`, and the runner has no
 pitch control at all — `follow-bed.js`'s driven branch passes `{move, run, aimYaw}` and never
@@ -361,6 +369,28 @@ turned over on the next `npm run build`. **A browser gate is only as fresh as `d
 believing one.** The nominations board now carries a `noms-board` handle the way every other board
 in the file already did (`pair-board`, `lynch-board`, `roll-board`, `tally-board`) — additive, so
 existing selectors and CSS keep matching.
+
+**The night book counted DOORS INTO CASTING, and a live night opens two per episode** (2026-09-01).
+`room.js` has two callers of `setPhase('CASTING')` — `playEpisode` (`:529`, the offline machine) and
+`beginCasting` (`:836`, the live door behind `t:'casting'` / `]`). Offline only the first fires, and
+that is the ONLY shape `episodesFromLog` had ever been tried against, because `friday-couch`'s
+driver is `createRoom` + `playEpisode`. **On a socket a real night's log reads `1,1,2,2,3,3,4,4`**,
+so the reader — which opened a record on every entry and numbered them `eps.length + 1` — gave a
+four-episode night EIGHT records: four filed under the wrong numbers, four empty shells with no
+pair, no nominations and no votes, **each still printing a scorekeeper bar into `bookLines`**. That
+is the module's own worst case, executed: `quoteCheck` is exact membership, so *"4 of 5 clears"*
+**verified** for an episode that never aired. Night one was recorded as a **DRILL** for the same
+reason — the job was keyed off the array length too, and the real premiere was never the zeroth
+record, so the locked two-jobs rule was mis-stated in the night's own book. Fixed with the number
+the event already carries: H278 put `{ episode }` on `phase.CASTING` for `foldWin`'s cap and it
+answers this as well, so a CASTING for the episode already open is a RE-ENTRY. A log whose entries
+carry no episode (`setPhase` used to write `{}`) keeps the old behaviour — a missing number is not
+evidence of a repeat. The job now comes from `missionFor`, the rule's one owner, not a second copy
+of *"the first one is the smash"*. Found by `harness/_night-table.mjs`, a probe that plays one
+season on a real server (`:5186`, one TV + eight handsets) and photographs all nine screens. Gate:
+`friday-couch` FC4d–FC4f — FC4d is the arm that the doubling really happened, FC4f re-states the
+old rule so the failure is executed rather than described, and both measure against the LOG's
+ground truth rather than against the reader under test.
 
 Known **undecided**, and it is John's call rather than a refactor: `COMPOSITION[n].cameras` and
 `WIN_TARGETS[n].cameraTarget` disagree — **3 against 4 at eight players** — and both files
