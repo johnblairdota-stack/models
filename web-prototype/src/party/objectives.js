@@ -213,6 +213,41 @@ export function objectiveGoal(pin, { here = null, missionRoom = null, targets = 
 }
 
 /**
+ * 🔩 **WHICH BRACKET THE DRILL IS FILLING — the pin, or failing that the one she is beside.**
+ *
+ * ⚠️ **THE FALLBACK IS NOT A SECOND WAY TO CHOOSE, AND SAYING SO MATTERS.** John's call is that
+ * the guide's pin picks the target; if this returned the nearest bracket whenever the pin were
+ * *inconvenient* it would be `jobGoal`'s old thumb-lean wearing a different hat. It returns the
+ * nearest only when there is NO objective pin at all — a runner who walked in on a door pin and
+ * started drilling before her guide said anything drills the thing she is standing at rather than
+ * nothing, and the guide's pin overrides it the instant it arrives.
+ *
+ * ⚠️ **A PIN NAMING THE OTHER JOB'S TARGET IS TREATED AS NO PIN, AND `null` WOULD BE WORSE.** The
+ * chips cannot produce a `face-*` pin on a drill night — `kindsForJob` offers two kinds and they
+ * are the brackets — so this only happens to a crafted message. Refusing outright would let one
+ * malformed frame stop the drill for the rest of the expedition, which is a sabotage with no tell
+ * and no cost, and lock 4's whole point is that the sabotage surface is four ORDINARY controls. So
+ * a nonsense pin degrades to the unpinned behaviour, which is proximity. Gate: `runner-intel` RI20f.
+ *
+ * Pure, so `harness/runner-intel.mjs` runs the shipped rule instead of a browser doing it once.
+ *
+ * @param {{hall?:{x:number,z:number}, floor?:{x:number,z:number}}} mounts
+ * @returns {'hall'|'floor'|null}
+ */
+export function mountFor(pinKind, at, mounts) {
+  const spot = objectiveSpot(pinKind);
+  if (spot === 'hall' || spot === 'floor') return mounts?.[spot] ? spot : null;
+  const h = mounts?.hall, f = mounts?.floor;
+  if (!h && !f) return null;
+  if (!h) return 'floor';
+  if (!f) return 'hall';
+  if (!at) return 'hall';
+  const dh = Math.hypot(h.x - at.x, h.z - at.z);
+  const df = Math.hypot(f.x - at.x, f.z - at.z);
+  return dh <= df ? 'hall' : 'floor';
+}
+
+/**
  * Words an objective line may never contain — the same fail-closed shape as `TELL_FORBIDDEN`.
  * `real` and `decoy` are the two that matter: they are the guide's private card, and the moment one
  * of them reaches a shared surface the whole drill is a formality.

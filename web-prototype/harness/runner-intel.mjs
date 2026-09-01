@@ -46,7 +46,7 @@ import {
 } from '../src/game/runner-intel.js';
 import { CUE_KEYS, CUE_KINDS, MOVE_KEYS, PIN_KINDS, PIN_WIRE_KEYS, WORLD_MISSION_KEYS, cueViolations, moveViolations, pinViolations, pinWireShape } from '../src/party/follow.js';
 import {
-  OBJECTIVE_KINDS, SAY_FORBIDDEN, objectiveGoal, objectiveSay, objectiveSpots, unionRect,
+  OBJECTIVE_KINDS, SAY_FORBIDDEN, mountFor, objectiveGoal, objectiveSay, objectiveSpots, unionRect,
 } from '../src/party/objectives.js';
 import { JOB, camHang } from '../src/party/jobs.js';
 import { camKeepOuts } from '../src/game/furn-layout.js';
@@ -804,6 +804,193 @@ console.log('\n  the guide pins the job');
     && padLeaks('guide', { ...inside, spots: [{ kind: 'face-left', label: 'L', x: 1, z: 2, path: [1, 2] }] }).length > 0
     && padLeaks('guide', { ...inside, spots: [{ kind: 'face-left', label: 'L', x: 1, z: 2, hunter: 'x' }] }).length > 0,
     `${padLeaks('guide', inside).length} leaks · a smuggled path and a smuggled hunter both caught`);
+}
+
+/* =================================================================================================
+ * RI20 · THE LAST FOUR METRES, WALKED — the whole chain, driven, in node
+ *
+ * 🚨 **EVERY CHECK ABOVE THIS ONE IS ABOUT ONE LINK.** RI19d proves the resolver reads a name;
+ * RI2 proves legs are built from a live portal answer; RI6 proves the heading lags. None of them
+ * proves the runner ARRIVES — and "the guide pins a face and the body walks to it" is the whole
+ * feature. That gap is exactly the shape `whisper-split` was written to close: a chain of
+ * individually-correct links whose end-to-end behaviour had only ever been seen in a browser.
+ *
+ * So this drives the shipped functions in a loop at 60 Hz over a fake gallery: `objectiveGoal` →
+ * `legsFor` → `consumeLegs` → `headingTo` → `lagHeading`, with the same `AUTOWALK.square` stop and
+ * the same `dodgeLateral` thumb, and measures how long the body takes and where it stops.
+ *
+ * ⚠️ **IT IS NOT A PHYSICS TEST AND MUST NOT BECOME ONE.** There is no collider here and no
+ * `Player.update`; the step below is *"walk `drive` metres per second along the heading"*, which is
+ * what the real body does when nothing is in the way. What it can therefore prove is that the
+ * BRAIN converges — that the legs are consumed, the heading points at the target, and the stop
+ * condition fires — and what it deliberately cannot prove is that a chair was in the way. That is
+ * `target-sight`'s job and `target-sight` is green.
+ * ============================================================================================== */
+
+console.log('\n  she gets there');
+
+{
+  const GAL = { id: 'r0.gallery', x0: 0, x1: 12, z0: 0, z1: 5 };
+  const SCENE = {
+    left: { x: 4.6, z: 0.22, live: true }, right: { x: 7.4, z: 0.22, live: true },
+    hall: { x: 6.0, z: 4.78, live: true }, floor: { x: 11.78, z: 2.5, live: true },
+  };
+  const SPEED = 2.6;                        // `player.js` walk speed, near enough for a convergence test
+  const DT = 1 / 60;
+
+  /**
+   * One walk. Returns where she stopped, how long it took, and whether she ever left the room.
+   *
+   * `portals` is the live `pathPortals` answer the bed would have got — empty inside one room,
+   * which is the case that matters here, and one doorway centre for the "pinned from the doorway"
+   * arm. The pin may CHANGE mid-walk (`repin`), because D2's *a second tap replaces* is the thing
+   * most likely to strand a body half way.
+   */
+  /*
+   * 🚨 **THE ROOM ORACLE IS A REAL ONE, AND THE FIRST DRAFT'S WAS NOT — IT COST A FALSE RED.**
+   * `clampToRoom` asks a caller-supplied `roomIdAt` whether a step SIDEWAYS would leave the room,
+   * and a stand-in that answers `'r0.gallery'` for every point in the universe is a clamp that can
+   * never fire. Driven that way, a thumb held hard walked the body straight out through the wall
+   * behind the paintings and RI20b went red on the harness rather than on the product. The bed
+   * passes `room.spaceAt(p)?.id`; this passes the gallery rectangle, which is the same answer.
+   */
+  const inGallery = (p) => (p.x >= GAL.x0 && p.x <= GAL.x1 && p.z >= GAL.z0 && p.z <= GAL.z1
+    ? 'r0.gallery' : 'r0.hall');
+
+  function walk({ from, pin, portals = [], stick = 0, repin = null, repinAt = 2.0, room = 'r0.gallery' }) {
+    let at = { ...from };
+    let heading = 0, lateral = 0, legs = [], plannedKey = '', t = 0, left = false;
+    let held = pin;
+    for (let i = 0; i < 60 * 25; i++) {
+      t += DT;
+      if (repin && t >= repinAt && held !== repin) { held = repin; plannedKey = ''; }
+      const goal = objectiveGoal(held, { here: room, missionRoom: 'r0.gallery', targets: SCENE });
+      const key = pinKey(held);
+      if (!goal) return { at, t, arrived: false, left, why: 'no goal' };
+      if (key !== plannedKey) { legs = legsFor(portals, goal); plannedKey = key; }
+      consumeLegs(legs, at);
+      const leg = legs[0] ?? goal;
+      heading = lagHeading(heading, headingTo(at, leg), DT);
+      lateral = clampToRoom(dodgeLateral(stick, lateral, DT), at, heading, inGallery);
+      const d = Math.hypot(leg.x - at.x, leg.z - at.z);
+      const drive = d < AUTOWALK.square ? 0 : 1;
+      // The body's forward is (sin h, cos h) and its RIGHT is (-cos h, sin h) — `_solve`'s own basis.
+      at = {
+        x: at.x + (Math.sin(heading) * drive + -Math.cos(heading) * lateral) * SPEED * DT,
+        z: at.z + (Math.cos(heading) * drive + Math.sin(heading) * lateral) * SPEED * DT,
+      };
+      if (at.x < GAL.x0 - 0.5 || at.x > GAL.x1 + 0.5 || at.z < GAL.z0 - 0.5 || at.z > GAL.z1 + 0.5) left = true;
+      /*
+       * ⚠️ **ARRIVAL IS `drive === 0`, AND WAITING FOR THE LATERAL TO SETTLE TOO WOULD BE WRONG.**
+       * The stop the bed actually performs is *"inside `AUTOWALK.square`, stop driving forward"*.
+       * The thumb is a live control and a player holding it against a wall keeps shuffling, so a
+       * condition that also required the dodge to be still would never fire on the arm that most
+       * needs measuring — the one where somebody is shoving the stick.
+       */
+      if (drive === 0) return { at, t, arrived: true, left, d: Math.hypot(goal.x - at.x, goal.z - at.z), goal };
+    }
+    return { at, t, arrived: false, left, why: 'ran out of clock' };
+  }
+
+  const DOOR = { x: 1.0, z: 2.5 };
+  const toLeft = walk({ from: DOOR, pin: { x: -40, z: -40, roomId: 'r0.gallery', kind: 'face-left' } });
+  const toRight = walk({ from: DOOR, pin: { x: -40, z: -40, roomId: 'r0.gallery', kind: 'face-right' } });
+  t('RI20 · pinned, she crosses the room and stops square in front of the face the guide named',
+    toLeft.arrived && toRight.arrived
+    && toLeft.d < AUTOWALK.square && toRight.d < AUTOWALK.square
+    && Math.hypot(toLeft.at.x - SCENE.left.x, toLeft.at.z - SCENE.left.z) < 1.0
+    && Math.hypot(toRight.at.x - SCENE.right.x, toRight.at.z - SCENE.right.z) < 1.0
+    && Math.hypot(toLeft.at.x - toRight.at.x, toLeft.at.z - toRight.at.z) > 2.0,
+    /*
+     * ⚠️ **`?? -1` IS NOT DEFENSIVE PADDING — A CRASHING GATE REPORTS NOTHING.** `d` is undefined
+     * on a walk that never arrived, and the first draft of this line read `toLeft.d.toFixed(2)`.
+     * Injecting a broken `AUTOWALK.square` therefore threw a TypeError partway through the file and
+     * killed the run: no red line, no summary, no exit code anybody could read as a failure of THIS
+     * check. A gate has to survive the fault it exists to catch for long enough to name it.
+     */
+    `left in ${toLeft.t.toFixed(1)}s at ${(toLeft.d ?? -1).toFixed(2)} m`
+    + ` · right in ${toRight.t.toFixed(1)}s at ${(toRight.d ?? -1).toFixed(2)} m`
+    + ` · ${Math.hypot(toLeft.at.x - toRight.at.x, toLeft.at.z - toRight.at.z).toFixed(2)} m apart`
+    + `${toLeft.arrived && toRight.arrived ? '' : ` · NEVER ARRIVED (${toLeft.why ?? toRight.why})`}`);
+
+  /*
+   * 🚨 **RI20b IS LOCK 3, MEASURED IN METRES.** *"Thumb dodge/hide stays lateral only. It is NOT
+   * how you pick which painting."* The same pin, walked three times with the thumb hard left, hard
+   * right and neutral, has to end at the SAME target — otherwise the stick is still voting.
+   */
+  const held = { x: 0, z: 0, roomId: 'r0.gallery', kind: 'face-left' };
+  const neutral = walk({ from: DOOR, pin: held, stick: 0 });
+  const shoved = walk({ from: DOOR, pin: held, stick: -1 });
+  const shovedOther = walk({ from: DOOR, pin: held, stick: 1 });
+  const spread = Math.max(
+    Math.hypot(shoved.at.x - neutral.at.x, shoved.at.z - neutral.at.z),
+    Math.hypot(shovedOther.at.x - neutral.at.x, shovedOther.at.z - neutral.at.z));
+  t('RI20b · a thumb pushed hard either way does NOT change which face she ends up at',
+    neutral.arrived && shoved.arrived && shovedOther.arrived
+    && [neutral, shoved, shovedOther].every((w) =>
+      Math.hypot(w.at.x - SCENE.left.x, w.at.z - SCENE.left.z)
+      < Math.hypot(w.at.x - SCENE.right.x, w.at.z - SCENE.right.z))
+    && spread < 1.6
+    && [neutral, shoved, shovedOther].every((w) => !w.left),
+    `all three end at the LEFT face · thumb moves the stop by ${spread.toFixed(2)} m and never leaves the room`);
+
+  t('RI20c · a second tap mid-walk turns her around — no leg survives a re-pin (D2)',
+    (() => {
+      const swung = walk({
+        from: DOOR,
+        pin: { x: 0, z: 0, roomId: 'r0.gallery', kind: 'face-left' },
+        repin: { x: 0, z: 0, roomId: 'r0.gallery', kind: 'mount-floor' },
+        repinAt: 1.2,
+      });
+      return swung.arrived
+        && Math.hypot(swung.at.x - SCENE.floor.x, swung.at.z - SCENE.floor.z) < 1.0
+        && Math.hypot(swung.at.x - SCENE.left.x, swung.at.z - SCENE.left.z) > 3.0;
+    })(),
+    'pinned at a painting, re-pinned at the junk bracket 1.2s in, ends at the bracket');
+
+  t('RI20d · with the pin taken away mid-walk she stops rather than finishing the old errand',
+    (() => {
+      const dropped = walk({
+        from: DOOR,
+        pin: { x: 0, z: 0, roomId: 'r0.gallery', kind: 'face-left' },
+        repin: { x: 0, z: 0, roomId: 'r0.gallery', kind: 'room' },
+        repinAt: 0.8,
+      });
+      return !dropped.arrived && dropped.why === 'no goal'
+        && Math.hypot(dropped.at.x - SCENE.left.x, dropped.at.z - SCENE.left.z) > 2.0;
+    })(),
+    'a door pin is not an objective, so the job goal goes and the body waits to be told again');
+
+  t('RI20e control · walked from a room she is not in, the same call goes NOWHERE',
+    (() => {
+      const outside = walk({
+        from: DOOR, pin: { x: 0, z: 0, roomId: 'r0.gallery', kind: 'face-left' }, room: 'r0.hall',
+      });
+      return !outside.arrived && outside.why === 'no goal'
+        && outside.at.x === DOOR.x && outside.at.z === DOOR.z;
+    })(),
+    'the body does not take one step — D4 is enforced before the first leg, not after it');
+
+  /*
+   * RI20f · the drill's bracket choice, executed. `mountFor` is pure for this reason: the rule
+   * *"the pin picks it, and only with no pin does proximity"* is the difference between a guide
+   * who matters and a runner who drills whatever she happens to be beside.
+   */
+  const MOUNTS = { hall: SCENE.hall, floor: SCENE.floor };
+  t('RI20f · the pin picks the bracket even when she is standing at the other one',
+    mountFor('mount-hall', SCENE.floor, MOUNTS) === 'hall'
+    && mountFor('mount-floor', SCENE.hall, MOUNTS) === 'floor'
+    && mountFor(null, SCENE.hall, MOUNTS) === 'hall'
+    && mountFor(null, SCENE.floor, MOUNTS) === 'floor'
+    && mountFor('face-left', SCENE.hall, MOUNTS) === 'hall'
+    && mountFor('face-left', SCENE.floor, MOUNTS) === 'floor'
+    && mountFor('mount-hall', SCENE.hall, { floor: SCENE.floor }) === null,
+    'a pin overrides proximity; no pin — or the OTHER job\'s pin — falls back to it');
+  t('RI20g · the bed asks that rule rather than keeping a second copy of it, and a walk-off resets',
+    /const spot = mountFor\(perf\.pin\?\.kind, runner\.pos, \{/.test(codeOf(bedSrc))
+    && /if \(wallCam\.at !== at\.shot\) \{ wallCam\.mount = 0; wallCam\.at = at\.shot; \}/.test(codeOf(bedSrc))
+    && /perf\.act > 0\.5 && nearWallCam\(\)/.test(codeOf(bedSrc)),
+    'one camera, one wall — half a mount does not carry across the room');
 }
 
 /* =================================================================================================

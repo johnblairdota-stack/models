@@ -84,7 +84,7 @@ decision, not a refactor.
   and no target, drawn as a mesh so the four-light rig did not grow; it is **not the hunter, and
   the hunter is still a door that is shut**. The clock keeps running while hidden. Every decision
   lives in `src/game/runner-intel.js`, which is pure and **imports nothing**, so a node gate
-  executes the shipped functions. Gate: `runner-intel` (55 checks), `party-warm` W26g/W26g2/W26g3.
+  executes the shipped functions. Gate: `runner-intel` (91 checks), `party-warm` W26g/W26g2/W26g3.
 - **The pin is on the wire at audience `crew`, and the TV is told it and may not draw it.**
   Stage 3 of `docs/slices/task-runner-intel.md`, landed 2026-09-01. `you.pin.{x,z,roomId,kind}`
   are `crew` rows — `all` would put the target's bearing on eight screens and delete the guide's
@@ -97,6 +97,54 @@ decision, not a refactor.
   `you.at.{x,z}` joined at `runner` audience so the bezel has both ends of its bearing; `bezelOf`
   returns pixels on a phone edge and no world coordinate, which is why a bearing is safe in a
   runner's hand and a map is not. Gates: `runner-intel` RI10–RI13, `intel-pads` IP11b–IP11d.
+- **The guide may pin the JOB, and the THUMB may not pick it.** John, 2026-09-02 (~8:07am
+  Brisbane): *"guides need to also be able to pin objectives like the paintings or the camera
+  install position."* Inside the mission room the guide's chip row gains the job's own targets —
+  the two identical faces on a smash night, the two identical brackets on a drill night — and the
+  runner auto-walks to whichever one a human tapped. **The removal is the half that matters:**
+  overnight, `jobGoal` read `perf.stick.x` and a nudge picked a twin, which made the guide's
+  sentence decoration. The thumb is a lateral dodge and nothing else now; with no objective pin the
+  body stands and the guide has to speak. A good guide pins the real face or the bracket that sees
+  the hall; **an evil guide pins the decoy face or the bracket that ends up looking at boards**,
+  and neither gets special handling anywhere. `src/party/objectives.js` owns the four kinds and
+  **cannot import `realFaceFor` or `drillShotFor`**. Gates: `runner-intel` RI19–RI19q (chips,
+  privacy, the removal), RI20–RI20g (the walk, driven at 60 Hz in node).
+- **An objective pin names a THING, not a place.** The phone computes its chip coordinates from
+  `planRegions`, whose rooms are a **union of rectangles**, while `follow-bed.js` picks ONE rect
+  out of `room.tables.spaces` — they agree for a plain rectangular gallery and are free to disagree
+  for anything else. So the coordinates ride as a **bearing hint for the bezel** and the BODY
+  re-resolves the NAME against the scene it built (`objectives.js` `objectiveGoal`, pure for
+  `runner-intel.js`'s reason). A pin lying about the target by 40 m still walks her to the real
+  painting. Two refusals, both `null` and neither a fallback: **an objective pin from outside the
+  mission room** (else `pathPortals` returns a four-door route, which is the memorised route D4
+  forbids) and **a face somebody already smashed**. Gates: `runner-intel` RI19d/RI19e/RI19e2/RI20e.
+- **`PIN_KINDS` grew to six; the wire SHAPE did not.** The objective rides in `kind`, which already
+  has an `entitle.js` row and a closed value list. A fifth field was the obvious alternative and is
+  worse: every field on this message needs a row in a deny-by-default table, so a fifth field is a
+  fifth audience decision and a fifth thing somebody can widen to `all` without reading RI10c.
+  D4's *"there is nowhere to put a second hop"* is untouched — the list grew, the shape did not.
+  `objectives.js` owns the four kinds; `follow.js` and `intel-pad.js` both DERIVE from it.
+- **The drill night has TWO identical brackets, and which one is worth mounting is the guide's
+  private card.** `jobs.js` `camHang(space, floorY, shot)`; `'hall'` returns what the old
+  single-bracket function returned field for field, so nothing measured has moved. The camera is
+  one camera: `mount` and `lit` live on the PAIR, and walking off one bracket onto the other
+  **restarts the fill**. Which wall it ended on is recorded as `mission.shot` and is deliberately
+  **not on the wire** — the locked rule is *"blind still counts as `camera_lit`"* and the guide's
+  own pad says *"Recap will say seated either way"*, so a `shot` on the world report would let a
+  screenshot answer a question the Verdict is built not to. `target-sight` grew with the target
+  list rather than measuring half the job: **256 targets over 64 seeds, 0 pierced, 0 blind, worst
+  100% visible, 3 keep-outs per mission room**. Gates: `runner-intel` RI19i/RI19q/RI20f/RI20g,
+  `target-sight` G1/G3/T7.
+- **The runner's pad shows a BEARING and never the pin's kind, which is why `mount-floor` may be
+  called `mount-floor` on the wire.** `bezelOf` returns `{whole, runs, word, range, pinned}` and
+  `RUNNER_PAD_KEYS` has no row for a kind, so a HALL pin and a FLOOR pin at the same point render
+  the identical screen. If the pad printed the kind, an evil guide pinning the junk bracket would
+  be announcing it. Gate: `runner-intel` RI19f.
+- **Two guards stand on the pin's privacy and BOTH have to fall — re-measured for objective pins.**
+  Widening the four `you.pin.*` rows to `all` reddens `runner-intel` RI10c and leaves the live
+  nine-socket sweep GREEN, because `room.js` also gates the field on the socket's seat role. Table
+  AND frame builder together reddens RI10c, RI18e, RI19n and RI19p. Recorded so the day somebody
+  simplifies one of the two, this is the note saying the other was never redundant.
 - **The six fake voice buttons are gone.** CLOSE / LATE / GOING and GO / HOLD printed *"buttons
   send nothing"* over a row of buttons, which is what was wrong with them: a control that reaches
   nobody teaches the one seat that is supposed to be watching a television that the game is in
@@ -211,6 +259,22 @@ decision, not a refactor.
   a 22px ribbon during the Expedition.
 
 ## Gates are the memory
+
+**A gate must survive the fault it exists to catch, and a ban must be asked of CODE** (2026-09-02).
+Three of this pass's checks were written wrong first and each is a reusable shape. (1) RI3c banned
+`realFaceFor` from `objectives.js` and **caught that module's own header** saying *"nothing in this
+file imports `realFaceFor`"* — the sentence a reader most needs; RI12b's count of `state.pin = `
+caught `bindPinPad`'s comment explaining the slot. `codeOf` already existed in `runner-intel.mjs`
+for exactly this (RI8e caught `hideTick`'s header saying it does not pause the clock) and now both
+use it — same lesson as `party-warm` W47c: **a whole-file ban is right for *"this does not exist"*
+and wrong for *"this must not be REACHED"*.** (2) RI20's detail line read `toLeft.d.toFixed(2)`,
+and `d` is undefined on a walk that never arrived — so injecting a broken `AUTOWALK.square` threw a
+TypeError partway through the file and killed the run with **no red line and no summary**, which
+reads as a crash rather than as the failure of that check. (3) RI20b's first draft handed
+`clampToRoom` a room oracle that answered `'r0.gallery'` for every point in the universe, so the
+clamp could never fire and a held thumb walked the body out through the wall — **a false red on the
+harness, about the product.** A stand-in for a live query has to be able to say no.
+
 
 Every bug above that has a gate name beside it is locked in. `.github/workflows/gates.yml:44` runs
 the full `gates:party` chain on every push and PR. **A playtest finding is not finished until it is

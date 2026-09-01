@@ -25,7 +25,7 @@ import {
   AUTOWALK, clampToRoom, consumeLegs, coverNear, dodgeLateral, headingTo, hideTick,
   lagHeading, legsFor, pinKey, redPassAt, replanReason,
 } from './runner-intel.js';
-import { isObjectivePin, objectiveGoal, objectiveSpot } from '../party/objectives.js';
+import { isObjectivePin, mountFor, objectiveGoal } from '../party/objectives.js';
 import { NoiseBus, NOISE_KIND } from './noise.js';
 import { PARTY_NOISE, emitTallyShort } from '../party/noiseplan.js';
 import { createMeshAvatar } from '../characters/mesh-avatar.js';
@@ -1695,12 +1695,10 @@ export async function buildFollowBed(engine, opts = {}) {
    */
   function activeMount() {
     if (!wallCam) return null;
-    const spot = objectiveSpot(perf.pin?.kind);
-    if (spot === 'hall' || spot === 'floor') return wallCam.spots[spot];
-    const h = wallCam.spots.hall, f = wallCam.spots.floor;
-    const dh = Math.hypot(runner.pos.x - h.pos.x, runner.pos.z - h.pos.z);
-    const df = Math.hypot(runner.pos.x - f.pos.x, runner.pos.z - f.pos.z);
-    return dh <= df ? h : f;
+    const spot = mountFor(perf.pin?.kind, runner.pos, {
+      hall: wallCam.spots.hall?.pos, floor: wallCam.spots.floor?.pos,
+    });
+    return spot ? wallCam.spots[spot] : null;
   }
 
   function nearWallCam() {
