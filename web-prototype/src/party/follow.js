@@ -15,6 +15,7 @@
  */
 
 import { cleanLook } from './look.js';
+import { OBJECTIVE_KINDS } from './objectives.js';
 
 /** The only beat that mounts a camera. Casting, recap and lobby get no follow. */
 export const FOLLOW_BEATS = ['expedition'];
@@ -906,7 +907,28 @@ export const MOVE_KEYS = ['t', 'x', 'y', 'lookX', 'lookY', 'run', 'swing', 'act'
  * which is D4 enforced by construction the same way `neighbourScope` enforces it.
  * ============================================================================================== */
 export const PIN_WIRE_KEYS = ['t', 'x', 'z', 'roomId', 'kind'];
-export const PIN_KINDS = ['room', 'edge'];
+/**
+ * 📍 **SIX KINDS, AND THE SCHEMA IS STILL FOUR FIELDS.**
+ *
+ * John, 2026-09-02: *"guides need to also be able to pin objectives like the paintings or the
+ * camera install position."*
+ *
+ * 🚨 **THE OBJECTIVE RIDES IN `kind`, AND THAT IS A DESIGN CHOICE RATHER THAN A SHORTCUT.** The
+ * obvious alternative was a fifth field — `spot: 'left' | 'hall'` — and it is worse in the one way
+ * that matters here: every field on this message needs a row in `net/party/entitle.js`, which is
+ * deny-by-default, so a fifth field is a fifth audience decision and a fifth thing that can be
+ * widened to `all` by somebody who has not read `runner-intel` RI10c. `kind` already has its row,
+ * already has a CLOSED value list, and `pinViolations` already refuses anything not on it. So the
+ * wire did not move: four fields, two of them numbers, one of them from a short list.
+ *
+ * D4's *"there is nowhere to put a second hop"* is therefore untouched — the list grew, the SHAPE
+ * did not, and a route still has nowhere to live.
+ *
+ * ⚠️ **`OBJECTIVE_KINDS` IS IMPORTED, NOT COPIED.** `objectives.js` owns the list because the
+ * chips, the say-line and the body's resolver all read it; a second copy here is the
+ * `episode-order` lesson (two machines, both gated, quietly disagreeing).
+ */
+export const PIN_KINDS = ['room', 'edge', ...OBJECTIVE_KINDS];
 /** Same 24-char cap `mansion.js` region ids live inside. A long id is a payload, not a room. */
 const PIN_ID_CAP = 24;
 

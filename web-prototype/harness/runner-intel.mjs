@@ -44,7 +44,22 @@ import {
   clampToRoom, consumeLegs, coverNear, dodgeLateral, headingTo, hideTick, holdTell,
   lagHeading, legsFor, pinKey, redPassAt, replanReason,
 } from '../src/game/runner-intel.js';
-import { CUE_KEYS, CUE_KINDS, MOVE_KEYS, PIN_WIRE_KEYS, cueViolations, moveViolations, pinViolations, pinWireShape } from '../src/party/follow.js';
+import { CUE_KEYS, CUE_KINDS, MOVE_KEYS, PIN_KINDS, PIN_WIRE_KEYS, WORLD_MISSION_KEYS, cueViolations, moveViolations, pinViolations, pinWireShape } from '../src/party/follow.js';
+import {
+  OBJECTIVE_KINDS, SAY_FORBIDDEN, objectiveGoal, objectiveSay, objectiveSpots, unionRect,
+} from '../src/party/objectives.js';
+import { JOB, camHang } from '../src/party/jobs.js';
+import { camKeepOuts } from '../src/game/furn-layout.js';
+import { planRegions } from '../src/party/mansion.js';
+/*
+ * ⚠️ **ALIASED, BECAUSE THE LIVE BLOCK BELOW NAMES TWO SOCKETS `runnerPad` AND `guidePad`.** Those
+ * are block-scoped and would not actually shadow these, but a reader hitting `guidePad(...)` twice
+ * in one file with two different meanings is exactly the confusion that makes a green gate hard to
+ * trust. The pad MODELS keep the `-Shape` suffix here; the sockets keep the plain name.
+ */
+import {
+  RUNNER_PAD_KEYS, guidePad as guidePadShape, padLeaks, runnerPad as runnerPadShape,
+} from '../src/party/intel-pad.js';
 import { MISSION_DRILL, MISSION_PAINTING, missionFor, seekLine } from '../src/party/mission.js';
 import { audienceFor } from '../net/party/entitle.js';
 import { createRoom } from '../src/party/room.js';
@@ -73,6 +88,17 @@ const codeOf = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*
 
 const bedSrc = src('src/game/follow-bed.js');
 const intelSrc = src('src/game/runner-intel.js');
+const objSrc = src('src/party/objectives.js');
+/*
+ * ⚠️ **`codeOf` EARNED ITS KEEP TWICE MORE ON 2026-09-02.** RI3c's first draft banned
+ * `realFaceFor` from `objectives.js` and caught that module's own header saying *"Nothing in this
+ * file imports `realFaceFor`"* — the sentence a reader most needs. RI12b's count of
+ * `state.pin = ` caught `bindPinPad`'s comment explaining the slot. Same lesson as RI8e above and
+ * as `party-warm` W47c: a whole-file ban is the right gate for *"this does not exist"* and the
+ * wrong one for *"this must not be REACHED"*.
+ */
+const objCode = codeOf(objSrc);
+const phoneCode = codeOf(src('src/views/party-phone.js'));
 const phoneSrc = src('src/views/party-phone.js');
 const hostSrc = src('src/views/party-host.js');
 const localSrc = src('net/party/local.mjs');
@@ -147,7 +173,7 @@ console.log('\n  auto-walk');
    */
   t('RI3 · the bed asks the house live, from where she is standing, on every replan',
     /room\.pathPortals\?\.\(runner\.pos, _goal, ROUTE_MIN_W, ROUTE_MIN_H\)/.test(bedSrc)
-    && /perf\.legs = \[\];\n\s*if \(!pin\) return;/.test(bedSrc)
+    && /perf\.legs = \[\];\n\s*const goal = pinGoal\(\);\n\s*if \(!goal\) return;/.test(bedSrc)
     && /perf\.legs = legsFor\(portals/.test(bedSrc),
     'replanToPin clears, then re-asks');
   t('RI3b control · no authored waypoint list re-appeared (D4)',
@@ -155,10 +181,21 @@ console.log('\n  auto-walk');
     && !/\bnavmesh\b/i.test(bedSrc)
     && !/'gallery'|"gallery"/.test(intelSrc) && !/chapel/i.test(intelSrc),
     'the brain has never heard of a room name');
-  t('RI3c · the brain never learns which twin is real — the lie survives the walk',
+  /*
+   * ⚠️ **THE WINDOW MOVED TO `resolveObjective` ON 2026-09-02 AND THE SECOND CLAUSE IS NEW.** The
+   * old check watched the prose above `jobGoal`, which was where the target used to be chosen; the
+   * target is now chosen by the guide's pin and resolved in `resolveObjective`, so that is where
+   * the "they are identical" argument has to be readable. The clause that actually got stronger is
+   * the third one: `objectives.js` is the module that turns a chip into a target and it must not be
+   * able to import the two functions that know which target is real, because a chip that could sort
+   * them would put the guide's private card on a board she taps in front of the room.
+   */
+  t('RI3c · neither the brain nor the chips learn which twin is real — the lie survives the walk',
     !/realFaceFor|emptyNail|twins/.test(intelSrc)
-    && /identical/i.test(bedSrc.slice(bedSrc.indexOf('function jobGoal') - 2200, bedSrc.indexOf('function jobGoal'))),
-    'no import of the real face anywhere in runner-intel.js');
+    && !/realFaceFor|drillShotFor/.test(objCode)
+    && /identical/i.test(bedSrc.slice(Math.max(0, bedSrc.indexOf('function resolveObjective') - 2600),
+      bedSrc.indexOf('function resolveObjective'))),
+    'no import of the real face in runner-intel.js or objectives.js');
 }
 
 /* =================================================================================================
@@ -425,9 +462,13 @@ console.log('\n  the wire');
   t('RI12b · the phone really sends it, once per tap, as an assignment',
     /state\.client\?\.send\(\{ t: 'pin', x: wire\.x, z: wire\.z, roomId: wire\.roomId, kind: wire\.kind \}\)/
       .test(phoneSrc)
-    && (phoneSrc.match(/state\.pin = /g) || []).length === 1
-    && !/state\.pin\.push|pins\s*[:=]\s*\[/.test(phoneSrc),
-    'one slot, one send');
+    // Counted in the code — `bindPinPad`'s comment writes the assignment out. See `intel-pads` IP12.
+    && (phoneCode.match(/state\.pin = /g) || []).length === 1
+    && !/state\.pin\.push|pins\s*[:=]\s*\[/.test(phoneCode)
+    // 🎯 ONE send, TWO chip rows. A door chip and an objective chip go through the same `tap`.
+    && /\[data-pin\]/.test(phoneSrc) && /\[data-spot\]/.test(phoneSrc)
+    && (phoneCode.match(/state\.client\?\.send\(\{ t: 'pin'/g) || []).length === 1,
+    'one slot, one send, two chip rows');
   /*
    * 🚨 **RI13 IS D9's CONTROL AND IT IS THE POINT OF THE WHOLE SPLIT.** The television is TOLD the
    * pin — it owns the body, so it must be — and it may not DRAW it. `party-loop.md`'s "Do not" #1
@@ -537,8 +578,19 @@ console.log('\n  the copy, and the two screens');
   t('RI16b · the guide map is the primary surface and is still one door deep',
     /class="guide-sheet"/.test(phoneSrc)
     && /\.guide-sheet \.guide-map \{ max-height:58vh/.test(src('src/party/night-skin.js'))
-    && /guidePad\(seed, meMark, state\.pin\)/.test(phoneSrc)
-    && !/whole-house|fullPlan|flyoverAll/.test(phoneSrc),
+    && /guidePad\(seed, meMark, state\.pin, \{ missionRoom, job \}\)/.test(phoneSrc)
+    && !/whole-house|fullPlan|flyoverAll/.test(phoneSrc)
+    /*
+     * 🎯 **AND THE OBJECTIVE CHIPS DID NOT BUY A FLYOVER.** John, 2026-09-02: *"Guide E
+     * neighbours-only still for doors in the halls… Do not restore a whole-house flyover. Map stays
+     * the primary surface."* The chips are two targets INSIDE the room the runner is standing in,
+     * they are gated on `hereId === missionRoom`, and `neighbourScope` is untouched — `lit` is still
+     * built from `here`'s own edges and there is still no field on it that could hold a second hop.
+     */
+    && /String\(scope\.hereId\) === String\(missionRoom\)/.test(src('src/party/intel-pad.js'))
+    && !/spots/.test(src('src/party/intel-pad.js').slice(
+      src('src/party/intel-pad.js').indexOf('export function neighbourScope'),
+      src('src/party/intel-pad.js').indexOf('function labelFor'))),
     'map first, chips under it, no flyover restored');
 }
 
@@ -561,6 +613,197 @@ console.log('\n  the copy, and the two screens');
   t('RI17 guard · Stage 1 (mission KIND + live resolver) is NOT in this pass, and says so',
     stillRoomed && stillLookedUp,
     'R1/R2/R3 unwritten · goes RED the day `missionFor` returns a kind · then write them');
+}
+
+/* =================================================================================================
+ * RI19 · JOHN'S 2026-09-02 CALL — the guide may pin the JOB, and the thumb no longer picks it
+ *
+ * *"guides need to also be able to pin objectives like the paintings or the camera install
+ * position."*
+ *
+ * 🚨 **THE HALF THAT IS EASY TO MISS IS A REMOVAL.** Adding chips is additive and visible. What
+ * this pass also had to do is take the target choice OFF the stick: overnight, `jobGoal` read
+ * `perf.stick.x` and a nudge picked a twin, which made the guide's sentence decoration — the
+ * runner could ignore her, lean either way, and the twin smash stopped being a thing two people
+ * do together. RI19g is that removal, executed. Every check below is a function this repo ships;
+ * `objectiveGoal` in particular exists as a pure function precisely so this file can run it,
+ * because the rule it carries (*a pin names a THING, not a place*) is the one standing between a
+ * lying phone and a body walking somewhere nobody asked for.
+ * ============================================================================================== */
+
+console.log('\n  the guide pins the job');
+
+{
+  const GAL = { id: 'r0.gallery', x0: 0, x1: 12, z0: 0, z1: 5 };
+  const smashChips = objectiveSpots(JOB.SMASH, GAL);
+  const drillChips = objectiveSpots(JOB.DRILL, GAL);
+
+  t('RI19 · six pin kinds now, and the wire SHAPE is still the same four fields',
+    PIN_KINDS.length === 6 && PIN_KINDS[0] === 'room' && PIN_KINDS[1] === 'edge'
+    && OBJECTIVE_KINDS.every((k) => PIN_KINDS.includes(k))
+    && PIN_WIRE_KEYS.join(',') === 't,x,z,roomId,kind'
+    && OBJECTIVE_KINDS.every((k) => pinViolations({ t: 'pin', x: 1, z: 2, roomId: 'r0.gallery', kind: k }).length === 0),
+    `${PIN_KINDS.length} kinds on ${PIN_WIRE_KEYS.length - 1} fields · ${OBJECTIVE_KINDS.join(' ')}`);
+  t('RI19b control · a kind nobody declared is still refused at the door',
+    pinViolations({ t: 'pin', x: 1, z: 2, roomId: 'r0.gallery', kind: 'face-middle' }).length > 0
+    && pinViolations({ t: 'pin', x: 1, z: 2, roomId: 'r0.gallery', kind: 'mount-ceiling' }).length > 0
+    && pinWireShape({ x: 1, z: 2, roomId: 'r0.gallery', kind: 'hunter' }) === null
+    && pinWireShape({ x: 1, z: 2, roomId: 'r0.gallery' })?.kind === 'room',
+    'a bad kind is a null shape; a missing one is a plain room pin');
+
+  t('RI19c · each job offers exactly its own two targets, and they are two different places',
+    smashChips.length === 2 && drillChips.length === 2
+    && smashChips.map((s) => s.kind).join(',') === 'face-left,face-right'
+    && drillChips.map((s) => s.kind).join(',') === 'mount-hall,mount-floor'
+    && Math.hypot(smashChips[0].x - smashChips[1].x, smashChips[0].z - smashChips[1].z) > 1
+    && Math.hypot(drillChips[0].x - drillChips[1].x, drillChips[0].z - drillChips[1].z) > 1
+    && objectiveSpots('reunion', GAL).length === 0,
+    `${smashChips.map((s) => s.label).join(' / ')} · ${drillChips.map((s) => s.label).join(' / ')}`);
+
+  /*
+   * 🚨 **RI19d IS THE ONE THAT MATTERS.** `objectives.js`'s header: the phone computes its chip
+   * coordinates from `planRegions`, whose rooms are a UNION of rectangles, and the body picks ONE
+   * rect out of `room.tables.spaces`. They agree for a plain gallery and are free to disagree for
+   * anything else — so the coordinates ride as a BEARING HINT for the bezel and the NAME is the
+   * instruction. Here the hint is a deliberate lie, 40 m away in another room, and the answer is
+   * still the real painting because `objectiveGoal` never reads `pin.x`.
+   */
+  const SCENE = {
+    left: { x: 4.6, z: 0.22, live: true }, right: { x: 7.4, z: 0.22, live: true },
+    hall: { x: 6.0, z: 4.78, live: true }, floor: { x: 11.78, z: 2.5, live: true },
+  };
+  const inRoom = { here: 'r0.gallery', missionRoom: 'r0.gallery', targets: SCENE };
+  const liar = { x: -40, z: -40, roomId: 'r0.gallery', kind: 'face-left' };
+  t('RI19d · the body resolves the NAME — a pin lying about where the target is still walks to it',
+    JSON.stringify(objectiveGoal(liar, inRoom)) === JSON.stringify({ x: 4.6, z: 0.22 })
+    && JSON.stringify(objectiveGoal({ ...liar, kind: 'mount-floor' }, inRoom))
+      === JSON.stringify({ x: 11.78, z: 2.5 })
+    && !/pin\.x|pin\.z/.test(objCode.slice(objCode.indexOf('export function objectiveGoal'))),
+    'pin.x is never read in the resolver — the hint is for the bezel and nothing else');
+
+  t('RI19e · an objective pin from OUTSIDE the mission room resolves to nothing (D4 held twice)',
+    objectiveGoal({ kind: 'face-left' }, { ...inRoom, here: 'r0.hall' }) === null
+    && objectiveGoal({ kind: 'face-left' }, { ...inRoom, here: null }) === null
+    && objectiveGoal({ kind: 'face-left' }, { ...inRoom, missionRoom: null }) === null
+    && objectiveGoal({ kind: 'room' }, inRoom) === null,
+    'no four-door route to a painting three rooms away, and a DOOR pin is not an objective');
+  t('RI19e2 · a face somebody already smashed is not a destination',
+    objectiveGoal({ kind: 'face-left' },
+      { ...inRoom, targets: { ...SCENE, left: { ...SCENE.left, live: false } } }) === null
+    && objectiveGoal({ kind: 'face-left' }, { ...inRoom, targets: {} }) === null,
+    'a pin at an empty nail is refused, not walked to');
+
+  /*
+   * ⚠️ **RI19f IS WHY `mount-floor` MAY BE CALLED `mount-floor` ON THE WIRE.** The name says which
+   * bracket the guide picked, and on a drill night which bracket is worth mounting is her private
+   * card (`drillShotFor`). If the runner's pad printed the kind, an evil guide pinning the junk
+   * bracket would be announcing it. It does not: `bezelOf` returns a bearing, a word and a band,
+   * and `RUNNER_PAD_KEYS` has no row for a kind — so a HALL pin and a FLOOR pin are the same
+   * screen with the segment in a different place, which is exactly what a shout across a couch is.
+   */
+  const HER = { x: 1.5, z: 1.25 };
+  const AT = { x: 6.0, z: 4.78, roomId: 'r0.gallery' };
+  const pinnedHall = runnerPadShape(HER, { ...AT, kind: 'mount-hall' });
+  const pinnedFloor = runnerPadShape(HER, { ...AT, kind: 'mount-floor' });
+  t('RI19f · the runner is shown a BEARING and never the kind — the two brackets read the same',
+    !RUNNER_PAD_KEYS.includes('kind')
+    && !JSON.stringify(pinnedHall).includes('mount')
+    && pinnedHall.word.length > 0 && pinnedHall.runs.length > 0
+    && JSON.stringify(pinnedHall) === JSON.stringify(pinnedFloor)
+    && padLeaks('runner', pinnedFloor).length === 0,
+    `${Object.keys(pinnedFloor).join(',')} — no kind in it · "${pinnedFloor.words}" either way`);
+
+  /*
+   * 🚨 **RI19g · THE REMOVAL.** John: *"Thumb dodge/hide stays lateral only. It is NOT how you pick
+   * which painting."* The old rule is restated here as an executed negative rather than described,
+   * for `expedition-jobs` J7's reason — a rule somebody reversed is only really gone when a check
+   * would go red if it came back.
+   */
+  const jobGoalBody = codeOf(bedSrc).slice(codeOf(bedSrc).indexOf('function jobGoal'),
+    codeOf(bedSrc).indexOf('function replanToPin'));
+  t('RI19g · the thumb no longer picks the target — the pin does, and the midpoint is gone',
+    /return resolveObjective\(perf\.pin\);/.test(jobGoalBody)
+    && !/perf\.stick/.test(jobGoalBody)
+    && !/midpoint|lean/.test(jobGoalBody)
+    && !/\(L\.pos\.x \+ R\.pos\.x\) \/ 2/.test(codeOf(bedSrc))
+    && /const want = dodgeLateral\(perf\.stick\.x/.test(bedSrc),
+    'the stick reaches `dodgeLateral` and nothing else');
+
+  t('RI19h · the say-line names the PICK and never the truth',
+    OBJECTIVE_KINDS.every((k) => objectiveSay(k).length > 0)
+    && OBJECTIVE_KINDS.every((k) => !SAY_FORBIDDEN.some((w) => objectiveSay(k).toLowerCase().includes(w)))
+    && objectiveSay('room') === '' && objectiveSay(null) === '',
+    OBJECTIVE_KINDS.map((k) => `"${objectiveSay(k)}"`).join(' '));
+  t('RI19h2 control · the sweep can see — a line that named the real face is caught',
+    SAY_FORBIDDEN.some((w) => 'Hit the real one.'.toLowerCase().includes(w))
+    && SAY_FORBIDDEN.some((w) => 'That one is a decoy.'.toLowerCase().includes(w)),
+    'a planted give-away reddens the same test');
+
+  /*
+   * RI19i · the two brackets have to be TWO. A second `camHang` that quietly returned the first
+   * one's coordinates would leave the drill night with one place to stand and a chip row that lies.
+   */
+  const hall = camHang(GAL, 0, 'hall'), floor = camHang(GAL, 0, 'floor');
+  const keeps = camKeepOuts(GAL);
+  t('RI19i · two brackets, the same fixture, on different walls — and the placer holds both clear',
+    Math.hypot(hall.x - floor.x, hall.z - floor.z) > 2
+    && hall.alongX !== floor.alongX && hall.y === floor.y
+    && JSON.stringify(camHang(GAL, 0)) === JSON.stringify(hall)
+    && keeps.length === 2
+    && keeps.some((k) => hall.x >= k.x0 && hall.x <= k.x1 && hall.z >= k.z0 && hall.z <= k.z1)
+    && keeps.some((k) => floor.x >= k.x0 && floor.x <= k.x1 && floor.z >= k.z0 && floor.z <= k.z1),
+    `hall ${hall.x.toFixed(2)},${hall.z.toFixed(2)} · floor ${floor.x.toFixed(2)},${floor.z.toFixed(2)}`
+    + ` · ${keeps.length} keep-outs · default is still the hall bracket`);
+
+  t('RI19j · a re-pin at the SAME point with a different name is a new pin, not a no-op',
+    pinKey({ x: 1, z: 2, roomId: 'r0.gallery', kind: 'face-left' })
+      !== pinKey({ x: 1, z: 2, roomId: 'r0.gallery', kind: 'face-right' })
+    && replanReason(
+      { pinKey: pinKey({ x: 1, z: 2, roomId: 'g', kind: 'face-left' }), phase: 'seek', legs: 2, since: 0, gained: 9 },
+      { pinKey: pinKey({ x: 1, z: 2, roomId: 'g', kind: 'face-right' }), phase: 'seek', legs: 2, since: 0, gained: 9 },
+    ) === 'pin',
+    'the kind is part of the identity, so the walk re-plans');
+
+  /*
+   * RI19k · the chips are gated on ONE room id against ONE room id, live on a generated house, and
+   * the shape they arrive in still passes the guide pad's own closed schema.
+   */
+  const seedPlan = planRegions(7);
+  const galleryRect = [...seedPlan.rooms].find((r) => String(r.id).endsWith('.gallery'));
+  const galUnion = galleryRect
+    ? unionRect([...seedPlan.rooms, ...seedPlan.corridors], galleryRect.id) : null;
+  const standIn = galleryRect
+    ? { x: (galleryRect.x0 + galleryRect.x1) / 2, z: (galleryRect.z0 + galleryRect.z1) / 2 }
+    : null;
+  const inside = standIn ? guidePadShape(7, standIn, null, { missionRoom: galleryRect.id, job: JOB.SMASH }) : null;
+  const elsewhere = standIn ? guidePadShape(7, standIn, null, { missionRoom: 'r9.nowhere', job: JOB.SMASH }) : null;
+  const unarmed = standIn ? guidePadShape(7, standIn, null) : null;
+  t('RI19k · chips appear in the mission room and NOWHERE else, on a real generated house',
+    !!inside && inside.spots.length === 2
+    && inside.spots.every((s) => s.x >= galUnion.x0 - 0.5 && s.x <= galUnion.x1 + 0.5
+      && s.z >= galUnion.z0 - 0.5 && s.z <= galUnion.z1 + 0.5)
+    && elsewhere.spots.length === 0 && unarmed.spots.length === 0
+    && inside.lit.length === elsewhere.lit.length,
+    `${inside?.spots.length ?? 0} chips in ${galleryRect?.id} · 0 outside it · the scope itself is unchanged`);
+  /*
+   * ⚠️ **RI19q · `mission.shot` IS DELIBERATELY LOCAL AND MUST STAY THAT WAY.** The body records
+   * which bracket the camera actually went on, because it is the only difference a drill night
+   * ever had. It may not travel: the locked rule is *"blind still counts as `camera_lit`"* and the
+   * guide's own pad already says *"Recap will say seated either way"*, so a `shot` on the world
+   * report would let a screenshot of the Verdict answer a question the Verdict is built not to.
+   * A dead field drifts; a field a gate holds down does not.
+   */
+  t('RI19q · which bracket the camera went on is recorded and never put on the wire',
+    /mission\.shot = wallCam\.at;/.test(codeOf(bedSrc))
+    && !WORLD_MISSION_KEYS.includes('shot')
+    && !/shot: mission\.shot|shot: wallCam/.test(codeOf(bedSrc)),
+    'blind still counts as camera_lit — the recap says seated either way');
+
+  t('RI19k2 · and the widened pad shape is still closed — a route on a chip is a red line',
+    padLeaks('guide', inside).length === 0
+    && padLeaks('guide', { ...inside, spots: [{ kind: 'face-left', label: 'L', x: 1, z: 2, path: [1, 2] }] }).length > 0
+    && padLeaks('guide', { ...inside, spots: [{ kind: 'face-left', label: 'L', x: 1, z: 2, hunter: 'x' }] }).length > 0,
+    `${padLeaks('guide', inside).length} leaks · a smuggled path and a smuggled hunter both caught`);
 }
 
 /* =================================================================================================
@@ -729,6 +972,60 @@ console.log('\n  a live room');
     && tv.of('pin').length === 2
     && !Array.isArray(room.game.state.pin),
     `${tv.of('pin').length} taps pushed · store holds ${JSON.stringify(room.game.state.pin)}`);
+
+  /* -----------------------------------------------------------------------------------------
+   * 🎯 **AND THE SAME JOURNEY FOR AN OBJECTIVE PIN, WHICH IS THE 2026-09-02 HALF.**
+   *
+   * The four checks above proved a DOOR pin reaches exactly two people and moves a body. A job pin
+   * rides the same verb, the same four fields and the same two guards, so the only honest way to
+   * know it is not a special case somewhere is to send one down nine real sockets and photograph
+   * the result. RI19n is the one that would have caught a widened row: `mount-floor` is the guide
+   * choosing the junk bracket, and a seated phone that could read that word would be watching the
+   * sabotage happen.
+   * -------------------------------------------------------------------------------------------- */
+  const seenObj = { runner: runnerPad.frames.length, seated: seatedPad.frames.length };
+  guidePad.send({ t: 'pin', x: 5.75, z: 0.22, roomId: 'r0.gallery', kind: 'face-right' });
+  await sleep(220);
+  const objPin = runnerPad.last('state')?.frame?.you?.pin ?? null;
+  t('RI19l · a JOB pin travels the same wire as a door pin, kind intact, four fields still',
+    objPin?.kind === 'face-right' && objPin?.x === 5.75 && objPin?.roomId === 'r0.gallery'
+    && Object.keys(objPin).sort().join(',') === 'kind,roomId,x,z'
+    && guidePad.last('state')?.frame?.you?.pin?.kind === 'face-right'
+    && room.game.state.pin?.kind === 'face-right',
+    JSON.stringify(objPin));
+  t('RI19m · the television is told which target, as a directed control input',
+    tv.last('pin')?.kind === 'face-right' && tv.of('pin').length === 3,
+    `${tv.of('pin').length} pushes · ${JSON.stringify(tv.last('pin'))}`);
+  /*
+   * 🚨 **MEASURED: BOTH GUARDS HAVE TO FALL, AND THE SAME PAIR STANDS ON A JOB PIN.** RI18e's
+   * header records that widening the four `you.pin.*` rows to `all` reddens RI10c and leaves the
+   * live sweep GREEN, because `room.js` also gates the field on the socket's seat role. Repeated
+   * for an objective pin on 2026-09-02 and it behaves identically: table alone → RI10c only; table
+   * AND the frame builder → RI10c, RI18e, RI19n and RI19p together. Recorded rather than left as a
+   * coincidence, because the day somebody "simplifies" one of the two guards, this is the note
+   * that says the other one was never redundant.
+   */
+  t('RI19n · and no seated phone learns which one the guide picked — swept over the raw bytes',
+    seatedPad.last('state')?.frame?.you?.pin === undefined
+    && !/face-right/.test(seatedPad.since(seenObj.seated))
+    && !/5\.75/.test(seatedPad.since(seenObj.seated)),
+    `${seatedPad.frames.length - seenObj.seated} frames since the tap, none carrying it`);
+  t('RI19o control · the sweep can see — the same sweep over the RUNNER frames finds the word',
+    /face-right/.test(runnerPad.since(seenObj.runner)),
+    'a needle where the needle provably is');
+  /*
+   * ⚠️ **AND THE DRILL'S JUNK BRACKET IS THE SAME SHAPE, WHICH IS WHY IT IS SENT TOO.** `mount-floor`
+   * is the only pin in the game whose NAME is the sabotage; if any of the three surfaces above were
+   * to treat the two mount kinds differently from the two face kinds, this is where it would show.
+   */
+  guidePad.send({ t: 'pin', x: 11.78, z: 2.5, roomId: 'r0.gallery', kind: 'mount-floor' });
+  await sleep(200);
+  t('RI19p · the junk bracket is pinnable and private on exactly the same terms',
+    room.game.state.pin?.kind === 'mount-floor'
+    && runnerPad.last('state')?.frame?.you?.pin?.kind === 'mount-floor'
+    && seatedPad.last('state')?.frame?.you?.pin === undefined
+    && tv.of('pin').length === 4,
+    'an evil guide gets no special handling, and neither does a good one');
 
   tv.close();
   for (const p of phones) p.close();

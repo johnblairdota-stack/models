@@ -539,13 +539,20 @@ console.log('\n  the television, and the wire');
  * runs) is that the source is what to bind to when the assertion is "the shipped screen does it".
  */
 {
-  const guideWired = /guidePad\(seed, meMark, state\.pin\)/.test(phoneSrc)
+  const guideWired = /guidePad\(seed, meMark, state\.pin, \{ missionRoom, job \}\)/.test(phoneSrc)
     && /\$\{guidePinPad\(scope\)\}/.test(phoneSrc)
     && /scope,\n\s*\}\)/.test(phoneSrc);
   const runnerWired = /const bez = runnerPad\(/.test(phoneSrc)
     && /\$\{bezelHtml\(bez\)\}/.test(phoneSrc);
   const stillTheMap = /guideMapSvg\(/.test(phoneSrc) && /The map is yours/.test(phoneSrc);
-  const assigns = (phoneSrc.match(/state\.pin = /g) || []).length;
+  /*
+   * ⚠️ **COUNTED IN THE CODE, NOT IN THE PROSE.** `bindPinPad`'s own comment explains the slot by
+   * writing `state.pin = …` out, and a whole-file count read that as a second assignment — the same
+   * shape as `runner-intel` RI3c catching `objectives.js`'s header. One assignment is the D2 claim;
+   * a sentence about it is documentation.
+   */
+  const phoneCode = phoneSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const assigns = (phoneCode.match(/state\.pin = /g) || []).length;
   t('IP12 · the phone renders both boards, and the pin is a SLOT that is assigned, never pushed',
     guideWired && runnerWired && stillTheMap
     && assigns === 1 && !/state\.pin\.push|pins\s*[:=]\s*\[/.test(phoneSrc)

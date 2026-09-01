@@ -65,10 +65,21 @@ export const AUTOWALK = Object.freeze({
 /** D3's four replan triggers, and there are no others. Read by the gate rather than copied. */
 export const REPLAN_TRIGGERS = Object.freeze(['pin', 'phase', 'legs', 'stall']);
 
-/** A pin's identity, so "did the pin change" is one string compare and not a deep equal. */
+/**
+ * A pin's identity, so "did the pin change" is one string compare and not a deep equal.
+ *
+ * ⚠️ **`kind` JOINED THE KEY WHEN OBJECTIVE PINS LANDED (2026-09-02), AND IT HAD TO.** Coordinates
+ * alone were a complete identity while every pin was a doorway. They stopped being one the moment
+ * a pin could name a TARGET: an objective pin's `x`/`z` are a bearing hint the phone computed, the
+ * body resolves the NAME instead (`follow-bed.js` `resolveObjective`), and two chips that happened
+ * to hint at the same point — or a phone that sent the same hint twice with a different kind —
+ * would have read as "no change" and left the runner walking at the previous target with the board
+ * showing the new one. The kind is the instruction, so the kind is part of the key.
+ */
 export function pinKey(pin) {
   if (!pin || !Number.isFinite(Number(pin.x)) || !Number.isFinite(Number(pin.z))) return '';
-  return Number(pin.x).toFixed(2) + '|' + Number(pin.z).toFixed(2) + '|' + String(pin.roomId ?? '');
+  return Number(pin.x).toFixed(2) + '|' + Number(pin.z).toFixed(2)
+    + '|' + String(pin.roomId ?? '') + '|' + String(pin.kind ?? '');
 }
 
 /**

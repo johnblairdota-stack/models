@@ -22,9 +22,10 @@ import { camHang, DRILL, JOB, TWIN, twinHang, WALL_CAM } from '../party/jobs.js'
  * `room.pathPortals`, the collider, the sledge ray. See `runner-intel.js`'s header.
  */
 import {
-  AUTOWALK, DODGE, clampToRoom, consumeLegs, coverNear, dodgeLateral, headingTo, hideTick,
+  AUTOWALK, clampToRoom, consumeLegs, coverNear, dodgeLateral, headingTo, hideTick,
   lagHeading, legsFor, pinKey, redPassAt, replanReason,
 } from './runner-intel.js';
+import { isObjectivePin, objectiveGoal, objectiveSpot } from '../party/objectives.js';
 import { NoiseBus, NOISE_KIND } from './noise.js';
 import { PARTY_NOISE, emitTallyShort } from '../party/noiseplan.js';
 import { createMeshAvatar } from '../characters/mesh-avatar.js';
@@ -833,11 +834,20 @@ function buildTwinPaintings(space, floorY) {
   return { left, right, faces: { left, right } };
 }
 
-function buildWallCam(space, floorY) {
-  const hang = camHang(space, floorY);
+/**
+ * 📷 **ONE BRACKET. There are two of them and the guide picks which one gets the camera.**
+ *
+ * John, 2026-09-02: *"guides need to also be able to pin objectives like… the camera install
+ * position."* A single mount is not a choice, so `jobs.js` `camHang` answers for two and this
+ * builds both — the SAME mesh, the same size, no mark on either, exactly as the twin paintings
+ * are the same mesh twice. Which one is worth mounting is `drillShotFor`'s answer and it lives on
+ * the GUIDE's private pad; from in here they are indistinguishable, which is the point.
+ */
+function buildOneMount(space, shot, floorY) {
+  const hang = camHang(space, floorY, shot);
   if (!hang) return null;
   const group = new THREE.Group();
-  group.name = 'mission-wall-cam';
+  group.name = `mission-wall-cam-${shot}`;
   const body = new THREE.Mesh(
     new THREE.BoxGeometry(WALL_CAM.w, WALL_CAM.h, WALL_CAM.d),
     new THREE.MeshStandardMaterial({ color: 0x1c2228, roughness: 0.55, metalness: 0.35 }));
@@ -850,7 +860,24 @@ function buildWallCam(space, floorY) {
   group.add(body, lens);
   group.position.set(hang.x, hang.y, hang.z);
   group.rotation.y = hang.rotY;
-  return { group, pos: new THREE.Vector3(hang.x, hang.y, hang.z), mount: 0, lit: false };
+  return { group, pos: new THREE.Vector3(hang.x, hang.y, hang.z), shot };
+}
+
+/**
+ * Both brackets, plus the drill's own state.
+ *
+ * ⚠️ **`mount` AND `lit` MOVED OFF THE BRACKET AND ONTO THE PAIR, AND THAT IS NOT TIDYING.** There
+ * is ONE camera and it goes on ONE wall; two brackets each carrying their own progress bar would
+ * let a runner half-drill one, walk across the room and half-drill the other, and the show would
+ * have no way to say which mount the night ended on. `at` is the bracket the drill is filling and
+ * `shot` is what the recap needs — a blind mount still counts as `camera_lit`, per the locked rule,
+ * so this is the only place the difference is ever recorded.
+ */
+function buildWallCam(space, floorY) {
+  const hall = buildOneMount(space, 'hall', floorY);
+  const floor = buildOneMount(space, 'floor', floorY);
+  if (!hall || !floor) return null;
+  return { spots: { hall, floor }, groups: [hall.group, floor.group], mount: 0, lit: false, at: 'hall' };
 }
 
 function spaceOfType(spaces, type) {
@@ -1202,8 +1229,7 @@ export async function buildFollowBed(engine, opts = {}) {
   }
   const wallCam = buildWallCam(gallery, room.floorY ?? 0);
   if (wallCam) {
-    wallCam.group.visible = false;
-    scene.add(wallCam.group);
+    for (const g of wallCam.groups) { g.visible = false; scene.add(g); }
   }
   const noise = new NoiseBus();
 
@@ -1637,7 +1663,8 @@ export async function buildFollowBed(engine, opts = {}) {
       if (wallCam) {
         wallCam.mount = 0;
         wallCam.lit = false;
-        wallCam.group.visible = false;
+        wallCam.at = 'hall';
+        for (const g of wallCam.groups) g.visible = false;
       }
       mission.phase = twins ? 'seek' : 'none';
       mission.room = gallery?.id ?? spec.room;
@@ -1651,16 +1678,36 @@ export async function buildFollowBed(engine, opts = {}) {
     if (wallCam) {
       wallCam.mount = 0;
       wallCam.lit = false;
-      wallCam.group.visible = true;
+      wallCam.at = 'hall';
+      for (const g of wallCam.groups) g.visible = true;
     }
     mission.phase = wallCam ? 'seek' : 'none';
     mission.room = gallery?.id ?? spec.room;
   }
 
+  /**
+   * 🎯 **THE BRACKET THE GUIDE PINNED — or, with no objective pin, whichever one she is beside.**
+   *
+   * The fallback is not a second way to choose. It exists because a runner who walked in on a door
+   * pin and started drilling before her guide said anything should drill the thing she is standing
+   * at rather than nothing; the guide's pin overrides it the instant it arrives, and the pin is
+   * what the auto-walk took her to in the first place.
+   */
+  function activeMount() {
+    if (!wallCam) return null;
+    const spot = objectiveSpot(perf.pin?.kind);
+    if (spot === 'hall' || spot === 'floor') return wallCam.spots[spot];
+    const h = wallCam.spots.hall, f = wallCam.spots.floor;
+    const dh = Math.hypot(runner.pos.x - h.pos.x, runner.pos.z - h.pos.z);
+    const df = Math.hypot(runner.pos.x - f.pos.x, runner.pos.z - f.pos.z);
+    return dh <= df ? h : f;
+  }
+
   function nearWallCam() {
-    if (!wallCam) return false;
-    const dx = runner.pos.x - wallCam.pos.x;
-    const dz = runner.pos.z - wallCam.pos.z;
+    const m = activeMount();
+    if (!m) return false;
+    const dx = runner.pos.x - m.pos.x;
+    const dz = runner.pos.z - m.pos.z;
     return Math.hypot(dx, dz) < 1.85;
   }
 
@@ -1680,22 +1727,28 @@ export async function buildFollowBed(engine, opts = {}) {
     const spec = mission.spec ?? missionFor(1);
     if (mission.phase === 'seek' && spec.job === JOB.DRILL && wallCam) {
       const holding = perf.act > 0.5 && nearWallCam() && !mission.heard;
-      if (holding) {
+      const at = holding ? activeMount() : null;
+      if (holding && at) {
+        // Walking off one bracket and onto the other starts the mount again — one camera, one wall.
+        if (wallCam.at !== at.shot) { wallCam.mount = 0; wallCam.at = at.shot; }
         wallCam.mount = Math.min(1, wallCam.mount + DRILL.rate * dt);
         mission.mount = wallCam.mount;
         if (Math.floor(t * 4) !== Math.floor((t - dt) * 4)) {
-          noise.emit(wallCam.pos, DRILL.loudness, NOISE_KIND.dig);
+          noise.emit(at.pos, DRILL.loudness, NOISE_KIND.dig);
         }
         const hunterHere = (roomIdAt(hunter.pos) ?? hunter.roomId()) === (gallery?.id ?? mission.room);
         if (hunterHere) perf.heardFor += dt;
         else perf.heardFor = Math.max(0, perf.heardFor - dt * 0.5);
         if (perf.heardFor >= DRILL.heardSeconds) {
           mission.heard = true;
-          emitTallyShort(noise, wallCam.pos);
+          emitTallyShort(noise, at.pos);
         }
       }
       if (wallCam.mount >= 1 && !wallCam.lit) {
         wallCam.lit = true;
+        // A blind mount still counts as `camera_lit` — the locked rule. Which wall it went on is
+        // recorded here and nowhere else, because it is the only difference the night ever had.
+        mission.shot = wallCam.at;
         mission.phase = 'return';
         mission.room = ballroom?.id ?? null;
         return;
@@ -1754,55 +1807,91 @@ export async function buildFollowBed(engine, opts = {}) {
   const _probe = { x: 0, z: 0 };
   const _goal = new THREE.Vector3();
 
+  /* ---------------------------------------------------------------------------------------------
+   * 🖼️ **THE LAST FOUR METRES, AND WHY THEY ARE NOW A PIN LIKE EVERY OTHER METRE.**
+   *
+   * The overnight lock reads *"AUTO-WALK the guide's pin, one door at a time. NOT auto-walk to the
+   * true camera (that kills the lie)"*, and at the time the guide could only pin a DOOR —
+   * `intel-pad.js` `pinDoor` builds its pin out of `scope.gates`, and gates are doors. So the legs
+   * ran out in the mission room's doorway with the job across the floor, and something had to
+   * cross that floor. Overnight it was the thumb. John, 2026-09-02: *"guides need to also be able
+   * to pin objectives like the paintings or the camera install position."*
+   *
+   * ⚠️ **AND THE LIE IS NOT WEAKENED BY IT, WHICH IS THE TEST THAT LOCK IS REALLY ASKING.** The
+   * body still never learns which target is real. `objectives.js` cannot even import the two
+   * functions that know (`realFaceFor`, `drillShotFor`) and `runner-intel` RI3c is the check.
+   * What it walks to is a name a PERSON chose, and the whole point is that she may have chosen
+   * the wrong one on purpose:
+   *   · SMASH: two IDENTICAL faces, same distance either side of the wall's centre, same loudness,
+   *     no mark on either (`jobs.js` `TWIN`).
+   *   · DRILL: two IDENTICAL brackets on two walls. What a mounted camera would end up SEEING is
+   *     on the far side of a wall the runner is standing behind, and `drillShotFor`'s answer is
+   *     printed on the GUIDE's pad only.
+   * ------------------------------------------------------------------------------------------ */
   /**
-   * 🖼️ **THE LAST FOUR METRES, ONCE SHE IS ALREADY IN THE ROOM — and why this is not the thing
-   * John forbade.**
+   * 🎯 **AN OBJECTIVE PIN, RESOLVED AGAINST THE SCENE THIS FILE BUILT.**
    *
-   * The lock reads: *"AUTO-WALK the guide's pin, one door at a time. NOT auto-walk to the true
-   * camera (that kills the lie)."* The guide can only pin a DOOR — `intel-pad.js` `pinDoor` builds
-   * its pin out of `scope.gates`, and gates are doors — so when the runner walks through the last
-   * one her legs run out standing in the doorway of the mission room with the job across the floor.
+   * `objectives.js`'s header has the argument in full; the short form is that the phone and the
+   * body do not compute the same house from the same numbers — `planRegions` hands the phone a
+   * UNION of rectangles and `spaceOfType` hands this file ONE of them — so the coordinates on an
+   * objective pin are a bearing hint for the runner's bezel and the NAME is the instruction. A
+   * phone that sent `face-left` with coordinates in the ballroom still walks her to the real left
+   * painting, because nothing below reads `pin.x` at all.
    *
-   * ⚠️ **WHAT IS RETURNED HERE REVEALS NOTHING, AND THAT IS THE TEST THE LOCK IS REALLY ASKING.**
-   *   · SMASH: the two faces are IDENTICAL, hung the same distance either side of the wall's
-   *     centre, same loudness, no mark on either (`jobs.js` `TWIN`). Walking at the PAIR says
-   *     nothing about which is real, because nothing about the pair is different. Which one gets
-   *     hit is chosen by the thumb — a nudge of the lateral dodge picks a side — and that is
-   *     `runner-intel.js` `SABOTAGE` entry one, working exactly as designed: no button, no verb,
-   *     an ordinary control used at the wrong moment.
-   *   · DRILL: there is one wall camera and its position was never the secret. The lie on a drill
-   *     night is `drillShotFor`'s HALL / FLOOR aim, which lives on the GUIDE's pad and is not on
-   *     this wire at all.
+   * 🚨 **AND IT REFUSES AN OBJECTIVE PIN FROM OUTSIDE THE MISSION ROOM, WHICH IS WHAT KEEPS D4
+   * INTACT.** `room.pathPortals` will happily return a four-door route to a painting three rooms
+   * away, and that is the memorised route the whole design forbids. The chips only exist while the
+   * runner is standing in the mission room (`intel-pad.js` `guidePad`), so this is the same rule
+   * enforced a second time at the end that has to be right — one guide sentence is still one leg.
+   */
+  function sceneTargets() {
+    const out = {};
+    for (const face of ['left', 'right']) {
+      const f = twins?.faces?.[face];
+      if (f?.pos) out[face] = { x: f.pos.x, z: f.pos.z, live: !!f.intact };
+    }
+    for (const shot of ['hall', 'floor']) {
+      const m = wallCam?.spots?.[shot];
+      if (m?.pos) out[shot] = { x: m.pos.x, z: m.pos.z, live: true };
+    }
+    return out;
+  }
+
+  function resolveObjective(pin) {
+    return objectiveGoal(pin, {
+      here: roomIdAt(runner.pos), missionRoom: mission.room, targets: sceneTargets(),
+    });
+  }
+
+  /** Where this pin actually sends the body. A door is its own coordinate; a job is a name. */
+  function pinGoal() {
+    const pin = perf.pin;
+    if (!pin) return null;
+    if (isObjectivePin(pin.kind)) return resolveObjective(pin);
+    return Number.isFinite(pin.x) && Number.isFinite(pin.z) ? { x: pin.x, z: pin.z } : null;
+  }
+
+  /**
+   * 🚨 **THE GUIDE'S PIN PICKS THE TARGET. THE THUMB DOES NOT, AND THAT IS JOHN'S 2026-09-02 CALL.**
    *
-   * 🚨 **AND IT ONLY FIRES INSIDE HER OWN ROOM.** `roomIdAt(runner.pos) === mission.room` is the
-   * whole guard. Outside it this returns null and the body does not move without a pin, so the
-   * house is still crossed one guide sentence at a time.
+   * ⚠️ **THIS REPLACES A RULE THAT SHIPPED LESS THAN A DAY AGO, AND THE OLD ONE IS WORTH KNOWING
+   * BECAUSE IT LOOKED RIGHT.** Overnight, `jobGoal` leaned on `perf.stick.x`: a nudge left walked
+   * at the left twin, a nudge right at the right one, and neutral walked at the MIDPOINT so that
+   * hitting either was a decision somebody made. It is a tidy piece of design and it is wrong for
+   * one reason — *"Thumb dodge/hide stays lateral only. It is NOT how you pick which painting."*
+   * With the thumb choosing the face, a guide who says *"left wall"* is decoration: the runner can
+   * ignore her, lean whichever way she likes, and the twin smash stops being a thing two people do
+   * together. The pin is the instruction, and an evil guide pinning the decoy is the entire lie.
    *
-   * Null when there is no job, no target, or she is somewhere else — all three are "no goal", and
-   * none of them is an error.
+   * 🚨 **SO WITH NO OBJECTIVE PIN THIS RETURNS `null` AND THE BODY STANDS, ON PURPOSE.** It is the
+   * same answer `autoWalkInput` already gives an unpinned runner in a hallway — *"standing still is
+   * a real answer and is not a stall"* — and it costs the same thing, which is that the guide has to
+   * speak. `mission.js` `seekLine` advances to *"You are in it. Two faces. Hit one."* the moment she
+   * arrives, so the screen says why nothing is happening rather than looking broken.
    */
   function jobGoal() {
     if (mission.phase !== 'seek') return null;
-    const here = roomIdAt(runner.pos);
-    if (!here || here !== mission.room) return null;
-    const spec = mission.spec ?? missionFor(1);
-    if (spec.job === JOB.DRILL) {
-      return wallCam?.pos ? { x: wallCam.pos.x, z: wallCam.pos.z } : null;
-    }
-    if (!twins) return null;
-    const L = twins.faces.left, R = twins.faces.right;
-    const live = [L, R].filter((f) => f?.intact && f.pos);
-    if (!live.length) return null;
-    /*
-     * The thumb picks the side. Neutral is the MIDPOINT, so a runner who touches nothing walks at
-     * the pair and has to make a choice to hit either — which is what makes hitting the wrong one
-     * a decision somebody made rather than a coin the game flipped for them.
-     */
-    const lean = perf.stick.x;
-    const pick = Math.abs(lean) < DODGE.dead ? null : (lean < 0 ? L : R);
-    if (pick?.intact && pick.pos) return { x: pick.pos.x, z: pick.pos.z };
-    if (live.length === 1) return { x: live[0].pos.x, z: live[0].pos.z };
-    return { x: (L.pos.x + R.pos.x) / 2, z: (L.pos.z + R.pos.z) / 2 };
+    return resolveObjective(perf.pin);
   }
 
   /**
@@ -1814,12 +1903,12 @@ export async function buildFollowBed(engine, opts = {}) {
    * that exist now are one guide sentence long.
    */
   function replanToPin() {
-    const pin = perf.pin;
     perf.legs = [];
-    if (!pin) return;
-    _goal.set(pin.x, room.floorY ?? 0, pin.z);
+    const goal = pinGoal();
+    if (!goal) return;
+    _goal.set(goal.x, room.floorY ?? 0, goal.z);
     const portals = room.pathPortals?.(runner.pos, _goal, ROUTE_MIN_W, ROUTE_MIN_H) ?? [];
-    perf.legs = legsFor(portals, { x: pin.x, z: pin.z });
+    perf.legs = legsFor(portals, goal);
   }
 
   /**

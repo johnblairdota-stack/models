@@ -19,7 +19,7 @@ import { linkBlock, mergeName, WHISPER_MAX, MAX_PAIRS, pairRemaining, isDone, wh
 import { cardFor, faceDownHtml, mountRoleCard, premiereHtml } from '../party/rolecard.js';
 import { EVIL } from '../party/cast.js';
 import { guideMapSvg } from '../party/guidemap.js';
-import { COMPASS_4, guidePad, pinDoor, pinShape, runnerPad } from '../party/intel-pad.js';
+import { COMPASS_4, guidePad, pinDoor, pinShape, pinSpot, runnerPad } from '../party/intel-pad.js';
 import { pickPlanSeed, planRoomLabels, roomLabel } from '../party/mansion.js';
 import { missionFor, seekLine } from '../party/mission.js';
 import {
@@ -856,7 +856,18 @@ export default async function partyPhone({ params }) {
          * `party-warm` W8c already settled what a blind guide gets. `scope: null` is the shipped
          * map, unchanged.
          */
-        const scope = (seed != null && meMark) ? guidePad(seed, meMark, state.pin) : null;
+        /*
+         * 🎯 **THE MISSION ROOM, OFF THE PUBLIC EVENT — the same read `missionLine` already makes.**
+         * `room.js` puts the room on the `mission.*` event at `VIS.PUBLIC`, so this is a fact this
+         * phone already had; nothing new is asked for and nothing new is entitled. The chips it
+         * unlocks are two targets inside a room the runner is standing in, which the guide can
+         * already see the whole of.
+         */
+        const missionRoom = [...(c.events ?? [])].reverse()
+          .find((e) => String(e.type ?? '').startsWith('mission.'))?.data?.room ?? null;
+        const scope = (seed != null && meMark)
+          ? guidePad(seed, meMark, state.pin, { missionRoom, job })
+          : null;
         guideScope = scope;
         /*
          * 🗺️ **THE MAP IS THE PRIMARY SURFACE, AND THE ORDER OF THIS TEMPLATE IS THE WHOLE OF
@@ -1340,9 +1351,32 @@ export default async function partyPhone({ params }) {
         <span class="pin-to">${g ? esc(g.toLabel) : 'wall'}</span>
       </button>`;
     }).join('');
+    /*
+     * 🎯 **AND WHEN SHE IS STANDING IN THE MISSION ROOM, THE JOB'S OWN TARGETS.**
+     *
+     * John, 2026-09-02: *"Objective chips appear when the runner is in the mission room."*
+     * `intel-pad.js` `guidePad` decides that — one room id against one room id — and hands back an
+     * EMPTY `spots` everywhere else, so this renders nothing outside the gallery without a second
+     * copy of the rule living on the phone.
+     *
+     * ⚠️ **THE DOOR CHIPS STAY UP BESIDE THEM.** A guide who pins a face and then wants her runner
+     * back out of the room must not have to walk her out with a stick that no longer steers; the
+     * north/east/south/west row is how the expedition ends, and hiding it inside the mission room
+     * would be a dead end wearing a feature's clothes.
+     */
+    const spots = (scope.spots ?? []).map((s) => {
+      const on = !!(state.pin && state.pin.kind === s.kind);
+      return `<button type="button" class="pin-chip goal${on ? ' on' : ''}" data-spot="${s.kind}">
+        <span class="pin-dir">goal</span>
+        <span class="pin-to">${esc(s.label)}</span>
+      </button>`;
+    }).join('');
     return `<div class="pin-pad" data-pin-pad>
-      <p class="hint">Pin a door. She walks to it. Then say which one, out loud.</p>
+      <p class="hint">${spots
+        ? 'She is in the room. Pin what she should go at, and say it out loud.'
+        : 'Pin a door. She walks to it. Then say which one, out loud.'}</p>
       <div class="pin-row">${chips}</div>
+      ${spots ? `<div class="pin-row pin-goals" data-goal-row>${spots}</div>` : ''}
       <p class="pin-say" data-pin-say>${esc(scope.say)}</p>
     </div>`;
   }
@@ -1365,17 +1399,25 @@ export default async function partyPhone({ params }) {
    */
   function bindPinPad(scope) {
     if (!scope) return;
+    /*
+     * 📍 ASSIGNMENT, not push. See `state.pin`'s header — one slot is the whole of D2. A door chip
+     * and an objective chip write the SAME slot through the SAME send, which is why a guide who
+     * taps LEFT FACE and then taps NORTH has one pin and not two: `pinDoor` and `pinSpot` both
+     * return a fresh object, and `state.pin = …` is what "replaces" means.
+     */
+    const tap = (pin) => {
+      state.pin = pin;
+      if (pin) {
+        const wire = pinShape(pin);
+        state.client?.send({ t: 'pin', x: wire.x, z: wire.z, roomId: wire.roomId, kind: wire.kind });
+      }
+      paint();
+    };
     root.querySelectorAll('[data-pin]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        // 📍 ASSIGNMENT, not push. See `state.pin`'s header — one slot is the whole of D2.
-        const pin = pinDoor(scope, String(btn.dataset.pin || ''));
-        state.pin = pin;
-        if (pin) {
-          const wire = pinShape(pin);
-          state.client?.send({ t: 'pin', x: wire.x, z: wire.z, roomId: wire.roomId, kind: wire.kind });
-        }
-        paint();
-      });
+      btn.addEventListener('click', () => tap(pinDoor(scope, String(btn.dataset.pin || ''))));
+    });
+    root.querySelectorAll('[data-spot]').forEach((btn) => {
+      btn.addEventListener('click', () => tap(pinSpot(scope, String(btn.dataset.spot || ''))));
     });
   }
 

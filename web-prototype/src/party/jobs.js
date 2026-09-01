@@ -88,14 +88,35 @@ export function twinHang(space, face, floorY = 0) {
   return { x: space.x0 + TWIN.wallInset, y: floorY + TWIN.hangY, z: cz + off, alongX, rotY: Math.PI / 2, face };
 }
 
-/** Opposite wall from the twins. Scenery, not a floorplan. */
-export function camHang(space, floorY = 0) {
+/**
+ * 📷 **TWO BRACKETS, IDENTICAL, AND ONLY THE GUIDE KNOWS WHICH ONE SEES ANYTHING.**
+ *
+ * John, 2026-09-02 (~8:07am Brisbane): *"guides need to also be able to pin objectives like the
+ * paintings or the camera install position."* A pin you can only put in one place is not a choice,
+ * so the DRILL night gets the shape the SMASH night already had: two identical mount points, no
+ * mark on either, and `drillShotFor` deciding which of them is real on the GUIDE's private pad.
+ * An evil guide pins FLOOR; a good one pins HALL. The words are already the show's — `SHOTS` is
+ * `['hall','floor']` and `blindDebrief` is *"the tool is looking at boards"*.
+ *
+ * ⚠️ **`'hall'` RETURNS WHAT THIS FUNCTION RETURNED BEFORE, FIELD FOR FIELD** (plus `shot`). That
+ * is why the default argument exists: `furn-layout.js`'s keep-out, the built mesh and
+ * `target-sight`'s *0 pierced · 0 blind · worst 100% visible* are all measured against that
+ * geometry, and this pass ADDS a second bracket rather than moving the first one.
+ *
+ * 🚨 **`alongX` DESCRIBES THIS HANG'S WALL, NOT THE ROOM'S LONG AXIS.** `hangKeepOut` and
+ * `target-sight`'s `camTarget` both branch on it to decide which way the body's box lies, so the
+ * FLOOR bracket — which is on the perpendicular pair of walls — returns the FLIPPED value. Under
+ * the old single-bracket function the two always coincided, which is why the field reads as if it
+ * were about the room. It never was.
+ */
+export function camHang(space, floorY = 0, shot = 'hall') {
   if (!space) return null;
   const { alongX, cx, cz } = longWall(space);
-  if (alongX) {
-    return { x: cx, y: floorY + WALL_CAM.hangY, z: space.z1 - WALL_CAM.wallInset, alongX, rotY: Math.PI };
+  const use = shot === 'floor' ? 'floor' : 'hall';
+  if (use === 'floor' ? !alongX : alongX) {
+    return { x: cx, y: floorY + WALL_CAM.hangY, z: space.z1 - WALL_CAM.wallInset, alongX: true, rotY: Math.PI, shot: use };
   }
-  return { x: space.x1 - WALL_CAM.wallInset, y: floorY + WALL_CAM.hangY, z: cz, alongX, rotY: -Math.PI / 2 };
+  return { x: space.x1 - WALL_CAM.wallInset, y: floorY + WALL_CAM.hangY, z: cz, alongX: false, rotY: -Math.PI / 2, shot: use };
 }
 
 function mix(seed, episode) {

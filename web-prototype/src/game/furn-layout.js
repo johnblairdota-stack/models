@@ -246,13 +246,32 @@ export function paintingKeepOut(space) {
     TWIN_OFFSET + TWIN.frameW / 2, TWIN.frameD / 2);
 }
 
-/** The episodes-2+ drill target, on the opposite long wall. */
+/**
+ * The episodes-2+ drill targets — **BOTH brackets**, one rect each.
+ *
+ * 🚨 **THE SECOND RECT IS NOT DECORATION.** `jobs.js` `camHang` now answers for two mount points
+ * because the guide pins one of them, and a bracket the placer is free to stand a vitrine in
+ * front of is exactly the bug `target-sight` was written to catch — *24 of 64 seeds place a
+ * prop's body through the mission painting* is the same failure one wall over. The keep-out has
+ * to grow with the target list or the gate measures half the job.
+ *
+ * `${id}.wallcam` keeps its name so nothing that already looks for it has to change; the new one
+ * is `${id}.wallcam-floor`.
+ */
 export function camKeepOut(space) {
-  if (!space) return null;
+  return camKeepOuts(space)[0] ?? null;
+}
+
+export function camKeepOuts(space) {
+  if (!space) return [];
   const w = space.x1 - space.x0, d = space.z1 - space.z0;
-  if (!(w > 0) || !(d > 0)) return null;
-  return hangKeepOut(space, `${space.id}.wallcam`, camHang(space),
-    WALL_CAM.w / 2, WALL_CAM.d / 2);
+  if (!(w > 0) || !(d > 0)) return [];
+  const out = [];
+  for (const [shot, id] of [['hall', `${space.id}.wallcam`], ['floor', `${space.id}.wallcam-floor`]]) {
+    const rect = hangKeepOut(space, id, camHang(space, 0, shot), WALL_CAM.w / 2, WALL_CAM.d / 2);
+    if (rect) out.push(rect);
+  }
+  return out;
 }
 
 /**
@@ -275,8 +294,7 @@ export function missionKeepOuts(spaces = []) {
       if (rect) out.push(rect);
     }
     if (kind === MISSION_DRILL.room) {
-      const rect = camKeepOut(s);
-      if (rect) out.push(rect);
+      out.push(...camKeepOuts(s));
     }
   }
   return out;

@@ -675,6 +675,13 @@ export function injectNightSkin() {
       background:rgba(var(--night-accent-rgb), .13); }
     /* A direction with no door is DIM, never missing — see guidePinPad's header. */
     .pin-chip.none { opacity:.4; }
+    /* 🎯 The job's own targets, when the runner is standing in the mission room. TWO chips, so the
+       row is two columns and they sit under the four doors rather than beside them — a six-wide
+       row at 390px gives every chip 58px, which is under a thumb. No colour of its own: the
+       accent is the same one an armed door chip uses, because a pin is a pin. */
+    .pin-row.pin-goals { grid-template-columns:repeat(2, 1fr); margin-top:7px; }
+    .pin-chip.goal { min-height:60px; border-style:dashed; }
+    .pin-chip.goal.on { border-style:solid; }
     .pin-say { margin:12px 0 0; font-size:26px; font-weight:900; line-height:1.06;
       color:var(--night-accent); }
 
