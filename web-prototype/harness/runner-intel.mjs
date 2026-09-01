@@ -9,6 +9,26 @@
  * and `docs/slices/task-runner-intel.md`; the pads that shipped first are `harness/intel-pads.mjs`.
  *
  * ---------------------------------------------------------------------------------------------
+ * 🎯 **2026-09-02 (~8:07am Brisbane) — THE GUIDE PINS THE JOB, AND THE THUMB STOPPED PICKING IT.**
+ * ---------------------------------------------------------------------------------------------
+ * *"guides need to also be able to pin objectives like the paintings or the camera install
+ * position."*
+ *
+ * RI19 is the chips, their privacy and the pin's new kinds; RI20 is the walk itself, driven. The
+ * ADDITION is easy to see and the REMOVAL is not, so it is stated here as well as at RI19g: the
+ * overnight `jobGoal` read `perf.stick.x` and a nudge picked a twin. With the thumb choosing the
+ * face a guide who says *"left wall"* is decoration, and the twin smash stops being a thing two
+ * people do together. RI19g restates that rule as an executed negative rather than describing it,
+ * which is `expedition-jobs` J7's shape.
+ *
+ * ⚠️ **RI20 EXISTS BECAUSE EVERYTHING ELSE HERE CHECKS ONE LINK.** RI19d proves the resolver reads
+ * a name, RI2 proves the legs come from a live portal answer, RI6 proves the heading lags — and
+ * none of them proves she ARRIVES, which is the whole feature. That gap is `whisper-split`'s shape:
+ * a chain of individually-correct links whose end-to-end behaviour had only been seen in a browser.
+ * RI20 is not a physics test and must not become one — there is no collider in it and none of its
+ * numbers are about a chair being in the way. That is `target-sight`'s job, and it is green.
+ *
+ * ---------------------------------------------------------------------------------------------
  * WHAT THIS GATE IS, AND WHAT IT LEAVES TO ITS NEIGHBOURS
  * ---------------------------------------------------------------------------------------------
  * `task-runner-intel.md` §9 reserved this filename for the BRAIN's gate with checks R1–R9. Two of
@@ -31,6 +51,14 @@
  * this reads the SOURCE, and every such read normalises CRLF: `host-desync` H8 was red on one
  * machine and green in CI against byte-identical content because a multi-line pattern missed a
  * `\r`, and the machine that reddens was not the machine anyone was looking at.
+ *
+ * ⚠️ **AND EVERY SUCH READ GOES THROUGH `codeOf`, BECAUSE THIS PROJECT'S COMMENTS ARE
+ * LOAD-BEARING.** They are full of the exact words the code is forbidden to contain, and three
+ * checks in this file have already caught prose rather than behaviour: RI8e caught `hideTick`'s
+ * header saying it does not pause the clock; RI3c caught `objectives.js`'s header saying it does
+ * not import `realFaceFor`; RI12b caught `bindPinPad`'s comment explaining the pin slot. A ban is
+ * the right gate for *"this does not exist"* and the wrong one for *"this must not be REACHED"* —
+ * `party-warm` W47c learned the same thing about the feed count.
  *
  * Pure node. No browser, no port, no `npm install`.
  */
