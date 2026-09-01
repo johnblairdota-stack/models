@@ -284,6 +284,24 @@ export default async function partyHost({ params }) {
       lookY: +m.lookY || 0,
       run: !!m.run,
       swing: !!m.swing,
+      /*
+       * 🛠️ **`act` WAS MISSING HERE AND THE DRILL HAS THEREFORE NEVER WORKED FROM A PHONE.**
+       *
+       * Found 2026-09-01 while wiring auto-walk. The pad sends it (`party-phone.js` L1153), the
+       * server validates and relays it (`local.mjs`, `MOVE_KEYS` has always carried it), and
+       * `follow-bed.js` reads `c.act` into `perf.act` — which `missionTick` tests as
+       * `perf.act > 0.5` to fill the wall-cam mount. This one hop dropped it, so on every DRILL
+       * night `holding` was false for the whole expedition and the mount could only ever end on
+       * the backstop clock, dark. Nothing was red: no gate walks a value from a thumb to a mount.
+       *
+       * ⚠️ It rides the same coalescing as the stick and NOT the same rule as `swing`. A swing is
+       * an EDGE that must survive a later sample; `act` is a HOLD, so the latest sample is the
+       * truth and a dropped intermediate value is not a lost input.
+       */
+      act: +m.act || 0,
+      // 🫥 HOLD to hide. A hold, like `act` — see `follow.js` MOVE_KEYS. The bed refuses it in an
+      // open hall, so what is forwarded here is a request and never a fact.
+      hide: !!m.hide,
     });
   }
   function queueMove(m) {
@@ -328,6 +346,25 @@ export default async function partyHost({ params }) {
        * reads once per `step`. `pending` holds the latest and the rAF delivers it.
        */
       if (m.t === 'move') { queueMove(m); return; }
+      /*
+       * 📍 **THE GUIDE'S PIN, ON ITS WAY TO THE BODY THAT WALKS IT.**
+       *
+       * The same journey as a thumb stick, one line above, and for the same reason: the mansion
+       * only exists inside this screen's follow slot, so a door a human tapped on a handset
+       * becomes a destination here or nowhere.
+       *
+       * 🚨 **IT IS FORWARDED AND IT IS NOT PAINTED.** Nothing in this file reads it, no chrome
+       * prints it and `syncFollow` never puts it in a follow cue. `party-loop.md`'s "Do not" #1 —
+       * no map, no route, no bearing on the television — is untouched, and
+       * `harness/runner-intel.mjs` RI9 is the control that keeps it that way.
+       *
+       * Not coalesced: a pin is a rare deliberate tap, not a 20 Hz sample, and the whole point of
+       * `queueMove` is to stop a stream from posting into the iframe several times a frame.
+       */
+      if (m.t === 'pin') {
+        sendCue({ kind: 'pin', x: +m.x || 0, z: +m.z || 0, roomId: String(m.roomId || ''), pinKind: String(m.kind || 'room') });
+        return;
+      }
       /*
        * A refusal is an EVENT, so the TV holds it itself rather than the server storing it —
        * there is nothing here for a reconnecting screen to catch up on, and a refusal that

@@ -19,11 +19,14 @@ import { linkBlock, mergeName, WHISPER_MAX, MAX_PAIRS, pairRemaining, isDone, wh
 import { cardFor, faceDownHtml, mountRoleCard, premiereHtml } from '../party/rolecard.js';
 import { EVIL } from '../party/cast.js';
 import { guideMapSvg } from '../party/guidemap.js';
-import { COMPASS_4, guidePad, pinDoor, runnerPad } from '../party/intel-pad.js';
+import { COMPASS_4, guidePad, pinDoor, pinShape, runnerPad } from '../party/intel-pad.js';
 import { pickPlanSeed, planRoomLabels, roomLabel } from '../party/mansion.js';
-import { missionFor } from '../party/mission.js';
+import { missionFor, seekLine } from '../party/mission.js';
 import {
-  JOB, RUNNER_VOICE, GUIDE_VOICE, realFaceFor, drillShotFor, footstepsCue, wallWord, toolLabel,
+  // RUNNER_VOICE / GUIDE_VOICE are no longer imported: with the button rows gone there is nothing
+  // here to iterate. The words themselves are printed in the SAY line as plain copy, and `jobs.js`
+  // stays their one owner for the harness and the recap.
+  JOB, realFaceFor, drillShotFor, footstepsCue, wallWord, toolLabel,
 } from '../party/jobs.js';
 import { intelLine } from '../party/intel.js';
 import { STICK_DEADZONE, warmLabel } from '../party/follow.js';
@@ -78,9 +81,10 @@ export default async function partyPhone({ params }) {
      * thing put on the wire, which is what makes the 20 Hz tick change-gated rather than a
      * metronome. See `startPad`.
      */
-    pad: { x: 0, y: 0, lookX: 0, lookY: 0, run: false, swing: false, act: 0, sent: '', timer: 0 },
-    /** Local voice prompt only. Never put on the wire — T2, buttons send nothing. */
-    voice: { runner: '', guide: '' },
+    pad: {
+      x: 0, y: 0, lookX: 0, lookY: 0, run: false, swing: false, act: 0, hide: false,
+      sent: '', timer: 0,
+    },
     /**
      * 📳 The pad's answer to the last thing the thumb did. `label` is the word under the stick,
      * `kind` is the CSS modifier, `timer` wipes it. See `padFx`.
@@ -763,33 +767,43 @@ export default async function partyPhone({ params }) {
          * she pushes the thumb at the glow. Smash-ready takes the WHOLE bezel cyan — a state of the
          * hammer, never a hint about where to walk.
          *
-         * 🚨 **THE PIN AND THE READY FLAG HAVE NO WIRE YET, AND THE PAD SAYS SO RATHER THAN
-         * PRETENDING.** `net/party/entitle.js`'s `MATRIX` carries neither field; that is Stage 3 of
-         * `task-runner-intel.md` and it wants its own review. Until then this renders the honest
-         * unpinned state, which is not a broken screen: the guide holds the pin and the guide SAYS
-         * it out loud, which is the locked *"voice is in the room"* rule. The bezel is drawn dim
-         * either way so the shape is on the phone the day the field lands.
+         * ✅ **THE PIN IS ON THE WIRE AS OF 2026-09-01, AND THE BEZEL POINTS AT A REAL DOOR.**
+         *
+         * ⚠️ **THIS COMMENT USED TO SAY THE OPPOSITE.** It read *"the pin and the ready flag have
+         * no wire yet, and the pad says so rather than pretending"* — true and honest while the
+         * pin lived on the guide's handset. `you.pin.*` now has four `crew` rows and `you.at.*`
+         * has two `runner` rows, so both ends of the bearing arrive and `bezelOf` can draw one.
+         *
+         * 🚨 **`ready` STILL HAS NO WIRE AND STILL SAYS SO.** Smash-ready is the sledge RAY
+         * intersecting the armed target (D7) and only the follow slot can cast it; there is no
+         * `you.smashReady` row and inventing one would be a second review. `false` is the honest
+         * value, and the whole-bezel arm is the shape waiting for it.
+         *
+         * ⚠️ **NO COORDINATE SURVIVES THIS CALL.** `bezelOf` returns `{edge, from, to}` pixels, a
+         * screen word and a range BAND — you cannot rebuild a map from a glowing segment, which
+         * is the entire reason a bearing is safe in a runner's hand and a map is not (D13).
          */
-        const bez = runnerPad(null, null, false);
+        const bez = runnerPad(frame?.you?.at ?? null, frame?.you?.pin ?? null, false);
         body += `${bezelHtml(bez)}
           <h1>${job === JOB.DRILL ? 'You drill.' : 'You smash.'}</h1>
           <p class="hint">${topDown
-            ? 'Eyes on the TV. The stick is the room — push where you want to go. Hold RUN, tap SWING.'
-            : 'Eyes on the TV. Left stick walks into the shot. Right stick looks. Hold RUN, tap SWING.'}</p>
+            ? 'Eyes on the TV. She walks to the door your guide pinned. The stick only steps you left or right.'
+            : 'Eyes on the TV. She walks to the pinned door on her own. The stick steps you sideways; the right stick looks.'}</p>
           <p class="hint">${job === JOB.DRILL
-            ? 'No map. Say CLOSE, LATE or GOING out loud from the cue, then hold DRILL. HOLD from your guide means let go. Clock still runs.'
+            ? 'No map. Say CLOSE, LATE or GOING out loud, then hold DRILL. HOLD from your guide means let go. Clock still runs.'
             : 'Listen to your guide — they have the map, you have the hammer. Two identical faces. No mark on either.'}</p>
-          ${missionLine(frame)}
+          ${missionLine(frame, frame?.you?.here ?? null)}
           ${hereLine(frame)}
           ${job === JOB.SMASH ? runnerSmashFaces() : runnerDrillPad(c.worldSeed, frame?.airingEpisode ?? 1)}
           <div class="stick-wrap${topDown ? ' top' : ''}">
             <div class="stick-col">
               <div class="stick" id="stick"><div class="nub" data-nub></div></div>
-              <div class="stick-cap">Move</div>
+              <div class="stick-cap">Dodge</div>
             </div>
             <div class="stick-side">
               <button class="stick-btn" id="run-btn" type="button">Run</button>
               <button class="stick-btn swing" id="swing-btn" type="button">${job === JOB.SMASH ? 'Hit' : 'Swing'}</button>
+              <button class="stick-btn hide" id="hide-btn" type="button">Hide<span>needs cover</span></button>
               ${job === JOB.DRILL ? '<button class="stick-btn drill" id="drill-btn" type="button">Drill<span>loud while down</span></button>' : ''}
             </div>
             ${topDown ? '' : `<div class="stick-col">
@@ -844,9 +858,25 @@ export default async function partyPhone({ params }) {
          */
         const scope = (seed != null && meMark) ? guidePad(seed, meMark, state.pin) : null;
         guideScope = scope;
-        body += `<h1>${scope ? 'One door ahead.' : 'You talk.'}</h1>
-          <p class="hint">The map is yours. The TV does not get it — call the rooms out loud.</p>
-          ${scope ? '<p class="hint">You see her room and what it opens onto. That is all there is.</p>' : ''}
+        /*
+         * 🗺️ **THE MAP IS THE PRIMARY SURFACE, AND THE ORDER OF THIS TEMPLATE IS THE WHOLE OF
+         * THAT.** John, 2026-09-01: *"Guide E neighbours map is the PRIMARY surface, readable at
+         * ~390x844. Pin chips in thumb country under the map… Real Aim stays a private one-liner
+         * and must not shrink the map."*
+         *
+         * What was above the map before: an `h1`, two hint paragraphs and, on a drill night, a
+         * whole three-button row further down that pushed the pin chips off the bottom of a 390×844
+         * screen. The map is what she is reading and the chips are what her thumb reaches, so the
+         * map goes FIRST at full width and the chips sit directly under it where a thumb rests.
+         * The heading is a single line above it; everything explanatory moved below the chips or
+         * out entirely.
+         *
+         * ⚠️ **`.guide-sheet` IS WHAT LETS THE MAP GROW.** `night-skin.js` gives the map a taller
+         * `max-height` inside this class only, so the unscoped map elsewhere is unchanged — see
+         * `GUIDE_MAP_CSS`'s own comment about a reskin that misses one surface.
+         */
+        body += `<div class="guide-sheet">
+          <h1 class="gs-title">${scope ? 'One door ahead.' : 'You talk.'}</h1>
           ${seed == null
             ? '<p class="hint gm-blind">Waiting for the house…</p>'
             : guideMapSvg({
@@ -857,12 +887,13 @@ export default async function partyPhone({ params }) {
               jam,
               scope,
             })}
-          <p class="hint ${hunterMark ? '' : 'gm-blind'}" data-gm-note>${esc(mapNote(jam, hunterMark))}</p>
           ${guidePinPad(scope)}
+          <p class="hint gs-note ${hunterMark ? '' : 'gm-blind'}" data-gm-note>${esc(mapNote(jam, hunterMark))}</p>
+          ${missionLine(frame, scope?.hereId ?? null)}
           ${guideJobPad(job, c.worldSeed, frame?.airingEpisode ?? 1)}
-          ${missionLine(frame)}
-          <p class="hint">Cameras live ${frame?.cameras?.unlocked ?? '—'}.</p>
-          ${intelBlock(frame, { productionOnly: true })}`;
+          <p class="hint gs-note">The TV does not get this map. Call the rooms out loud. Cameras live ${frame?.cameras?.unlocked ?? '—'}.</p>
+          ${intelBlock(frame, { productionOnly: true })}
+        </div>`;
       } else {
         /*
          * 👏 THE PAD SENDS. Until now these four buttons printed a word on this phone and
@@ -1064,11 +1095,18 @@ export default async function partyPhone({ params }) {
     }
     const drillBtn = root.querySelector('#drill-btn');
     if (drillBtn) {
+      /*
+       * ⚠️ **THE OLD "HAVE YOU TAPPED A WORD YET" GUARD IS GONE, AND IT WAS THE SECOND REASON THE
+       * DRILL NEVER WORKED.** It refused to start the mount until the player had tapped one of
+       * the CLOSE / LATE / GOING buttons — buttons that sent nothing to anybody and are now
+       * removed (John, 2026-09-01: *"Drop fake tappable CLOSE/LATE/GOING and GO/HOLD cue
+       * BUTTONS"*), so it was a decorative prerequisite for a real action. The first reason was
+       * one hop further on: `party-host.js` `flushMove` dropped `act` entirely.
+       *
+       * The rule it was reaching for is unchanged and is enforced where it belongs — in the room.
+       * The guide says GO. Nothing on this pad can send that, so nothing on this pad can check it.
+       */
       const down = () => {
-        if (!state.voice.runner) {
-          padFx('Say it first', '', 18);
-          return;
-        }
         state.pad.act = 1;
         drillBtn.classList.add('on');
         sendPad();
@@ -1082,7 +1120,23 @@ export default async function partyPhone({ params }) {
       drillBtn.addEventListener('pointerup', up);
       drillBtn.addEventListener('pointercancel', up);
     }
-    bindVoicePad();
+    /*
+     * 🫥 **HIDE — a HOLD, and the pad never learns whether it worked.**
+     *
+     * Deliberately: `runner-intel.js` `coverNear` refuses it in an open hall, and that refusal
+     * happens in the follow bed where the furniture is. A pad that lit up green only when cover
+     * was in reach would be a cover DETECTOR in the runner's hand — a second information channel
+     * on the thing she is holding, which is the exact thing D13 took off this screen. She looks at
+     * the television and sees whether the body ducked, like everybody else in the room does.
+     */
+    const hideBtn = root.querySelector('#hide-btn');
+    if (hideBtn) {
+      const down = () => { state.pad.hide = true; hideBtn.classList.add('on'); sendPad(); };
+      const up = () => { state.pad.hide = false; hideBtn.classList.remove('on'); sendPad(); };
+      hideBtn.addEventListener('pointerdown', down);
+      hideBtn.addEventListener('pointerup', up);
+      hideBtn.addEventListener('pointercancel', up);
+    }
     startPad();
   }
 
@@ -1151,8 +1205,11 @@ export default async function partyPhone({ params }) {
       run: !!p.run,
       swing: !!swing,
       act: +p.act || 0,
+      // 🫥 HOLD to hide. A hold like `act`, so it joins the change-gated key below rather than
+      // becoming an edge — and it is a REQUEST: the bed refuses it with no furniture in reach.
+      hide: !!p.hide,
     };
-    const key = `${msg.x}|${msg.y}|${msg.lookX}|${msg.lookY}|${msg.run}|${msg.act}`;
+    const key = `${msg.x}|${msg.y}|${msg.lookX}|${msg.lookY}|${msg.run}|${msg.act}|${msg.hide}`;
     if (!swing && key === p.sent) return;
     p.sent = key;
     state.client?.send(msg);
@@ -1170,8 +1227,7 @@ export default async function partyPhone({ params }) {
     state.padFx.label = '';
     state.padFx.kind = '';
     state.pad.act = 0;
-    state.voice.runner = '';
-    state.voice.guide = '';
+    state.pad.hide = false;
     if (!state.pad.timer) return;
     clearInterval(state.pad.timer);
     state.pad.timer = 0;
@@ -1222,14 +1278,27 @@ export default async function partyPhone({ params }) {
     </div>`;
   }
 
+  /*
+   * 🗣️ **THE THREE TAPPABLE WORDS ARE GONE, AND THE RULE THEY WERE DRESSED AS IS STRONGER FOR IT.**
+   *
+   * John, 2026-09-01: *"Drop fake tappable CLOSE/LATE/GOING and GO/HOLD cue BUTTONS. Voice stays
+   * in the room. One SAY line of text is fine. FOOTSTEPS can stay as a small line, not a 3-button
+   * row."*
+   *
+   * The buttons were honest about themselves — they printed *"buttons send nothing"* right above
+   * a row of buttons — and that is exactly what was wrong with them. A control that does nothing
+   * teaches a player that the pad is where the game happens, on the one seat whose whole job is to
+   * be looking at a television and listening to a person. Worse, one of them had grown teeth: the
+   * DRILL button refused to start the mount until CLOSE / LATE / GOING had been tapped, so a
+   * decorative widget was gating a real action (see `startPad`).
+   *
+   * `jobs.js` `voiceSendsNothing()` is untouched and still returns true. It used to be a promise
+   * about six buttons; with nothing to press it is a statement about the whole pad.
+   */
   function runnerDrillPad(seed, episode) {
     const cue = footstepsCue(Date.now(), seed ?? 0);
-    const said = state.voice.runner;
     return `<div class="voice-pad" data-job-pad="drill">
-      <p class="hint">You say it. Out loud. Buttons send nothing.</p>
-      <div class="voice-row" data-voice-role="runner">
-        ${RUNNER_VOICE.map((w) => `<button type="button" class="voice-btn${said === w ? ' on' : ''}" data-voice="${w}">${w}</button>`).join('')}
-      </div>
+      <p class="say-line">Say <strong>CLOSE</strong>, <strong>LATE</strong> or <strong>GOING</strong> out loud.</p>
       <div class="voice-cue" data-foot-cue>FOOTSTEPS · ${esc(cue)}</div>
     </div>`;
   }
@@ -1244,12 +1313,8 @@ export default async function partyPhone({ params }) {
       </div>`;
     }
     const shot = drillShotFor(seed, episode);
-    const said = state.voice.guide;
     return `<div class="voice-pad" data-job-pad="drill-guide">
-      <p class="hint">You talk. Say GO when you think he cannot hear it. Say HOLD to freeze the drill. Out loud · buttons send nothing.</p>
-      <div class="voice-row" data-voice-role="guide">
-        ${GUIDE_VOICE.map((w) => `<button type="button" class="voice-btn ${w === 'HOLD' ? 'hold' : 'go'}${said === w ? ' on' : ''}" data-voice="${w}">${w}</button>`).join('')}
-      </div>
+      <p class="say-line">Say <strong>GO</strong> when he cannot hear it. Say <strong>HOLD</strong> to stop her.</p>
       <p class="voice-know">REAL aim is <strong>${esc(toolLabel(shot))}</strong>. Recap will say seated either way. She cannot see this.</p>
     </div>`;
   }
@@ -1276,18 +1341,39 @@ export default async function partyPhone({ params }) {
       </button>`;
     }).join('');
     return `<div class="pin-pad" data-pin-pad>
-      <p class="hint">Pin a door — then say it out loud. Buttons send nothing.</p>
+      <p class="hint">Pin a door. She walks to it. Then say which one, out loud.</p>
       <div class="pin-row">${chips}</div>
       <p class="pin-say" data-pin-say>${esc(scope.say)}</p>
     </div>`;
   }
 
+  /**
+   * 📍 **AND NOW THE PIN SENDS — Stage 3, 2026-09-01.**
+   *
+   * ⚠️ **THIS COMMENT USED TO SAY THE OPPOSITE AND THE OLD SENTENCE IS WORTH KEEPING.** The pin
+   * was LOCAL, on purpose, and *"Buttons send nothing"* was printed on this pad beside it: the pin
+   * reached the runner because the guide SAID it, which is the locked *"voice is in the room"*
+   * rule. John's lock replaces the reason rather than the rule — *"AUTO-WALK the guide's pin, one
+   * door at a time… the pin MUST go on the wire"* — because a body cannot walk a fact that never
+   * left the phone holding it. **The guide still has to say it out loud**; what changed is that
+   * the runner's feet now follow as well as her ears, and the two are allowed to disagree, which
+   * is the whole of the lie.
+   *
+   * Assignment stays assignment: `state.pin` is one slot, `pinDoor` returns a fresh object, and
+   * the message carries exactly `intel-pad.js` `PIN_KEYS`. The server refuses it from anybody who
+   * is not `pair.guide` and refuses any shape that is not those four fields.
+   */
   function bindPinPad(scope) {
     if (!scope) return;
     root.querySelectorAll('[data-pin]').forEach((btn) => {
       btn.addEventListener('click', () => {
         // 📍 ASSIGNMENT, not push. See `state.pin`'s header — one slot is the whole of D2.
-        state.pin = pinDoor(scope, String(btn.dataset.pin || ''));
+        const pin = pinDoor(scope, String(btn.dataset.pin || ''));
+        state.pin = pin;
+        if (pin) {
+          const wire = pinShape(pin);
+          state.client?.send({ t: 'pin', x: wire.x, z: wire.z, roomId: wire.roomId, kind: wire.kind });
+        }
         paint();
       });
     });
@@ -1320,27 +1406,25 @@ export default async function partyPhone({ params }) {
       </div>`;
   }
 
-  function bindVoicePad() {
-    root.querySelectorAll('[data-voice]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const word = String(btn.dataset.voice || '').toUpperCase();
-        const role = btn.closest('[data-voice-role]')?.dataset.voiceRole;
-        if (role === 'runner' && RUNNER_VOICE.includes(word)) state.voice.runner = word;
-        if (role === 'guide' && GUIDE_VOICE.includes(word)) state.voice.guide = word;
-        btn.parentElement?.querySelectorAll('[data-voice]').forEach((b) => b.classList.toggle('on', b === btn));
-        // Local only. Do not send. The six hear it in the room.
-      });
-    });
-  }
 
-  function missionLine(frame) {
+  /**
+   * 🧭 **AND IT ADVANCES ONCE SHE IS IN THE ROOM** — John, 2026-09-01: *"stop saying Find the
+   * gallery."*
+   *
+   * The room the job is in rides the PUBLIC `mission.*` event (`room.js` L1138), which is where
+   * the phase already comes from, so this is one more field off a record every phone gets.
+   * `here` is the seat's own room and differs per seat by design: `you.here` is `runner` audience
+   * and the guide has `scope.hereId` off her own map. A seated watcher passes neither and gets
+   * the unchanged line, which is correct — they are not in any room.
+   */
+  function missionLine(frame, here = null) {
     const evs = state.client?.events ?? [];
     const last = [...evs].reverse().find((e) => String(e.type ?? '').startsWith('mission.'));
     const phase = last ? String(last.type).slice('mission.'.length) : 'seek';
     const spec = missionFor(frame?.airingEpisode ?? 1);
-    if (phase === 'done') return `<p class="goal">Home. That is the run.</p>`;
-    if (phase === 'return') return `<p class="goal">${esc(spec.home)}</p>`;
-    return `<p class="goal">${esc(spec.seek)}</p>`;
+    return `<p class="goal">${esc(seekLine(spec, {
+      here, missionRoom: last?.data?.room ?? null, phase,
+    }))}</p>`;
   }
 
   /**

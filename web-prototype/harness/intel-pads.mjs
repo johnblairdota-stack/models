@@ -42,7 +42,7 @@ import { fileURLToPath } from 'node:url';
 import { guideMapSvg } from '../src/party/guidemap.js';
 import { PLAN_YAW } from '../src/party/follow.js';
 import { pickPlanSeed, planRegions } from '../src/party/mansion.js';
-import { AUDIENCE, MATRIX, audienceFor } from '../net/party/entitle.js';
+import { AUDIENCE, MATRIX, audienceFor, entitled, project } from '../net/party/entitle.js';
 import {
   BEZEL, COMPASS_4, COMPASS_8, GUIDE_PAD_KEYS, PAD_FORBIDDEN, PIN_KEYS, RUNNER_PAD_KEYS,
   SCREEN_RIGHT, SCREEN_UP,
@@ -477,27 +477,60 @@ console.log('\n  the television, and the wire');
 }
 
 /*
- * 🚨 **A FAIL-CLOSED GUARD PLACED BEFORE THE FEATURE — the `room-ghosts` RG5b shape.**
+ * ✅ **THE GUARD FIRED, AND THIS IS WHAT IT WAS FOR — Stage 3 landed 2026-09-01.**
  *
- * The pin has NO WIRE. `MATRIX` is deny-by-default and carries no pin row and no smash-ready row,
- * so `bezelOf` renders the unpinned state on a live night and the guide's pin travels the way the
- * locked rule says the calls travel: **out loud, in the room.** That is Stage 3 of
- * `task-runner-intel.md` and it is budgeted its own review.
+ * The line above used to read *"there is no pin on the wire yet, and `crew` is the audience
+ * waiting for it"*, and its whole job was to go RED the day one landed so the audience had to be
+ * chosen DELIBERATELY rather than by whoever typed the row. It went red on the first run of the
+ * auto-walk branch. The answer it was holding open is the answer that was taken: **`crew`.**
  *
- * Stating the zero-of-zero rather than letting it read as coverage is the point. The day somebody
- * adds a pin field, this goes RED and they have to decide the audience DELIBERATELY — and the
- * answer is already written down: `crew`, which is runner-or-guide and exists in `AUDIENCE`
- * today. Never `all`; a seated phone must not learn where the target is.
+ * The reason John's lock needs the wire at all: *"AUTO-WALK the guide's pin, one door at a time…
+ * the pin MUST go on the wire."* A body cannot walk a fact that never left the handset holding it.
+ *
+ * 🚨 **THE TWO WRONG AUDIENCES ARE BOTH ASSERTED AGAINST, BECAUSE EACH FAILS IN ITS OWN
+ * DIRECTION.** `all` puts the target's bearing on eight screens and deletes the guide's job of
+ * SAYING it. `guide` alone is what shipped before tonight and leaves the runner's bezel pointing
+ * at nothing. Neither is a thing a reader would notice in a table of forty-seven rows, so both are
+ * executed here.
  */
 {
   const rows = MATRIX.map(([k]) => k);
-  const pinRows = rows.filter((k) => /(^|\.)pin|bearing|smashReady|ready$/i.test(k));
-  const phoneSends = /send\(\s*\{\s*t:\s*'pin'/.test(phoneSrc);
-  t('IP11b guard · there is no pin on the wire yet, and `crew` is the audience waiting for it',
-    pinRows.length === 0 && !phoneSends
-    && AUDIENCE.includes('crew') && audienceFor('you.here') === 'runner'
-    && audienceFor('flyover.marks[].x') === 'guide',
-    `${rows.length} matrix rows, ${pinRows.length} of them a pin · Stage 3 · goes RED the day one lands`);
+  const pinRows = rows.filter((k) => /(^|\.)pin$|(^|\.)pin\./i.test(k));
+  const phoneSends = /t: 'pin'/.test(phoneSrc);
+  t('IP11b · the pin is on the wire at `crew` — never `all`, never guide-only',
+    pinRows.length === 4
+    && pinRows.every((k) => audienceFor(k) === 'crew')
+    && ['x', 'z', 'roomId', 'kind'].every((k) => pinRows.includes(`you.pin.${k}`))
+    && phoneSends,
+    `${rows.length} matrix rows · ${pinRows.join(' ')} · all at ${audienceFor('you.pin.x')}`);
+  /*
+   * `entitled` is the function every projection runs through, so the four seats are asked of IT
+   * rather than of a reading of the table. A seated phone and the television are the two that must
+   * come back false, and the television is the one that would be a D9 breach.
+   */
+  const seat = (o) => entitled('crew', { isTV: false, alignment: 'good', seatRole: null, ownerId: null, playerId: 'p1', ...o });
+  t('IP11c · runner and guide are told; a seated phone and the TV are not',
+    seat({ seatRole: 'runner' }) && seat({ seatRole: 'guide' })
+    && !seat({ seatRole: null })
+    && !entitled('crew', { isTV: true, alignment: 'good', seatRole: 'guide', ownerId: null, playerId: null }),
+    'runner ok · guide ok · seated refused · TV refused');
+  /*
+   * 🚨 **AND THE CONTROL, WHICH IS THE HALF A ROW CANNOT GIVE YOU.** `project` is deny-by-default,
+   * so a row's absence is a drop and a row's presence is a pass — but neither says the FILTER
+   * agrees. Two frames, identical but for the seat, projected through the shipped `project`.
+   */
+  const full = { you: { id: 'p1', pin: { x: 4.5, z: -1.25, roomId: 'r0.hall', kind: 'room' } } };
+  const ctx = (o) => ({ isTV: false, alignment: 'good', seatRole: null, ownerId: 'p1', playerId: 'p1', ...o });
+  const asRunner = project(full, ctx({ seatRole: 'runner' })).frame;
+  const asSeated = project(full, ctx({ seatRole: null })).frame;
+  const asTV = project(full, { isTV: true, alignment: 'good', seatRole: null, ownerId: null, playerId: null }).frame;
+  t('IP11d control · the shipped projection really delivers it to one seat and prunes it for the other',
+    asRunner?.you?.pin?.x === 4.5 && asRunner.you.pin.roomId === 'r0.hall'
+    && asSeated?.you?.pin === undefined
+    && asTV?.you?.pin === undefined
+    && project(full, ctx({ seatRole: 'runner' })).unrowed.length === 0,
+    `runner ${JSON.stringify(asRunner?.you?.pin)} · seated ${JSON.stringify(asSeated?.you ?? null)}`
+    + ` · tv ${JSON.stringify(asTV ?? null)}`);
 }
 
 /*

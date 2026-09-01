@@ -33,6 +33,9 @@ import { coverageRoomOf } from './mansion.js';
 import { mapFeed } from './mapfeed.js';
 import { missionFor } from './mission.js';
 import { drillShotFor, FAIL_CHROME, JOB } from './jobs.js';
+// 📍 The pin's shape lives with the rest of the follow wire, so the TV, the server and the phone
+// all read one schema. See `follow.js` `PIN_WIRE_KEYS`.
+import { pinWireShape } from './follow.js';
 
 export const PHASES = ['LOBBY', 'CASTING', 'EXPEDITION', 'DEBRIEF', 'VERDICT'];
 
@@ -110,6 +113,21 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
      * is applied, and only ever as `you.intel`.
      */
     world: null,
+    /**
+     * 📍 **THE GUIDE'S ONE PIN, ONCE — and "one" is the whole of D2.**
+     *
+     * *"A second tap REPLACES the pin; it does not append to it. There is no pin list, no
+     * ordering, no undo stack."* So it is a single slot holding `{x, z, roomId, kind}` or null,
+     * and `setPin` ASSIGNS — assignment is what "replaces" means, and there is no array here for
+     * a route to accumulate in. `src/party/follow.js` `pinWireShape` is the only thing that may
+     * build the value, so a widened message cannot widen this.
+     *
+     * ⚠️ **IT IS CLEARED BY A NEW CASTING, NOT BY A CLOCK.** A pin has no expiry (D2), and the
+     * thing that ends its meaning is a different pair standing up. Left alive across a Casting it
+     * would send the NEXT runner at a door the LAST guide picked, which is a route surviving the
+     * conversation that made it.
+     */
+    pin: null,
     /** A hunter sighting up to `STALE_MAX` old — what a good player is allowed to be told. */
     worldStale: null,
     /** Monotonic, so the vague read can be sporadic without a clock or an RNG. */
@@ -208,6 +226,16 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       base.you = { ...base.you, here: state.world.runner.room };
     }
     /*
+     * …and WHERE in that room. Same seat, same reasoning, one step finer — see `you.at` in
+     * `entitle.js`. It is the other end of the bezel's bearing: the pin arrived on the wire
+     * tonight and `bezelOf` needs two points to draw one segment. Set separately from `here` so a
+     * report carrying a coordinate but no room still delivers it.
+     */
+    if (!sock.isTV && sock.seatRole === 'runner' && base.you
+      && Number.isFinite(Number(state.world?.runner?.x))) {
+      base.you = { ...base.you, at: { x: state.world.runner.x, z: state.world.runner.z } };
+    }
+    /*
      * WHICH CAMERA THE SHOW IS ON — the same seat, the same reasoning, one field wider.
      *
      * The runner's controls change with the perspective: absolute under the plan-locked top-down,
@@ -217,6 +245,23 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
      */
     if (!sock.isTV && sock.seatRole === 'runner' && base.you && state.world?.view) {
       base.you = { ...base.you, view: state.world.view };
+    }
+    /*
+     * 📍 **THE PIN REACHES BOTH SEATS, AND THE GUIDE IS NOT AN AFTERTHOUGHT ON THAT LIST.**
+     *
+     * The runner needs it because her bezel points at it and her body walks it. The guide needs it
+     * back off the wire — rather than trusting the copy on her own handset — for the reason
+     * `party-host.js` `resolveBeatClaim` was written: a locally-set fact is PROVISIONAL until the
+     * server names it, and a guide whose phone shows a pin the server refused would be shouting
+     * about a door nobody is walking to.
+     *
+     * `crew` is stated once, in `entitle.js`. This block only decides that the field is OFFERED to
+     * the table; the table decides who is entitled. A seated phone and the television both fall
+     * out here because neither carries a `crew` seat role, and the TV carries no `you` at all.
+     */
+    if (!sock.isTV && base.you && state.pin
+      && (sock.seatRole === 'runner' || sock.seatRole === 'guide')) {
+      base.you = { ...base.you, pin: { ...state.pin } };
     }
     /*
      * 🗺️ **`|| state.world` — AND WITHOUT IT THE GUIDE'S NEW MAP IS A FLOOR PLAN WITH NO MARKS ON
@@ -526,6 +571,7 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
      * run, so frame.episode would say 2 on the first walk. Sibling of #18 VERDICT lie.
      */
     state.airingEpisode = state.episode;
+    state.pin = null;                               // 📍 same rule as `beginCasting`. One pair, one pin.
     setPhase('CASTING');
     // 🚨 THE PAIR COMES OUT OF A BALLOT, NOT A SEAT INDEX. `ballot.js` resolves every tie
     // deterministically and publicly, so casting never stalls and never waits on a human.
@@ -828,6 +874,9 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       state.liveLiving = null;
       state.lynchVotes = {};
       state.failChromeSent = false;
+      // 📍 A pin belongs to the pair that made it. See `state.pin`'s header — kept alive across a
+      // Casting it would send the NEXT runner at a door the LAST guide picked.
+      state.pin = null;
       revealPendingTool();
       for (const s of sockets) {
         if (s.isTV) continue;
@@ -1021,6 +1070,30 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
      *
      * @returns {boolean} true when the mission phase changed, so the transport can act on it
      */
+    /**
+     * 📍 **THE GUIDE PINS A DOOR. The room decides whether that is allowed, and stores ONE.**
+     *
+     * ⚠️ **THE SENDER CHECK IS HERE AS WELL AS ON THE TRANSPORT, AND THAT IS NOT BELT-AND-BRACES
+     * FOR ITS OWN SAKE.** `net/party/local.mjs` already refuses a `t:'pin'` from anybody who is
+     * not `pair.guide`, exactly as it refuses a `t:'move'` from anybody who is not `pair.runner`.
+     * But `setWorld` right below has a header explaining that `playEpisode` CLEARS every
+     * `seatRole` before the live run is over and has to re-assert them from `state.pair` — so
+     * "who is the guide" has two answers in this file depending on when you ask, and the durable
+     * one is `state.pair`. Asking it here means the store cannot be written by a stale seat.
+     *
+     * Returns the stored pin, or `null` when it was refused — so the transport can tell the TV
+     * about a pin that actually landed rather than about one that was merely sent.
+     */
+    setPin(playerId, pin) {
+      if (!playerId || state.pair?.guide !== playerId) return null;
+      const clean = pinWireShape(pin);
+      // 🚨 ASSIGNMENT, NOT PUSH. D2: a second tap REPLACES. A null clears, which is how a guide
+      // takes a bad call back without inventing an undo stack to do it with.
+      state.pin = clean;
+      broadcast();
+      return clean;
+    },
+
     setWorld({ runner = null, hunter = null, mission = null, view = null } = {}) {
       const wasPhase = state.world?.mission?.phase ?? 'none';
       state.worldTick += 1;

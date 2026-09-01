@@ -731,7 +731,16 @@ t('G4 · this file\'s hang matches `jobs.js` / follow-bed twins — it re-derive
 t('G5 · ...and the swing: eye, body, the fixed pitch, both reaches, and the 1.25 m collider',
   /this\.radius = this\.height \* 0\.20/.test(src('src/game/player.js'))
   && /this\.aimPitch = -0\.06;/.test(src('src/game/player.js'))
-  && /aimYaw: operator\.basisYaw\(\),/.test(src('src/game/follow-bed.js'))
+  /*
+   * ⚠️ **CLAUSE 3 CHANGED SOURCE ON 2026-09-01; THE FACT IT ASSERTS DID NOT.** It used to read
+   * `aimYaw: operator.basisYaw(),` — the driven branch handing the body the CAMERA's yaw. Under
+   * John's auto-walk lock the yaw the body is given is the WALK's heading, because the walk is
+   * what steers now and feeding the camera back in would turn the robot every time the operator
+   * drifted. The thing this file cares about is unchanged and is why clause 4 sits right under it:
+   * the runner is handed a YAW and never a PITCH, so the swing is one shallow fan pinned at
+   * −0.06 rad and not a sweepable cone. That is the whole basis of this gate's geometry.
+   */
+  && /aimYaw: perf\.heading,/.test(src('src/game/follow-bed.js'))
   && !/aimPitch:/.test(src('src/game/follow-bed.js'))                       // clause 4, still true
   && /const PAINTING_REACH = WEAPON_RANGE\.sledge \+ 0\.35;/.test(src('src/game/follow-bed.js'))
   && /_paintRay\.far = PAINTING_REACH;/.test(src('src/game/follow-bed.js'))

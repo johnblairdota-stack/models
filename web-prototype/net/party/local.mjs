@@ -39,7 +39,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { createRoom } from '../../src/party/room.js';
 import { OUTCOME } from '../../src/party/win.js';
-import { WARM_STAGES, moveViolations, warmPct, worldViolations } from '../../src/party/follow.js';
+import { WARM_STAGES, moveViolations, pinViolations, warmPct, worldViolations } from '../../src/party/follow.js';
 import {
   isShowBeat, missionEndsRun, recapAfterMs, nextShowBeat, holdMsFor, remainingMs,
   CASTING_BACKSTOP_MS,
@@ -1687,7 +1687,41 @@ function handleClient(room, bound, self, msg) {
       t: 'move', x: +msg.x || 0, y: +msg.y || 0,
       lookX: +msg.lookX || 0, lookY: +msg.lookY || 0,
       run: !!msg.run, swing: !!msg.swing, act: msg.act ?? 0,
+      // 🫥 A HOLD, not a verb — see `follow.js` MOVE_KEYS. It is a REQUEST: the TV refuses it in
+      // an open hall, because hide is armour and armour needs a piece of furniture.
+      hide: !!msg.hide,
     };
+    for (const s of room.game.sockets) if (s.isTV) push(room, s.id, out);
+    return;
+  }
+
+  /*
+   * 📍 **THE GUIDE PINS A DOOR — Stage 3, landed 2026-09-01.**
+   *
+   * 🚨 **IT TRAVELS TWICE, BY TWO DIFFERENT MECHANISMS, AND THE SPLIT IS THE DESIGN.**
+   *
+   *   · to the TELEVISION as a directed CONTROL INPUT — the same shape and the same reasoning as
+   *     `t:'move'` directly above. The TV owns the body, so the TV must be told where the body is
+   *     being sent. Directed rather than fanned for `move`'s own reason and for a second one that
+   *     matters more: a fanned pin is the whole room being told where the target is.
+   *   · to the two CREW PHONES as frame state, because `room.setPin` broadcasts and
+   *     `entitle.js` carries four `you.pin.*` rows at audience `crew`. The runner's bezel points
+   *     at it; the guide reads her own pin back off the wire rather than trusting her local copy,
+   *     which is `resolveBeatClaim`'s lesson one screen over.
+   *
+   * ⚠️ **THE TV IS TOLD, AND THE TV STILL DRAWS NO MAP.** `party-loop.md`'s "Do not" #1 is about
+   * what is on the shared SCREEN, not about what the renderer knows — it already knows where every
+   * body in the house is standing, because it is the one moving them. `harness/runner-intel.mjs`
+   * RI9 is the control that keeps the pin off the picture.
+   *
+   * The sender check is `pair.guide`, and it is `room.setPin` that applies it — see its header for
+   * why the durable answer to "who is the guide" lives in `state.pair` rather than on the socket.
+   */
+  if (msg.t === 'pin' && self && !isTV && self.playerId) {
+    if (pinViolations(msg).length) return;
+    const stored = room.game.setPin(self.playerId, msg);
+    if (!stored) return;
+    const out = { t: 'pin', x: stored.x, z: stored.z, roomId: stored.roomId, kind: stored.kind };
     for (const s of room.game.sockets) if (s.isTV) push(room, s.id, out);
     return;
   }

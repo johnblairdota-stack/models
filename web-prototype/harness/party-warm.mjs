@@ -178,6 +178,12 @@ console.log('\nparty-warm — the lobby-warm night');
     { kind: 'pair', pairs: [{ a: 'p1', b: 'p2', name: 'JELLIE' }] },
     // 🔨 The nominator swings. Public ids; SHOWRUNNER is the taken-nominator sentinel.
     { kind: 'execute', executioner: 'p1', target: 'p2' },
+    /*
+     * 📍 Where the guide sent her. The one cue the television is TOLD and may not DRAW — the
+     * mansion lives in the follow slot, so a door tapped on a handset becomes a destination here
+     * or nowhere. `runner-intel.mjs` RI9 is the control that keeps it off the picture.
+     */
+    { kind: 'pin', x: 1.5, z: -2.0, roomId: 'r0.hall', pinKind: 'room' },
   ];
   let clean = 0;
   for (const cue of GOOD) {
@@ -1174,9 +1180,20 @@ console.log('\nparty-warm — the lobby-warm night');
 
   const phonePad = await readFile(new URL('../src/views/party-phone.js', import.meta.url), 'utf8');
   const bedSrcFeel = await readFile(new URL('../src/game/follow-bed.js', import.meta.url), 'utf8');
-  t('W15p · the phone nub and the bed both read the exported zone, not a restated 0.12',
+  /*
+   * ⚠️ **`stickCamMove(` LEFT THE BED ON 2026-09-01 AND THIS CHECK HAD TO STOP ASKING FOR IT.**
+   * John's lock: the runner AUTO-WALKS the guide's pin and *"the STICK is a lateral dodge only"*,
+   * so the driven branch no longer turns a 2-axis thumb into camera-relative strafe — it turns
+   * one axis into a lateral through `runner-intel.js` `dodgeLateral`. The RULE this line is about
+   * is unchanged and is the reason it still greps for two things: the deadzone is EXPORTED and
+   * read, on both machines, rather than restated as a number in either. `stickMag` is still the
+   * bed's own reader; `DODGE.dead` is the dodge's, and it is exported for exactly this reason.
+   */
+  const intelSrcFeel = await readFile(new URL('../src/game/runner-intel.js', import.meta.url), 'utf8');
+  t('W15p · the phone nub and the bed both read an exported zone, not a restated 0.12',
     /STICK_DEADZONE/.test(phonePad) && !/> 0\.12/.test(phonePad)
-    && /stickCamMove\(/.test(bedSrcFeel) && /stickMag\(/.test(bedSrcFeel));
+    && /stickMag\(/.test(bedSrcFeel)
+    && /DODGE\.dead/.test(intelSrcFeel) && !/> 0\.12/.test(bedSrcFeel));
 }
 
 // ---- W16 · PR B cyan policy (THREE-free) — envelope keeps G, inter-room does not ------------
@@ -1983,12 +2000,44 @@ console.log('\nparty-warm — the lobby-warm night');
   const followSrc = await readFile(new URL('../src/party/follow.js', import.meta.url), 'utf8');
   const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
   const localSrc = await readFile(new URL('../net/party/local.mjs', import.meta.url), 'utf8');
-  t('W26g · the bed drives with stickCamMove + the operator basis, not heading+forward-only',
-    /stickCamMove\(/.test(bedSrc)
-    && /operator\.basisYaw\(/.test(bedSrc)
+  const intelSrc = await readFile(new URL('../src/game/runner-intel.js', import.meta.url), 'utf8');
+  /*
+   * 🚶 **THIS ASSERTION USED TO SAY THE OPPOSITE, AND JOHN REVERSED IT ON 2026-09-01.**
+   *
+   * It read *"the bed drives with `stickCamMove` + the operator basis, not heading+forward-only"*,
+   * and that was the right rule for a night when the phone WAS the body: a free 2-axis stick has
+   * to be camera-relative or pushing up walks out of frame, and a heading-plus-forward drive was
+   * the old broken shape that read as a robot on rails.
+   *
+   * The lock that replaced it: the runner AUTO-WALKS the guide's pin one door at a time, and
+   * *"the STICK is a lateral dodge only… cannot steer into another room."* So heading-plus-forward
+   * is now exactly what the bed must do — the heading comes from `pathPortals` toward a door a
+   * HUMAN tapped, and the thumb's whole authority is the lateral. Three arguments, from the sofa:
+   * a body that finds the gallery by itself makes the guide decorative and kills the twin-painting
+   * lie; driving a first-person body through a generated house on a phone is a worse game than
+   * listening to somebody shout at you; and a free stick lets an evil runner burn the clock
+   * standing in a corridor with nothing for the room to argue about.
+   *
+   * 🚨 **THE OLD RULE IS RE-STATED AS AN EXECUTED NEGATIVE, NOT DELETED** — `friday-couch` FC4f's
+   * discipline. If the camera-relative drive ever comes back into the driven branch this reddens,
+   * rather than the reversal being a thing a reader has to remember.
+   */
+  t('W26g · the bed AUTO-WALKS the pin and the thumb is a lateral dodge only',
+    /autoWalkInput\(/.test(bedSrc)
+    && /dodgeLateral\(/.test(bedSrc)
+    && /clampToRoom\(/.test(bedSrc)
+    && /pathPortals\?\.\(runner\.pos/.test(bedSrc)
     && /liveRunShot\(/.test(bedSrc)
     && !/perf\.stickRef/.test(bedSrc)
     && !/move: \{ x: 0, y: mag \}/.test(bedSrc));
+  t('W26g2 control · the camera-relative free stick is GONE from the driven branch',
+    !/const move = stickCamMove\(s\.x, s\.y\)/.test(bedSrc)
+    && !/aimYaw: operator\.basisYaw\(\),\n\s*\}\);\n\s*missionTick/.test(bedSrc.replace(/\r\n/g, '\n')));
+  t('W26g3 · and the forward axis is dropped in ONE place, in the brain, not on the phone',
+    /export function dodgeLateral/.test(intelSrc)
+    && /stickX/.test(intelSrc)
+    && !/stickY/.test(intelSrc)
+    && /'t', 'x', 'y', 'lookX', 'lookY', 'run', 'swing', 'act', 'hide'/.test(followSrc));
   /*
    * ⚠️ **THE RULE IS UNCHANGED; THE FUNCTION THAT ENFORCES IT MOVED.** A live run still refuses a
    * mid-run cut to shoulder / lead / doorway — those invert a camera-relative stick and take the
@@ -2035,10 +2084,20 @@ console.log('\nparty-warm — the lobby-warm night');
    * between the two, and the camera is in the repaint key or the pad would keep the wrong shape
    * for the rest of the night.
    */
+  /*
+   * ⚠️ **THE THIRD CLAUSE CHANGED ON 2026-09-01 BECAUSE THE COPY IT QUOTED BECAME FALSE.**
+   * It read *"The stick is the room — push where you want to go"*, which was the absolute
+   * top-down stick's own sentence. Under John's auto-walk lock the stick no longer takes you
+   * anywhere: the body walks the guide's pin and the thumb only steps sideways. The two things
+   * this check is really about are unchanged and still asserted — the top-down branch renders NO
+   * look stick, and the two camera arms carry DIFFERENT copy, so a phone that took the wrong
+   * shape still reddens.
+   */
   t('W26i2 · under a plan-locked top-down the look stick is not rendered at all',
     /const topDown = camView === 'top' \|\| camView === 'iso';/.test(phoneSrc)
     && /\$\{topDown \? '' : `<div class="stick-col">\s*\n\s*<div class="stick stick-look"/.test(phoneSrc)
-    && /The stick is the room — push where you want to go/.test(phoneSrc));
+    && /The stick only steps you left or right/.test(phoneSrc)
+    && /the right stick looks/.test(phoneSrc));
   t('W26i3 · and the camera is part of the sheet\'s repaint key, so it re-shapes on the crossing',
     /const camStamp = iAmRunner \? `:\$\{frame\?\.you\?\.view \|\| 'chase'\}` : '';/.test(phoneSrc)
     && /\$\{hasCard\(\) \? 'card' : 'nocard'\}\$\{camStamp\}/.test(phoneSrc));
