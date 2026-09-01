@@ -34,6 +34,7 @@ import { MAX_PAIRS, pairShape } from '../party/link.js';
 import { missionFor } from '../party/mission.js';
 import { FAIL_CHROME, JOB, SMASH_CHROME, toolLabel } from '../party/jobs.js';
 import { EPISODE_CAP } from '../party/phases.js';
+import { isStinging, stepSting, stingHtml } from '../party/stinger.js';
 
 /** TV chrome 3·2·1 after every living ballot (or the 20s backstop), then `{ t: 'episode' }`. */
 const SEND_COUNTDOWN_MS = 3000;
@@ -857,6 +858,28 @@ export default async function partyHost({ params }) {
        */
       ui.worldSent = (ui.worldSent || 0) + 1;
       client.send({ t: 'world', ...m.world });
+      /*
+       * 📺 **THE ONE THING THE HOST KEEPS OFF THIS REPORT, AND WHY IT IS NOT A BREACH OF THE LINE
+       *    ABOVE.**
+       *
+       * John's TV E board attaches a rule to its own pick: *"the stinger must never fire on a
+       * camera the runner has not already left."* Answering that needs exactly two fields —
+       * `runner.room` and `mission.room` — and `src/party/stinger.js` `STING_READS` is that list,
+       * closed. Both are facts about the RUNNER AND HER OWN JOB, which is the side of the wall the
+       * locked rule already puts the television on: *"The TV may see over the walls of the
+       * runner's OWN rooms, and never the whole house."*
+       *
+       * 🚨 `m.world.hunter` IS NOT READ HERE AND MUST NEVER BE. The paragraph above names what it
+       * is protecting — *"a TV that knew where the hunter was"* — and this is a NAMED two-field
+       * lift out of a report that is otherwise still only relayed. Named, never spread, for the
+       * same reason `local.mjs` names its four at the other end of the wire: a spread would let a
+       * widened report hand the television a position nobody entitled it to.
+       * Gate: `tv-stinger` TS6 moves the hunter and asserts the sting is byte-identical.
+       */
+      ui.stingWorld = {
+        runnerRoom: m.world.runner?.room ?? null,
+        missionRoom: m.world.mission?.room ?? null,
+      };
     }
   });
 
@@ -1106,6 +1129,13 @@ export default async function partyHost({ params }) {
       if (settleBeatClaim()) { paint(); return; }
       maybeArmFromBackstop();
       paintReactStrip();
+      /*
+       * 📺 The sting arms on a server EVENT but fires on a world report and expires on a WALL
+       * CLOCK, and neither of those two is a `t:'state'` — the world report is a postMessage from
+       * the follow iframe and the expiry is nobody's message at all. So it has to ride this
+       * ticker, exactly as the reaction strip does and for the same reason.
+       */
+      patchSting();
       const sendLeft = sendCountdownLeft();
       if (sendLeft != null) {
         if (sendLeft <= 0) { sendThemIn(); return; }
@@ -1324,6 +1354,53 @@ export default async function partyHost({ params }) {
     } else if (el) {
       el.remove();
     }
+    patchSting();
+  }
+
+  /**
+   * 📺 **TV E · THE CAMERA STINGER.** `docs/design/refs-runner-intel/canvas/TvFollowE.dc.html`,
+   * John's pick 2026-09-01. A camera mounts, the show stings it for ~2 s, then it goes.
+   *
+   * ⚠️ **PATCHED IN PLACE, NEVER VIA `paint()`** — the react strip's rule and the same failure.
+   * The sting expires by wall clock, and repainting the run frame to age it out would remount the
+   * follow camera's canvas mid-chase. It is also mounted INSIDE the camera layer rather than in
+   * `root`, so `paint()` cannot tear it off half-way through: see `STING_CSS` for the stacking
+   * argument that forced that and made this the safer half too.
+   */
+  function patchSting() {
+    const layer = follow.layer;
+    const live = layer?.querySelector('[data-cam-sting]');
+    /*
+     * Off the run beat there is nothing to celebrate and the camera layer is the full-bleed warm
+     * backdrop, so the state is dropped rather than paused. A run that ends mid-sting takes the
+     * corner card with it, which is right: the sting belongs to the expedition, not to the night.
+     */
+    if (ui.beat !== 'expedition') {
+      ui.sting = null;
+      live?.remove();
+      root.querySelector('.run-stage')?.classList.remove('stung');
+      return;
+    }
+    const frame = client.frame;
+    ui.sting = stepSting(ui.sting, {
+      events: client.events,
+      cameras: frame?.cameras,
+      world: ui.stingWorld,
+      episode: frame?.airingEpisode ?? frame?.episode ?? null,
+      now: Date.now(),
+    });
+    const on = isStinging(ui.sting);
+    // 🔢 THE COUNT BECOMES A MOMENT. `run-facts` already prints `Cameras n / m`; it lifts for
+    // exactly as long as the sting holds, which is the board's whole argument against a digit.
+    root.querySelector('.run-stage')?.classList.toggle('stung', on);
+    if (!layer) return;
+    if (!on) { live?.remove(); return; }
+    // Same camera, same markup — do not reinsert, or the .22s cut-in restarts four times a second.
+    if (live && live.dataset.camSting === String(ui.sting.cam)) return;
+    live?.remove();
+    layer.insertAdjacentHTML('beforeend', stingHtml(ui.sting));
+    const made = layer.querySelector('[data-cam-sting]');
+    if (made) made.dataset.camSting = String(ui.sting.cam);
   }
 
   function paint() {
