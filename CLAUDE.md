@@ -116,8 +116,10 @@ decision, not a refactor.
   identical faces, same loudness, guide says the REAL wall out loud, TV follow does not say
   which, empty-nail still is the delayed check. Later nights are one noisy DRILL until a camera
   mounts; blind still counts as `camera_lit`; a dark mount retries DRILL. Voice is in the room
-  (GO/HOLD, CLOSE/LATE/GOING); pad buttons do not send the call. Fail chrome names no person.
-  Gate: `expedition-jobs`.
+  (GO/HOLD, CLOSE/LATE/GOING) — those words are not tappable cue rows on the pad. Guide E's
+  neighbours map is the primary surface (this room + doors out; no whole-house flyover). The
+  seek line advances once the runner is in the job room. Fail chrome names no person.
+  Gates: `expedition-jobs`, `intel-pads`.
 - **One Reckoning clock.** If it hits zero with nobody standing, skip the vote — nobody
   accused, no execution this episode. Do not re-arm the countdown. A name after zero does
   not stand. Two accused who lock before zero still vote. Gate: `party-night` N19 / N17d2.
