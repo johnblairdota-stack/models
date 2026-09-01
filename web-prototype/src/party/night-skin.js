@@ -15,6 +15,7 @@ import { ROLE_CARD_CSS } from './rolecard.js';
 import { GUIDE_MAP_CSS } from './guidemap.js';
 import { INTRO_FRAME_PCT, TV_FRAME_PCT } from './follow.js';
 import { SHOW_CHROME_CSS } from './look.js';
+import { STING_CSS } from './stinger.js';
 
 export function playerName(players, id) {
   const p = (players || []).find((x) => x.id === id);
@@ -782,6 +783,7 @@ export function injectNightSkin() {
       .ballot .pick { text-align:left; }
     }
     ${ROLE_CARD_CSS}
+    ${STING_CSS}
   `;
   document.head.appendChild(s);
 }
