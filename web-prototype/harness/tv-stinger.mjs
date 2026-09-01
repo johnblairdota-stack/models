@@ -27,6 +27,7 @@
  *         including the three unanswerable shapes, which must all read NO
  *   TS3   the seal — deny-by-default over the board's absent list, with a planted needle
  *   TS3b  nothing hidden may collide with a visible key (the bug `carry` was one line from)
+ *   TS3i  and the absent list is really the BOARD's, wherever the untracked canvas is on disk
  *   TS4   the sting is a MOMENT: it does not latch, does not restart, and one mount stings once
  *   TS5   a mount from an earlier episode cannot arm tonight
  *   TS6   🚨 **THE HUNTER CONTROL** — move him anywhere and the sting is byte-identical
@@ -54,6 +55,8 @@ const here = dirname(fileURLToPath(import.meta.url));
  * content because a multi-line regex met CRLF — CLAUDE.md's standing note for source-reading
  * gates. Every pattern below that crosses a line break depends on this line. */
 const src = (rel) => readFileSync(join(here, '..', rel), 'utf8').replace(/\r\n/g, '\n');
+/** Same read, but `null` when the file is not in this tree. See the board note below. */
+const maybe = (rel) => { try { return src(rel); } catch { return null; } };
 
 let pass = 0, fail = 0;
 const t = (n, c, d = '') => {
@@ -67,7 +70,33 @@ const hostSrc = src('src/views/party-host.js');
 const skinSrc = src('src/party/night-skin.js');
 const roomSrc = src('src/party/room.js');
 const stingSrc = src('src/party/stinger.js');
-const boardSrc = src('docs/design/refs-runner-intel/canvas/TvFollowE.dc.html');
+/*
+ * ⚠️ **THE BOARD IS IN-FLIGHT AND UNTRACKED, SO CI CHECKS OUT A TREE WITH NO CANVAS IN IT.**
+ *
+ * `friday-couch` FC3b paid for this exact lesson one gate over and wrote it down: a gate that read
+ * an untracked file unconditionally would THROW before its first assertion on the one machine
+ * anybody looks at, and would read as a *product* failure. `docs/design/refs-runner-intel/` is
+ * John's design canvas and is not in git.
+ *
+ * So the deny list is checked TWO ways and neither of them is the optional one:
+ *   · TS3h  the transcript below is covered by `STING_FORBIDDEN` — runs everywhere, CI included
+ *   · TS3i  the transcript IS the board's own strip — runs only where the canvas is on disk, and
+ *           reddens if either side drifts
+ *
+ * A transcript nobody ever compares against its source is a hand-kept list, which is the failure
+ * `episode-order` is named after. This one is compared wherever the source exists, and the run
+ * PRINTS which of the two arms it saw so a green tick cannot quietly mean "half of it".
+ */
+const boardSrc = maybe('docs/design/refs-runner-intel/canvas/TvFollowE.dc.html');
+
+/** `TvFollowE.dc.html`'s "Not on the TV, at any second of the run" strip, transcribed. */
+const ABSENT_STRIP = Object.freeze([
+  'plan', 'minimap', 'room outline', 'whole-house fit', 'room name',
+  'bearing pin', 'compass', 'heading', 'arrow', 'wedge',
+  'route', 'breadcrumb', 'door count',
+  'hunter mark', 'hunter bearing', 'hunter distance',
+  'target glow', 'cyan edge', 'object caption',
+]);
 
 console.log('\n📺 tv-stinger — TV E, the camera stinger\n');
 
@@ -137,14 +166,10 @@ t('TS3f', stingLeaks({ ...s1, nested: { room: 'x' } }).length > 0, 'planted at d
 t('TS3g', stingLeaks(null).length > 0 && stingLeaks('cam 2').length > 0, 'a non-shape is refused');
 
 /*
- * The board's footer IS the deny list, so it is read off the board rather than trusted. Every word
- * on `TvFollowE.dc.html`'s "Not on the TV, at any second of the run" strip has to be answered by a
- * key in `STING_FORBIDDEN` — a board word with no key is a hole nobody would notice.
+ * The board's footer IS the deny list, so every word on the "Not on the TV, at any second of the
+ * run" strip has to be answered by a key in `STING_FORBIDDEN` — a board word with no key is a hole
+ * nobody would notice. See the `boardSrc` note for why this is two checks and not one.
  */
-const ABSENT = (boardSrc.match(/class="absent">([^<]+)</g) || [])
-  .map((m) => m.replace(/^class="absent">/, '').replace(/<$/, '').replace(/&middot;/g, '·'))
-  .join(' · ').split('·').map((w) => w.trim().toLowerCase())
-  .filter(Boolean);
 const covered = (word) => {
   const w = word.replace(/[^a-z ]/g, '').trim();
   const head = w.split(' ').filter((p) => !['whole', 'house', 'hunter', 'object'].includes(p));
@@ -153,10 +178,24 @@ const covered = (word) => {
     return head.some((p) => lk === p || lk.startsWith(p) || p.startsWith(lk));
   });
 };
-const uncovered = ABSENT.filter((w) => !covered(w));
-t('TS3h', ABSENT.length >= 15 && uncovered.length === 0,
-  `${ABSENT.length} words on the board's absent strip, all answered by a key`);
+const uncovered = ABSENT_STRIP.filter((w) => !covered(w));
+t('TS3h', ABSENT_STRIP.length >= 15 && uncovered.length === 0,
+  `${ABSENT_STRIP.length} words on the board's absent strip, all answered by a key`);
 if (uncovered.length) note(`uncovered: ${uncovered.join(', ')}`);
+
+// TS3i · and the transcript is the board, wherever the board is on disk.
+const ONDISK = boardSrc == null ? null : (boardSrc.match(/class="absent">([^<]+)</g) || [])
+  .map((m) => m.replace(/^class="absent">/, '').replace(/<$/, '').replace(/&middot;/g, '·'))
+  .join(' · ').split('·').map((w) => w.trim().toLowerCase())
+  .filter(Boolean);
+if (ONDISK == null) {
+  t('TS3i', true, 'the canvas is not in this tree · transcript arm only (this is CI\'s arm)');
+} else {
+  const drift = [...ONDISK.filter((w) => !ABSENT_STRIP.includes(w)),
+    ...ABSENT_STRIP.filter((w) => !ONDISK.includes(w))];
+  t('TS3i', drift.length === 0,
+    `the canvas IS here · ${ONDISK.length} words, transcript matches${drift.length ? ' · drift ' + drift.join(', ') : ''}`);
+}
 
 /* ---- TS4 · a moment, not a latch ------------------------------------------------------------- */
 
@@ -305,7 +344,7 @@ t('TS9c', /THE CAMERA'S PICTURE HAS NO WIRE/.test(stingSrc),
 
 note(`beat: dark at mount · lights on the way out · ${STINGER_MS} ms · gone`);
 note(`shape: ${JSON.stringify(s1)} · ${STING_KEYS.length} keys, ${STING_FORBIDDEN.length} refused`);
-note(`board absent strip: ${ABSENT.length} words · uncovered ${uncovered.length}`);
+note(`board absent strip: ${ABSENT_STRIP.length} words · uncovered ${uncovered.length} · canvas ${boardSrc ? 'on disk' : 'ABSENT (CI arm)'}`);
 note(`hunter control: 3 positions · 1 distinct sting`);
 
 console.log(`\n  ${pass} ok · ${fail} fail\n`);
