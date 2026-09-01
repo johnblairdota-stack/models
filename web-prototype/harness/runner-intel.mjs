@@ -563,6 +563,180 @@ console.log('\n  the copy, and the two screens');
     'R1/R2/R3 unwritten · goes RED the day `missionFor` returns a kind · then write them');
 }
 
+/* =================================================================================================
+ * RI18 · THE LIVE ROOM — the pin's journey, photographed on real frames
+ *
+ * 🚨 **EVERYTHING ABOVE THIS LINE IS ABOUT BYTES AND TABLES, AND THAT IS THE `whisper-split`
+ * LESSON EXACTLY.** `link-merge` L10–L14 proved the whisper's privacy on the wire and every check
+ * was about structure; the chromes were template literals in a browser view, so *"the partner pad
+ * shows the words and a third does not"* had only ever been checked by opening six tabs. RI10c
+ * asks the entitlement TABLE what `you.pin.x` is for. This asks NINE ACTUAL SOCKETS what they
+ * were sent.
+ *
+ * One server, one television, eight handsets, a real casting, a real pair, one tap of a pin chip.
+ * Then every frame every socket received is swept for the word — including the RAW BYTES, because
+ * a parse that silently dropped a field would hide a leak from the first question and not the
+ * second.
+ * ============================================================================================== */
+
+console.log('\n  a live room');
+
+{
+  const { startServer, castingBackstop } = await import('../net/party/local.mjs');
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const PORT = 5352;                 // not 5178 / 5181 / 5184, and not another gate's port
+
+  const open = (url) => new Promise((resolve) => {
+    const ws = new WebSocket(url);
+    const frames = [];
+    const box = {
+      ws, frames, welcome: null,
+      send: (o) => { try { ws.send(JSON.stringify(o)); } catch { /* a closed pad cannot send */ } },
+      close: () => { try { ws.close(); } catch { /* already gone */ } },
+      of: (type) => frames.map((f) => f.msg).filter((m) => m?.t === type),
+      last: (type) => box.of(type).at(-1) ?? null,
+      since: (n) => frames.slice(n).map((f) => f.raw).join('\n'),
+    };
+    ws.onmessage = (e) => {
+      const raw = String(e.data);
+      let msg = null; try { msg = JSON.parse(raw); } catch { /* keep the bytes anyway */ }
+      frames.push({ raw, msg });
+      if (msg && (msg.t === 'welcome' || msg.t === 'full')) { box.welcome = msg; resolve(box); }
+    };
+    ws.onerror = () => resolve(box);
+    setTimeout(() => resolve(box), 1500);
+  });
+
+  const srv = startServer({ port: PORT, count: 8, castSeed: 31, worldSeed: 9, code: 'pin' });
+  await sleep(140);
+  const base = `ws://localhost:${PORT}/?room=pin`;
+  const tv = await open(`${base}&host=1`);
+  const phones = [];
+  for (let i = 0; i < 8; i++) phones.push(await open(base));
+  await sleep(120);
+
+  const NAMES = ['John', 'Ellie', 'Ada', 'Ben', 'Cy', 'Dee', 'Eli', 'Fox'];
+  phones.forEach((p, i) => p.send({ t: 'name', name: NAMES[i] }));
+  await sleep(110);
+  tv.send({ t: 'start' });
+  await sleep(90);
+  tv.send({ t: 'casting' });
+  await sleep(140);
+
+  const room = srv.rooms.get('pin');
+  const idOf = (n) => room.game.state.players.find((p) => p.name === n)?.id ?? null;
+  const RUNNER = idOf('Ada'), GUIDE = idOf('Ben');
+  phones.forEach((p) => p.send({ t: 'ballot', runner: RUNNER, guide: GUIDE }));
+  await sleep(200);
+  castingBackstop(room);              // its own header invites the direct call; no 45s wait
+  await sleep(200);
+
+  /*
+   * ⚠️ **THE WORLD REPORT FIRST, AND NOT ONLY TO EXERCISE `you.at`.** `setWorld` is what
+   * re-asserts the seat roles from `state.pair` — `playEpisode` clears every `seatRole` before the
+   * live run is over, which its own header explains — so a pin sent before the TV has reported
+   * once would be refused for the least interesting possible reason.
+   */
+  tv.send({
+    t: 'world',
+    runner: { room: 'r0.gallery', x: 4.25, z: -1.5 },
+    hunter: { room: 'r0.cellar', x: 12, z: 8 },
+    mission: {
+      phase: 'seek', room: 'r0.gallery', job: 'smash',
+      holdQuiet: 5.5, holdRed: 1.2, holdLongest: 9.4,
+    },
+    view: 'top',
+  });
+  await sleep(180);
+
+  const byId = new Map(phones.map((p) => [p.welcome?.playerId, p]));
+  const runnerPad = byId.get(RUNNER);
+  const guidePad = byId.get(GUIDE);
+  const seatedPad = phones.find((p) => ![RUNNER, GUIDE].includes(p.welcome?.playerId));
+
+  t('RI18 arm · a real pair is cast on nine live sockets, and the TV has reported a world',
+    room.game.state.pair?.runner === RUNNER && room.game.state.pair?.guide === GUIDE
+    && !!runnerPad && !!guidePad && !!seatedPad
+    && runnerPad.last('state')?.frame?.you?.here === 'r0.gallery',
+    `pair ${room.game.state.pair?.runner === RUNNER ? 'Ada' : 'MISSING'}`
+    + ` / ${room.game.state.pair?.guide === GUIDE ? 'Ben' : 'MISSING'}`
+    + ` · here=${runnerPad?.last('state')?.frame?.you?.here}`);
+  t('RI18b · the widened world report is ACCEPTED — three hold durations reach room state',
+    room.game.state.world?.mission?.holdQuiet === 5.5
+    && room.game.state.world?.mission?.holdLongest === 9.4,
+    `quiet ${room.game.state.world?.mission?.holdQuiet}s`
+    + ` · longest ${room.game.state.world?.mission?.holdLongest}s`);
+  t('RI18c · the runner is told where she is standing; nobody else is',
+    runnerPad.last('state')?.frame?.you?.at?.x === 4.25
+    && guidePad.last('state')?.frame?.you?.at === undefined
+    && seatedPad.last('state')?.frame?.you?.at === undefined,
+    'you.at is `runner` audience — proprioception, not the map');
+
+  // ---- the tap
+  const seenBefore = { runner: runnerPad.frames.length, seated: seatedPad.frames.length };
+  guidePad.send({ t: 'pin', x: 6.5, z: -2.25, roomId: 'r0.gallery', kind: 'room' });
+  await sleep(220);
+
+  const runnerPin = runnerPad.last('state')?.frame?.you?.pin ?? null;
+  const guidePin = guidePad.last('state')?.frame?.you?.pin ?? null;
+  const seatedPin = seatedPad.last('state')?.frame?.you?.pin ?? null;
+  const tvPin = tv.last('pin');
+  t('RI18d · one tap reaches BOTH crew phones, with the same four fields',
+    runnerPin?.x === 6.5 && runnerPin?.roomId === 'r0.gallery'
+    && guidePin?.x === 6.5 && guidePin?.kind === 'room'
+    && Object.keys(runnerPin).sort().join(',') === 'kind,roomId,x,z',
+    JSON.stringify(runnerPin));
+  /*
+   * 🚨 **TWO GUARDS STAND HERE AND BOTH HAD TO BE DEFEATED TO MAKE THIS RED**, which was measured
+   * rather than assumed. Widening the four `you.pin.*` rows to `all` on its own reddens RI10c and
+   * leaves this GREEN — because `room.js` only OFFERS the field to a socket whose seat role is
+   * runner or guide, the same belt-and-braces `you.here` has had since it shipped. The leak only
+   * reaches a seated handset when the table AND the frame builder are both wrong, and that is
+   * exactly why both ends are checked: RI10c is the table, this is nine real sockets.
+   */
+  t('RI18e · and it reaches NO seated phone — swept over the raw bytes, not the parse',
+    seatedPin === null
+    && !/"pin"/.test(seatedPad.since(seenBefore.seated))
+    && !/6\.5/.test(seatedPad.since(seenBefore.seated)),
+    `${seatedPad.frames.length - seenBefore.seated} frames since the tap, none carrying it`);
+  t('RI18f control · the sweep can see — the same sweep over the RUNNER frames finds it',
+    /"pin"/.test(runnerPad.since(seenBefore.runner))
+    && /6\.5/.test(runnerPad.since(seenBefore.runner)),
+    'a needle where the needle provably is');
+  t('RI18g · the TELEVISION is told, as a directed control input',
+    tvPin?.x === 6.5 && tvPin?.z === -2.25 && tvPin?.roomId === 'r0.gallery'
+    && tv.of('pin').length === 1,
+    `${tv.of('pin').length} pin push to the TV · ${JSON.stringify(tvPin)}`);
+
+  // ---- the fail-CLOSED direction, live: anybody who is not the guide reaches nobody
+  const before = JSON.stringify(room.game.state.pin);
+  seatedPad.send({ t: 'pin', x: 99, z: 99, roomId: 'r0.void', kind: 'room' });
+  runnerPad.send({ t: 'pin', x: 77, z: 77, roomId: 'r0.void', kind: 'room' });
+  await sleep(200);
+  t('RI18h · a seated phone and the RUNNER herself are both refused, live',
+    JSON.stringify(room.game.state.pin) === before
+    && room.game.state.pin.x === 6.5
+    && tv.of('pin').length === 1
+    && !/"x":s*99|"x":s*77|r0.void/.test(runnerPad.since(0)),
+    'the ballot grants the map, not the willingness to send');
+
+  // ---- and a second tap REPLACES, on the wire and not only in the store
+  guidePad.send({ t: 'pin', x: 1.25, z: 3.5, roomId: 'r0.hall', kind: 'room' });
+  await sleep(200);
+  t('RI18i · a second tap replaces the first everywhere — one pin, never two (D2)',
+    room.game.state.pin.x === 1.25
+    && runnerPad.last('state')?.frame?.you?.pin?.x === 1.25
+    && tv.of('pin').length === 2
+    && !Array.isArray(room.game.state.pin),
+    `${tv.of('pin').length} taps pushed · store holds ${JSON.stringify(room.game.state.pin)}`);
+
+  tv.close();
+  for (const p of phones) p.close();
+  await sleep(80);
+  srv.close?.();
+  await sleep(60);
+}
+
 console.log(`\n  reading · auto-walk arrives at ${AUTOWALK.arrive} m`
   + ` · dodge reaches ${DODGE.reach} of a stick, ${DODGE.probe} m of probe`
   + ` · cover within ${COVER.radius} m`

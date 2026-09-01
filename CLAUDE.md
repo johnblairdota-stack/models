@@ -68,11 +68,41 @@ decision, not a refactor.
 
 - **D13 · The phone is a controller, never a viewport.** No 3D on the phone. The runner's camera
   lives on the **TV**. A phone chase embed was built (#29) and **removed** (#30) because it loaded
-  slowly and did not work. The pad has **two shapes**, and which one is live follows the camera:
-  on the ground it is two sticks (left = move, camera-relative; right = look/orbit); under the
-  plan-locked top-down the look stick is **not rendered** and the move stick is **absolute** —
-  screen direction is world direction — with RUN/SWING grown into the freed half. The phone is
-  told which via `you.view` (runner-audience). Gates: `party-warm` W26i–W26i4.
+  slowly and did not work. The pad still has **two shapes** following the camera — under the
+  plan-locked top-down the look stick is **not rendered**, on the ground it is — and the phone is
+  told which via `you.view` (runner-audience). ⚠️ **The move stick stopped being "move" on
+  2026-09-01** — see the auto-walk lock below. Gates: `party-warm` W26i–W26i4, W26g.
+- **The runner AUTO-WALKS the guide's PIN; the stick is a lateral dodge only.** John, 2026-09-01.
+  The body pathfinds one door at a time to the door the guide tapped — **never to the true
+  target, which would kill the lie** — and the thumb's whole authority is a step left or right
+  into cover, clamped so it cannot steer into another room. **HOLD hides behind furniture, and
+  there is no hiding in an open hall**: that single refusal is what keeps the evil runner's
+  sabotage surface closed to four ordinary controls used at the wrong moment (`runner-intel.js`
+  `SABOTAGE` — wrong face, drill through HOLD, drop the drill, clock-talk). **No sabotage button,
+  and no verb for one.** With no pin nobody moves, which is the guide having a reason to exist.
+  Hiding is deniable because the TV runs a **staged RED PASS** — a seeded clock with no position
+  and no target, drawn as a mesh so the four-light rig did not grow; it is **not the hunter, and
+  the hunter is still a door that is shut**. The clock keeps running while hidden. Every decision
+  lives in `src/game/runner-intel.js`, which is pure and **imports nothing**, so a node gate
+  executes the shipped functions. Gate: `runner-intel` (55 checks), `party-warm` W26g/W26g2/W26g3.
+- **The pin is on the wire at audience `crew`, and the TV is told it and may not draw it.**
+  Stage 3 of `docs/slices/task-runner-intel.md`, landed 2026-09-01. `you.pin.{x,z,roomId,kind}`
+  are `crew` rows — `all` would put the target's bearing on eight screens and delete the guide's
+  job of SAYING it; `guide` alone is what shipped before and left the runner's bezel pointing at
+  nothing. `t:'pin'` is refused from anybody who is not `pair.guide` (checked in `room.setPin`
+  against `state.pair`, because `playEpisode` clears every `seatRole` before the run is over), a
+  second pin REPLACES, and a new Casting drops it. To the television it travels as a directed
+  CONTROL INPUT exactly like `t:'move'` — `party-loop.md`'s "Do not" #1 is a rule about the
+  PICTURE, and the renderer already knows where every body is because it is the one moving them.
+  `you.at.{x,z}` joined at `runner` audience so the bezel has both ends of its bearing; `bezelOf`
+  returns pixels on a phone edge and no world coordinate, which is why a bearing is safe in a
+  runner's hand and a map is not. Gates: `runner-intel` RI10–RI13, `intel-pads` IP11b–IP11d.
+- **The six fake voice buttons are gone.** CLOSE / LATE / GOING and GO / HOLD printed *"buttons
+  send nothing"* over a row of buttons, which is what was wrong with them: a control that reaches
+  nobody teaches the one seat that is supposed to be watching a television that the game is in
+  their hand. They are one SAY line of copy now, FOOTSTEPS stays as a small line, and
+  `voiceSendsNothing()` is unchanged — it used to be a promise about six buttons and is now a
+  statement about a pad with nothing to press. Gates: `expedition-jobs` J7/J7b, `runner-intel` RI14c.
 - **The DIRECTOR may not cut during the run** — no shoulder / lead / doorway under the player's
   thumb, because those invert a camera-relative stick. ⚠️ This bullet used to read *"chase-only
   during the run"* and that became literally false when the four perspectives shipped; a
@@ -391,6 +421,28 @@ season on a real server (`:5186`, one TV + eight handsets) and photographs all n
 `friday-couch` FC4d–FC4f — FC4d is the arm that the doubling really happened, FC4f re-states the
 old rule so the failure is executed rather than described, and both measure against the LOG's
 ground truth rather than against the reader under test.
+
+**A HOLD was validated, relayed and read, and ONE HOP DROPPED IT — the drill has never worked from
+a phone** (2026-09-01). `party-phone.js` sends `act`, `MOVE_KEYS` has always carried it,
+`local.mjs` relays it and `follow-bed.js` reads `c.act` into `perf.act`, which `missionTick` tests
+as `perf.act > 0.5` to fill the wall-cam mount. `party-host.js` `flushMove` — the one hop between
+the socket and the iframe — built its cue by hand and left `act` out. So on **every DRILL night**
+`holding` was false for the whole expedition, the mount could never fill, and the run could only
+end on the backstop clock, dark. Nothing was red: no gate walked a value from a thumb to a mount,
+which is the shape of every bug on this list. A second, independent gate on the same button:
+the DRILL hold refused to start until one of the decorative CLOSE / LATE / GOING buttons had been
+tapped, so a widget that reached nobody was a prerequisite for a real action. Both are fixed and
+`runner-intel` RI14e now walks all four hops — phone → server → TV → bed — for `act` and `hide`.
+
+**The seek line advances once she is standing in it** (2026-09-01). A pad that keeps saying FIND
+THE GALLERY at somebody standing in the gallery reads as a screen that has stopped listening, and
+under auto-walk it is worse because the body arrived without the player steering it. `seekLine`
+compares two room ids and nothing else — `you.here` for the runner, `scope.hereId` for the guide,
+`mission.room` off the PUBLIC `mission.*` event — so it leaks nothing and adds no fourth phase.
+Guide E's map also became the PRIMARY surface at 390×844: map first at `58vh`, pin chips directly
+under it in thumb country, everything explanatory one line tall below them. The whole-house
+flyover was **not** restored and the hunter coverage mark is untouched. Gates: `runner-intel`
+RI15–RI16b.
 
 Known **undecided**, and it is John's call rather than a refactor: `COMPOSITION[n].cameras` and
 `WIN_TARGETS[n].cameraTarget` disagree — **3 against 4 at eight players** — and both files
