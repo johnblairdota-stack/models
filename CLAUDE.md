@@ -84,7 +84,7 @@ decision, not a refactor.
   and no target, drawn as a mesh so the four-light rig did not grow; it is **not the hunter, and
   the hunter is still a door that is shut**. The clock keeps running while hidden. Every decision
   lives in `src/game/runner-intel.js`, which is pure and **imports nothing**, so a node gate
-  executes the shipped functions. Gate: `runner-intel` (91 checks), `party-warm` W26g/W26g2/W26g3.
+  executes the shipped functions. Gate: `runner-intel` (93 checks), `party-warm` W26g/W26g2/W26g3.
 - **The pin is on the wire at audience `crew`, and the TV is told it and may not draw it.**
   Stage 3 of `docs/slices/task-runner-intel.md`, landed 2026-09-01. `you.pin.{x,z,roomId,kind}`
   are `crew` rows — `all` would put the target's bearing on eight screens and delete the guide's
@@ -109,6 +109,15 @@ decision, not a refactor.
   and neither gets special handling anywhere. `src/party/objectives.js` owns the four kinds and
   **cannot import `realFaceFor` or `drillShotFor`**. Gates: `runner-intel` RI19–RI19q (chips,
   privacy, the removal), RI20–RI20g (the walk, driven at 60 Hz in node).
+- **An objective pin dies with the job it named; a DOOR pin does not.** Found by walking the loop
+  end to end, 2026-09-02. The guide pins LEFT FACE, the runner smashes it, `armMission` moves
+  `mission.room` to the ballroom, and `objectiveGoal` correctly refuses the pin — so the body
+  stands, which is the design. What was WRONG is that the pin was still on her BEZEL, pointing at a
+  canvas she had already broken: the one screen the runner is told to trust, aimed at a destination
+  that no longer exists. *"The guide has to speak"* is the design; **a stale bearing is not silence,
+  it is a wrong answer.** `setWorld` drops an objective pin when the mission leaves `seek`, and ONLY
+  an objective pin — a door pin is how the guide walks her home and must survive untouched. An
+  over-broad clear reddens RI19r2. Gate: `runner-intel` RI19r/RI19r2, live on nine sockets.
 - **An objective pin names a THING, not a place.** The phone computes its chip coordinates from
   `planRegions`, whose rooms are a **union of rectangles**, while `follow-bed.js` picks ONE rect
   out of `room.tables.spaces` — they agree for a plain rectangular gallery and are free to disagree

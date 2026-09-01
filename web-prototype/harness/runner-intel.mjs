@@ -1214,6 +1214,37 @@ console.log('\n  a live room');
     && tv.of('pin').length === 4,
     'an evil guide gets no special handling, and neither does a good one');
 
+  /* -----------------------------------------------------------------------------------------
+   * 📍 **RI19r · AND IT DIES WITH THE JOB, WHICH IS A BUG THIS PASS FOUND BY WALKING THE LOOP.**
+   *
+   * Pinned at a face, the smash lands, `armMission` moves `mission.room` to the ballroom, and
+   * `objectiveGoal` correctly refuses the pin — the body stands, which is the design. What was
+   * wrong is that the pin was still on the runner's BEZEL, pointing at a canvas she had already
+   * broken. `setWorld` now drops an objective pin when the mission leaves `seek`, and RI19r2 is
+   * the half that stops the fix from being too big: a DOOR pin is how the guide walks her home
+   * and must survive the same transition untouched.
+   * -------------------------------------------------------------------------------------------- */
+  const stale = { t: 'world', runner: { room: 'r0.gallery', x: 4.25, z: -1.5 }, view: 'top' };
+  guidePad.send({ t: 'pin', x: 5.75, z: 0.22, roomId: 'r0.gallery', kind: 'face-right' });
+  await sleep(160);
+  tv.send({ ...stale, mission: { phase: 'return', room: 'r0.ballroom', job: 'smash' } });
+  await sleep(200);
+  t('RI19r · the smash lands and the objective pin goes with it — no bearing at a broken canvas',
+    room.game.state.pin === null
+    && runnerPad.last('state')?.frame?.you?.pin === undefined,
+    'the pin named a target, and the target stopped being one');
+
+  tv.send({ ...stale, mission: { phase: 'seek', room: 'r0.gallery', job: 'smash' } });
+  await sleep(160);
+  guidePad.send({ t: 'pin', x: 1.25, z: 3.5, roomId: 'r0.hall', kind: 'room' });
+  await sleep(160);
+  tv.send({ ...stale, mission: { phase: 'return', room: 'r0.ballroom', job: 'smash' } });
+  await sleep(200);
+  t('RI19r2 · a DOOR pin survives the same transition — it is how she gets home',
+    room.game.state.pin?.kind === 'room' && room.game.state.pin?.x === 1.25
+    && runnerPad.last('state')?.frame?.you?.pin?.x === 1.25,
+    'the fix clears the pins that stopped meaning something, and only those');
+
   tv.close();
   for (const p of phones) p.close();
   await sleep(80);

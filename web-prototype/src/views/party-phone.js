@@ -1320,13 +1320,13 @@ export default async function partyPhone({ params }) {
       return `<div class="twin-row guide" data-job-pad="smash-guide">
         ${twinFaceHtml('left', { real: real === 'left' })}
         ${twinFaceHtml('right', { real: real === 'right' })}
-        <p class="voice-know">She cannot see this. Say <strong>${esc(wallWord(real))}</strong> out loud.</p>
+        <p class="voice-know">She cannot see this. Say <strong>${esc(wallWord(real))}</strong> out loud, and pin a face.</p>
       </div>`;
     }
     const shot = drillShotFor(seed, episode);
     return `<div class="voice-pad" data-job-pad="drill-guide">
       <p class="say-line">Say <strong>GO</strong> when he cannot hear it. Say <strong>HOLD</strong> to stop her.</p>
-      <p class="voice-know">REAL aim is <strong>${esc(toolLabel(shot))}</strong>. Recap will say seated either way. She cannot see this.</p>
+      <p class="voice-know">REAL is the <strong>${esc(toolLabel(shot))} MOUNT</strong>. Recap will say seated either way. She cannot see this.</p>
     </div>`;
   }
 

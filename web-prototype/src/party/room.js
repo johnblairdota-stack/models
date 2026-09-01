@@ -33,6 +33,7 @@ import { coverageRoomOf } from './mansion.js';
 import { mapFeed } from './mapfeed.js';
 import { missionFor } from './mission.js';
 import { drillShotFor, FAIL_CHROME, JOB } from './jobs.js';
+import { isObjectivePin } from './objectives.js';
 // 📍 The pin's shape lives with the rest of the follow wire, so the TV, the server and the phone
 // all read one schema. See `follow.js` `PIN_WIRE_KEYS`.
 import { pinWireShape } from './follow.js';
@@ -1128,6 +1129,23 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
 
       const phase = mission?.phase ?? 'none';
       const moved = phase !== wasPhase;
+      /*
+       * 📍 **AN OBJECTIVE PIN DIES WITH THE JOB IT NAMED, AND THIS IS NOT TIDYING.**
+       *
+       * Found while walking the loop end to end, 2026-09-02. The guide pins LEFT FACE, the runner
+       * smashes it, and `armMission` moves `mission.room` to the ballroom for the walk home — so
+       * `objectives.js` `objectiveGoal` correctly refuses the pin (she is no longer in the mission
+       * room) and the body stands still, which is right. What was WRONG is that the pin was still
+       * on her bezel, pointing at a canvas she had already broken: the one screen the runner is
+       * told to trust, aimed at a destination that no longer exists, with nothing on it saying so.
+       * One tap of a door chip recovered it, and *"the guide has to speak"* is the design — but a
+       * stale bearing is not silence, it is a wrong answer.
+       *
+       * ⚠️ **ONLY THE OBJECTIVE KINDS, AND ONLY OFF `seek`.** A DOOR pin is still exactly as valid
+       * after the smash as before it — it is how the guide walks her home — so clearing every pin
+       * here would delete a live instruction to solve a problem it does not have.
+       */
+      if (moved && phase !== 'seek' && isObjectivePin(state.pin?.kind)) state.pin = null;
       if (moved && phase !== 'none') {
         /*
          * 🚨 PUBLIC, AND CARRYING NO ATTRIBUTION. `party-anon` A4's rule applies to a mission
