@@ -18,12 +18,12 @@ import { deadIdsFromPublic, historyFromCastEvents } from '../party/ballot.js';
 import { linkBlock, mergeName, WHISPER_MAX, MAX_PAIRS, pairRemaining, isDone, whisperLines } from '../party/link.js';
 import { cardFor, faceDownHtml, mountRoleCard, premiereHtml } from '../party/rolecard.js';
 import { EVIL } from '../party/cast.js';
-import { guideMapSvg } from '../party/guidemap.js';
-import { COMPASS_4, guidePad, pinDoor, runnerPad } from '../party/intel-pad.js';
-import { pickPlanSeed, planRoomLabels, roomLabel } from '../party/mansion.js';
-import { missionFor } from '../party/mission.js';
+import { guideMapSvg, MAP_MARK } from '../party/guidemap.js';
+import { COMPASS_4, guidePad, pinDoor, regionAt, runnerPad } from '../party/intel-pad.js';
+import { coverageRoomOf, pickPlanSeed, planRegions, planRoomLabels, roomLabel } from '../party/mansion.js';
+import { missionFor, seekLine } from '../party/mission.js';
 import {
-  JOB, RUNNER_VOICE, GUIDE_VOICE, realFaceFor, drillShotFor, footstepsCue, wallWord, toolLabel,
+  JOB, realFaceFor, drillShotFor, footstepsCue, wallWord, toolLabel,
 } from '../party/jobs.js';
 import { intelLine } from '../party/intel.js';
 import { STICK_DEADZONE, warmLabel } from '../party/follow.js';
@@ -79,8 +79,6 @@ export default async function partyPhone({ params }) {
      * metronome. See `startPad`.
      */
     pad: { x: 0, y: 0, lookX: 0, lookY: 0, run: false, swing: false, act: 0, sent: '', timer: 0 },
-    /** Local voice prompt only. Never put on the wire — T2, buttons send nothing. */
-    voice: { runner: '', guide: '' },
     /**
      * 📳 The pad's answer to the last thing the thumb did. `label` is the word under the stick,
      * `kind` is the CSS modifier, `timer` wipes it. See `padFx`.
@@ -603,9 +601,23 @@ export default async function partyPhone({ params }) {
      * 1.35 s camera move on the television rather than their own hands.
      */
     const camStamp = iAmRunner ? `:${frame?.you?.view || 'chase'}` : '';
+    /*
+     * 🗺️ **GUIDE E'S VIEWBOX IS THE SHEET'S SHAPE.** Neighbours-only crops to this room + the
+     * doors out of it, so crossing a doorway has to rebuild the plan (and the pin chips). The
+     * runner's x/z is NOT in the stamp — that would smash the map under the thumb at 2 Hz.
+     * `regionAt` is the door, the same one `guidePad` uses.
+     */
+    const guideHereStamp = (() => {
+      if (!iAmGuide) return '';
+      const seed = c.worldSeed == null ? null : pickPlanSeed(c.worldSeed).seed;
+      const you = (frame?.flyover?.marks ?? []).find((m) => m.kind === 'you');
+      if (seed == null || !you) return ':blind';
+      const plan = planRegions(seed);
+      return `:${regionAt([...plan.rooms, ...plan.corridors], you) || 'off'}`;
+    })();
     const liveStamp = beat === 'expedition' && !state.stage
       ? `${beat}:${iAmRunner ? 'run' : iAmGuide ? 'guide' : 'watch'}:${missionPhase}:${missionFor(frame?.airingEpisode ?? 1).job}`
-        + `:${hasCard() ? 'card' : 'nocard'}${camStamp}`
+        + `:${hasCard() ? 'card' : 'nocard'}${camStamp}${guideHereStamp}`
       : null;
     if (liveStamp && root.dataset.liveUi === liveStamp && patchLive(frame)) {
       window.__rrrPhone = { frame, beat, seat: me.seat, iAmRunner, iAmGuide };
@@ -779,9 +791,9 @@ export default async function partyPhone({ params }) {
           <p class="hint">${job === JOB.DRILL
             ? 'No map. Say CLOSE, LATE or GOING out loud from the cue, then hold DRILL. HOLD from your guide means let go. Clock still runs.'
             : 'Listen to your guide — they have the map, you have the hammer. Two identical faces. No mark on either.'}</p>
-          ${missionLine(frame)}
+          ${missionLine(frame, frame?.you?.here)}
           ${hereLine(frame)}
-          ${job === JOB.SMASH ? runnerSmashFaces() : runnerDrillPad(c.worldSeed, frame?.airingEpisode ?? 1)}
+          ${job === JOB.SMASH ? runnerSmashFaces() : runnerDrillPad(c.worldSeed)}
           <div class="stick-wrap${topDown ? ' top' : ''}">
             <div class="stick-col">
               <div class="stick" id="stick"><div class="nub" data-nub></div></div>
@@ -844,9 +856,11 @@ export default async function partyPhone({ params }) {
          */
         const scope = (seed != null && meMark) ? guidePad(seed, meMark, state.pin) : null;
         guideScope = scope;
-        body += `<h1>${scope ? 'One door ahead.' : 'You talk.'}</h1>
-          <p class="hint">The map is yours. The TV does not get it — call the rooms out loud.</p>
-          ${scope ? '<p class="hint">You see her room and what it opens onto. That is all there is.</p>' : ''}
+        body += `<div class="guide-sheet">
+          <div class="guide-head">
+            <h1>${scope ? 'One door ahead.' : 'You talk.'}</h1>
+            <p class="hint">The map is yours. The TV does not get it — call the rooms out loud.</p>
+          </div>
           ${seed == null
             ? '<p class="hint gm-blind">Waiting for the house…</p>'
             : guideMapSvg({
@@ -860,9 +874,10 @@ export default async function partyPhone({ params }) {
           <p class="hint ${hunterMark ? '' : 'gm-blind'}" data-gm-note>${esc(mapNote(jam, hunterMark))}</p>
           ${guidePinPad(scope)}
           ${guideJobPad(job, c.worldSeed, frame?.airingEpisode ?? 1)}
-          ${missionLine(frame)}
+          ${missionLine(frame, scope?.hereId)}
           <p class="hint">Cameras live ${frame?.cameras?.unlocked ?? '—'}.</p>
-          ${intelBlock(frame, { productionOnly: true })}`;
+          ${intelBlock(frame, { productionOnly: true })}
+        </div>`;
       } else {
         /*
          * 👏 THE PAD SENDS. Until now these four buttons printed a word on this phone and
@@ -1065,10 +1080,6 @@ export default async function partyPhone({ params }) {
     const drillBtn = root.querySelector('#drill-btn');
     if (drillBtn) {
       const down = () => {
-        if (!state.voice.runner) {
-          padFx('Say it first', '', 18);
-          return;
-        }
         state.pad.act = 1;
         drillBtn.classList.add('on');
         sendPad();
@@ -1082,7 +1093,6 @@ export default async function partyPhone({ params }) {
       drillBtn.addEventListener('pointerup', up);
       drillBtn.addEventListener('pointercancel', up);
     }
-    bindVoicePad();
     startPad();
   }
 
@@ -1170,8 +1180,6 @@ export default async function partyPhone({ params }) {
     state.padFx.label = '';
     state.padFx.kind = '';
     state.pad.act = 0;
-    state.voice.runner = '';
-    state.voice.guide = '';
     if (!state.pad.timer) return;
     clearInterval(state.pad.timer);
     state.pad.timer = 0;
@@ -1222,16 +1230,9 @@ export default async function partyPhone({ params }) {
     </div>`;
   }
 
-  function runnerDrillPad(seed, episode) {
+  function runnerDrillPad(seed) {
     const cue = footstepsCue(Date.now(), seed ?? 0);
-    const said = state.voice.runner;
-    return `<div class="voice-pad" data-job-pad="drill">
-      <p class="hint">You say it. Out loud. Buttons send nothing.</p>
-      <div class="voice-row" data-voice-role="runner">
-        ${RUNNER_VOICE.map((w) => `<button type="button" class="voice-btn${said === w ? ' on' : ''}" data-voice="${w}">${w}</button>`).join('')}
-      </div>
-      <div class="voice-cue" data-foot-cue>FOOTSTEPS · ${esc(cue)}</div>
-    </div>`;
+    return `<div class="voice-cue" data-job-pad="drill" data-foot-cue>FOOTSTEPS · ${esc(cue)}</div>`;
   }
 
   function guideJobPad(job, seed, episode) {
@@ -1244,14 +1245,7 @@ export default async function partyPhone({ params }) {
       </div>`;
     }
     const shot = drillShotFor(seed, episode);
-    const said = state.voice.guide;
-    return `<div class="voice-pad" data-job-pad="drill-guide">
-      <p class="hint">You talk. Say GO when you think he cannot hear it. Say HOLD to freeze the drill. Out loud · buttons send nothing.</p>
-      <div class="voice-row" data-voice-role="guide">
-        ${GUIDE_VOICE.map((w) => `<button type="button" class="voice-btn ${w === 'HOLD' ? 'hold' : 'go'}${said === w ? ' on' : ''}" data-voice="${w}">${w}</button>`).join('')}
-      </div>
-      <p class="voice-know">REAL aim is <strong>${esc(toolLabel(shot))}</strong>. Recap will say seated either way. She cannot see this.</p>
-    </div>`;
+    return `<p class="voice-know" data-job-pad="drill-guide">REAL aim <strong>${esc(toolLabel(shot))}</strong> · recap says seated either way. She cannot see this.</p>`;
   }
 
   /**
@@ -1276,7 +1270,6 @@ export default async function partyPhone({ params }) {
       </button>`;
     }).join('');
     return `<div class="pin-pad" data-pin-pad>
-      <p class="hint">Pin a door — then say it out loud. Buttons send nothing.</p>
       <div class="pin-row">${chips}</div>
       <p class="pin-say" data-pin-say>${esc(scope.say)}</p>
     </div>`;
@@ -1320,27 +1313,18 @@ export default async function partyPhone({ params }) {
       </div>`;
   }
 
-  function bindVoicePad() {
-    root.querySelectorAll('[data-voice]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const word = String(btn.dataset.voice || '').toUpperCase();
-        const role = btn.closest('[data-voice-role]')?.dataset.voiceRole;
-        if (role === 'runner' && RUNNER_VOICE.includes(word)) state.voice.runner = word;
-        if (role === 'guide' && GUIDE_VOICE.includes(word)) state.voice.guide = word;
-        btn.parentElement?.querySelectorAll('[data-voice]').forEach((b) => b.classList.toggle('on', b === btn));
-        // Local only. Do not send. The six hear it in the room.
-      });
-    });
-  }
-
-  function missionLine(frame) {
+  function goalCopy(frame, here) {
     const evs = state.client?.events ?? [];
     const last = [...evs].reverse().find((e) => String(e.type ?? '').startsWith('mission.'));
     const phase = last ? String(last.type).slice('mission.'.length) : 'seek';
     const spec = missionFor(frame?.airingEpisode ?? 1);
-    if (phase === 'done') return `<p class="goal">Home. That is the run.</p>`;
-    if (phase === 'return') return `<p class="goal">${esc(spec.home)}</p>`;
-    return `<p class="goal">${esc(spec.seek)}</p>`;
+    if (phase === 'done') return 'Home. That is the run.';
+    if (phase === 'return') return spec.home;
+    return seekLine(spec, coverageRoomOf(here));
+  }
+
+  function missionLine(frame, here) {
+    return `<p class="goal" data-goal>${esc(goalCopy(frame, here))}</p>`;
   }
 
   /**
@@ -1442,6 +1426,9 @@ export default async function partyPhone({ params }) {
     const hereEl = root.querySelector('[data-here]');
     if (hereEl) hereEl.textContent = hereLabel(frame?.you?.here);
 
+    const goalEl = root.querySelector('[data-goal]');
+    if (goalEl && !map) goalEl.textContent = goalCopy(frame, frame?.you?.here);
+
     const foot = root.querySelector('[data-foot-cue]');
     if (foot) {
       const cue = footstepsCue(Date.now(), state.client?.worldSeed ?? 0);
@@ -1477,8 +1464,10 @@ export default async function partyPhone({ params }) {
         el.setAttribute('cx', String(Math.round(m.x * 100) / 100));
         el.setAttribute('cy', String(Math.round(m.z * 100) / 100));
       };
-      put('gm-runner', marks.find((m) => m.kind === 'you'), 1.15);
-      put('gm-hunter', marks.find((m) => m.kind === 'hunter'), 1.3);
+      put('gm-runner', marks.find((m) => m.kind === 'you'), MAP_MARK.runner);
+      const hunter = marks.find((m) => m.kind === 'hunter');
+      put('gm-hunter-halo', hunter, MAP_MARK.hunterHalo);
+      put('gm-hunter', hunter, MAP_MARK.hunter);
       /*
        * 📡 The jam is a CLASS, not a rebuild. The glyph layer is already in the SVG and its
        * animation is CSS, so cutting the feed costs one `classList` write at 2 Hz. Appending
@@ -1486,7 +1475,7 @@ export default async function partyPhone({ params }) {
        * document order — so the two marks are re-parented behind it whenever they are created.
        */
       const jam = root.querySelector('.gm-jam');
-      if (jam) for (const cls of ['gm-runner', 'gm-hunter']) {
+      if (jam) for (const cls of ['gm-runner', 'gm-hunter-halo', 'gm-hunter']) {
         const el = map.querySelector(`.${cls}`);
         if (el && el.compareDocumentPosition(jam) & Node.DOCUMENT_POSITION_PRECEDING) {
           map.insertBefore(el, jam);

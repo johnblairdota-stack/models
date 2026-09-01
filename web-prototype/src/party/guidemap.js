@@ -33,6 +33,19 @@ import { planRegions, roomLabel, roomLabelsFor } from './mansion.js';
 /** Padding inside the viewBox, in world metres, so a mark on an outer wall is not clipped. */
 const PAD = 1.2;
 
+/**
+ * Mark radii, in world metres. Shared with `party-phone.js` `patchLive` so a 2 Hz rewrite of
+ * the circles cannot silently shrink the hunter the sit-down pass just made readable.
+ *
+ * Sized for Guide E's CROPPED neighbours viewBox, not the whole-house envelope: a 1.3 m
+ * disc in a 40 m plan on a postage-stamp SVG was the red dot John could not see.
+ */
+export const MAP_MARK = Object.freeze({
+  runner: 1.25,
+  hunter: 1.65,
+  hunterHalo: 2.7,
+});
+
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -71,9 +84,7 @@ function doorAxisAt(doors, at) {
 export function guideMapSvg({ seed, runner, flyover, goal, jam = false, scope = null } = {}) {
   const plan = planRegions(seed);
   const env = plan.env ?? { x0: 0, x1: 1, z0: 0, z1: 1 };
-  const x0 = env.x0 - PAD, z0 = env.z0 - PAD;
-  const w = (env.x1 - env.x0) + PAD * 2;
-  const d = (env.z1 - env.z0) + PAD * 2;
+  const floor = [...plan.rooms, ...plan.corridors];
 
   /*
    * 🌫️ **GUIDE E · "NEIGHBOURS ONLY" — ONE RULE: FOG HIDES.**
@@ -101,11 +112,35 @@ export function guideMapSvg({ seed, runner, flyover, goal, jam = false, scope = 
    * blind guide gets: *a floor plan, not an invented mark.* The caller passes `scope: null` and
    * she gets exactly that. Fog is about attention, not secrecy — the plan is built from
    * `worldSeed`, which is audience `all`.
+   *
+   * 📐 **THE VIEWBOX FOLLOWS THE SCOPE.** Sit-down 2026-09-01: fogging the rest of the house
+   * while still fitting the WHOLE envelope made the lit rooms a postage stamp under the chrome.
+   * Unscoped stays the house. Scoped fits this room and the doors out of it. That is not a
+   * whole-house flyover — it is the neighbours plan at a size a 390-wide thumb can read.
    */
   const scoped = !!scope && Array.isArray(scope.lit) && scope.lit.length > 0;
   const litIds = scoped ? new Set(scope.lit) : null;
   const isLit = (id) => !scoped || litIds.has(id);
-  const floor = [...plan.rooms, ...plan.corridors];
+
+  let x0 = env.x0 - PAD, z0 = env.z0 - PAD;
+  let w = (env.x1 - env.x0) + PAD * 2;
+  let d = (env.z1 - env.z0) + PAD * 2;
+  if (scoped) {
+    const lit = floor.filter((r) => litIds.has(r.id));
+    if (lit.length) {
+      let ax0 = Infinity, az0 = Infinity, ax1 = -Infinity, az1 = -Infinity;
+      for (const r of lit) {
+        if (r.x0 < ax0) ax0 = r.x0;
+        if (r.z0 < az0) az0 = r.z0;
+        if (r.x1 > ax1) ax1 = r.x1;
+        if (r.z1 > az1) az1 = r.z1;
+      }
+      x0 = ax0 - PAD;
+      z0 = az0 - PAD;
+      w = (ax1 - ax0) + PAD * 2;
+      d = (az1 - az0) + PAD * 2;
+    }
+  }
   /** Is this world point inside a region the guide can currently see? */
   const litAt = (p) => {
     if (!scoped) return true;
@@ -198,10 +233,11 @@ export function guideMapSvg({ seed, runner, flyover, goal, jam = false, scope = 
     body.push(`<circle class="gm-mark" cx="${n2(m.x)}" cy="${n2(m.z)}" r="0.9"/>`);
   }
   if (runner && Number.isFinite(Number(runner.x)) && litAt(runner)) {
-    body.push(`<circle class="gm-runner" cx="${n2(runner.x)}" cy="${n2(runner.z)}" r="1.15"/>`);
+    body.push(`<circle class="gm-runner" cx="${n2(runner.x)}" cy="${n2(runner.z)}" r="${MAP_MARK.runner}"/>`);
   }
   if (flyover?.hunter && Number.isFinite(Number(flyover.hunter.x)) && litAt(flyover.hunter)) {
-    body.push(`<circle class="gm-hunter" cx="${n2(flyover.hunter.x)}" cy="${n2(flyover.hunter.z)}" r="1.3"/>`);
+    body.push(`<circle class="gm-hunter-halo" cx="${n2(flyover.hunter.x)}" cy="${n2(flyover.hunter.z)}" r="${MAP_MARK.hunterHalo}"/>`);
+    body.push(`<circle class="gm-hunter" cx="${n2(flyover.hunter.x)}" cy="${n2(flyover.hunter.z)}" r="${MAP_MARK.hunter}"/>`);
   }
 
   /*
@@ -218,7 +254,7 @@ export function guideMapSvg({ seed, runner, flyover, goal, jam = false, scope = 
    */
   body.push(jamLayer(x0, z0, w, d));
 
-  return `<svg class="guide-map${jam ? ' jam' : ''}" viewBox="${n2(x0)} ${n2(z0)} ${n2(w)} ${n2(d)}" `
+  return `<svg class="guide-map${jam ? ' jam' : ''}${scoped ? ' neighbours' : ''}" viewBox="${n2(x0)} ${n2(z0)} ${n2(w)} ${n2(d)}" `
     + `preserveAspectRatio="xMidYMid meet" aria-label="The house">${body.join('')}</svg>`;
 }
 
@@ -278,6 +314,13 @@ export const GUIDE_MAP_CSS = `
     .guide-map { width:100%; height:auto; max-height:46vh; display:block; margin:10px 0 4px;
       background:var(--night-deep); border:1px solid rgba(var(--night-accent-rgb), .18);
       border-radius:12px; }
+    /* Guide E · the neighbours plan is the PRIMARY surface, not a widget under cue rows.
+       52vh of a 844-tall phone is ~440px — readable at 390 wide once the viewBox is cropped. */
+    .guide-map.neighbours { max-height:none; min-height:280px; height:52vh; flex:1 1 auto; }
+    .guide-map.neighbours .gm-label { font-size:.72px; }
+    .guide-sheet { display:flex; flex-direction:column; min-height:calc(100dvh - 52px); }
+    .guide-sheet .guide-head h1 { font-size:22px; margin:0 0 4px; }
+    .guide-sheet .guide-head .hint { margin:0 0 8px; }
     .guide-map .gm-hall { fill:var(--night-well); }
     .guide-map .gm-room { fill:var(--night-panel); stroke:var(--night-dim); stroke-width:.12; }
     .guide-map .gm-goal { stroke:var(--night-accent); stroke-width:.34; }
@@ -286,7 +329,8 @@ export const GUIDE_MAP_CSS = `
       dominant-baseline:middle; letter-spacing:.06em; text-transform:uppercase; }
     .guide-map .gm-mark { fill:var(--night-soft); opacity:.55; }
     .guide-map .gm-runner { fill:var(--night-live); }
-    .guide-map .gm-hunter { fill:var(--night-bad); }
+    .guide-map .gm-hunter-halo { fill:var(--night-bad); opacity:.32; }
+    .guide-map .gm-hunter { fill:var(--night-bad); stroke:var(--night-deep); stroke-width:.2; }
     .gm-blind { color:var(--night-dim); }
 
     /* 🌫️ GUIDE E · neighbours only. Fog is drawn rather than left empty, so the guide can see

@@ -20,6 +20,7 @@ export const MISSION_PAINTING = {
   target: 'twin-painting',
   catalogId: null,
   seek: 'Find the gallery. Hit one painting.',
+  act: 'Hit one painting.',
   home: 'One is down. Get back to the ballroom.',
 };
 
@@ -32,6 +33,7 @@ export const MISSION_TABLE = {
   target: 'table-round',
   catalogId: 'table-round',
   seek: 'Find the chapel. Smash the round table.',
+  act: 'Smash the round table.',
   home: 'The table is down. Get back to the ballroom.',
 };
 
@@ -43,6 +45,7 @@ export const MISSION_DRILL = {
   target: 'wall-cam',
   catalogId: null,
   seek: 'Find the gallery. Mount the wall camera.',
+  act: 'Mount the wall camera.',
   home: 'The mount is in. Get back to the ballroom.',
 };
 
@@ -51,4 +54,16 @@ export function missionFor(episode) {
   const ep = Number(episode);
   // Missing / NaN / 0 / 1 stay on the premiere smash. Only 2+ is the drill.
   return Number.isFinite(ep) && ep >= 2 ? MISSION_DRILL : MISSION_PAINTING;
+}
+
+/**
+ * The seek line once they are standing in the job room.
+ *
+ * Sit-down 2026-09-01: both pads still said "Find the gallery" while the runner's own
+ * proprioception line read "You are in Gallery". `mission.phase` stays `seek` until the
+ * smash/mount lands — that is the job clock, not the copy. `hereType` is a coverage room
+ * name (`gallery`), never a generated id.
+ */
+export function seekLine(spec, hereType) {
+  return hereType && hereType === spec.room ? spec.act : spec.seek;
 }

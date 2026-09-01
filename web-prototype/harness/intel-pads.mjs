@@ -39,7 +39,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { guideMapSvg } from '../src/party/guidemap.js';
+import { guideMapSvg, MAP_MARK } from '../src/party/guidemap.js';
 import { PLAN_YAW } from '../src/party/follow.js';
 import { pickPlanSeed, planRegions } from '../src/party/mansion.js';
 import { AUDIENCE, MATRIX, audienceFor } from '../net/party/entitle.js';
@@ -279,10 +279,53 @@ console.log('\n  the map, scoped');
   const c = guideMapSvg({ seed, goal: 'gallery', runner: { x: 2, z: 2 }, scope: { lit: [] } });
   t('IP7 · an unscoped map is byte-identical to the shipped one — `scope` is purely additive',
     a === b && b === c && !/gm-fog/.test(a) && /gm-room/.test(a) && /gm-goal/.test(a)
+    && !/neighbours/.test(a)
     // W8c/W8d, re-run here so this file fails too if the scope work ever reaches them.
     && !guideMapSvg({ seed }).includes('gm-hunter')
     && guideMapSvg({ seed, flyover: { hunter: { x: 1, z: 1 } } }).includes('gm-hunter'),
     `${a.length} chars, three ways of asking for no scope · W8c/W8d still hold`);
+}
+
+{
+  /*
+   * 📐 **THE VIEWBOX FOLLOWS THE SCOPE.** Fogging the rest of the house while still fitting the
+   * whole envelope was the postage stamp John sat on. Cropping is the fix; a scoped viewBox that
+   * is still the house is a class rename, not a map you can read at 390 wide.
+   *
+   * The assertion is the AABB of the LIT rects (plus the shipped PAD), not a ratio against the
+   * house: a hub with four doors can cover most of a small plan and a ratio would lie about it.
+   */
+  const vb = (s) => (s.match(/viewBox="([^"]+)"/) || ['', '0 0 1 1'])[1].split(/\s+/).map(Number);
+  const near = (a, b) => Math.abs(a - b) < 0.05;
+  const PAD_M = 1.2;
+  const bad = [];
+  let cropped = 0;
+  for (const h of houses) {
+    const house = vb(guideMapSvg({ seed: h.seed }));
+    for (const sp of h.spots) {
+      const pad = guidePad(h.seed, sp.at, null);
+      if (!pad.lit.length) continue;
+      const svg = guideMapSvg({ seed: h.seed, scope: pad });
+      const box = vb(svg);
+      if (!/neighbours/.test(svg)) { bad.push(`s${h.s} ${sp.id}: no neighbours class`); continue; }
+      const lit = h.g.rects.filter((r) => pad.lit.includes(r.id));
+      const x0 = Math.min(...lit.map((r) => r.x0)) - PAD_M;
+      const z0 = Math.min(...lit.map((r) => r.z0)) - PAD_M;
+      const x1 = Math.max(...lit.map((r) => r.x1)) + PAD_M;
+      const z1 = Math.max(...lit.map((r) => r.z1)) + PAD_M;
+      if (!near(box[0], x0) || !near(box[1], z0) || !near(box[2], x1 - x0) || !near(box[3], z1 - z0)) {
+        bad.push(`s${h.s} ${sp.id}: viewBox ${box.join(',')} ≠ lit ${[x0, z0, x1 - x0, z1 - z0].map((n) => n.toFixed(2)).join(',')}`);
+        continue;
+      }
+      const houseArea = house[2] * house[3];
+      const litArea = box[2] * box[3];
+      if (!(litArea < houseArea - 1)) bad.push(`s${h.s} ${sp.id}: cropped area ${litArea.toFixed(0)} ≮ house ${houseArea.toFixed(0)}`);
+      else cropped++;
+    }
+  }
+  t('IP7c · a scoped map CROPS to the lit rooms — not a fogged whole-house flyover',
+    bad.length === 0 && cropped >= 40,
+    bad.length ? bad.slice(0, 3).join(' | ') : `${cropped} stands cropped to the neighbours AABB`);
 }
 
 /*
@@ -529,8 +572,20 @@ console.log('\n  the television, and the wire');
   const newOnes = ['gm-fog', 'gm-here', 'gm-gate', 'gm-pin'];
   const hex = [...css.matchAll(/#[0-9a-fA-F]{3,8}\b/g)].map((m) => m[0]);
   t('IP12b · the four new map classes exist and the map\'s CSS still holds no colour of its own',
-    newOnes.every((c) => css.includes(`.${c}`)) && hex.length === 0,
-    `${newOnes.join(' ')} · ${hex.length ? hex.join(' ') : 'no hex, all --night-* names'}`);
+    newOnes.every((c) => css.includes(`.${c}`)) && hex.length === 0
+    && /guide-map\.neighbours/.test(css) && /gm-hunter-halo/.test(css),
+    `${newOnes.join(' ')} · neighbours crop · ${hex.length ? hex.join(' ') : 'no hex, all --night-* names'}`);
+}
+
+{
+  t('IP13 · expedition pads have no tappable CLOSE/LATE/GOING or GO/HOLD cue row',
+    !/<button[^>]*data-voice/.test(phoneSrc)
+    && !/class="voice-btn/.test(phoneSrc)
+    && !/voice-row/.test(phoneSrc)
+    && /FOOTSTEPS/.test(phoneSrc)
+    && /guide-sheet/.test(phoneSrc)
+    && MAP_MARK.hunter > 1.3 && MAP_MARK.hunterHalo > MAP_MARK.hunter,
+    `hunter r=${MAP_MARK.hunter} halo=${MAP_MARK.hunterHalo} · cue rows gone`);
 }
 
 console.log(`\n  reading · ${houses.length} generated houses`

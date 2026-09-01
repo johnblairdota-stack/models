@@ -6,8 +6,9 @@
  * actually mounts. A blind mount still counts as camera_lit. A failed mount stays dark and the
  * next pair drills again. Do not invent TILT. Do not put a map on the TV.
  *
- * Voice lives in the room. Pad buttons for GO / HOLD / CLOSE / LATE / GOING / which-face do
- * not send. The six hear the sentences; fail chrome never names a person.
+ * Voice lives in the room. CLOSE / LATE / GOING and GO / HOLD are spoken, not tapped — the
+ * pads do not carry those cue rows. Which-face chips still do not send. The six hear the
+ * sentences; fail chrome never names a person.
  *
  * No THREE, no DOM. Follow-bed, phones, recap and the harness all read this so the lie and
  * the still cannot disagree.

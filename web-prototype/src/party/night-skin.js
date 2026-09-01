@@ -712,18 +712,11 @@ export function injectNightSkin() {
       font-size:18px; font-weight:900; letter-spacing:.18em; color:#6ec8d4;
       border:2px solid #6ec8d4; padding:2px 8px; background:rgba(10,18,20,.45); }
     .voice-pad { margin:10px 0 4px; }
-    .voice-row { display:flex; gap:8px; }
-    .voice-btn { flex:1; appearance:none; border:1px solid rgba(232,220,200,.28); background:var(--night-panel);
-      color:var(--night-ink); font:inherit; font-weight:800; letter-spacing:.16em; text-transform:uppercase;
-      min-height:52px; border-radius:10px; }
-    .voice-btn.on { background:var(--night-accent); color:var(--night-deep); }
-    .voice-btn.hold { border-color: rgba(232, 92, 58, .55); color:#f3b39a; }
-    .voice-btn.hold.on { background:#c4472a; color:#fff7f2; }
-    .voice-btn.go { border-color: rgba(110, 200, 212, .55); color:#6ec8d4; }
-    .voice-btn.go.on { background:#6ec8d4; color:#102226; }
-    .voice-cue { margin-top:8px; padding:8px 10px; border:1px solid rgba(232,220,200,.18);
-      min-height:36px; font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:#c9b8a4; }
-    .voice-know { margin:8px 0 0; padding:8px 10px; border:1px solid #6ec8d4; color:#9be0e8; font-size:13px; }
+    .voice-cue { margin:6px 0 2px; padding:0; border:0; min-height:0;
+      font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:var(--night-dim); }
+    .voice-know { margin:8px 0 0; padding:0; border:0; color:var(--night-soft); font-size:13px;
+      line-height:1.35; }
+    .voice-know strong { color:var(--night-live); }
     /* 🔨 THE PAD'S OWN ANSWER TO A SWING. The button's .on flash is under the thumb that is
        covering it, so it confirms nothing to the person who tapped it — this line sits clear of
        both the stick and the buttons.

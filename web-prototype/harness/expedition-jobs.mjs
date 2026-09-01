@@ -13,7 +13,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { missionFor, MISSION_PAINTING, MISSION_DRILL, MISSION_TABLE } from '../src/party/mission.js';
+import { missionFor, MISSION_PAINTING, MISSION_DRILL, MISSION_TABLE, seekLine } from '../src/party/mission.js';
 import {
   FACES, SHOTS, GUIDE_VOICE, RUNNER_VOICE, JOB, FAIL_CHROME, SMASH_CHROME,
   realFaceFor, drillShotFor, footstepsCue, smashDebrief, voiceDebrief, blindDebrief,
@@ -109,15 +109,17 @@ t('J6 · hang helpers place twins on one wall and the cam on the other — not a
 
 {
   const phone = src('../src/views/party-phone.js');
-  t('J7 · phone voice buttons are local — they never send the call',
-    /data-voice/.test(phone)
-      && /Local only\. Do not send/.test(phone)
-      && /buttons send nothing/i.test(phone)
+  t('J7 · voice stays in the room — no CLOSE/LATE/GOING or GO/HOLD cue row, and the pad never sends the call',
+    !/<button[^>]*data-voice/.test(phone)
+      && !/class="voice-btn/.test(phone)
+      && !/voice-row/.test(phone)
       && !/t: 'voice'/.test(phone)
       && !/t: 'call'/.test(phone)
       && /id="drill-btn"/.test(phone)
       && /twin-face/.test(phone)
-      && /FOOTSTEPS/.test(phone));
+      && /FOOTSTEPS/.test(phone)
+      && /Say CLOSE, LATE or GOING out loud/.test(phone)
+      && /REAL aim/.test(phone));
 }
 
 {
@@ -246,6 +248,16 @@ t('J9 · world report may carry job / emptyNail / heard, never a person',
       && /Scenery, not a map/.test(host)
       && !/pathPortals/.test(host));
 }
+
+t('J14 · the seek line advances once the runner is in the job room',
+  seekLine(MISSION_DRILL, null) === MISSION_DRILL.seek
+    && seekLine(MISSION_DRILL, 'gallery') === MISSION_DRILL.act
+    && seekLine(MISSION_DRILL, 'study') === MISSION_DRILL.seek
+    && seekLine(MISSION_PAINTING, 'gallery') === MISSION_PAINTING.act
+    && !/Find the gallery/.test(MISSION_DRILL.act)
+    && /Mount the wall camera/.test(MISSION_DRILL.act)
+    && /data-goal/.test(src('../src/views/party-phone.js'))
+    && /seekLine\(spec, coverageRoomOf\(here\)\)/.test(src('../src/views/party-phone.js')));
 
 console.log(`\nexpedition-jobs: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
