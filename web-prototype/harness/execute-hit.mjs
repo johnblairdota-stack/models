@@ -33,6 +33,8 @@ import {
 } from '../src/game/execute-hit.js';
 import { liveTexture, dropDeadMaps, paintViewFail } from '../src/party/follow.js';
 import { SHOWRUNNER } from '../src/party/vote.js';
+import { executionPlate } from '../src/party/scorekeeper.js';
+import { verdictPlateHtml } from '../src/party/look.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -225,6 +227,72 @@ t('H9b · execution plate language is untouched — who / by whose hand',
 t('H9c · accusation SETTLE still exists for Reckoning — only Execution stopped using it',
   /SETTLE: 2\.00/.test(stageSrc)
   && !/settleClip/.test(stepFn));
+
+/* ── H16 · 🔨 "BEN SWINGS" ON ITS OWN LINE ───────────────────────────────────────────────────
+ *
+ * Couch Plan Rung 6. The Execution's big slot, `show-verdict-v`, is
+ * `clamp(18px, 2.6vw, 32px)` / weight 800 / `text-transform:uppercase` in a `42rem` box, and it
+ * was carrying the whole sentence — *"Ben swings — they named them, so their vote was already
+ * cast."*, 61 characters. From a sofa that is three lines of shouting capitals whose first two
+ * words are the fact. The event now owns the big line and the rule drops to `show-verdict-s`.
+ *
+ * 🚨 **THIS EXECUTES THE SHIPPED CHROME.** `executionPlate` lives in `src/party/scorekeeper.js`
+ * and `verdictPlateHtml` in `src/party/look.js`, both pure, so the rendered HTML is built here
+ * rather than pattern-matched — the `phone-accusation` lesson, and the reason a whole-file regex
+ * could never have caught the 61-character line in the first place. H16d is the control: the
+ * plate must still be able to say a LONG thing, so this is a rule about which slot, not a
+ * character budget somebody can satisfy by deleting words.
+ */
+{
+  const ben = { executed: 'p3', executioner: 'p1', threshold: 5, abstained: 0 };
+  const plate = executionPlate(ben, 'Ben');
+  const runner = executionPlate({ ...ben, executioner: SHOWRUNNER }, '');
+  const nobody = executionPlate({ executed: null, threshold: 5, abstained: 0 }, 'Ben');
+
+  t('H16 · the big line is the EVENT and nothing else — name, verb, stop',
+    plate.line === 'Ben swings.'
+    && runner.line === 'The Showrunner swings.'
+    && plate.line.length <= 24
+    && !/—|because|so their|already cast/i.test(plate.line),
+    `"${plate.line}" · ${plate.line.length} chars · showrunner "${runner.line}"`);
+
+  t('H16b · ...and the RULE is still said, one size down, never dropped',
+    plate.why === 'they named them, so their vote was already cast'
+    && runner.why === 'no nominator left to swing'
+    && !plate.line.includes(plate.why),
+    `"${plate.why}"`);
+
+  // The rendered plate: the two facts land in two different elements, and the ballot
+  // bookkeeping the beat already carried is still beside the rule rather than replaced by it.
+  const html = verdictPlateHtml({
+    kicker: 'CASTING IS NEXT.',
+    line: plate.line,
+    sub: [plate.why, `threshold ${ben.threshold} · abstained ${ben.abstained}`].join(' · '),
+  });
+  const big = (html.match(/<div class="show-verdict-v">([^<]*)<\/div>/) || [])[1] || '';
+  const small = (html.match(/<div class="show-verdict-s">([^<]*)<\/div>/) || [])[1] || '';
+  t('H16c · rendered, they are two elements: BEN SWINGS above, the rule and the threshold below',
+    big === 'Ben swings.'
+    && small.startsWith(plate.why)
+    && small.includes('threshold 5')
+    && small.includes('abstained 0')
+    && !big.includes('threshold'),
+    `v="${big}" · s="${small}"`);
+
+  t('H16d control · the plate can still carry a long line — H16 is about which SLOT, not a word count',
+    (verdictPlateHtml({ line: 'A'.repeat(90) }).match(/A{90}/) || []).length === 1
+    && nobody.line === 'Nobody reached the threshold.' && nobody.why === ''
+    && executionPlate(null).line === '',
+    `no-eviction "${nobody.line}" · null plate is empty`);
+
+  // And the view is still wired to both halves — a pure helper nobody calls is not chrome.
+  const hostSrc16 = read('src/views/party-host.js').replace(/\r\n/g, '\n');
+  t('H16e · the TV passes BOTH halves — the line to `verdict`, the rule to `verdictWhy`',
+    /verdict: executionSwing\(client\.lynchResult, names\),/.test(hostSrc16)
+    && /verdictWhy: executionSwingWhy\(client\.lynchResult\),/.test(hostSrc16)
+    && /verdictKicker, verdictSub, verdictWhy,/.test(hostSrc16)
+    && /executionPlate/.test(hostSrc16));
+}
 
 /* ── H10 · seated aim fallback ──────────────────────────────────────────────────────────── */
 t('H10 · seatedAim is a visor-height torso when Head is missing',

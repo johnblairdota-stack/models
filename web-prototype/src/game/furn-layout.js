@@ -33,7 +33,8 @@ import {
   openingsFromRoom,
   propFootprint,
 } from './portal-clearance.js';
-import { MISSION_PAINTING } from '../party/mission.js';
+import { MISSION_PAINTING, MISSION_DRILL } from '../party/mission.js';
+import { camHang, twinHang, TWIN, TWIN_OFFSET, WALL_CAM } from '../party/jobs.js';
 
 export { openingsFromRoom } from './portal-clearance.js';
 
@@ -173,64 +174,110 @@ export function drawHalf(spec) {
 }
 
 /**
- * 🖼️ **THE ONE THING IN THE ROOM THIS PLACER DOES NOT PLACE — and used to hang furniture through.**
+ * 🖼️ **THE TWO THINGS IN THE ROOM THIS PLACER DOES NOT PLACE — and used to hang furniture through.**
  *
- * `follow-bed.js` `buildPainting` hangs the episode-1 smash target itself: the longest wall, the
- * side furthest from the room's centre, 0.22 m off it, a 1.46 × 1.86 × 0.09 frame at 1.85 m.
- * It is not a `FurnProp` and it is not in `FURN_SMASH_ASSETS`, so nothing here ever saw it —
- * and `candidatesFor`'s `cam-wall` slots are `{ x: space.x0 + 0.22, z: c.z }` and
- * `{ x: c.x, z: space.z0 + 0.22 }`, which is that formula character for character. **Two placers
- * owned one slot and neither knew it**: on 12 of 64 world seeds the catalog smash cam was hung
- * through the canvas (`target-sight` T2), and `accept`'s 0.45 m clamp cannot separate them
- * because it is smaller than the frame's own 0.73 m half-width.
+ * `follow-bed.js` hangs both mission targets itself and neither is a `FurnProp`, so nothing here
+ * ever saw them. `candidatesFor`'s `cam-wall` slots are the same wall mouths the two hang formulas
+ * use, character for character — `{ x: space.x0 + 0.22, z: c.z }` / `{ x: space.x1 - 0.22, z: c.z }`
+ * against `twinHang` / `camHang`'s own `wallInset` of 0.22. **Two placers owned one slot and
+ * neither knew it**, twice over:
  *
- * So the placer is told. The rect is the frame's footprint grown by a body DIAMETER
- * (`Player.radius` = `height * 0.20` = 0.34 m at the 1.7 m default `follow-bed` builds with) on
- * the three sides that face the room: laterally, so a runner can stand square-on to any part of
- * the frame; forward, so there is a lane to stand in and swing from. Backwards it stops at the
- * wall, because there is no floor behind a wall to keep clear.
+ *   · the **twin paintings** (episode 1) — `buildTwinPaintings`, the longest wall, two 1.46 m
+ *     frames at `cx ± TWIN_OFFSET`. Caught by `target-sight` T2 on 12 of 64 world seeds.
+ *   · the **wall camera** (episodes 2+) — `buildWallCam`, the OPPOSITE long wall, one 0.48 m box
+ *     at 1.72 m. Caught by `target-sight` T2 on 11 of 192 targets, and it survived the first
+ *     keep-out because that rect only ever covered the paintings.
  *
- * ⚠️ **THIS IS A SECOND COPY OF `buildPainting`'S FORMULA AND THAT IS A DEBT, NOT A DESIGN.**
- * `follow-bed.js` imports THREE, so this file cannot ask it where the painting went without
- * pulling the renderer into every caller; `target-sight.mjs` G4 pins the harness's own third copy
- * against `follow-bed.js`'s source text for exactly this reason. The day `buildPainting` moves,
- * these numbers move with it — T2 is what will say so.
+ * `accept`'s 0.45 m clamp is all that ever stood between them and it is smaller than a frame's own
+ * 0.73 m half-width, so it does not separate anything.
+ *
+ * So the placer is told, and it is told by **asking `jobs.js` where the targets went** rather than
+ * by re-typing the formula: `twinHang` / `camHang` are the same pure functions `follow-bed.js`
+ * builds the real meshes from, and this file's old copy of the numbers was already stale — it
+ * described ONE centred 1.46 m frame, which stopped being true the day the twins shipped, and its
+ * rect reached ±1.41 m where the pair reaches ±2.33 m. A second copy of a formula is a debt; the
+ * only way to stop paying it is to not have one.
+ *
+ * Each rect is the target's own footprint grown by a body DIAMETER (`Player.radius` =
+ * `height * 0.20` = 0.34 m at the 1.7 m default `follow-bed` builds with) on the sides that face
+ * the room: laterally, so a runner can stand square-on to any part of it; forward, so there is a
+ * lane to stand in and swing (or drill) from. Backwards it stops at the wall, because there is no
+ * floor behind a wall to keep clear.
  */
-export const PAINTING_WALL_OFF = 0.22;
-export const PAINTING_W = 1.46;
-export const PAINTING_D = 0.09;
+export const PAINTING_WALL_OFF = TWIN.wallInset;
+export const PAINTING_W = TWIN.frameW;
+export const PAINTING_D = TWIN.frameD;
 /** `Player`: `this.radius = this.height * 0.20`, and `follow-bed` builds the runner at 1.7 m. */
 export const RUNNER_R = 0.34;
 
+/** The lane a runner needs beside and in front of a target they were sent to work on. */
+const KEEP_LANE = 2 * RUNNER_R;
+
+/**
+ * One wall-hung target's keep-out, from the hang `jobs.js` actually produces.
+ * `alongX` says the thing spans x and hangs on a z wall; `inward` is the sign that points into
+ * the room from that wall, so the lane is grown on the room side only.
+ */
+function hangKeepOut(space, id, hang, halfW, halfD) {
+  if (!hang) return null;
+  const hw = halfW + KEEP_LANE;
+  const hd = halfD + KEEP_LANE;
+  if (hang.alongX) {
+    const wall = hang.z < mid(space).z ? space.z0 : space.z1;
+    const inward = hang.z < mid(space).z ? 1 : -1;
+    const a = wall, b = hang.z + inward * hd;
+    return { id, x0: hang.x - hw, x1: hang.x + hw, z0: Math.min(a, b), z1: Math.max(a, b) };
+  }
+  const wall = hang.x < mid(space).x ? space.x0 : space.x1;
+  const inward = hang.x < mid(space).x ? 1 : -1;
+  const a = wall, b = hang.x + inward * hd;
+  return { id, x0: Math.min(a, b), x1: Math.max(a, b), z0: hang.z - hw, z1: hang.z + hw };
+}
+
+/** Both twin faces, as one rect — they share a wall and the lane between them is not a slot. */
 export function paintingKeepOut(space) {
   if (!space) return null;
   const w = space.x1 - space.x0, d = space.z1 - space.z0;
   if (!(w > 0) || !(d > 0)) return null;
-  const alongX = w >= d;                                   // `buildPainting`: the longest wall
-  const c = mid(space);
-  const lane = 2 * RUNNER_R;
-  const hw = PAINTING_W / 2 + lane;                        // along the wall
-  const hd = PAINTING_D / 2 + lane;                        // out into the room
-  return alongX
-    ? { id: `${space.id}.painting`, x0: c.x - hw, x1: c.x + hw, z0: space.z0, z1: space.z0 + PAINTING_WALL_OFF + hd }
-    : { id: `${space.id}.painting`, x0: space.x0, x1: space.x0 + PAINTING_WALL_OFF + hd, z0: c.z - hw, z1: c.z + hw };
+  const hang = twinHang(space, 'left');
+  if (!hang) return null;
+  // One rect over the PAIR: a face half-width plus the offset that separates the two.
+  return hangKeepOut(space, `${space.id}.painting`, hang,
+    TWIN_OFFSET + TWIN.frameW / 2, TWIN.frameD / 2);
+}
+
+/** The episodes-2+ drill target, on the opposite long wall. */
+export function camKeepOut(space) {
+  if (!space) return null;
+  const w = space.x1 - space.x0, d = space.z1 - space.z0;
+  if (!(w > 0) || !(d > 0)) return null;
+  return hangKeepOut(space, `${space.id}.wallcam`, camHang(space),
+    WALL_CAM.w / 2, WALL_CAM.d / 2);
 }
 
 /**
- * Every rect a catalog prop may not stand in, for one set of spaces. Today that is one rect — the
- * mission painting's — in the room `mission.js` names, and it is derived rather than passed so
- * that a caller cannot forget it: `dressCatalogFurniture` and `party-warm` and `target-sight` all
- * call `catalogPlacements(spaces, openings)` and all three must get the same house.
+ * Every rect a catalog prop may not stand in, for one set of spaces. Two rects per mission room —
+ * the twin paintings' and the wall camera's — and they are derived rather than passed so that a
+ * caller cannot forget one: `dressCatalogFurniture` and `party-warm` and `target-sight` all call
+ * `catalogPlacements(spaces, openings)` and all three must get the same house.
  *
- * The chapel's episode-2 target needs no row here: it IS a catalog prop (`table-round`), so
- * `farEnough` already holds the others off it.
+ * Both jobs live in the SAME room (`mission.js`: `MISSION_PAINTING.room` and `MISSION_DRILL.room`
+ * are both `gallery`) on opposite long walls, which is why one loop yields both. The equality is
+ * asserted rather than assumed — the day they part company this returns rects for each room the
+ * two name, instead of silently keeping only the first one clear.
  */
 export function missionKeepOuts(spaces = []) {
   const out = [];
   for (const s of spaces ?? []) {
-    if (spaceKind(s) !== MISSION_PAINTING.room) continue;
-    const rect = paintingKeepOut(s);
-    if (rect) out.push(rect);
+    const kind = spaceKind(s);
+    if (kind === MISSION_PAINTING.room) {
+      const rect = paintingKeepOut(s);
+      if (rect) out.push(rect);
+    }
+    if (kind === MISSION_DRILL.room) {
+      const rect = camKeepOut(s);
+      if (rect) out.push(rect);
+    }
   }
   return out;
 }
