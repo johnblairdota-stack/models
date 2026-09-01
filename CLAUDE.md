@@ -84,7 +84,7 @@ decision, not a refactor.
   and no target, drawn as a mesh so the four-light rig did not grow; it is **not the hunter, and
   the hunter is still a door that is shut**. The clock keeps running while hidden. Every decision
   lives in `src/game/runner-intel.js`, which is pure and **imports nothing**, so a node gate
-  executes the shipped functions. Gate: `runner-intel` (93 checks), `party-warm` W26g/W26g2/W26g3.
+  executes the shipped functions. Gate: `runner-intel` (97 checks), `party-warm` W26g/W26g2/W26g3.
 - **The pin is on the wire at audience `crew`, and the TV is told it and may not draw it.**
   Stage 3 of `docs/slices/task-runner-intel.md`, landed 2026-09-01. `you.pin.{x,z,roomId,kind}`
   are `crew` rows — `all` would put the target's bearing on eight screens and delete the guide's
@@ -268,6 +268,36 @@ decision, not a refactor.
   a 22px ribbon during the Expedition.
 
 ## Gates are the memory
+
+**The guide's chip row was a PHOTOGRAPH, and no node gate could see it** (2026-09-02, found by
+walking the loop). `party-phone.js`'s structural stamp is *"everything that changes the SHAPE of the
+screen"*, and the guide's half read `expedition:guide:{missionPhase}:{job}:{card}` — **not one term
+of which changes when the runner walks through a door.** `patchLive` writes the here-label, the
+intel strip, the two map marks and the sentence under them, and has never touched the pin pad. So
+`guidePinPad(scope)` rendered ONCE, on the first expedition frame with the runner still in the
+ballroom, and **every chip stayed the ballroom's for the whole run** — Guide E's premise (*"her rect
+plus the rects a door joins to it, RIGHT NOW"*) inverted. Under auto-walk that is not cosmetic: she
+taps NORTH, pins a doorway out of a room the runner left two rooms ago, and the body walks to it.
+Tapping was equally stuck, because `bindPinPad` calls `paint()`, which matched the same stamp and
+patched — so the `on` highlight and the say-line never moved either. Fixed with a `guideStamp` term
+carrying `hereId` and the pin; the guide's sheet has **no stick**, so the argument that put the
+stamp there (a rebuild destroys `setPointerCapture` under a thumb) does not apply to her seat, and a
+rebuild per doorway is the bargain `camStamp` already takes for the runner's camera crossings.
+**The gate is a DISJUNCTION on purpose** — the chips may follow the runner by the stamp OR by
+`patchLive`, because this repo has already chosen each of those for a different element, and a gate
+that demanded the stamp would redden the day somebody does the other one correctly. Gate:
+`runner-intel` RI21–RI21d, whose control runs the SHIPPED stamp through the same predicate.
+
+**And the fix for it threw on every paint, which only the BROWSER gate could see** (same day). The
+memo added to stop `planRegions` being built twice per frame was `let scopeMemo` beside its helper —
+but `guideScopeFor` is a hoisted `function` called from the stamp hundreds of lines ABOVE that
+declaration, so the `let` was in its temporal dead zone on every paint and the whole phone threw
+*"Cannot access 'ne' before initialization"*, minified, from inside the guide's own sheet.
+`phone-accusation` **PA8** caught it; **no node gate could have**, because none of them execute
+`paint()`. It lives on `state` now — an object literal fully built before any of this runs, so there
+is no dead zone at all. Two standing lessons: **a hoisted function that reads a `let` declared later
+in the same closure is a trap the bundler will not warn about**, and *"the node gates are green"* is
+not the same sentence as *"the page loads"*.
 
 **A gate must survive the fault it exists to catch, and a ban must be asked of CODE** (2026-09-02).
 Three of this pass's checks were written wrong first and each is a reusable shape. (1) RI3c banned

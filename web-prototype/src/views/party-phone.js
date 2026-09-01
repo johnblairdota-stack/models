@@ -94,6 +94,18 @@ export default async function partyPhone({ params }) {
     reactAt: 0,
     /** The last `mission.*` this phone painted, so the BREAK can be told from the steady state. */
     missionSeen: null,
+    /*
+     * 🚨 **GUIDE E'S SCOPE, MEMOISED — AND IT LIVES ON `state` BECAUSE A `let` HERE IS A TRAP.**
+     *
+     * `guideScopeFor` is a hoisted `function` and the structural stamp calls it near the TOP of
+     * `paint()`, hundreds of lines above where the helper is written. A `let scopeMemo` beside the
+     * helper is therefore in its temporal dead zone on every paint, and the whole phone threw
+     * *"Cannot access 'ne' before initialization"* — minified, from inside the guide's own sheet.
+     * `harness/phone-accusation.mjs` PA8 caught it; nothing in node could have, because none of the
+     * node gates execute `paint()`. `state` is an object literal that is fully built before any of
+     * this runs, so a field on it has no dead zone at all.
+     */
+    scopeMemo: { key: '', scope: null },
     /** How far along the TV's mansion bake is — fanned to every phone, not just the host. */
     warm: '',
     warmPct: 0,
@@ -607,9 +619,38 @@ export default async function partyPhone({ params }) {
      * 1.35 s camera move on the television rather than their own hands.
      */
     const camStamp = iAmRunner ? `:${frame?.you?.view || 'chase'}` : '';
+    /*
+     * 🚨 **THE GUIDE'S CHIPS ARE PART OF HER SHEET'S SHAPE, AND LEAVING THEM OUT MADE THE WHOLE
+     * PAD A PHOTOGRAPH.** Found 2026-09-02 while walking the loop end to end.
+     *
+     * The stamp above is *"everything that changes the SHAPE of the screen"*, and until now the
+     * guide's half of it was `expedition:guide:{missionPhase}:{job}:{card}` — **not one term of
+     * which changes when the runner walks through a door.** `patchLive` writes the here-label, the
+     * intel strip, the two map marks and the sentence under them, and it has never touched the pin
+     * pad. So `guidePinPad(scope)` rendered ONCE, on the first expedition frame, with the runner
+     * still standing in the ballroom, and every chip on it stayed the ballroom's for the whole run.
+     *
+     * That is Guide E's premise inverted. The board's own argument is *"her rect plus the rects a
+     * door joins to it, RIGHT NOW"*; a frozen chip row means she taps NORTH and pins a doorway out
+     * of a room the runner left two rooms ago — and under auto-walk the body then walks to it.
+     * Tapping a chip was equally stuck: `bindPinPad` calls `paint()`, which matched the same stamp
+     * and patched, so neither the `on` highlight nor the say-line moved either.
+     *
+     * ⚠️ **THE FIX IS A STAMP TERM, NOT A NEW PATCH PATH, AND THE COST IS WHY.** Patching the chips
+     * in place means re-deriving the scope inside `patchLive` at 2 Hz and diffing four buttons and
+     * a sentence against the DOM — more machinery than the thing it saves. The guide's sheet has
+     * **no stick** (`bindPad` bails at `if (!stick)`), so the argument that put this stamp here in
+     * the first place — a rebuild destroys `setPointerCapture` under a thumb — does not apply to
+     * her seat at all. A rebuild per DOORWAY is the same bargain `camStamp` already takes for the
+     * runner's camera crossings, and `guideScope` is computed once per paint and reused below so
+     * the plan is not built twice.
+     */
+    const guideStamp = iAmGuide && beat === 'expedition'
+      ? `:${guideScopeFor(frame)?.hereId ?? '-'}:${state.pin ? `${state.pin.kind}@${state.pin.roomId}` : '-'}`
+      : '';
     const liveStamp = beat === 'expedition' && !state.stage
       ? `${beat}:${iAmRunner ? 'run' : iAmGuide ? 'guide' : 'watch'}:${missionPhase}:${missionFor(frame?.airingEpisode ?? 1).job}`
-        + `:${hasCard() ? 'card' : 'nocard'}${camStamp}`
+        + `:${hasCard() ? 'card' : 'nocard'}${camStamp}${guideStamp}`
       : null;
     if (liveStamp && root.dataset.liveUi === liveStamp && patchLive(frame)) {
       window.__rrrPhone = { frame, beat, seat: me.seat, iAmRunner, iAmGuide };
@@ -856,18 +897,7 @@ export default async function partyPhone({ params }) {
          * `party-warm` W8c already settled what a blind guide gets. `scope: null` is the shipped
          * map, unchanged.
          */
-        /*
-         * 🎯 **THE MISSION ROOM, OFF THE PUBLIC EVENT — the same read `missionLine` already makes.**
-         * `room.js` puts the room on the `mission.*` event at `VIS.PUBLIC`, so this is a fact this
-         * phone already had; nothing new is asked for and nothing new is entitled. The chips it
-         * unlocks are two targets inside a room the runner is standing in, which the guide can
-         * already see the whole of.
-         */
-        const missionRoom = [...(c.events ?? [])].reverse()
-          .find((e) => String(e.type ?? '').startsWith('mission.'))?.data?.room ?? null;
-        const scope = (seed != null && meMark)
-          ? guidePad(seed, meMark, state.pin, { missionRoom, job })
-          : null;
+        const scope = guideScopeFor(frame);
         guideScope = scope;
         /*
          * 🗺️ **THE MAP IS THE PRIMARY SURFACE, AND THE ORDER OF THIS TEMPLATE IS THE WHOLE OF
@@ -1339,6 +1369,39 @@ export default async function partyPhone({ params }) {
    * direction with no door is drawn dim rather than omitted, because a missing chip and a chip for
    * a wall look identical to a thumb but mean opposite things.
    */
+  /**
+   * 🗺️ **GUIDE E'S SCOPE, BUILT AT MOST ONCE PER PAINT.**
+   *
+   * Two callers want it and they are on opposite sides of the structural stamp: the stamp itself
+   * needs `hereId` to know whether the sheet's SHAPE has changed, and the guide branch needs the
+   * whole thing to render. Calling `guidePad` twice would build `planRegions` twice per frame at
+   * 2 Hz, which is the kind of waste that later gets "fixed" by taking the term back out of the
+   * stamp — so the memo is here to make sure the honest version stays the cheap one.
+   *
+   * 🚨 **THE KEY IS EVERY INPUT, SO THIS CANNOT GO STALE.** Seed, the runner's mark, the pin, the
+   * mission room and the job — miss one and the memo is a lie. It is not a cache of the HOUSE:
+   * `neighbourScope`'s header forbids that in capitals and it is right, because the generator can
+   * move a wall. This is one frame's answer, thrown away the moment any input differs.
+   *
+   * ⚠️ **THE MISSION ROOM COMES OFF THE PUBLIC `mission.*` EVENT** — the same read `missionLine`
+   * already makes. `room.js` writes it at `VIS.PUBLIC`, so nothing new is asked for and nothing new
+   * is entitled; the chips it unlocks are two targets inside a room the runner is standing in,
+   * which the guide can already see the whole of.
+   */
+  function guideScopeFor(frame) {
+    const c = state.client;
+    const seed = c?.worldSeed == null ? null : pickPlanSeed(c.worldSeed).seed;
+    const meMark = (frame?.flyover?.marks ?? []).find((k) => k.kind === 'you') ?? null;
+    if (seed == null || !meMark) return null;
+    const missionRoom = [...(c.events ?? [])].reverse()
+      .find((e) => String(e.type ?? '').startsWith('mission.'))?.data?.room ?? null;
+    const job = missionFor(frame?.airingEpisode ?? 1).job;
+    const key = `${seed}|${meMark.x}|${meMark.z}|${JSON.stringify(state.pin ?? null)}|${missionRoom}|${job}`;
+    if (state.scopeMemo.key === key) return state.scopeMemo.scope;
+    state.scopeMemo = { key, scope: guidePad(seed, meMark, state.pin, { missionRoom, job }) };
+    return state.scopeMemo.scope;
+  }
+
   function guidePinPad(scope) {
     if (!scope) return '';
     const gates = new Map((scope.gates ?? []).map((g) => [g.dir, g]));

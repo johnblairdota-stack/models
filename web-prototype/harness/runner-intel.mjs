@@ -1022,6 +1022,88 @@ console.log('\n  she gets there');
 }
 
 /* =================================================================================================
+ * RI21 · THE GUIDE'S CHIP ROW CANNOT BE A PHOTOGRAPH
+ *
+ * 🚨 **THE BUG THIS EXISTS FOR SHIPPED ON 2026-09-01 AND WAS FOUND ON 2026-09-02 BY WALKING THE
+ * LOOP, NOT BY A CHECK.** `party-phone.js`'s structural stamp is *"everything that changes the
+ * SHAPE of the screen"* and the guide's half of it read
+ * `expedition:guide:{missionPhase}:{job}:{card}` — **not one term of which changes when the runner
+ * walks through a door.** `patchLive` writes the here-label, the intel strip, the two map marks and
+ * the sentence under them, and has never touched the pin pad. So `guidePinPad(scope)` rendered ONCE,
+ * on the first expedition frame, with the runner still in the ballroom, and every chip stayed the
+ * ballroom's for the whole run.
+ *
+ * That is Guide E's premise inverted — the board's argument is *"her rect plus the rects a door
+ * joins to it, RIGHT NOW"* — and under auto-walk it is worse than cosmetic: she taps NORTH, pins a
+ * doorway out of a room the runner left two rooms ago, and the body walks to it. Tapping was
+ * equally stuck, because `bindPinPad` calls `paint()`, which matched the same stamp and patched.
+ *
+ * ⚠️ **THE CHECK IS A DISJUNCTION ON PURPOSE, AND PINNING THE IMPLEMENTATION WOULD BE WORSE.**
+ * There are two honest ways to keep the row live — put the scope in the STAMP so the sheet rebuilds,
+ * or teach `patchLive` to rewrite the chips — and this repo has already chosen each of them for a
+ * different element (the camera is a stamp term; the map marks are patched). A gate that demanded
+ * the stamp would redden the day somebody does the other one correctly. So it asks the question the
+ * bug actually asks: **when the runner changes room, can the chips change?**
+ * ============================================================================================== */
+
+console.log('\n  and her chips are not a photograph');
+
+{
+  const phone = codeOf(src('src/views/party-phone.js'));
+  const stampExpr = phone.slice(phone.indexOf('const camStamp'), phone.indexOf('if (liveStamp &&'));
+  const patchBody = phone.slice(phone.indexOf('function patchLive'), phone.indexOf('function mapNote'));
+
+  /** Can the chip row change when the runner walks through a door? Two legal answers. */
+  const staleProof = (stamp, patch) => {
+    const inStamp = /guideStamp/.test(stamp) && /hereId/.test(stamp) && /\$\{guideStamp\}/.test(stamp);
+    const inPatch = /data-pin-pad|pin-chip|data-spot/.test(patch);
+    return { inStamp, inPatch, live: inStamp || inPatch };
+  };
+  const now = staleProof(stampExpr, patchBody);
+
+  t('RI21 · the chips can follow the runner through a door — by the stamp, or by the patch',
+    now.live,
+    `stamp carries the room: ${now.inStamp} · patchLive rewrites the chips: ${now.inPatch}`);
+
+  /*
+   * 🚨 **THE CONTROL IS THE SHIPPED BUG, EXECUTED.** This is the exact stamp expression that was on
+   * `main` before this fix, run through the same predicate. It has to come out RED, or the check
+   * above is asserting something that was always true and proves nothing.
+   */
+  const OLD_STAMP = `const camStamp = iAmRunner ? \`:\${frame?.you?.view || 'chase'}\` : '';
+    const liveStamp = beat === 'expedition' && !state.stage
+      ? \`\${beat}:\${iAmRunner ? 'run' : iAmGuide ? 'guide' : 'watch'}:\${missionPhase}:\${missionFor(frame?.airingEpisode ?? 1).job}\`
+        + \`:\${hasCard() ? 'card' : 'nocard'}\${camStamp}\`
+      : null;`;
+  const old = staleProof(OLD_STAMP, patchBody);
+  t('RI21b control · the stamp that SHIPPED fails this, which is why the check is worth having',
+    !old.live && !old.inStamp,
+    'ballroom chips for the whole run — the bug, run through the same predicate');
+
+  /*
+   * And the pin, for the same reason one step smaller: `bindPinPad` repaints after a tap, so if the
+   * pin is not part of the sheet's identity the `on` highlight and `sayThis`'s line never move and
+   * the guide has no way to tell whether her tap was heard.
+   */
+  t('RI21c · a TAP changes the sheet too — the highlight and the say-line are not write-only',
+    /state\.pin \? `\$\{state\.pin\.kind\}@\$\{state\.pin\.roomId\}`/.test(stampExpr)
+    || /data-pin-say/.test(patchBody),
+    'the pin is part of the sheet identity, so a tap redraws the row that carries it');
+
+  /*
+   * RI21d · and the fix must not have bought a rebuild with a double plan build. The memo's key has
+   * to name EVERY input `guidePad` reads — miss one and the memo is a lie that hands the stamp a
+   * stale `hereId`, which is the original bug with an extra step.
+   */
+  const memo = phone.slice(phone.indexOf('function guideScopeFor'), phone.indexOf('function guidePinPad'));
+  t('RI21d · the scope is built at most once per paint, and the memo key names every input',
+    /scopeMemo\.key === key/.test(memo)
+    && ['seed', 'meMark.x', 'meMark.z', 'state.pin', 'missionRoom', 'job'].every((k) => memo.includes(k))
+    && (phone.match(/guidePad\(seed, meMark, state\.pin/g) || []).length === 1,
+    'one call site, and a key that cannot go stale behind the stamp');
+}
+
+/* =================================================================================================
  * RI18 · THE LIVE ROOM — the pin's journey, photographed on real frames
  *
  * 🚨 **EVERYTHING ABOVE THIS LINE IS ABOUT BYTES AND TABLES, AND THAT IS THE `whisper-split`
