@@ -27,7 +27,7 @@ import {
   rollCallRevealed, rundownRibbon,
 } from '../party/show.js';
 import { NO_ONE, SHOWRUNNER } from '../party/vote.js';
-import { clearsLine, lynchBoardRows, tallyBoardCopy } from '../party/scorekeeper.js';
+import { clearsLine, executionPlate, lynchBoardRows, tallyBoardCopy } from '../party/scorekeeper.js';
 import { outcomeLine } from '../party/win.js';
 import { deadIdsFromPublic, describeCastTiebreaks, livingFromPublic, previewCastTiebreaks, shouldArmCastSend } from '../party/ballot.js';
 import { MAX_PAIRS, pairShape } from '../party/link.js';
@@ -1489,6 +1489,7 @@ export default async function partyHost({ params }) {
         whoSub: executed ? 'out' : 'no eviction',
         whoId: executed,
         verdict: executionSwing(client.lynchResult, names),
+        verdictWhy: executionSwingWhy(client.lynchResult),
         executed: !!executed,
         tally: client.lynchResult ? { votes: client.lynchVotes, result: client.lynchResult, noms: client.noms } : null,
       });
@@ -2064,7 +2065,7 @@ function talkSlateHtml(beat) {
 function talkStage({
   recap, names, lobby, runEnd, clock, kicker, beat,
   who, whoSub, whoId, standing, tally, verdict, executed, aside, facts, state,
-  verdictKicker, verdictSub,
+  verdictKicker, verdictSub, verdictWhy,
 }) {
   const look = whoId ? seatLook(lobby, whoId) : null;
   const face = look ? robotFaceSvg(look.shell, look.accent, { size: 64, treatment: 'chip' }) : '';
@@ -2111,9 +2112,17 @@ function talkStage({
     ? verdictPlateHtml({
       kicker: verdictKicker ?? (executed ? 'VERDICT READY' : 'NO EVICTION'),
       line: verdict,
-      sub: verdictSub ?? (tally?.result
-        ? `threshold ${tally.result.threshold ?? '—'} · abstained ${tally.result.abstained ?? 0}`
-        : ''),
+      /*
+       * `verdictWhy` is the REASON the line above happened, and it rides in FRONT of the ballot
+       * bookkeeping rather than replacing it — see `executionSwing`. Passing `verdictSub`
+       * still overrides the lot, which is how the Verdict and the Reunion say their own.
+       */
+      sub: verdictSub ?? [
+        verdictWhy || '',
+        tally?.result
+          ? `threshold ${tally.result.threshold ?? '—'} · abstained ${tally.result.abstained ?? 0}`
+          : '',
+      ].filter(Boolean).join(' · '),
     })
     : '';
   const side = `${aside || ''}${nomBoard(standing, names, lobby, beat)}${tally ? lynchBoard(tally.votes, tally.result, names, tally.noms) : ''}`;
@@ -2363,15 +2372,31 @@ function executionNextLine(episode) {
   return Number(episode) >= EPISODE_CAP ? 'The Reunion is next.' : 'Casting is next.';
 }
 
+/**
+ * 🔨 **"BEN SWINGS" ON ITS OWN LINE — Couch Plan Rung 6.**
+ *
+ * `show-verdict-v` is the biggest type on the Execution screen: `clamp(18px, 2.6vw, 32px)`,
+ * weight 800, `text-transform:uppercase`, in a box capped at `42rem`. Into that went
+ * *"Ben swings — they named them, so their vote was already cast."* — 61 characters, so the room
+ * got THREE lines of shouting capitals and the two words it came for were the start of a
+ * paragraph. The rule is not new copy; it is that the EVENT and the REASON are two facts, and
+ * this plate already has two sizes for exactly that. The event keeps the big line. The reason
+ * drops to the sub beside the threshold, where the rest of the ballot's bookkeeping already is.
+ *
+ * `executionLine` is still the whole sentence and is untouched — the phone and the event log want
+ * one string. Only the TV splits, and W37c is the lock on that.
+ */
 function executionSwing(result, names) {
   if (!result) return '';
-  if (!result.executed) return 'Nobody reached the threshold.';
   const swing = result.executioner === SHOWRUNNER
-    ? 'The Showrunner'
+    ? ''
     : joinedName(names, result.executioner, 'The nominator');
-  return result.executioner === SHOWRUNNER
-    ? 'The Showrunner swings.'
-    : `${swing} swings — they named them, so their vote was already cast.`;
+  return executionPlate(result, swing).line;
+}
+
+/** The RULE behind the swing, at sub size. The line above it is the event. */
+function executionSwingWhy(result) {
+  return executionPlate(result).why;
 }
 
 /* =============================================================================================

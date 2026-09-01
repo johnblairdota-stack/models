@@ -22,7 +22,41 @@
  * No THREE, no DOM.
  */
 
-import { acceptLynchVotes, assumedLynchVotes, NO_ONE, tallyVote } from './vote.js';
+import { acceptLynchVotes, assumedLynchVotes, NO_ONE, SHOWRUNNER, tallyVote } from './vote.js';
+
+/**
+ * 🔨 **THE EXECUTION PLATE, IN ITS TWO SIZES — Couch Plan Rung 6, "BEN SWINGS on its own line".**
+ *
+ * `look.js` `verdictPlateHtml` has three slots and the middle one, `show-verdict-v`, is the
+ * biggest type on the beat: `clamp(18px, 2.6vw, 32px)`, weight 800, `text-transform:uppercase`,
+ * inside a box capped at `42rem`. Into that slot went the whole sentence —
+ * *"Ben swings — they named them, so their vote was already cast."* — 61 characters, so the couch
+ * got three lines of shouting capitals and the two words it came for were the opening of a
+ * paragraph. The event and the rule behind it are two facts and the plate already has two sizes
+ * for that; this returns one string for each.
+ *
+ * ⚠️ **IT LIVES HERE, NOT IN THE VIEW, FOR THE SAME REASON `whisperLines` DOES.** A template
+ * literal inside `party-host.js` can only ever be checked by a regex over source text or by a
+ * human opening a tab. Here a node gate EXECUTES the shipped chrome — `execute-hit` H16 does,
+ * against the real `verdictPlateHtml` — which is the difference between proving the words are
+ * short and proving the file contains a short-looking string.
+ *
+ * The caller resolves the display name (`joinedName` is a view concern: it knows about seats and
+ * duplicate Sams). Passing nothing yields "The nominator", which is what an unresolved id read
+ * before this moved.
+ */
+export function executionPlate(result, swingName = 'The nominator') {
+  if (!result) return { line: '', why: '' };
+  if (!result.executed) return { line: 'Nobody reached the threshold.', why: '' };
+  const showrunner = result.executioner === SHOWRUNNER;
+  const who = showrunner ? 'The Showrunner' : (swingName || 'The nominator');
+  return {
+    line: `${who} swings.`,
+    why: showrunner
+      ? 'no nominator left to swing'
+      : 'they named them, so their vote was already cast',
+  };
+}
 
 /** Living-majority line already on the wire as `t:'tally'.need` / `.living`. */
 export function clearsLine({ need, living } = {}) {

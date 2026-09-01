@@ -22,11 +22,43 @@
  * that net. A player was sent to smash a thing and could not: it was behind the furniture.
  *
  * ---------------------------------------------------------------------------------------------
- * 🚨 WHAT IT FOUND, 2026-08-28, FIRST RUN, ON THE REAL PLACEMENT PIPELINE — IT IS RED
+ * ✅ WHAT IT FOUND, AND WHAT CLOSED IT — 2026-09-01, COUCH PLAN RUNG 6, THIS GATE IS NOW GREEN
  * ---------------------------------------------------------------------------------------------
- * 64 world seeds, 128 targets, 364 dressed props. **6 of the 19 assertions below are RED, on the
- * shipped arm, and the reds are the bug reproducing rather than a threshold set too tight.**
- * Two independent defects, neither of which this file may fix (`harness/` only, this branch).
+ * It joined `gates:party` on 2026-09-01. Three things had to be true first, and only one of them
+ * was a threshold; the archaeology below is kept because every one of them can come back.
+ *
+ * **(a) THE PLACER IS TOLD WHERE THE TARGETS HANG, AND IT ASKS `jobs.js` RATHER THAN RE-TYPING IT.**
+ * `furn-layout.js` `missionKeepOuts` now yields TWO rects per mission room — the twin paintings'
+ * and the wall camera's — each built by `hangKeepOut` from the same pure `twinHang` / `camHang`
+ * that `follow-bed.js` builds the real meshes from. The first keep-out (2026-08-28) covered the
+ * paintings only and was itself a re-typed copy of a formula that had already moved: it described
+ * ONE centred 1.46 m frame and reached ±1.41 m, where the shipped PAIR reaches ±2.33 m. T2 read
+ * 11/192 pierced after it, all `cam-wall` through the wall camera, on seeds 5, 21, 22, 25, 29, 46,
+ * 48, 49, 60, 61 and 62 — the `{ x: space.x1 - 0.22, z: c.z }` slot, which is `camHang`'s own
+ * formula character for character on a gallery deeper than it is wide. It reads 0/192 now, and
+ * **T7 is the assertion that the rects are what did it** rather than luck in the seed order.
+ * The cost is printed, not hidden: the keep-outs refuse slots, so the modelled occluder set falls
+ * from 1241 props to 1103. G2 is the floor under that.
+ *
+ * **(b) THE DRILL WAS BEING MODELLED AS A SWING, AND IT IS NOT ONE.** Episodes 2+ do not smash the
+ * wall camera; `missionTick` fills the mount while `perf.act > 0.5 && nearWallCam()`, and
+ * `nearWallCam` is `Math.hypot(dx, dz) < 1.85` — a PLANAR PROXIMITY TEST with no ray, no aim and
+ * no pitch in it anywhere. Modelling it with the mission swing ray was not a strict gate, it was a
+ * false one: at the fixed −0.06 rad the ray occupies y 1.4245–1.5385 and the camera's body is
+ * 1.56–1.88, so the ray could never enter it from anywhere in the house, and **all 64 cam targets
+ * read blind on G7/T3/T4 while the shipped job worked fine.** A gate that reports a defect the
+ * product does not have is the same failure as one that misses a defect it does have — both are
+ * the instrument disagreeing with the game. The drill channel now asks the two questions the drill
+ * really asks: can you STAND within `DRILL_REACH` of it, and can you SEE it from there. G5b pins
+ * `nearWallCam`'s radius and the `perf.act` gate against `follow-bed.js`'s source text.
+ *
+ * **(c) 1 OF 64 SEEDS SEALED A MISSION ROOM, AND THAT IS NOW 0.** See T1's note below.
+ *
+ * The original report, kept because it is the reason every clause is worded the way it is:
+ *
+ * 64 world seeds, 128 targets, 364 dressed props. **6 of the 19 assertions below were RED, on the
+ * shipped arm, and the reds were the bug reproducing rather than a threshold set too tight.**
+ * Two independent defects, neither of which this file could fix at the time (`harness/` only).
  *
  * **(1) T2 — ON 24 OF 64 SEEDS (37.5%) A DRESSED PROP'S BODY INTERSECTS THE PAINTING'S BODY.**
  * Not "near it" — through it. Two causes, both one line, both in `src/game/furn-layout.js`:
@@ -58,8 +90,12 @@
  *   how `party-warm` W34d keeps furniture out of doorways — so this is one more keep-out rect,
  *   derived from `buildPainting`'s formula, handed to `catalogPlacements` beside `openings`. The
  *   two placers must not both own the same slot; today they do, and neither is aware of it.
+ *   ✅ **DONE** — `missionKeepOuts`, and it derives the rects from `jobs.js` rather than a copy.
  *
- * **(2) T1 — 1 OF 64 SEEDS SEALS A MISSION ROOM.** `ws=60`'s chapel (`r5.chapel`, 6.5 × 6.8 m,
+ * **(2) T1 — 1 OF 64 SEEDS SEALS A MISSION ROOM.** ✅ **CLOSED** by `mansion.js` `tablesPass`,
+ * which is this paragraph's own fix landed: `planPasses` asks `generatedTables` instead of the
+ * region graph. 0/192 sealed today, and it cost `pickPlanSeed` 0.81 → 1.98 ms per uncached seed.
+ * The report as filed: `ws=60`'s chapel (`r5.chapel`, 6.5 × 6.8 m,
  * with the episode-2 table dressed into it) has **zero interior doorways** in the built
  * `PORTALS`/`PANELS` tables. Its only connector is `x.g4`, an EXIT to `outside`. Widened to 256
  * world seeds: **5 sealed mission rooms — 4 chapels (60, 72, 81, 247) and one GALLERY (164)**,
@@ -139,7 +175,16 @@
  *     frame box at `floorY + 1.85`. At pitch −0.06 that ray only ever occupies y 1.4245–1.5385,
  *     which is inside the frame's 0.92–2.78 band at every reach, so the painting's vertical is
  *     never the binding constraint and the test is honestly a plan-view one.
- *   · **The chapel table (episodes 2+)** IS a `FurnProp`, and the mission ray cannot touch it:
+ *   · **The wall camera (episodes 2+)** is not smashed at all — it is DRILLED, and the drill has
+ *     no ray. `missionTick` fills `wallCam.mount` while `perf.act > 0.5 && nearWallCam()`, and
+ *     `nearWallCam` is `Math.hypot(dx, dz) < 1.85` on the plan, full stop: no aim, no pitch, no
+ *     cast, no `far`. So the `drill` channel here is exactly those two questions —
+ *     **can you stand within 1.85 m of it, and can you see it from there** — and clause 5 is a
+ *     LOOK rather than a swing, free in pitch, because a runner who cannot see the camera cannot
+ *     point a drill at it even though the mechanic would happily fill the mount blind. Clause 4
+ *     does not apply to this channel and is skipped rather than faked; G5b is what pins that.
+ *
+ *   · **The chapel table (episodes 2+, RETIRED)** IS a `FurnProp`, and the mission ray cannot touch it:
  *     the fitted GLB is ~0.85 m tall (`targetH` 0.546 × `FURN_FIT_BOOST`) and the mission ray
  *     never descends below 1.4245 m. It dies through the OTHER channel — `missionTick` reads
  *     `table.prop.isShattered`, which `Player._resolveSledgeHit` → `_swingCast` sets by casting
@@ -182,7 +227,7 @@ import { fileURLToPath } from 'node:url';
 
 import { generatedTables } from '../src/world/genplan.js';
 import { PLAN_OPTS, pickPlanSeed, MISSION_ROOM } from '../src/party/mansion.js';
-import { catalogPlacements, walkHalf } from '../src/game/furn-layout.js';
+import { catalogPlacements, drawHalf, missionKeepOuts, walkHalf } from '../src/game/furn-layout.js';
 import { FURN_SMASH_ASSETS, FURN_FIT_BOOST } from '../src/game/furn-catalog.js';
 import { MOVE, WEAPON_RANGE } from '../src/game/rules.js';
 import { MISSION_PAINTING, MISSION_DRILL, missionFor } from '../src/party/mission.js';
@@ -228,6 +273,8 @@ const WORK_AIM_RANGE = WEAPON_RANGE.sledge + 0.9;
 /** `player.js` `_swingRay` fallback: `dir.y -= 0.18`, origin pulled back 0.2 m. */
 const SWING_DROP = 0.18;
 const SWING_PULLBACK = 0.2;
+/** `follow-bed.js` `nearWallCam`: `Math.hypot(dx, dz) < 1.85`. Planar. No ray, no aim. */
+const DRILL_REACH = 1.85;
 /** `furnprop.js` / `furn-layout.js`: `boxH = max(dim.h, targetH, 1.25)` for a non-thin prop. */
 const FURN_MIN_BOX_H = 1.25;
 /** The one number this file chooses. 10 cm of floor — a third of a body radius. */
@@ -316,7 +363,7 @@ function camTarget(space, floorY = 0) {
       x0: hang.x - hw, x1: hang.x + hw, z0: hang.z - hd, z1: hang.z + hd,
       y0: hang.y - WALL_CAM.h / 2, y1: hang.y + WALL_CAM.h / 2,
     },
-    channel: 'mission',
+    channel: 'drill',
   };
 }
 
@@ -401,7 +448,16 @@ function survey(space, props, target, portals) {
     }
   }
 
-  // ---- clauses 3–5 · in reach, aimable at the fixed pitch, and nothing in between ------------
+  /* ---- clauses 3–5 · in reach, aimable at the fixed pitch, and nothing in between ------------
+   *
+   * TWO CHANNELS, because the game resolves the two jobs differently and a gate that pretends
+   * otherwise reports a defect the product does not have — which is the same failure as missing
+   * one. SMASH is a ray at the one pitch the runner has. DRILL is `nearWallCam()` — a planar
+   * radius, no aim anywhere in it — plus a LOOK, free in pitch, because a runner who cannot SEE
+   * the camera cannot point a drill at it even though the mechanic would fill the mount blind.
+   */
+  const drill = target.channel === 'drill';
+  const eyeAtY = Math.min(B.y1 - 0.02, Math.max(B.y0 + 0.02, (B.y0 + B.y1) / 2));
   let inReach = 0, standReach = 0, occluded = 0, sighted = 0, frontal = 0;
   let nearest = Infinity;
   const blockers = new Map();
@@ -421,19 +477,40 @@ function survey(space, props, target, portals) {
       }
       if (a1 - a0 > Math.PI) { a0 = -Math.PI; a1 = Math.PI; }      // standing inside the span
       let hit = false, clear = false, firstBlocker = null;
-      for (let k = 0; k < YAWS; k++) {
-        const yaw = a0 + ((a1 - a0) * k) / (YAWS - 1);
-        const r = swingRay(eye, yaw, target.channel);
-        const tT = rayBox(r.o, r.d, r.far, B);
-        if (tT < 0) continue;
-        hit = true;
-        let block = null;
-        for (const b of bodies) {
-          const tB = rayBox(r.o, r.d, r.far, b);
-          if (tB >= 0 && tB < tT - 1e-6) { block = b; break; }
+      if (drill) {
+        // `nearWallCam`, character for character: planar, to the camera's own position, and it is
+        // the ONLY thing standing between `perf.act` and the mount filling.
+        if (Math.hypot(px - target.x, pz - target.z) < DRILL_REACH) {
+          hit = true;
+          for (const [qx, qz] of corners) {
+            const v = [qx - px, eyeAtY - EYE_Y, qz - pz];
+            const L = Math.hypot(v[0], v[1], v[2]);
+            if (L < 1e-6) { clear = true; break; }
+            const d = [v[0] / L, v[1] / L, v[2] / L];
+            let block = null;
+            for (const b of bodies) {
+              const tB = rayBox(eye, d, L - 1e-4, b);
+              if (tB >= 0) { block = b; break; }
+            }
+            if (!block) { clear = true; break; }
+            if (!firstBlocker) firstBlocker = block;
+          }
         }
-        if (!block) { clear = true; break; }
-        if (!firstBlocker) firstBlocker = block;
+      } else {
+        for (let k = 0; k < YAWS; k++) {
+          const yaw = a0 + ((a1 - a0) * k) / (YAWS - 1);
+          const r = swingRay(eye, yaw, target.channel);
+          const tT = rayBox(r.o, r.d, r.far, B);
+          if (tT < 0) continue;
+          hit = true;
+          let block = null;
+          for (const b of bodies) {
+            const tB = rayBox(r.o, r.d, r.far, b);
+            if (tB >= 0 && tB < tT - 1e-6) { block = b; break; }
+          }
+          if (!block) { clear = true; break; }
+          if (!firstBlocker) firstBlocker = block;
+        }
       }
       if (hit) standReach++;
       if (hit && walkable) {
@@ -486,7 +563,8 @@ function survey(space, props, target, portals) {
       ]);
     }
   }
-  const far = target.channel === 'mission' ? MISSION_REACH : WORK_AIM_RANGE;
+  const far = drill ? DRILL_REACH
+    : (target.channel === 'mission' ? MISSION_REACH : WORK_AIM_RANGE);
   let faceSeen = 0;
   for (const Q of faceQs) {
     let seen = false;
@@ -664,12 +742,21 @@ t('G5 · ...and the swing: eye, body, the fixed pitch, both reaches, and the 1.2
   `eye ${EYE_Y.toFixed(4)} m · r ${BODY_R.toFixed(2)} m · pitch ${AIM_PITCH} rad`
   + ` · reach ${MISSION_REACH.toFixed(2)} / ${WORK_AIM_RANGE.toFixed(2)} m`);
 
+t('G5b · ...and the DRILL, which has no ray at all — `nearWallCam` is a planar radius',
+  /function nearWallCam\(\)/.test(src('src/game/follow-bed.js'))
+  && /Math\.hypot\(dx, dz\) < 1\.85;/.test(src('src/game/follow-bed.js'))
+  && /perf\.act > 0\.5 && nearWallCam\(\)/.test(src('src/game/follow-bed.js'))
+  // If the mount ever grows an aim test, clause 4 comes back for this channel and this goes red.
+  && !/aimD(ir|ist)[^\n]*wallCam/.test(src('src/game/follow-bed.js'))
+  && Math.abs(DRILL_REACH - 1.85) < 1e-9,
+  `drill reach ${DRILL_REACH.toFixed(2)} m planar · ${camsR.length} cam targets on the drill channel`);
+
 t('G6 · every survey had floor to stand on — a room with no floor would make T vacuous',
   rows.every((r) => r.standN > 0),
   `stand ${Math.min(...rows.map((r) => r.standN))}\u2013${Math.max(...rows.map((r) => r.standN))} cells`
   + ` at ${GRID} m, ${sumOf(rows, (r) => r.standN)} total`);
 
-t('G7 · ...and the swing could reach every target from SOME standable cell, doors and props aside',
+t('G7 · ...and each channel could reach its target from SOME standable cell, doors and props aside',
   rows.every((r) => r.standReach > 0),
   `${rows.filter((r) => r.standReach === 0).length} of ${rows.length} out of reach from anywhere`
   + ` · worst ${Math.min(...rows.map((r) => r.standReach))} cells`);
@@ -768,6 +855,55 @@ t('T6 · and at least half of the TARGET is visible from inside swinging distanc
   + ` · ${lit.filter((r) => r.faceVis < 0.5).length} targets under half visible`
   + ` · ${lit.filter((r) => r.faceVis === 0).length} invisible`);
 
+/*
+ * T7 · **THE MECHANISM, NOT THE OUTCOME.** T2 reads 0/192, and 0/192 is also what you get from a
+ * lucky seed order. This asks the placer's own answer instead: `missionKeepOuts` must yield a rect
+ * for EACH mission target in EACH mission room, every rect must actually contain the hang it was
+ * built from, and no placement's DRAWN body may enter one. That last clause is `accept`'s own
+ * `blockedBy(propFootprint(...), keepOuts)` re-asked from outside, so a keep-out that was computed
+ * and then not consulted is red here while T2 stays green.
+ */
+{
+  let rects = 0, rooms = 0, missing = [], holdsHang = true, entered = [];
+  for (let ws = 0; ws < SEEDS; ws++) {
+    const night = nightFor(ws);
+    const keeps = missionKeepOuts(night.tables.spaces);
+    const gal = night.gallery;
+    if (!gal) continue;
+    rooms++;
+    rects += keeps.length;
+    const forRoom = keeps.filter((k) => k.id.startsWith(`${gal.id}.`));
+    for (const want of ['painting', 'wallcam']) {
+      if (!forRoom.some((k) => k.id === `${gal.id}.${want}`)) missing.push(`ws${ws}/${want}`);
+    }
+    // Every rect must contain the thing it exists to protect, both twin faces included.
+    for (const hang of [twinHang(gal, 'left'), twinHang(gal, 'right'), camHang(gal)]) {
+      if (!hang) continue;
+      const k = forRoom.find((r) => hang.x >= r.x0 && hang.x <= r.x1 && hang.z >= r.z0 && hang.z <= r.z1);
+      if (!k) holdsHang = false;
+    }
+    for (const p of night.placements) {
+      const spec = SPEC.get(p.catalogId);
+      const h = drawHalf(spec);
+      if (!(h > 0)) continue;
+      const foot = { x0: p.x - h, x1: p.x + h, z0: p.z - h, z1: p.z + h };
+      for (const k of keeps) {
+        if (foot.x0 < k.x1 && k.x0 < foot.x1 && foot.z0 < k.z1 && k.z0 < foot.z1) {
+          entered.push(`ws${ws} ${p.catalogId}→${k.id}`);
+        }
+      }
+    }
+  }
+  t('T7 · the placer holds BOTH mission targets clear — a rect each, over the real hang, and honoured',
+    rooms === SEEDS && rects === SEEDS * 2 && missing.length === 0
+    && holdsHang && entered.length === 0,
+    `${rects} rects over ${rooms} mission rooms`
+    + `${missing.length ? ` · MISSING ${missing.slice(0, 6).join(',')}` : ''}`
+    + `${holdsHang ? '' : ' · a rect does not cover its own hang'}`
+    + ` · ${entered.length} prop bodies inside a keep-out`
+    + (entered.length ? ` [${entered.slice(0, 6).join(', ')}]` : ''));
+}
+
 /* =============================================================================================
  * C · THE CONTROLS. Three breakages that must go RED, and two that must stay GREEN.
  *
@@ -778,11 +914,11 @@ t('T6 · and at least half of the TARGET is visible from inside swinging distanc
 
 console.log('\n  controls');
 
-function controlSweep(kind, n = Math.min(SEEDS, 16)) {
+function controlSweep(kind, n = Math.min(SEEDS, 16), mk = (g) => paintingTarget(g, 'left')) {
   const out = [];
   for (let ws = 0; ws < n; ws++) {
     const night = nightFor(ws);
-    const built = night.gallery ? paintingTarget(night.gallery, 'left') : null;
+    const built = night.gallery ? mk(night.gallery) : null;
     if (!built) continue;
     const props = night.placements.filter((p) => p.spaceId === night.gallery.id);
     const c = applyControl(kind, night, built, props);
@@ -810,6 +946,47 @@ t('C3 control · a target under the floor is never entered by the swing ray',
   cUnder.length > 0 && cUnder.every((m) => m.inReach === 0 && m.sighted === 0),
   `${cUnder.length} seeds, in-reach ${cUnder.reduce((a, m) => a + m.inReach, 0)}`);
 
+/*
+ * 🚨 **C6 AND C7 ARE THE PRICE OF THE DRILL CHANNEL.** Sixty-four targets went from RED to green
+ * the moment `camTarget` stopped being modelled as a swing, and a change with that shape has to
+ * prove it did not simply stop asking. C6 breaks the drill the way a placer really could; C7
+ * recomputes the radius independently, so deleting `nearWallCam`'s test would show up as the
+ * whole room being in reach rather than as silence.
+ */
+const cWallCam = controlSweep('wall', Math.min(SEEDS, 16), (g) => camTarget(g));
+t('C6 control · the wall camera boxed in by four cases is DRILLED from nowhere, though it is in radius',
+  cWallCam.length > 0 && cWallCam.every((m) => m.sighted === 0)
+  && cWallCam.every((m) => m.faceVis === 0) && cWallCam.every((m) => m.inReach > 0),
+  `${cWallCam.length} seeds, sighted ${cWallCam.reduce((a, m) => a + m.sighted, 0)}`
+  + `, still within reach from ${Math.min(...cWallCam.map((m) => m.inReach))}+ cells`
+  + ` — the radius says yes and the LOOK says no`);
+
+{
+  /*
+   * The radius, counted by hand on an empty room, against the same grid `survey` walks. Not a
+   * second call to `survey` — the whole point is that this arithmetic is independent of it. An
+   * empty 12 x 8 gallery has no occluder, so `inReach` here is EXACTLY the standable cells inside
+   * `nearWallCam`. Delete the radius test in `survey` and this number becomes the room.
+   */
+  const room = { id: 'ctl.drill', roomType: 'gallery', x0: 0, x1: 12, z0: 0, z1: 8 };
+  const portals = [{ id: 'p', a: 'ctl.drill', b: 'x', x: 6, z: 8, w: 1.9, axis: 'x' }];
+  const cam = camTarget(room);
+  const m = survey(room, [], cam, portals);
+  const gx0 = room.x0 + BODY_R, gx1 = room.x1 - BODY_R;
+  const gz0 = room.z0 + BODY_R, gz1 = room.z1 - BODY_R;
+  const nx = Math.floor((gx1 - gx0) / GRID) + 1, nz = Math.floor((gz1 - gz0) / GRID) + 1;
+  let want = 0;
+  for (let i = 0; i < nx; i++) {
+    for (let j = 0; j < nz; j++) {
+      if (Math.hypot(gx0 + i * GRID - cam.x, gz0 + j * GRID - cam.z) < DRILL_REACH) want++;
+    }
+  }
+  t('C7 control · `nearWallCam`\'s 1.85 m is LIVE — counted by hand, it is a disc and not the room',
+    m.inReach === want && want > 0 && want < nx * nz / 4 && m.sighted === want,
+    `${m.inReach} cells in reach, ${want} counted independently, of ${nx * nz} in a ${
+      room.x1 - room.x0} x ${room.z1 - room.z0} m room · all ${m.sighted} of them see it`);
+}
+
 // The other direction. A rig that says NO to everything is as blind as one that says YES.
 {
   const room = { id: 'ctl.gallery', roomType: 'gallery', x0: 0, x1: 12, z0: 0, z1: 8 };
@@ -824,18 +1001,32 @@ t('C3 control · a target under the floor is never entered by the swing ray',
     { id: 'c.ott', catalogId: 'ottoman', spaceId: room.id, x: 6, z: 1.0 },
     { id: 'c.rug', catalogId: 'rug-circle', spaceId: room.id, x: 6, z: 1.6 },
   ], paintingTarget(room, 'left'), portals);
-  // At the SHIPPED inset. `candidatesFor` gives the vitrine `max(0.62, halfSpan + 0.18)` = 0.62,
-  // and its drawn half is 0.651 — so the case's own body reaches 3 cm BEHIND the wall line and
-  // straight through a painting hung 22 cm off it. This is not a contrived number; it is the
-  // arithmetic of seeds 1, 6, 7, 8, 14, 27, 32, 35, 45, 47, 52 and 54.
+  /*
+   * At the SHIPPED inset, in front of a twin face. `candidatesFor` gives the vitrine
+   * `max(0.62, halfSpan + 0.18)` = 0.62 and its drawn half is 0.651 — so the case's own body
+   * reaches 3 cm BEHIND the wall line and straight through a frame hung 22 cm off it. That
+   * arithmetic has not changed and is still the playtest sentence. What changed is that a real
+   * placer can no longer CHOOSE that slot: `missionKeepOuts` refuses it, which is what T7 asserts.
+   * So it is placed here by hand, at the LEFT face's own x rather than the room's centre — the
+   * twins hang at `cx ± TWIN_OFFSET` and a case at the midpoint now sits in the gap BETWEEN them,
+   * which is the honest reason this control's old numbers went stale rather than any rig change.
+   */
+  const face = twinHang(room, 'left');
   const tall = survey(room, [
+    { id: 'c.vit', catalogId: 'vitrine', spaceId: room.id, x: face.x, z: room.z0 + 0.62 },
+  ], paintingTarget(room, 'left'), portals);
+  // ...and the same case at the MIDPOINT, where the pair leaves it a gap. It must NOT read as a
+  // burial: a control that goes red for the wrong reason teaches nothing.
+  const gap = survey(room, [
     { id: 'c.vit', catalogId: 'vitrine', spaceId: room.id, x: 6, z: room.z0 + 0.62 },
   ], paintingTarget(room, 'left'), portals);
-  t('C5 control · a 0.52 m ottoman never occludes an eye-height ray; the shipped vitrine slot buries the frame',
+  t('C5 control · a 0.52 m ottoman never occludes an eye-height ray; a vitrine at the shipped inset buries the face it stands at',
     low.occluded === 0 && low.sighted > 0 && low.faceVis === 1
-    && tall.intersects.includes('vitrine') && tall.faceVis < 0.5,
+    && tall.intersects.includes('vitrine') && tall.faceVis < 0.2
+    && gap.faceVis > tall.faceVis,
     `ottoman+rug ${low.occluded} occluded / ${low.sighted} sighted / ${(low.faceVis * 100).toFixed(0)}% seen`
-    + ` · vitrine ${tall.occluded} occluded / ${tall.sighted} sighted / ${(tall.faceVis * 100).toFixed(0)}% seen`);
+    + ` · vitrine at the face ${tall.occluded} occluded / ${(tall.faceVis * 100).toFixed(0)}% seen`
+    + ` · same case in the twins' gap ${(gap.faceVis * 100).toFixed(0)}% seen`);
 }
 
 /* =============================================================================================
