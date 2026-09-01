@@ -650,6 +650,54 @@ export function injectNightSkin() {
     .stick-btn.drill { border-color: rgba(232, 92, 58, .55); color:#f3b39a; }
     .stick-btn.drill span { display:block; font-size:9px; letter-spacing:.16em; margin-top:4px; }
     .stick-btn.drill.on { background:#c4472a; color:#fff7f2; }
+
+    /* ==========================================================================================
+     * 🧭 GUIDE E · "Pin a door", and 📱 RUNNER D · the frame bezel.
+     * John's picks, 2026-09-01 — docs/design/refs-runner-intel/canvas/. The model behind both
+     * is src/party/intel-pad.js; this is only how they look.
+     * ⚠️ NO BACKTICKS ANYWHERE IN THIS BLOCK. It is inside a template literal, and one backtick
+     * here takes the whole build down for every agent — CLAUDE.md's standing warning.
+     * ======================================================================================== */
+    .pin-pad { margin:10px 0 4px; }
+    .pin-row { display:grid; grid-template-columns:repeat(4, 1fr); gap:7px; }
+    .pin-chip { appearance:none; font:inherit; border-radius:10px; min-height:72px; padding:6px 4px;
+      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px;
+      background:var(--night-panel); color:var(--night-soft); touch-action:manipulation;
+      border:1px solid rgba(var(--night-accent-rgb), .22); }
+    .pin-chip .pin-dir { font-size:11px; font-weight:900; letter-spacing:.16em; text-transform:uppercase; }
+    .pin-chip .pin-to { font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--night-dim); }
+    .pin-chip.on { border-color:var(--night-accent); color:var(--night-accent);
+      background:rgba(var(--night-accent-rgb), .13); }
+    /* A direction with no door is DIM, never missing — see guidePinPad's header. */
+    .pin-chip.none { opacity:.4; }
+    .pin-say { margin:12px 0 0; font-size:26px; font-weight:900; line-height:1.06;
+      color:var(--night-accent); }
+
+    /* The bezel is the EDGE OF THE PHONE, so it is fixed to the viewport and never in the flow —
+       and it is pointer-events:none throughout, because it lies over RUN and SWING. */
+    .bezel { position:fixed; inset:0; pointer-events:none; z-index:40; }
+    .bezel i { position:absolute; display:block; background:var(--night-well); }
+    .bezel .bz-top, .bezel .bz-bottom { left:0; right:0; height:9px; }
+    .bezel .bz-top { top:0; } .bezel .bz-bottom { bottom:0; }
+    .bezel .bz-left, .bezel .bz-right { top:0; bottom:0; width:9px; }
+    .bezel .bz-left { left:0; } .bezel .bz-right { right:0; }
+    .bezel .bz-lit { background:var(--night-accent);
+      box-shadow:0 0 22px rgba(var(--night-accent-rgb), .9), 0 0 44px rgba(var(--night-accent-rgb), .4); }
+    .bezel .bz-lit.bz-top { top:0; right:auto; } .bezel .bz-lit.bz-bottom { bottom:0; right:auto; }
+    .bezel .bz-lit.bz-left { left:0; bottom:auto; } .bezel .bz-lit.bz-right { right:0; bottom:auto; }
+    /* Smash-ready takes the WHOLE bezel. A state of the hammer, never a hint about where to walk. */
+    /* ⚠️ No rgba(var(--night-live-rgb), ...) — palette.js publishes an -rgb companion for the
+       accent and the bad colour only, and inventing a third here is how a reskin ends up with one
+       stale surface (party-follow F8's reason). A solid glow, on the named colour. */
+    .bezel.armed i { background:var(--night-live); box-shadow:0 0 22px var(--night-live); }
+    .bz-read { display:flex; align-items:center; justify-content:space-between; gap:12px;
+      margin:2px 0 8px; padding:12px 16px; border-radius:10px; background:var(--night-panel); }
+    .bz-read .bz-cap { font-size:10px; font-weight:800; letter-spacing:.22em; text-transform:uppercase;
+      color:var(--night-dim); }
+    .bz-read .bz-word { font-size:17px; font-weight:900; letter-spacing:.08em; text-transform:uppercase;
+      color:var(--night-accent); }
+    .bz-read.armed .bz-word { color:var(--night-live); }
+
     .twin-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:10px 0 4px; }
     .twin-row .twin-note, .twin-row .voice-know { grid-column:1 / -1; margin:0; }
     .twin-face { position:relative; min-height:88px; border:2px solid #6b4a22; border-radius:4px;

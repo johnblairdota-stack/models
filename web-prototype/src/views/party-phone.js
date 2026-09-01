@@ -19,6 +19,7 @@ import { linkBlock, mergeName, WHISPER_MAX, MAX_PAIRS, pairRemaining, isDone, wh
 import { cardFor, faceDownHtml, mountRoleCard, premiereHtml } from '../party/rolecard.js';
 import { EVIL } from '../party/cast.js';
 import { guideMapSvg } from '../party/guidemap.js';
+import { COMPASS_4, guidePad, pinDoor, runnerPad } from '../party/intel-pad.js';
 import { pickPlanSeed, planRoomLabels, roomLabel } from '../party/mansion.js';
 import { missionFor } from '../party/mission.js';
 import {
@@ -56,6 +57,22 @@ export default async function partyPhone({ params }) {
     castEpisode: null,
     /** null · 'deal' while the backs are flying · 'premiere' while the card is first up. */
     stage: null,
+    /**
+     * 📍 **THE GUIDE'S ONE PIN — D2, and the word "one" is the whole rule.**
+     *
+     * *"A second tap **replaces** the pin; it does not append to it. There is no pin list, no
+     * ordering, no undo stack."* So this is a single slot holding `{x, z, roomId, kind}` or null,
+     * and `pinDoor` returns a fresh object that is ASSIGNED here — assignment is what "replaces"
+     * means, and there is no array for a route to accumulate in.
+     *
+     * ⚠️ **LOCAL, AND ON PURPOSE.** It reaches the runner by the guide SAYING it, which is the
+     * locked *"voice is in the room"* rule — the same rule that already makes GO/HOLD and
+     * CLOSE/LATE/GOING mouth-to-ear and not pad-to-pad. Putting the pin on the wire is Stage 3 of
+     * `task-runner-intel.md` and wants its own review: it needs `crew` audience (runner or guide,
+     * never `all` — a seated phone must not learn where the target is) and a `MATRIX` row, and
+     * `MATRIX` is deny-by-default so a field without one is a hard red (`party-isolation` I1c).
+     */
+    pin: null,
     /**
      * 🕹️ The pad's own state. `x`/`y` is the stick as a clamped unit vector; `sent` is the last
      * thing put on the wire, which is what makes the 20 Hz tick change-gated rather than a
@@ -597,6 +614,12 @@ export default async function partyPhone({ params }) {
 
     let body = '';
     if (state.err) body += `<div class="err">${esc(state.err)}</div>`;
+    /*
+     * Guide E's scope, hoisted so the chips can be bound after `root.innerHTML` is written.
+     * ⚠️ It cannot ride on `bindPad`: that function bails at `if (!stick)` and the guide sheet has
+     * no stick, so anything bound in there never runs on this seat.
+     */
+    let guideScope = null;
 
     if (beat !== 'casting') {
       state.cast = freshCast();
@@ -730,7 +753,26 @@ export default async function partyPhone({ params }) {
          * guides still get their feed.
          */
         const job = missionFor(frame?.airingEpisode ?? 1).job;
-        body += `<h1>${job === JOB.DRILL ? 'You drill.' : 'You smash.'}</h1>
+        /*
+         * 📱 **RUNNER D · FRAME BEZEL.** John locked the board 2026-09-01
+         * (`docs/design/refs-runner-intel/canvas/RunnerPadD.dc.html`). The bearing is not a widget
+         * in the middle of the screen competing with the television for her eyes — it is a glowing
+         * segment of the phone's own EDGE at the pin's angle, which peripheral vision catches while
+         * she keeps watching the show. Under the plan-locked top-down the move stick is absolute,
+         * so screen direction IS world direction and the segment needs no rotation in her head:
+         * she pushes the thumb at the glow. Smash-ready takes the WHOLE bezel cyan — a state of the
+         * hammer, never a hint about where to walk.
+         *
+         * 🚨 **THE PIN AND THE READY FLAG HAVE NO WIRE YET, AND THE PAD SAYS SO RATHER THAN
+         * PRETENDING.** `net/party/entitle.js`'s `MATRIX` carries neither field; that is Stage 3 of
+         * `task-runner-intel.md` and it wants its own review. Until then this renders the honest
+         * unpinned state, which is not a broken screen: the guide holds the pin and the guide SAYS
+         * it out loud, which is the locked *"voice is in the room"* rule. The bezel is drawn dim
+         * either way so the shape is on the phone the day the field lands.
+         */
+        const bez = runnerPad(null, null, false);
+        body += `${bezelHtml(bez)}
+          <h1>${job === JOB.DRILL ? 'You drill.' : 'You smash.'}</h1>
           <p class="hint">${topDown
             ? 'Eyes on the TV. The stick is the room — push where you want to go. Hold RUN, tap SWING.'
             : 'Eyes on the TV. Left stick walks into the shot. Right stick looks. Hold RUN, tap SWING.'}</p>
@@ -788,8 +830,23 @@ export default async function partyPhone({ params }) {
          */
         const jam = !!frame?.flyover?.jam;
         const job = missionFor(frame?.airingEpisode ?? 1).job;
-        body += `<h1>You talk.</h1>
+        /*
+         * 🗺️ **GUIDE E · NEIGHBOURS ONLY.** John locked the board 2026-09-01
+         * (`docs/design/refs-runner-intel/canvas/GuidePadE.dc.html`). She sees the runner's own
+         * room and only what its portals reach right now; everything else is fog, so the pad
+         * cannot hold a route even in principle — there is no second step on it to draw.
+         * `intel-pad.js` `guidePad` is the whole model and a node gate executes it directly.
+         *
+         * ⚠️ **NO `you` MARK, NO SCOPE — AND THE FALLBACK IS TODAY'S FLOOR PLAN.** With no idea
+         * where she is standing there is no "her room" for anything to be a neighbour of, and
+         * `party-warm` W8c already settled what a blind guide gets. `scope: null` is the shipped
+         * map, unchanged.
+         */
+        const scope = (seed != null && meMark) ? guidePad(seed, meMark, state.pin) : null;
+        guideScope = scope;
+        body += `<h1>${scope ? 'One door ahead.' : 'You talk.'}</h1>
           <p class="hint">The map is yours. The TV does not get it — call the rooms out loud.</p>
+          ${scope ? '<p class="hint">You see her room and what it opens onto. That is all there is.</p>' : ''}
           ${seed == null
             ? '<p class="hint gm-blind">Waiting for the house…</p>'
             : guideMapSvg({
@@ -798,8 +855,10 @@ export default async function partyPhone({ params }) {
               runner: meMark,
               flyover: hunterMark ? { hunter: hunterMark } : null,
               jam,
+              scope,
             })}
           <p class="hint ${hunterMark ? '' : 'gm-blind'}" data-gm-note>${esc(mapNote(jam, hunterMark))}</p>
+          ${guidePinPad(scope)}
           ${guideJobPad(job, c.worldSeed, frame?.airingEpisode ?? 1)}
           ${missionLine(frame)}
           <p class="hint">Cameras live ${frame?.cameras?.unlocked ?? '—'}.</p>
@@ -891,6 +950,7 @@ export default async function partyPhone({ params }) {
       c.send({ t: 'name', name: v });
     });
     bindPad();
+    bindPinPad(guideScope);
     /*
      * ⚠️ `e.target` IS THE SVG, NOT THE BUTTON. The old handler read `dataset.r` straight off the
      * target and worked only because the buttons were plain text — with a face and a label inside
@@ -1192,6 +1252,72 @@ export default async function partyPhone({ params }) {
       </div>
       <p class="voice-know">REAL aim is <strong>${esc(toolLabel(shot))}</strong>. Recap will say seated either way. She cannot see this.</p>
     </div>`;
+  }
+
+  /**
+   * 🚪 **GUIDE E'S WHOLE CONTROL — one chip per door out of here, in thumb country.**
+   *
+   * The chips ARE the scope. There is a chip for each door out of the room she is looking at and
+   * there is nothing else to tap, so a route cannot be assembled by tapping twice: the second tap
+   * REPLACES the pin (D2) and the map redraws around wherever the runner has walked to. A
+   * direction with no door is drawn dim rather than omitted, because a missing chip and a chip for
+   * a wall look identical to a thumb but mean opposite things.
+   */
+  function guidePinPad(scope) {
+    if (!scope) return '';
+    const gates = new Map((scope.gates ?? []).map((g) => [g.dir, g]));
+    const chips = COMPASS_4.map((dir) => {
+      const g = gates.get(dir);
+      const on = !!(g && state.pin && state.pin.roomId === g.toId);
+      return `<button type="button" class="pin-chip${g ? '' : ' none'}${on ? ' on' : ''}"
+        data-pin="${dir}"${g ? '' : ' disabled'}>
+        <span class="pin-dir">${dir}</span>
+        <span class="pin-to">${g ? esc(g.toLabel) : 'wall'}</span>
+      </button>`;
+    }).join('');
+    return `<div class="pin-pad" data-pin-pad>
+      <p class="hint">Pin a door — then say it out loud. Buttons send nothing.</p>
+      <div class="pin-row">${chips}</div>
+      <p class="pin-say" data-pin-say>${esc(scope.say)}</p>
+    </div>`;
+  }
+
+  function bindPinPad(scope) {
+    if (!scope) return;
+    root.querySelectorAll('[data-pin]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        // 📍 ASSIGNMENT, not push. See `state.pin`'s header — one slot is the whole of D2.
+        state.pin = pinDoor(scope, String(btn.dataset.pin || ''));
+        paint();
+      });
+    });
+  }
+
+  /**
+   * 📱 **RUNNER D'S BEZEL — fixed to the viewport, and deliberately not in the flow.**
+   *
+   * "The edge of the phone" has to actually be the edge of the phone, so this is a `position:fixed`
+   * overlay rather than a border on a card. It is `pointer-events:none` throughout: the whole point
+   * is that it is caught by peripheral vision while the thumb is on the stick and the eyes are on
+   * the television, so it must never be able to eat a touch meant for RUN or SWING.
+   *
+   * `bez.runs` arrives as CSS pixels around the perimeter and can span two edges at a corner —
+   * `intel-pad.js` `runsOf` does the wrapping, so there is no geometry in this function at all.
+   */
+  function bezelHtml(bez) {
+    const rails = ['top', 'right', 'bottom', 'left']
+      .map((e) => `<i class="bz-rail bz-${e}"></i>`).join('');
+    const lit = (bez.runs ?? []).map((r) => {
+      const len = Math.max(0, r.to - r.from);
+      return (r.edge === 'top' || r.edge === 'bottom')
+        ? `<i class="bz-lit bz-${r.edge}" style="left:${r.from}px;width:${len}px"></i>`
+        : `<i class="bz-lit bz-${r.edge}" style="top:${r.from}px;height:${len}px"></i>`;
+    }).join('');
+    return `<div class="bezel${bez.whole ? ' armed' : ''}" data-bezel aria-hidden="true">${rails}${lit}</div>
+      <div class="bz-read${bez.whole ? ' armed' : ''}" data-bezel-read>
+        <span class="bz-cap">${bez.whole ? 'Armed — whole bezel' : (bez.pinned ? 'Your guide pinned' : 'No map here')}</span>
+        <span class="bz-word">${esc(bez.whole ? 'SWING NOW' : (bez.pinned ? bez.words : 'the TV is the picture'))}</span>
+      </div>`;
   }
 
   function bindVoicePad() {
