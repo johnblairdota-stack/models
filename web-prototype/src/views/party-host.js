@@ -1677,8 +1677,7 @@ export default async function partyHost({ params }) {
       } else if (onSendoff) {
         /*
          * 🎭 Pair locked. Drop the ballot overlay so the seated circle is the picture.
-         * The plates already name the two — do not reprint "X walks · Y talks" (W36d,
-         * the four lines John cut from casting). Not a SHOW beat.
+         * The plates already name the two. Not a SHOW beat.
          */
         body += `<p class="intro-hint">the pair is locked</p>`;
       } else if (ui.introsSent) {
