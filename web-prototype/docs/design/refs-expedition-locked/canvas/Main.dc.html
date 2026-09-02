@@ -1,0 +1,185 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; background: #0c0a08; }
+    a { color: #f5a14a; } a:hover { color: #f3ece3; }
+  </style>
+</helmet>
+<div style="width: 1720px; height: 1480px; background: #0c0a08; color: #f3ece3; display: flex; flex-direction: column; gap: 26px; padding: 44px 48px; box-sizing: border-box; font-family: ui-sans-serif, system-ui, sans-serif;">
+
+  <!-- ============ HEADER ============ -->
+  <div style="display: flex; flex-direction: column; gap: 10px;">
+    <div style="display: flex; align-items: baseline; gap: 16px;">
+      <div style="font-size: 12px; letter-spacing: 0.32em; color: #8a7d70; text-transform: uppercase;">Prime Time · the Expedition · spec board · 2026-09-02</div>
+      <div style="flex-grow: 1; height: 1px; background: rgba(168,152,132,0.25); align-self: center;"></div>
+      <div style="font-size: 12px; letter-spacing: 0.22em; color: #9ff2c8; text-transform: uppercase;">Locked · every card names its gate</div>
+    </div>
+    <div style="font-size: 54px; font-weight: 800; letter-spacing: 0.01em; line-height: 1.02;">The expedition is locked. It is not first-person.</div>
+    <div style="font-size: 20px; color: #a89884; line-height: 1.35; max-width: 1280px;">The guide points. The robot walks there by itself. The thumb only dodges. The TV makes the show. The old spec said "first-person" — that sentence is gone, and a gate now keeps it gone.</div>
+  </div>
+
+  <!-- ============ ROW 1 · THE WIRE (backend first) ============ -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <div style="display: flex; align-items: center; gap: 14px;">
+      <div style="font-size: 13px; letter-spacing: 0.30em; color: #f5a14a; text-transform: uppercase; font-weight: 700;">1 · The wire — what the server holds</div>
+      <div style="flex-grow: 1; height: 1px; background: rgba(245,161,74,0.30);"></div>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px;">
+
+      <div style="background: #161310; border: 1px solid rgba(168,152,132,0.22); border-radius: 6px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="font-size: 15px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;">The pin is on the wire</div>
+        <div style="font-size: 14px; color: #a89884; line-height: 1.5;">Only the guide may send <span style="color: #f3ece3; font-family: ui-monospace, Menlo, monospace;">t:'pin'</span>. It rides as <span style="color: #f3ece3; font-family: ui-monospace, Menlo, monospace;">you.pin.{x,z,roomId,kind}</span> at audience <span style="color: #f3ece3;">crew</span>. The TV is told it and may not draw it. A new pin replaces. A new Casting drops it.</div>
+        <div style="margin-top: auto; font-size: 11px; font-family: ui-monospace, Menlo, monospace; color: #9ff2c8; background: #122019; border-radius: 4px; padding: 5px 9px; align-self: flex-start;">runner-intel RI10–RI13 · intel-pads IP11b–d</div>
+      </div>
+
+      <div style="background: #161310; border: 1px solid rgba(168,152,132,0.22); border-radius: 6px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="font-size: 15px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;">The body walks itself</div>
+        <div style="font-size: 14px; color: #a89884; line-height: 1.5;">The runner AUTO-WALKS to the pinned door. One door at a time — never to the true target, which would kill the lie. With no pin, nobody moves. That is why the guide exists: she has to speak.</div>
+        <div style="margin-top: auto; font-size: 11px; font-family: ui-monospace, Menlo, monospace; color: #9ff2c8; background: #122019; border-radius: 4px; padding: 5px 9px; align-self: flex-start;">runner-intel RI20–RI20g · 60 Hz, in node</div>
+      </div>
+
+      <div style="background: #161310; border: 1px solid rgba(168,152,132,0.22); border-radius: 6px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="font-size: 15px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;">Jobs are pins too</div>
+        <div style="font-size: 14px; color: #a89884; line-height: 1.5;">In the mission room her chips add the job's own targets. SMASH: two identical faces. DRILL: two identical brackets. The thumb cannot pick one — only a pin can. <span style="color: #f3ece3; font-family: ui-monospace, Menlo, monospace;">objectives.js</span> owns the kinds and cannot import the answers. An evil guide pins the decoy. Nothing special-cases it.</div>
+        <div style="margin-top: auto; font-size: 11px; font-family: ui-monospace, Menlo, monospace; color: #9ff2c8; background: #122019; border-radius: 4px; padding: 5px 9px; align-self: flex-start;">runner-intel RI19–RI19q · RI3c</div>
+      </div>
+
+      <div style="background: #161310; border: 1px solid rgba(255,138,122,0.35); border-radius: 6px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="font-size: 15px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #ff8a7a;">The hunter is a door. It is shut.</div>
+        <div style="font-size: 14px; color: #a89884; line-height: 1.5;">The TV's red pass is a seeded clock. It has no position and no target. Hiding is deniable because the pass is staged — and the clock keeps running while you hide. Do not build the hunter. Do not draw him.</div>
+        <div style="margin-top: auto; font-size: 11px; font-family: ui-monospace, Menlo, monospace; color: #9ff2c8; background: #122019; border-radius: 4px; padding: 5px 9px; align-self: flex-start;">runner-intel RI8 · tv-stinger TS6</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ ROW 2 · THREE SCREENS ============ -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <div style="display: flex; align-items: center; gap: 14px;">
+      <div style="font-size: 13px; letter-spacing: 0.30em; color: #f5a14a; text-transform: uppercase; font-weight: 700;">2 · Three screens, one run — John's picks, shipped</div>
+      <div style="flex-grow: 1; height: 1px; background: rgba(245,161,74,0.30);"></div>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px;">
+
+      <!-- GUIDE -->
+      <div style="background: #161310; border: 1px solid rgba(168,152,132,0.22); border-radius: 6px; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; align-items: baseline; gap: 10px;">
+          <div style="font-size: 15px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;">Guide phone</div>
+          <div style="font-size: 12px; color: #f5a14a; letter-spacing: 0.08em;">GUIDE E · "NEIGHBOURS ONLY"</div>
+        </div>
+        <div style="background: #080604; border: 1px solid rgba(168,152,132,0.18); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; height: 300px; box-sizing: border-box;">
+          <div style="flex-grow: 1; background: #12100c; border-radius: 6px; position: relative; overflow: hidden;">
+            <div style="position: absolute; left: 26%; top: 22%; width: 46%; height: 52%; background: rgba(245,161,74,0.13); border: 1px solid rgba(245,161,74,0.7);"></div>
+            <div style="position: absolute; left: 27%; top: 24%; font-size: 10px; letter-spacing: 0.14em; color: #f5a14a;">HER ROOM</div>
+            <div style="position: absolute; left: 4%; top: 30%; width: 20%; height: 36%; background: rgba(243,236,227,0.05); border: 1px solid rgba(168,152,132,0.45);"></div>
+            <div style="position: absolute; left: 74%; top: 34%; width: 22%; height: 30%; background: rgba(243,236,227,0.05); border: 1px solid rgba(168,152,132,0.45);"></div>
+            <div style="position: absolute; left: 48%; top: 44%; width: 9px; height: 9px; border-radius: 50%; background: #f3ece3;"></div>
+            <div style="position: absolute; left: 72%; top: 46%; width: 7px; height: 12px; background: #f5a14a; box-shadow: 0 0 10px rgba(245,161,74,0.9);"></div>
+            <div style="position: absolute; right: 6px; bottom: 6px; font-size: 9px; letter-spacing: 0.12em; color: #8a7d70;">NO WHOLE HOUSE · NO HUNTER MARK</div>
+          </div>
+          <div style="display: flex; gap: 6px;">
+            <div style="font-size: 10px; letter-spacing: 0.10em; color: #a89884; border: 1px solid rgba(168,152,132,0.45); border-radius: 999px; padding: 4px 10px;">EAST DOOR</div>
+            <div style="font-size: 10px; letter-spacing: 0.10em; color: #0c0a08; background: #f5a14a; border: 1px solid #f5a14a; border-radius: 999px; padding: 4px 10px; font-weight: 700;">LEFT FACE</div>
+            <div style="font-size: 10px; letter-spacing: 0.10em; color: #a89884; border: 1px solid rgba(168,152,132,0.45); border-radius: 999px; padding: 4px 10px;">RIGHT FACE</div>
+          </div>
+        </div>
+        <div style="font-size: 14px; color: #a89884; line-height: 1.5;">She sees her runner's room, plus the rooms one door away. That is all, on purpose. The map moves with the runner. The chips are doors and job targets. This screen never airs.</div>
+        <div style="margin-top: auto; font-size: 11px; font-family: ui-monospace, Menlo, monospace; color: #9ff2c8; background: #122019; border-radius: 4px; padding: 5px 9px; align-self: flex-start;">intel-pads · runner-intel RI21 (the map follows her)</div>
+      </div>
+
+      <!-- RUNNER -->
+      <div style="background: #161310; border: 1px solid rgba(168,152,132,0.22); border-radius: 6px; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; align-items: baseline; gap: 10px;">
+          <div style="font-size: 15px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;">Runner phone</div>
+          <div style="font-size: 12px; color: #f5a14a; letter-spacing: 0.08em;">RUNNER D · "FRAME BEZEL"</div>
+        </div>
+        <div style="background: #080604; border: 1px solid rgba(168,152,132,0.18); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; height: 300px; box-sizing: border-box; position: relative; overflow: hidden;">
+          <div style="position: absolute; left: 24%; top: 0; width: 40%; height: 5px; background: #f5a14a; border-radius: 0 0 4px 4px; box-shadow: 0 0 16px rgba(245,161,74,0.9);"></div>
+          <div style="flex-grow: 1; display: flex; align-items: center; justify-content: center;">
+            <div style="font-size: 12px; letter-spacing: 0.22em; color: #8a7d70; text-transform: uppercase;">No map here · eyes on the TV</div>
+          </div>
+          <div style="display: flex; align-items: flex-end; justify-content: space-between;">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
+              <div style="width: 84px; height: 84px; border-radius: 50%; border: 1px solid rgba(168,152,132,0.5); display: flex; align-items: center; justify-content: center;">
+                <div style="width: 34px; height: 34px; border-radius: 50%; background: #161310; border: 1px solid rgba(243,236,227,0.5);"></div>
+              </div>
+              <div style="font-size: 10px; letter-spacing: 0.14em; color: #8a7d70;">STICK · DODGE LEFT / RIGHT ONLY</div>
+            </div>
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
+              <div style="width: 96px; height: 44px; border-radius: 8px; background: #122019; border: 1px solid rgba(159,242,200,0.6); display: flex; align-items: center; justify-content: center; color: #9ff2c8; font-size: 12px; letter-spacing: 0.14em; font-weight: 700;">HOLD</div>
+              <div style="font-size: 10px; letter-spacing: 0.14em; color: #8a7d70;">HIDE BEHIND FURNITURE</div>
+            </div>
+          </div>
+        </div>
+        <div style="font-size: 14px; color: #a89884; line-height: 1.5;">The bearing is the edge of the phone — a glow at the pin's angle, pixels only, no coordinates. The stick steps sideways into cover and nothing else. HOLD hides behind furniture; there is no hide in an open hall. The pad never prints the pin's kind.</div>
+        <div style="margin-top: auto; font-size: 11px; font-family: ui-monospace, Menlo, monospace; color: #9ff2c8; background: #122019; border-radius: 4px; padding: 5px 9px; align-self: flex-start;">runner-intel RI19f · RI22 (the bearing moves) · RI14e</div>
+      </div>
+
+      <!-- TV -->
+      <div style="background: #161310; border: 1px solid rgba(168,152,132,0.22); border-radius: 6px; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; align-items: baseline; gap: 10px;">
+          <div style="font-size: 15px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;">The TV</div>
+          <div style="font-size: 12px; color: #f5a14a; letter-spacing: 0.08em;">PRODUCED FOLLOW + TV E · "CAMERA STINGER"</div>
+        </div>
+        <div style="background: #080604; border: 1px solid rgba(168,152,132,0.18); border-radius: 10px; height: 300px; box-sizing: border-box; position: relative; overflow: hidden;">
+          <div style="position: absolute; left: 0; top: 0; right: 0; height: 22px; background: #12100c; border-bottom: 1px solid rgba(168,152,132,0.25); display: flex; align-items: center; gap: 10px; padding: 0 10px; font-size: 9px; letter-spacing: 0.12em; color: #8a7d70;">
+            <span>CASTING</span><span style="color: #f5a14a; font-weight: 700;">EXPEDITION</span><span>RECAP</span><span>DEBRIEF</span><span>RECKONING</span><span>VOTE</span><span>EXECUTION</span><span>VERDICT</span>
+          </div>
+          <div style="position: absolute; left: 14%; top: 34%; width: 54%; height: 50%; border: 1px solid rgba(168,152,132,0.35); background: rgba(243,236,227,0.03);"></div>
+          <div style="position: absolute; left: 34%; top: 56%; width: 14px; height: 20px; background: #f3ece3; border-radius: 3px;"></div>
+          <div style="position: absolute; left: 30.5%; top: 50%; width: 44px; height: 44px; border: 1px solid rgba(245,161,74,0.8); border-radius: 50%;"></div>
+          <div style="position: absolute; left: 62%; top: 28%; width: 26%; height: 62%; background: linear-gradient(90deg, rgba(255,138,122,0) 0%, rgba(255,138,122,0.16) 60%, rgba(255,138,122,0) 100%);"></div>
+          <div style="position: absolute; left: 70%; bottom: 12%; font-size: 9px; letter-spacing: 0.12em; color: #ff8a7a;">RED PASS · STAGED</div>
+          <div style="position: absolute; right: 10px; bottom: 34px; background: #12100c; border: 1px solid rgba(159,242,200,0.55); border-radius: 6px; padding: 8px 12px; display: flex; flex-direction: column; gap: 2px;">
+            <div style="font-size: 12px; font-weight: 800; color: #9ff2c8; letter-spacing: 0.08em;">CAM 02 · now live</div>
+            <div style="font-size: 10px; color: #a89884;">2 / 4 · two seconds, then gone</div>
+          </div>
+          <div style="position: absolute; left: 10px; bottom: 8px; font-size: 9px; letter-spacing: 0.12em; color: #8a7d70;">NO MAP · NO ROUTE · NO HUNTER MARK · NO WHOLE HOUSE</div>
+        </div>
+        <div style="font-size: 14px; color: #a89884; line-height: 1.5;">A produced follow of the runner. Chase inside the ballroom, top-down over her own rooms outside it, a crane between — never a cut under the thumb. A mount is a two-second moment, not a digit. The TV is told the pin and may not draw it.</div>
+        <div style="margin-top: auto; font-size: 11px; font-family: ui-monospace, Menlo, monospace; color: #9ff2c8; background: #122019; border-radius: 4px; padding: 5px 9px; align-self: flex-start;">party-follow F11i · party-warm W26h · tv-stinger TS1–TS9</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ ROW 3 · GONE ============ -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <div style="display: flex; align-items: center; gap: 14px;">
+      <div style="font-size: 13px; letter-spacing: 0.30em; color: #ff8a7a; text-transform: uppercase; font-weight: 700;">3 · Gone, on purpose — do not bring these back</div>
+      <div style="flex-grow: 1; height: 1px; background: rgba(255,138,122,0.30);"></div>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+      <div style="font-size: 12px; color: #ff8a7a; border: 1px solid rgba(255,138,122,0.4); border-radius: 999px; padding: 6px 14px; letter-spacing: 0.04em;">a first-person camera — never built, no longer written</div>
+      <div style="font-size: 12px; color: #ff8a7a; border: 1px solid rgba(255,138,122,0.4); border-radius: 999px; padding: 6px 14px; letter-spacing: 0.04em;">the six fake voice buttons — CLOSE / LATE / GOING · GO / HOLD (voice stays in the room)</div>
+      <div style="font-size: 12px; color: #ff8a7a; border: 1px solid rgba(255,138,122,0.4); border-radius: 999px; padding: 6px 14px; letter-spacing: 0.04em;">the thumb picking the painting</div>
+      <div style="font-size: 12px; color: #ff8a7a; border: 1px solid rgba(255,138,122,0.4); border-radius: 999px; padding: 6px 14px; letter-spacing: 0.04em;">hiding in an open hall</div>
+      <div style="font-size: 12px; color: #ff8a7a; border: 1px solid rgba(255,138,122,0.4); border-radius: 999px; padding: 6px 14px; letter-spacing: 0.04em;">a sabotage button — no verb for one</div>
+      <div style="font-size: 12px; color: #ff8a7a; border: 1px solid rgba(255,138,122,0.4); border-radius: 999px; padding: 6px 14px; letter-spacing: 0.04em;">the whole-house flyover</div>
+      <div style="font-size: 12px; color: #ff8a7a; border: 1px solid rgba(255,138,122,0.4); border-radius: 999px; padding: 6px 14px; letter-spacing: 0.04em;">a map on the runner's phone</div>
+      <div style="font-size: 12px; color: #ff8a7a; border: 1px solid rgba(255,138,122,0.4); border-radius: 999px; padding: 6px 14px; letter-spacing: 0.04em;">the pocket fact</div>
+      <div style="font-size: 12px; color: #ff8a7a; border: 1px solid rgba(255,138,122,0.4); border-radius: 999px; padding: 6px 14px; letter-spacing: 0.04em;">a new name-tag layout — T7 stays a finding, the fix needs John</div>
+      <div style="font-size: 12px; color: #ff8a7a; border: 1px solid rgba(255,138,122,0.4); border-radius: 999px; padding: 6px 14px; letter-spacing: 0.04em;">hunter AI, hunter art — the door stays shut</div>
+    </div>
+  </div>
+
+  <!-- ============ FOOTER ============ -->
+  <div style="margin-top: auto; display: flex; flex-direction: column; gap: 10px;">
+    <div style="height: 1px; background: rgba(168,152,132,0.25);"></div>
+    <div style="display: flex; gap: 24px; align-items: baseline;">
+      <div style="font-size: 13px; color: #a89884; line-height: 1.5; flex-grow: 1;">Name tags: overlap is fine. A name fully gone is not — today the worst seat measures 100% buried (tag-census T7, kept out of the chain on purpose). The fix moves where the tag floats, which is inside a locked rule. John's call, not a refactor.</div>
+      <div style="font-size: 12px; font-family: ui-monospace, Menlo, monospace; color: #9ff2c8; white-space: nowrap;">proof: npm run gates:party · spec net: expedition-spec</div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

@@ -269,6 +269,16 @@ decision, not a refactor.
 
 ## Gates are the memory
 
+**The written spec agrees with the wire about the expedition** (2026-09-02, The Desk's card in
+PR #61: *"camera spec still says first-person"*). Four design docs still said first-person and a
+throttle verb; they are amended in place with dated notes, the history that must survive is kept
+(D13's overturn line, the struck `party-loop.md` build-list line the bible quotes), and
+`harness/expedition-spec.mjs` reddens on the exact stale sentences — in both directions: ES4 also
+fails when the code the fresh paper cites stops existing. The bible's new §5.7.1 is the one-stop
+locked-expedition section. Board: `docs/design/refs-expedition-locked/canvas/` (committed, unlike
+the runner-intel canvases). Slice: `docs/slices/task-expedition-as-locked.md`. Gate:
+`expedition-spec` (35).
+
 **The guide's chip row was a PHOTOGRAPH, and no node gate could see it** (2026-09-02, found by
 walking the loop). `party-phone.js`'s structural stamp is *"everything that changes the SHAPE of the
 screen"*, and the guide's half read `expedition:guide:{missionPhase}:{job}:{card}` — **not one term

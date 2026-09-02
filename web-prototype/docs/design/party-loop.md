@@ -17,7 +17,7 @@ Assumed win (change if John says so): goods unlock cameras and catch evil; evil 
 ## A turn
 
 1. Seated circle on the TV. Phones vote to pick a **pair**.
-2. One is the **runner** (first-person, dark corridors, quiet). One is the **guide** (private phone flyover, adapted from `[F]`). The TV is **not** the map.
+2. One is the **runner** (the one body in the dark corridors, quiet — aired on the TV as a produced follow; **amended 2026-09-02**, the picture was never built first-person). One is the **guide** (private phone map; **amended 2026-09-01** from the `[F]` flyover to Guide E "Neighbours Only" — her runner's room plus the door-joined neighbours). The TV is **not** the map.
 3. They go complete a **task**: breach a wall or barricaded door (hammer is **automated**; picker aims for `DamageField.channel(0.34, 1.70, 0.30).open` — a walkable doorway, measured at 3 blows. `COLLAPSE.fail` is a different test and must not be the goal; collapse is an allowed side effect), reach a terminal, unlock more **RRR reality-TV cameras**.
 4. Those cameras feed **everyone** on the TV. The TV plays the run like a reality show following the runner (will the hunter take them?).
 5. If the hunter takes the runner: they are **out for the rest of the game**. They can still **speak in real life** about what they know. No ghost phone UI. The guide cannot be taken (they are not in the halls). Task fails, that terminal's cameras stay dark.
@@ -38,7 +38,10 @@ Both-partners-running is a later A/B, not the first playable.
 - QR join, host vs phone views, lobby, 8-cap, reconnect.
 - Seated circle of 8 ornate chairs (current `chairRow` is wall-lining showcase only).
 - Roles, voting, partner pick, terminals, camera unlocks.
-- Phone first-person + touch. Private guide flyover.
+- ~~Phone first-person + touch. Private guide flyover.~~ **Overridden by D13** (ratified 2026-08-19;
+  struck 2026-09-02 so the bible's quote of this line still lands): the phone is a controller, never a
+  viewport — the runner's camera lives on the TV as a produced follow, and since 2026-09-01 the guide's
+  map is Guide E "Neighbours Only", not a flyover.
 - TV reality-TV follow camera (limited, produced), not god-view. **Amended 2026-08-28:** the
   expedition is played top-down with the roof off over the runner's OWN rooms only — "not
   god-view" now means never the whole house at once, rather than never overhead. See
