@@ -105,7 +105,13 @@ function playMatch({ count, seed, goodPolicy, evilPolicy }) {
   const suspicion = {};
   const stats = { calls: [], arrivals: 0, arrivalsEvilCaused: 0, offCrewEvilEvents: 0, offCrewRounds: 0, episodes: 0, executions: [] };
 
-  for (let ep = 1; ep <= EPISODE_CAP; ep++) {
+  /*
+   * 2g1e at the cap is RENEWED — that extra episode is the last vote, a full
+   * order. Breaking on EPISODE_CAP here is the CAST7 Reunion-from-cap. The +8
+   * is a hang detector for a 2v1 stall, not a second product cap (R2e is the
+   * live sixty-minute ceiling).
+   */
+  for (let ep = 1; ep <= EPISODE_CAP + 8; ep++) {
     if (r.state.outcome && r.state.outcome !== OUTCOME.RENEWED) break;
     const living = r.state.players.filter((p) => p.alive).map((p) => p.id);
     if (living.length < 2) break;
