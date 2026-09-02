@@ -1677,11 +1677,10 @@ export default async function partyHost({ params }) {
       } else if (onSendoff) {
         /*
          * 🎭 Pair locked. Drop the ballot overlay so the seated circle is the picture.
-         * Chrome still names the two — the plates already have them. Not a SHOW beat.
+         * The plates already name the two — do not reprint "X walks · Y talks" (W36d,
+         * the four lines John cut from casting). Not a SHOW beat.
          */
-        const runnerName = joinedName(names, pair.runner || recap.runner, 'The runner');
-        const guideName = joinedName(names, pair.guide || recap.guide, 'The guide');
-        body += `<p class="intro-hint">${esc(runnerName)} walks · ${esc(guideName)} talks</p>`;
+        body += `<p class="intro-hint">the pair is locked</p>`;
       } else if (ui.introsSent) {
         /*
          * 🎬 **THE BOARD HAS TO OUTLIVE THE ROLE-CARD WINDOW OR ITS COUNTER IS A LIE.**

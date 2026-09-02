@@ -1587,7 +1587,9 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
        * moving in the middle of the picture, which is what actually gets noticed.
        */
       const tagOf = (id) => robots.find((r) => String(r.seat.id) === id)?.tag || null;
-      stream.sync((pairs || []).filter((p) => p?.name), tagOf);
+      // Named pairs only: a nameless {a,b} is the sendoff, not a whisper merge.
+      if ((pairs || []).some((p) => p?.name)) stream.sync(pairs || [], tagOf);
+      else stream.sync([], tagOf);
     },
 
     /** Harness hook: how many streams are flying, and how lit they are. */
