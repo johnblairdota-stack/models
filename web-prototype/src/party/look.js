@@ -648,7 +648,7 @@ export const SHOW_CHROME_CSS = `
     .cast-vote-picks { display:block; font-size:11px; letter-spacing:.06em;
       color:var(--night-ink); text-shadow:0 2px 10px rgba(0,0,0,.9); }
     .cast-vote-picks em { font-style:normal; margin-right:4px; font-size:9px; font-weight:800;
-      letter-spacing:.16em; text-transform:uppercase; color:var(--react-accent, var(--night-accent)); }
+      letter-spacing:.16em; text-transform:uppercase; color:var(--night-accent); }
     /* Directly under the slips, not floated to the bottom of the column — it is the footnote to
        the ballots above it, and a tiebreak line stranded 900px away reads as unrelated chrome. */
     .cast-why { flex:0 0 auto; margin:0; color:var(--night-soft); font-size:11px;
