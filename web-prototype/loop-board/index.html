@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>THE LOOP — pair-lock sendoff</title>
+<style>
+  :root {
+    --bg: #07080c;
+    --panel: #10131a;
+    --card: #161a24;
+    --line: #2a3142;
+    --ink: #efe8d8;
+    --dim: #8e8674;
+    --gold: #d4b36a;
+    --gold2: #f0d9a0;
+    --red: #c45c4a;
+    --green: #6fbf8a;
+    --blue: #7aa3c4;
+    --now: #8e8674;
+    --proposal: #d4b36a;
+    --hunch: #7aa3c4;
+    --slice: #c45c4a;
+    --mono: "Cascadia Code", ui-monospace, Consolas, monospace;
+    --serif: "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, serif;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.45 "Segoe UI", system-ui, sans-serif;
+    padding: 0 0 72px;
+  }
+  .bar {
+    height: 4px;
+    background: linear-gradient(90deg, #3a2a12 0%, var(--gold) 40%, var(--gold2) 50%, var(--gold) 60%, #3a2a12 100%);
+  }
+  header {
+    padding: 28px 32px 22px;
+    border-bottom: 1px solid var(--line);
+    background: radial-gradient(ellipse at 20% 0%, #1a140c 0%, var(--bg) 55%);
+  }
+  .kicker {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 8px;
+  }
+  h1 {
+    font-family: var(--serif);
+    font-size: 42px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    line-height: 1.05;
+  }
+  h1 em { color: var(--gold); font-style: italic; }
+  .strap { color: var(--dim); max-width: 72ch; margin-top: 10px; font-size: 15px; }
+  .meta {
+    margin-top: 16px;
+    display: flex; gap: 22px; flex-wrap: wrap;
+    font-family: var(--mono); font-size: 12px; color: var(--dim);
+  }
+  .meta b { color: var(--gold2); font-weight: 600; }
+
+  main { padding: 0 32px; max-width: 1400px; margin: 0 auto; }
+  section { margin-top: 36px; }
+  h2 {
+    font-size: 12px;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 8px;
+  }
+  h2 small { color: var(--dim); letter-spacing: 0; text-transform: none; font-weight: 400; margin-left: 10px; }
+
+  .numbers {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
+  }
+  .num {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-top: 2px solid var(--gold);
+    padding: 12px 12px 10px;
+  }
+  .num .v { font-family: var(--mono); font-size: 22px; color: var(--gold2); }
+  .num .l { font-size: 11px; color: var(--dim); letter-spacing: 0.08em; text-transform: uppercase; margin-top: 4px; }
+  .note {
+    margin-top: 12px;
+    background: var(--panel);
+    border-left: 3px solid var(--gold);
+    padding: 12px 16px;
+    color: var(--dim);
+    max-width: 110ch;
+  }
+  .note strong { color: var(--ink); font-weight: 600; }
+
+  .thesis {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    padding: 18px 22px;
+    max-width: 110ch;
+  }
+  .thesis p + p { margin-top: 10px; }
+  .thesis .ok { color: var(--green); }
+  .thesis .fail { color: var(--red); }
+
+  .ruler { margin-top: 16px; font-family: var(--mono); font-size: 12px; }
+  .ruler .row { display: grid; grid-template-columns: 88px 1fr 72px; gap: 10px; align-items: center; margin: 6px 0; }
+  .ruler .lab { color: var(--dim); }
+  .track { position: relative; height: 18px; background: #0c0e14; border: 1px solid var(--line); }
+  .tick {
+    position: absolute; top: 0; bottom: 0;
+    font-size: 10px; line-height: 18px; padding: 0 5px; color: #1a120c; white-space: nowrap;
+  }
+  .tick.r { background: var(--gold); }
+  .tick.g { background: var(--blue); }
+  .tick.s { background: #5a5346; color: var(--ink); }
+  .tick.a { background: var(--gold); }
+  .tick.f { background: var(--red); }
+  .tick.p { background: #3d6b52; color: var(--ink); }
+  .ruler .sec { color: var(--dim); text-align: right; }
+
+  .shots { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  article.shot {
+    background: var(--card);
+    border: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+  }
+  .plate {
+    position: relative;
+    background: #000;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+  }
+  .plate img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .stamp {
+    position: absolute; top: 10px; left: 10px;
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em;
+    padding: 4px 8px; background: #000c; border: 1px solid var(--gold);
+    color: var(--gold2);
+  }
+  article.shot[data-kind="now"] .stamp { border-color: var(--now); color: var(--now); }
+  article.shot[data-kind="proposal"] .stamp { border-color: var(--proposal); color: var(--proposal); }
+  article.shot[data-kind="hunch"] .stamp { border-color: var(--hunch); color: var(--hunch); }
+  article.shot[data-kind="slice"] .stamp { border-color: var(--slice); color: var(--slice); }
+  article.shot[data-kind="now"] { border-top: 3px solid var(--now); }
+  article.shot[data-kind="proposal"] { border-top: 3px solid var(--proposal); }
+  article.shot[data-kind="hunch"] { border-top: 3px solid var(--hunch); }
+  article.shot[data-kind="slice"] { border-top: 3px solid var(--slice); }
+  .copy { padding: 14px 16px 16px; }
+  .copy h3 { font-family: var(--serif); font-size: 22px; font-weight: 500; margin-bottom: 4px; }
+  .copy .why { color: var(--gold); font-size: 13px; margin-bottom: 8px; }
+  .copy p { color: var(--dim); font-size: 14px; }
+  .copy p + p { margin-top: 8px; }
+  .copy .keep { color: var(--green); }
+  .copy ul { margin: 8px 0 0 18px; color: var(--dim); font-size: 14px; }
+  .copy li + li { margin-top: 4px; }
+
+  .locks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .lock {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    padding: 12px 14px;
+  }
+  .lock h3 { font-size: 14px; margin-bottom: 4px; color: var(--green); }
+  .lock p { color: var(--dim); font-size: 13px; }
+
+  .anim, .gates {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    padding: 16px 18px;
+  }
+  .anim p, .gates p { color: var(--dim); max-width: 110ch; }
+  .anim p + p, .gates p + p { margin-top: 8px; }
+  table.cheat {
+    width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px;
+  }
+  table.cheat th, table.cheat td {
+    text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top;
+  }
+  table.cheat th { color: var(--gold); font-weight: 600; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; }
+  table.cheat td.gate { font-family: var(--mono); color: var(--blue); font-size: 12px; white-space: nowrap; }
+  code { font-family: var(--mono); font-size: 13px; color: var(--gold); background: #0e1118; padding: 1px 6px; border-radius: 3px; }
+
+  footer {
+    margin: 48px 32px 0;
+    padding: 22px 0 0;
+    border-top: 2px solid var(--gold);
+    max-width: 1400px;
+  }
+  footer .line { font-family: var(--serif); font-size: 28px; color: var(--gold2); }
+  footer .sub { color: var(--dim); margin-top: 8px; max-width: 70ch; }
+
+  @media (max-width: 980px) {
+    .shots, .locks, .numbers { grid-template-columns: 1fr 1fr; }
+    h1 { font-size: 32px; }
+    main, header { padding-left: 16px; padding-right: 16px; }
+  }
+  @media (max-width: 640px) {
+    .shots, .locks, .numbers { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body
+  data-now-stand-runner="0.00"
+  data-now-stand-guide="0.40"
+  data-now-settle="2.00"
+  data-now-fade="0.25"
+  data-now-ms="2250"
+  data-now-clip="Sit_to_Stand_Transition_M"
+  data-board="loop-pair-lock"
+>
+
+<div class="bar"></div>
+<header>
+  <p class="kicker">Playability loop · critic board · isolated</p>
+  <h1>The pick is two names.<br><em>The sendoff is a blink.</em></h1>
+  <p class="strap">
+    After 3·2·1 locks runner and guide, the room has — for the first time all night — two
+    bodies to watch. Shipped sendoff (PR 67) stands both chairs on the accuser clip, 0.40s
+    apart, and cuts to the mansion. It does not sell RUNNER versus GUIDE. Chrome is cold.
+    The camera is still the talk sweep. This board is the argument for how to make the pick
+    feel like a pick. A lynch-vote people-scene is a <strong>separate</strong> suggestion.
+  </p>
+  <p class="meta">
+    <span>tree <b>main @ PR 67</b></span>
+    <span>path <b>web-prototype/loop-board/</b></span>
+    <span>serve <b>npm run loop:board → :5209</b></span>
+    <span>not Desk :5199 · Night :5205 · Hunter :5207 · live :5178/:5181</span>
+  </p>
+</header>
+
+<main>
+
+<section>
+  <h2>Shipped NOW <small>verified off pair-lock-stage.js — do not invent</small></h2>
+  <div class="numbers">
+    <div class="num"><div class="v">0.00s</div><div class="l">STAND_RUNNER</div></div>
+    <div class="num"><div class="v">0.40s</div><div class="l">STAND_GUIDE</div></div>
+    <div class="num"><div class="v">2.00s</div><div class="l">SETTLE hold</div></div>
+    <div class="num"><div class="v">0.25s</div><div class="l">FADE</div></div>
+    <div class="num"><div class="v">2.25s</div><div class="l">PAIR_LOCK_MS 2250</div></div>
+    <div class="num"><div class="v">M clip</div><div class="l">Sit_to_Stand_Transition_M</div></div>
+  </div>
+  <p class="note">
+    Overlay drops. Seated circle is the picture. Runner stands, guide 0.40s later, both
+    <em>hold</em> the stand, settle at 2.00, fade 0.25, expedition at 2.25s.
+    <strong>No reactors. sitLock on. No walk to the door. No new SHOW beat. No new follow camera.</strong>
+    Phones stay on the Locked sheet. TV chrome is <code>the pair is locked</code> — not
+    <code>X walks · Y talks</code> (that line is the phone, and again on the expedition hero).
+    Same class as accusation-stage, not a cinematic. Same stand clip as the accuser.
+  </p>
+  <p class="note">
+    Honest clock: <code>accusationSpan()</code> is also <strong>2.25s</strong> (SETTLE 2.00 + FADE 0.25).
+    The accusation <em>header</em> bills “roughly four seconds” because the circle does four
+    things — stand, flinch, gasp-ripple, settle into a different clip. Sendoff does one clip
+    twice, 0.40s apart. Same wall time, half the picture. That is why 2.25s of accusation
+    feels like a scene and 2.25s of sendoff feels like a blink.
+  </p>
+</section>
+
+<section>
+  <h2>The feel <small>why the pick does not land</small></h2>
+  <div class="thesis">
+    <p>The room has been staring at eight seated bodies since walk-in. Casting is a ballot overlay.
+    Then two names lock, and for two seconds two chairs stand up in the same pose the accuser
+    will use later, and then the house. <span class="fail">Nothing told you who runs and who talks
+    except a lower-third that refuses to name the jobs.</span> The stagger is too short to read as
+    two people; it reads as a chorus line that missed its mark.</p>
+    <p><span class="ok">Reactors-none is correct</span> — a sendoff gasp is the Reckoning leak with
+    no accusation to justify it. <span class="ok">sitLock + no door-walk is correct</span> — the
+    expedition is the walk; dropping the lock on a body inside a solid chair is John’s documented
+    bug. The critic is not asking to walk them out, invent a SHOW beat, or cut a new follow camera.
+    The critic is asking for the two names to be <em>watched</em>.</p>
+  </div>
+  <div class="ruler" aria-label="timing comparison">
+    <div class="row">
+      <span class="lab">NOW</span>
+      <div class="track" style="max-width:225px">
+        <span class="tick r" style="left:0;width:18%">R</span>
+        <span class="tick g" style="left:18%;width:18%">G</span>
+        <span class="tick s" style="left:80%;width:20%">S+F</span>
+      </div>
+      <span class="sec">2.25s</span>
+    </div>
+    <div class="row">
+      <span class="lab">ACCUSE</span>
+      <div class="track" style="max-width:225px">
+        <span class="tick a" style="left:0;width:16%">A</span>
+        <span class="tick f" style="left:16%;width:16%">fl</span>
+        <span class="tick p" style="left:32%;width:48%">gasp</span>
+        <span class="tick s" style="left:80%;width:20%">S+F</span>
+      </div>
+      <span class="sec">2.25s · billed ~4s</span>
+    </div>
+    <div class="row">
+      <span class="lab">SHOT A</span>
+      <div class="track" style="max-width:375px">
+        <span class="tick r" style="left:0;width:12%">R</span>
+        <span class="tick g" style="left:26%;width:14%">G @1.00</span>
+        <span class="tick s" style="left:86%;width:14%">S+F</span>
+      </div>
+      <span class="sec">~3.75s</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Four plates <small>real images in the DOM — NOW / proposal / hunch / new slice</small></h2>
+  <div class="shots">
+
+    <article class="shot" data-kind="now" data-shot="now">
+      <div class="plate">
+        <img src="shots/shot-now-chorus.jpg" alt="Wide ballroom: two robots stand in the seated circle, lower-third reads THE PAIR IS LOCKED">
+        <span class="stamp">NOW · CHORUS-LINE</span>
+      </div>
+      <div class="copy">
+        <h3>Chorus-line stand</h3>
+        <p class="why">Why it fails</p>
+        <p>Two chairs use the accuser stand, 0.40s apart, then the mansion. The talk camera is
+        still walking the outside of the ring, so the pair is two extra heads in a group photo.
+        Chrome says the fact and refuses the jobs. Same clip, same energy, no read of who does
+        what. The room has two names to watch and is shown eight bodies instead.</p>
+        <ul>
+          <li>Stagger too short to parse as two people.</li>
+          <li>Same clip as the accuser — the pick borrows the indictment’s body language.</li>
+          <li>No job read on the TV. Phones already say walks / talks; the television does not.</li>
+        </ul>
+      </div>
+    </article>
+
+    <article class="shot" data-kind="proposal" data-shot="a">
+      <div class="plate">
+        <img src="shots/shot-a-jobs.jpg" alt="Two-shot of two golden robots mid sit-to-stand, chest plates RUNS and TALKS">
+        <span class="stamp">SHOT A · PROPOSAL</span>
+      </div>
+      <div class="copy">
+        <h3>Two-shot / job read</h3>
+        <p class="why">Smallest change that sells the pick</p>
+        <p>Keep sitLock. Keep <code>Sit_to_Stand_Transition_M</code>. Change three numbers and
+        the picture you already have. <code>intro-bed</code> already owns a <code>pair</code>
+        plate — two-shot on neighbours, eye opposite them on the outside arc. Punch the existing
+        onStage circle toward the two locked chairs. Not a new <code>follow.js</code> mode.
+        Not a SHOW beat.</p>
+        <ul>
+          <li><code>STAND_GUIDE</code> <strong>1.00</strong> not 0.40 — a second person, not a chorus.</li>
+          <li><code>SETTLE</code> ~<strong>3.5</strong> so air approaches the billed accusation, not the machine’s 2.25s.</li>
+          <li>TV nameplates <strong>RUNS / TALKS</strong> on the two bodies. Chrome can stay quiet; the picture talks.</li>
+          <li>Runner holds the stand. Guide same clip, later — smaller energy via timing, not a new bake.</li>
+        </ul>
+        <p class="keep">This is the one to do if John wants the pick to land this week.</p>
+      </div>
+    </article>
+
+    <article class="shot" data-kind="hunch" data-shot="b">
+      <div class="plate">
+        <img src="shots/shot-b-door-in-frame.jpg" alt="High angle: standing pair at their chairs, one pointing at the open mansion door in frame">
+        <span class="stamp">SHOT B · HUNCH</span>
+      </div>
+      <div class="copy">
+        <h3>Door-in-frame</h3>
+        <p class="why">Do not walk them. Compose the door behind the stands.</p>
+        <p>The expedition is the walk. The sendoff can still <em>point at the house</em> if the
+        existing ballroom camera sits so the mansion door is in frame behind the two chairs.
+        Pair stands. One aims the house. Seated circle watches. sitLock stays on.</p>
+        <p>Talk plates look <em>in</em> from outside the ring. The door is a wall. Getting it
+        behind the two stands is a composition, not a path. <strong>Needs a Lead slice if it
+        moves a camera</strong> — still <code>intro-bed</code> picture, still not a follow.js
+        mode, still not a SHOW beat. A look / aim clip is a hunch for later; nothing on
+        <code>SEATED_REACTION_CLIPS</code> is a point-at-the-door bake.</p>
+      </div>
+    </article>
+
+    <article class="shot" data-kind="slice" data-shot="c">
+      <div class="plate">
+        <img src="shots/shot-c-vote-slice.jpg" alt="Lynch vote people-scene: standing pile around an empty named chair, tally chrome at the bottom">
+        <span class="stamp">SHOT C · NEW SLICE</span>
+      </div>
+      <div class="copy">
+        <h3>Vote people-scene</h3>
+        <p class="why">Do not sneak this into pair-lock</p>
+        <p>John also asked what camera dramatizes a pick. A lynch-vote huddle — standing pile on
+        the accused chair, seated watchers, tally chrome — is a people-scene the night does not
+        have. Pair-lock’s closed list already named vote close as chrome, not a stand-up.
+        <strong>Closed today as chrome-only.</strong></p>
+        <p>If it ever opens, it is its own slice, its own key, its own leak surface. Reactors
+        on a vote are not free just because accusation already gasps. Do not borrow pair-lock’s
+        two chairs to prototype this.</p>
+      </div>
+    </article>
+
+  </div>
+</section>
+
+<section>
+  <h2>Animation <small>already in the seated GLB</small></h2>
+  <div class="anim">
+    <p>Keep <code>Sit_to_Stand_Transition_M</code>. It is already on
+    <code>SEATED_REACTION_CLIPS</code> and already measured as a leave-the-chair clip under a
+    pinned root (hips 0.531 → 0.782, 0.44 m inward). The accuser uses it. The sendoff uses it.
+    A second bake is not the lever.</p>
+    <p>Runner holds the stand. Guide plays the same clip, later. Smaller energy is the stagger
+    (<code>STAND_GUIDE</code> 1.00), not a different file. <code>Sit_to_Stand_Transition_F</code>
+    ends over the root — a robot standing inside its own seat. Do not switch to F to “soften”
+    the guide.</p>
+    <p>A look / aim / point clip is a <strong>hunch for later</strong>. The eleven seated
+    performances do not include one. Shot B’s pointing arm is a picture, not a request to
+    author a clip in this pass.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Already correct <small>do not relitigate — changing one is John’s call</small></h2>
+  <div class="locks">
+    <div class="lock">
+      <h3>Reactors: none</h3>
+      <p>Who gasps is a leak. A sendoff gasp is the Reckoning tell with no accusation to cover it. Only the two named chairs move.</p>
+    </div>
+    <div class="lock">
+      <h3>sitLock stays on</h3>
+      <p>The clip travels. Dropping the lock on a body inside a solid chair is the crouch-in-front-of-seat bug. Execution is the walk that unlocks, and only the swinger, and only then.</p>
+    </div>
+    <div class="lock">
+      <h3>No door-walk</h3>
+      <p>The expedition is the walk. Sendoff is a stand-in-place. Walking them to the mansion door on Casting is a second run.</p>
+    </div>
+    <div class="lock">
+      <h3>No new SHOW beat</h3>
+      <p>Accusation plays ON Reckoning. Sendoff plays ON Casting after lock. A <code>sendoff</code> beat reddens show-beat SB2 until somebody partitions it.</p>
+    </div>
+    <div class="lock">
+      <h3>No follow.js camera</h3>
+      <p><code>FOLLOW_BEATS</code> is still <code>['expedition']</code>. Punching the onStage circle is intro-bed’s existing pair plate, not a cue kind.</p>
+    </div>
+    <div class="lock">
+      <h3>Phones stay Locked</h3>
+      <p>No expedition pad, no 3D, no map until SETTLE+FADE. The controller does not become a viewport for two seconds of theatre.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>If a later slice cheats <small>gates that go red — loop:check restates them</small></h2>
+  <div class="gates">
+    <p>This board does not implement. The night already has memory. A slice that “just” drops
+    sitLock, adds a SHOW beat, or opens a follow camera to dramatize the pick will not fail
+    silently.</p>
+    <table class="cheat">
+      <thead>
+        <tr><th>Cheat</th><th>Gate</th><th>What it asserts</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>sitLock dropped on sendoff stands</td>
+          <td class="gate">pair-lock-stage P3d</td>
+          <td>No <code>sitLock = false</code> in the stage; “sitLock stays on” in stage + intro-bed</td>
+        </tr>
+        <tr>
+          <td>New SHOW_BEATS entry</td>
+          <td class="gate">P3a · show-beat SB2</td>
+          <td>No <code>sendoff</code> beat; every SHOW_BEATS name is on exactly one side of the door</td>
+        </tr>
+        <tr>
+          <td>follow.js touched (sendoff mode / second follow beat)</td>
+          <td class="gate">P3e · party-follow F0c</td>
+          <td>No sendoff/pairlock cue kind; <code>FOLLOW_BEATS.length === 1</code></td>
+        </tr>
+        <tr>
+          <td>Reactors gasp on sendoff</td>
+          <td class="gate">pair-lock-stage P0d</td>
+          <td>Plan roles are runner / guide / settle only</td>
+        </tr>
+        <tr>
+          <td>Expedition pins before SETTLE+FADE</td>
+          <td class="gate">P2 / P4</td>
+          <td>Live hop waits PAIR_LOCK_MS; sim does not skip</td>
+        </tr>
+        <tr>
+          <td>This board’s NOW stamp disagrees with the tree</td>
+          <td class="gate">loop:check L0</td>
+          <td>HTML data-now-* matches PAIR / PAIR_CLIPS / PAIR_LOCK_MS</td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="margin-top:12px"><code>npm run loop:check</code> · <code>npm run loop:board</code> →
+    <code>http://localhost:5209</code> · <code>loop:check</code> is not in <code>gates:party</code>.
+    The night gates already hold the product.</p>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <p class="line">John decides. Lead slices. Playability loop does not implement.</p>
+  <p class="sub">Shot A is the smallest change that sells RUNNER vs GUIDE. Shot B is a composition
+  hunch and needs a Lead slice if a camera moves. Shot C is a new slice, closed today as chrome-only.
+  Nothing in this folder may land in the night.</p>
+</footer>
+
+</body>
+</html>
