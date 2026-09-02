@@ -552,6 +552,40 @@ t('H10 · seatedAim is a visor-height torso when Head is missing',
     && WRECK_SHOT.dur < 10
     && !/linger/.test(kinds)
     && !/execLinger/.test(kinds));
+
+  /*
+   * CAST8 H380: linger overran ~18s on the host VOTE/CAMERA WARMING clock.
+   * HIT clock is exec.t - hitAt. clearExecute at 5.00. sit=false vanish is red.
+   */
+  const stepFn = introSrc.slice(
+    introSrc.indexOf('function stepExecute'),
+    introSrc.indexOf('function afterBodies'),
+  );
+  const camFn = introSrc.slice(
+    introSrc.indexOf("if (exec.phase !== 'off')"),
+    introSrc.indexOf("if (exec.phase !== 'off')") + 900,
+  );
+  t('H17f · linger on the HIT clock is 5.00 — CAST8-class 18s overrun is red',
+    /elapsed = exec\.t - exec\.hitAt/.test(stepFn)
+    && /elapsed >= LINGER_TOTAL_S/.test(stepFn)
+    && /clearExecute\(\)/.test(stepFn)
+    && LINGER_TOTAL_S === 5.00
+    && LINGER_TOTAL_S < 18
+    && /exec\.t >= exec\.swingAt \+ SWING_DUR/.test(stepFn)
+    && /beginHit\(t\)/.test(stepFn),
+    `HIT ${LINGER_TOTAL_S}s · swing-complete starts the clock`);
+  t('H17g · after contact fillLingerEye owns the lens — not fillExecuteEye',
+    /if \(exec\.hit\)/.test(camFn)
+    && /fillLingerEye\(\)/.test(camFn)
+    && camFn.indexOf('fillLingerEye()') < camFn.indexOf('fillExecuteEye()')
+    && /function fillLingerEye/.test(introSrc)
+    && !/fillExecuteEye\(\)/.test(stepFn));
+  t('H17h · wreck sit=false vanish is red — wreckPose u=1 stays on floorY',
+    body.y === 0
+    && /if \(r\.wrecked\) return;/.test(introSrc)
+    && /if \(r\.wrecked\)/.test(driveFn)
+    && driveFn.indexOf('if (r.wrecked)') < driveFn.indexOf('heldRunner')
+    && /body\.root\.visible = true/.test(driveFn));
 }
 
 if (fail) {

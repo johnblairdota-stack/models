@@ -139,14 +139,14 @@ export function legKey(leg) {
  * A point beside the snag, not the snag. Perpendicular to the blocked heading so the
  * first new leg cannot be the (x, z, roomId) that just failed.
  */
-function sidestepOf(from, blocked, goal) {
+function sidestepOf(from, blocked, goal, sign = 1) {
   const at = from && Number.isFinite(Number(from.x)) && Number.isFinite(Number(from.z))
     ? from : blocked;
   if (!at || !Number.isFinite(Number(at.x)) || !Number.isFinite(Number(at.z))) return null;
   const tx = Number((goal && Number.isFinite(goal.x) ? goal.x : blocked?.x) ?? at.x) - Number(at.x);
   const tz = Number((goal && Number.isFinite(goal.z) ? goal.z : blocked?.z) ?? at.z) - Number(at.z);
   const len = Math.hypot(tx, tz) || 1;
-  const SIDE = 1.15;
+  const SIDE = 1.15 * (sign < 0 ? -1 : 1);
   return {
     x: Number(at.x) + (-tz / len) * SIDE,
     z: Number(at.z) + (tx / len) * SIDE,
@@ -163,18 +163,23 @@ function sidestepOf(from, blocked, goal) {
  */
 export function unstickLegs(portalCentres, goal, blocked, from) {
   const raw = legsFor(portalCentres, goal);
-  const skip = legKey(blocked);
-  if (!skip) return raw;
-  const rest = raw.filter((leg, i) => !(i === 0 && legKey(leg) === skip));
-  if (rest.length && legKey(rest[0]) !== skip) return rest;
-  const side = sidestepOf(from, blocked, goal);
+  const blockedList = Array.isArray(blocked) ? blocked : (blocked ? [blocked] : []);
+  const skips = new Set(blockedList.map(legKey).filter(Boolean));
+  if (!skips.size) return raw;
+  const rest = raw.filter((leg) => !skips.has(legKey(leg)));
+  if (rest.length && !skips.has(legKey(rest[0]))) return rest;
+  const last = blockedList[blockedList.length - 1];
+  const sides = [sidestepOf(from, last, goal, 1), sidestepOf(from, last, goal, -1)]
+    .filter((s) => s && legKey(s) && !skips.has(legKey(s)));
   const fallback = rest.length
     ? rest
     : (goal && Number.isFinite(Number(goal.x)) && Number.isFinite(Number(goal.z))
       ? [{ x: Number(goal.x), z: Number(goal.z), roomId: String(goal.roomId ?? '') }]
       : []);
-  const tail = fallback.filter((l) => !side || legKey(l) !== legKey(side));
-  if (side && legKey(side) && legKey(side) !== skip) return [side, ...tail];
+  const used = new Set(sides.map(legKey));
+  const tail = fallback.filter((l) => !used.has(legKey(l)));
+  if (sides.length) return [...sides, ...tail];
+  if (tail.length > 1 && skips.has(legKey(tail[0]))) return tail.slice(1);
   return tail;
 }
 

@@ -26,7 +26,8 @@ import {
   formatRemain, holdMsFor, isTalkBeat, nextShowBeat, remainingMs, reunionBeatAt,
   rollCallRevealed, rundownRibbon,
 } from '../party/show.js';
-import { NO_ONE, SHOWRUNNER } from '../party/vote.js';
+import { NO_ONE, SHOWRUNNER, heldHit, standingTally } from '../party/vote.js';
+import { hitHoldReady } from '../party/phases.js';
 import { clearsLine, executionPlate, lynchBoardRows, tallyBoardCopy } from '../party/scorekeeper.js';
 import { outcomeLine } from '../party/win.js';
 import { deadIdsFromPublic, describeCastTiebreaks, livingFromPublic, previewCastTiebreaks, shouldArmCastSend } from '../party/ballot.js';
@@ -1036,9 +1037,10 @@ export default async function partyHost({ params }) {
    */
   function cueExecute() {
     const show = ui.beat;
-    const live = show === 'execution' && client.lynchResult?.executed;
+    const held = airedHit(client);
+    const live = show === 'execution' && held?.hit && held.executed;
     const executioner = live ? String(client.lynchResult.executioner || '') : '';
-    const target = live ? String(client.lynchResult.executed || '') : '';
+    const target = live ? String(held.executed || '') : '';
     const key = `${show}|${executioner}>${target}`;
     if (key === ui.execKey) return;
     if (sendCue({ kind: 'execute', executioner, target })) ui.execKey = key;
@@ -1122,8 +1124,8 @@ export default async function partyHost({ params }) {
      * being photographed. During that window the screen says "Counting the ballot." and this
      * says nothing, because there is nothing painted to be the sound of.
      */
-    if (show === 'execution' && client.lynchResult) {
-      const out = !!client.lynchResult.executed;
+    if (show === 'execution' && airedHit(client)?.held) {
+      const out = !!airedHit(client).hit; // held HIT only — CAST8 OUT-without-driver is red
       const key = `${episode}|${out}`;
       if (key !== audioSeen.evict) {
         audioSeen.evict = key;
@@ -1681,7 +1683,8 @@ export default async function partyHost({ params }) {
         aside: client.lynchResult ? '' : tallyBoard(client.tally),
       });
     } else if (show === 'execution') {
-      const executed = client.lynchResult?.executed;
+      const held = airedHit(client);
+      const executed = held?.hit ? held.executed : null;
       body += talkStage({
         recap, names, lobby: client.lobby, runEnd: ui.runEnd, clock,
         /*
@@ -1698,9 +1701,9 @@ export default async function partyHost({ params }) {
          * said anything at all. `executionLine`'s old `!result` fallback ("The vote is in.") was
          * covering that window, and deleting the duplicate deleted the cover with it.
          */
-        kicker: client.lynchResult ? executionNextLine(episode) : 'Counting the ballot.', beat: 'execution',
+        kicker: held?.held ? executionNextLine(episode) : 'Counting the ballot.', beat: 'execution',
         who: executed ? joinedName(names, executed, 'A player') : 'Nobody',
-        whoSub: executed ? 'out' : 'no eviction',
+        whoSub: !held?.held ? 'counting' : (executed ? 'out' : 'no eviction'),
         whoId: executed,
         verdict: executionSwing(client.lynchResult, names),
         verdictWhy: executionSwingWhy(client.lynchResult),
@@ -1724,7 +1727,7 @@ export default async function partyHost({ params }) {
        * ======================================================================================= */
       const v = client.verdict;
       const season = seasonCopy(v?.status);
-      const executed = client.lynchResult?.executed;
+      const executed = airedHit(client)?.hit ? airedHit(client).executed : null;
       body += talkStage({
         recap, names, lobby: client.lobby, runEnd: ui.runEnd, clock,
         kicker: season.line, beat: 'verdict',
@@ -1799,8 +1802,11 @@ export default async function partyHost({ params }) {
          * sent one"; this board is the answer to "what did they send", and it has nothing to say
          * until they have.
          */
-        body += castBoard(client.lobby, votes, castWarm(), seatedLivingIds());
-        if (votes.length) body += ballotBoard(votes, names, recap, episode, castTiebreaks(votes, episode));
+        body += castStage({
+          votes, names,
+          tiebreaks: castTiebreaks(votes, episode),
+          board: castBoard(client.lobby, votes, castWarm(), seatedLivingIds()),
+        });
       }
       body += `<div class="actions">`;
       if (sendLeft != null) {
@@ -2196,6 +2202,27 @@ function standingLead(standing, names) {
   return first ? joinedName(names, first.target, 'Someone') : '';
 }
 
+/**
+ * OUT chrome is only legal after a held HIT. Empty tally with a standing pile
+ * is not a HIT (CAST8 H379). Do not invent a lynch the board did not print.
+ */
+function airedHit(client) {
+  const r = client?.lynchResult;
+  if (!r || !Object.prototype.hasOwnProperty.call(r, 'executed')) return null;
+  const standing = (client.noms || []).map((n) => n.target).filter(Boolean);
+  if (standing.length && !Object.keys(r.counts || {}).length) {
+    return { held: false, hit: false, executed: null };
+  }
+  if (!hitHoldReady(r, { executed: r.executed ?? null })) return null;
+  const executed = r.executed ?? null;
+  if (executed && standing.length && !standing.includes(executed)) {
+    return { held: false, hit: false, executed: null };
+  }
+  const agreed = heldHit(r, { executed });
+  if (!agreed) return null;
+  return { held: true, hit: agreed.hit, executed: agreed.executed };
+}
+
 /* =============================================================================================
  * 🎬 **THE CASTING STAGE — ONE PICTURE, EDGE TO EDGE, WITH THE BALLOTS ON TOP OF IT.**
  *
@@ -2527,8 +2554,9 @@ function pairBoard(links, names, lobby, refusals) {
 }
 
 function lynchBoard(votes, result, names, noms) {
-  const counts = result?.counts || {};
-  const standing = new Set((noms || []).map((n) => n.target).filter(Boolean));
+  const standingIds = (noms || []).map((n) => n.target).filter(Boolean);
+  const counts = standingTally(result, standingIds);
+  const standing = new Set(standingIds);
   const tally = Object.entries(counts)
     .filter(([id]) => id && id !== NO_ONE && id !== 'NOBODY')
     .filter(([id]) => standing.size === 0 || standing.has(id))

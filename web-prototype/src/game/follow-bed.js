@@ -1352,18 +1352,20 @@ export async function buildFollowBed(engine, opts = {}) {
     heading: 0,
     lastPortal: null,
     /**
-     * 🕹️ **FALSE UNTIL THE FIRST `move` CUE, AND THE SCRIPTED SCHEDULE ABOVE IS WHAT RUNS UNTIL
-     * THEN. THAT FALLBACK IS NOT DEAD CODE.**
+     * 🕹️ **FALSE UNTIL THE `run` CUE (or the first stick). THE SCRIPTED SCHEDULE IS THE
+     * STANDALONE FALLBACK, NOT THE LIVE NIGHT.**
      *
-     * `RunnerRoute` and the hesitation terms were D13's whole runner and are easy to mistake for
-     * something this slice replaced. Three things still need them:
-     *   · `?view=party.follow` opened standalone, which is how this view is developed.
-     *   · `?still=1`, which has to stay deterministic for a screenshot.
-     *   · `harness/party-follow-drive.mjs` **D3** — *consecutive grabs differ* — which would go
-     *     red on a camera pointed at a robot whose owner has not picked their phone up yet.
-     * Once a phone drives, the schedule never runs again that night.
+     * CAST8 sat on expedition ~100s then host `]`: auto-walk waited for a move cue, and
+     * the CAST bots never touched the stick. The stick is a lateral dodge only now.
+     * Sendoff's `run` cue hands the body to auto-walk — no pin, she stands; a pin, she
+     * walks. Standalone `?view=party.follow` / `?still=1` still have no run cue, so the
+     * schedule stays for those. Gate: runner-intel RI24.
      */
     driven: false,
+    /** Stall identities already failed. A replan that re-issues one is a green RI1 and a stuck night. */
+    blocked: [],
+    /** Return-home asked once after the pin is consumed. */
+    homing: false,
     /** The held perspective: chase / wide / iso / top. The ballroom threshold picks it; `P` pins. */
     perspective: 'chase',
     /**
@@ -1762,9 +1764,7 @@ export async function buildFollowBed(engine, opts = {}) {
       }
     }
     if (mission.phase === 'return' && ballroom) {
-      const inside = runner.pos.x > ballroom.x0 && runner.pos.x < ballroom.x1
-        && runner.pos.z > ballroom.z0 && runner.pos.z < ballroom.z1;
-      if (inside) mission.phase = 'done';
+      if (inBallroom()) mission.phase = 'done';
     }
   }
 
@@ -1869,6 +1869,35 @@ export async function buildFollowBed(engine, opts = {}) {
     return Number.isFinite(pin.x) && Number.isFinite(pin.z) ? { x: pin.x, z: pin.z } : null;
   }
 
+  function inBallroom() {
+    if (!ballroom) return false;
+    return runner.pos.x > ballroom.x0 && runner.pos.x < ballroom.x1
+      && runner.pos.z > ballroom.z0 && runner.pos.z < ballroom.z1;
+  }
+
+  /**
+   * After the job lands the body walks home. Not the true camera — the ballroom
+   * the recap clock waits on. A door pin still wins (the guide walking her back).
+   */
+  function homeGoal() {
+    if (mission.phase !== 'return' || !ballroom) return null;
+    const x = (Number(ballroom.x0) + Number(ballroom.x1)) / 2;
+    const z = (Number(ballroom.z0) + Number(ballroom.z1)) / 2;
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return null;
+    return { x, z, roomId: String(ballroom.id || '') };
+  }
+
+  function walkGoal() {
+    const pin = pinGoal();
+    const home = homeGoal();
+    if (mission.phase === 'return' && home) {
+      if (!pin) return home;
+      const atPin = Math.hypot(runner.pos.x - pin.x, runner.pos.z - pin.z) < AUTOWALK.arrive;
+      return atPin ? home : pin;
+    }
+    return pin ?? home;
+  }
+
   /**
    * 🚨 **THE GUIDE'S PIN PICKS THE TARGET. THE THUMB DOES NOT, AND THAT IS JOHN'S 2026-09-02 CALL.**
    *
@@ -1902,7 +1931,7 @@ export async function buildFollowBed(engine, opts = {}) {
    */
   function replanToPin(blocked) {
     perf.legs = [];
-    const goal = pinGoal();
+    const goal = walkGoal();
     if (!goal) return;
     _goal.set(goal.x, room.floorY ?? 0, goal.z);
     const portals = room.pathPortals?.(runner.pos, _goal, ROUTE_MIN_W, ROUTE_MIN_H) ?? [];
@@ -1960,7 +1989,12 @@ export async function buildFollowBed(engine, opts = {}) {
           roomId: perf.legs[0].roomId ?? roomIdAt(runner.pos),
         }
         : null;
-      replanToPin(blocked);
+      if (blocked) {
+        perf.blocked = [...(perf.blocked || []), blocked].slice(-6);
+      } else if (why !== 'stall') {
+        perf.blocked = [];
+      }
+      replanToPin(why === 'stall' ? (perf.blocked.length ? perf.blocked : blocked) : null);
       perf.nav = {
         pinKey: key, plannedKey: key, phase: mission.phase, since: 0, gained: 0,
         lastAt: { x: runner.pos.x, z: runner.pos.z }, why,
@@ -1974,6 +2008,11 @@ export async function buildFollowBed(engine, opts = {}) {
     }
 
     consumeLegs(perf.legs, runner.pos);
+    if (mission.phase === 'return' && !inBallroom() && !perf.legs.length && homeGoal() && !perf.homing) {
+      perf.homing = true;
+      replanToPin(null);
+      consumeLegs(perf.legs, runner.pos);
+    }
     const leg = perf.legs[0] ?? jobGoal();
     if (!leg) {
       // Arrived, or never sent. Face the last heading and wait to be told again.
@@ -2633,28 +2672,35 @@ export async function buildFollowBed(engine, opts = {}) {
          */
         perf.pin = null;
         perf.legs = [];
+        perf.blocked = [];
+        perf.homing = false;
         perf.nav = { pinKey: '', plannedKey: null, phase: '', since: 0, gained: 0, lastAt: null, why: '' };
         perf.hide = false;
         perf.lateral = 0;
         perf.hold = { hiding: false, heldS: 0, quietS: 0, redS: 0, longestS: 0 };
         armMission(c.episode ?? 1);
+        /*
+         * CAST8: sendoff must hand the body to auto-walk. A stick is a dodge, not
+         * the thing that starts the walk. No pin → stand. A pin → walk the pin.
+         */
+        perf.driven = true;
         return;
       }
       /*
        * 📍 **THE PIN. The guide tapped a door; this is where it becomes a destination.**
        *
-       * ⚠️ **IT DOES NOT SET `perf.driven`.** A stick does, because a stick is a person picking
-       * the body up. A pin is the OTHER person, and a guide who pins before her runner has
-       * touched the pad must not retire the scripted schedule out from under a body nobody is
-       * driving yet — `party-follow-drive` D3 (*consecutive grabs differ*) is watching exactly
-       * that, and a room that went still because the guide was faster would be the failure.
-       *
-       * D2: a second tap REPLACES. That is an assignment and there is no list to append to.
+       * ⚠️ **ON A LIVE RUN A PIN STARTS THE WALK.** The stick is a dodge. CAST8 froze
+       * every expedition because auto-walk waited for a move cue the bots never sent.
+       * Standalone follow (no `run` cue) still leaves `driven` alone so the schedule
+       * can keep the camera alive. D2: a second tap REPLACES.
        */
       if (c.kind === 'pin') {
         perf.pin = Number.isFinite(+c.x) && Number.isFinite(+c.z)
           ? { x: +c.x, z: +c.z, roomId: String(c.roomId || ''), kind: String(c.pinKind || 'room') }
           : null;
+        if (mode === 'run') perf.driven = true;
+        perf.blocked = [];
+        perf.homing = false;
         return;
       }
       if (c.kind === 'shot' && SHOTS.includes(c.shot)) {

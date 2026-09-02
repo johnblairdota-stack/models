@@ -48,6 +48,7 @@ import {
   isBackwardTalkJump,
 } from '../../src/party/show.js';
 import { reckoningSeconds } from '../../src/party/phases.js';
+import { standingTally } from '../../src/party/vote.js';
 import { reactCheck } from '../../src/party/react.js';
 import { pairLockMs } from '../../src/game/pair-lock-stage.js';
 import {
@@ -807,8 +808,12 @@ function enterVoteLive(room) {
 function enterExecutionLive(room) {
   if (!room.game.state.voteResult) room.game.closeVote();
   room.game.enterExecution();
-  setShow(room, 'execution');
+  /*
+   * CAST8 Vote→HIT: fan the held result BEFORE the execution plate, so the TV
+   * cannot paint last episode's OUT (or invent one) on a driver nobody.
+   */
   fanout(room, lynchPayload(room));
+  setShow(room, 'execution');
   scheduleShowProgress(room, holdMsFor('execution'));
 }
 
@@ -1072,12 +1077,13 @@ function tallyPayload(room) {
 function lynchPayload(room) {
   const r = room.game.state.voteResult;
   if (!r) return { t: 'lynch', votes: [] };
+  const standing = (room.game.state.nominations || []).map((n) => n.target);
   return {
     t: 'lynch',
     votes: Object.entries(r.votes || {}).map(([voter, choice]) => ({ voter, choice })),
     result: {
       executed: r.executed ?? null,
-      counts: r.counts || {},
+      counts: standingTally(r, standing),
       threshold: r.threshold ?? 0,
       abstained: r.abstained ?? 0,
       executioner: r.executioner ?? null,

@@ -329,6 +329,54 @@ console.log('\n  unstick');
     `stalled=${stalled} · gained ${toward.toFixed(2)} m toward pin in ${clock.toFixed(1)}s`);
 }
 
+{
+  /*
+   * CAST8 H358/H378: every expedition froze ~100s then host ]. Auto-walk waited
+   * for a move cue. The run cue is the walk. Host ] is not a product walk.
+   * SECONDS[EXPEDITION] is a ceiling, not the designed end of a stuck body.
+   */
+  const bedCode = codeOf(bedSrc);
+  const hostSrc = src('src/views/party-host.js');
+  const hostCode = codeOf(hostSrc);
+  const runCue = bedSrc.slice(bedSrc.indexOf("if (c.kind === 'run')"), bedSrc.indexOf("if (c.kind === 'pin')"));
+  const pinCue = bedSrc.slice(bedSrc.indexOf("if (c.kind === 'pin')"), bedSrc.indexOf("if (c.kind === 'shot'"));
+  const skip = /DEV_SKIP[\s\S]*expedition:\s*'recap'/.test(hostSrc)
+    && /e\.key !== '\]'/.test(hostSrc)
+    && /DEV_SKIP/.test(hostSrc);
+  t('RI24 · run cue hands the body to auto-walk — a stick is not required',
+    /perf\.driven = true/.test(runCue)
+    && /perf\.driven = true/.test(pinCue)
+    && /mode === 'run'/.test(pinCue),
+    'sendoff starts the walk; a pin on a live run does too');
+  t('RI24b · CAST8-class 100s freeze plus host ] is not the product walk',
+    skip
+    && /mission\.phase = 'done'/.test(bedCode)
+    && /function homeGoal/.test(bedSrc)
+    && /perf\.homing/.test(bedSrc)
+    && CUE_KINDS.join(',') === 'intros,run,move,shot,idle,noms,pair,execute,pin',
+    'recap clocks on done / home; ] is DEV only; no new CUE_KIND');
+  t('RI24c · stall replan cannot return the blocked identity even across a retry pile',
+    (() => {
+      const blocked = [
+        { x: 2, z: 2, roomId: 'r0.hall>r0.gallery' },
+        { x: 8, z: 2, roomId: 'r0.gallery>r0.chapel' },
+      ];
+      const next = unstickLegs([
+        { centre: { x: 2, z: 2 }, a: 'r0.hall', b: 'r0.gallery' },
+        { centre: { x: 8, z: 2 }, a: 'r0.gallery', b: 'r0.chapel' },
+      ], { x: 11, z: 2, roomId: 'r0.chapel' }, blocked, { x: 1.1, z: 2, roomId: 'r0.hall' });
+      return next.length > 0 && !blocked.some((b) => legKey(next[0]) === legKey(b));
+    })(),
+    'new first leg is not a failed (x,z,roomId)');
+  const freezeMs = 100_000;
+  t('RI24d · a wedged body that never gains stallGain is a defect, not a 100s sit',
+    AUTOWALK.stallSec * 3 * 1000 < freezeMs
+    && AUTOWALK.stallGain === 0.75
+    && /unstickLegs\(portals, goal, blocked/.test(bedSrc)
+    && !/licensedSkip|skipHall|forceRecap/.test(bedCode),
+    'unstick on stall · no licensed skip');
+}
+
 /* =================================================================================================
  * RI4 · LOCK 2 — the stick is a LATERAL DODGE and cannot steer into another room
  * ============================================================================================== */

@@ -118,3 +118,17 @@ export function sessionSeconds(episodes, noms = 0) {
   for (let ep = 1; ep <= episodes; ep++) s += episodeSeconds(ep, noms);
   return s;
 }
+
+/**
+ * Vote → execution → verdict may not print OUT until driver and chrome share
+ * HIT or no-HIT. Not a SHOW beat. W5 stays gone.
+ *
+ * @param {{executed?:string|null}|null} driver
+ * @param {{executed?:string|null}|null} chrome
+ */
+export function hitHoldReady(driver, chrome) {
+  if (!driver || !chrome) return false;
+  if (!Object.prototype.hasOwnProperty.call(driver, 'executed')) return false;
+  if (!Object.prototype.hasOwnProperty.call(chrome, 'executed')) return false;
+  return String(driver.executed ?? '') === String(chrome.executed ?? '');
+}
