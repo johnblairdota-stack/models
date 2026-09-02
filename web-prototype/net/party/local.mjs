@@ -927,8 +927,7 @@ function enterNextCasting(room) {
    * fold is not RENEWED. `t:'casting'`, `t:'show' beat:casting`, and the TV `]`
    * walk (`nextShowBeat('verdict') === 'casting'`) all come through this door
    * and used to open another Casting anyway — chrome said CANCELLED, the TV
-   * offered "Casting is next." A non-RENEWED fold is the night over; a camera
-   * miss at the cap is still RENEWED and still opens Casting.
+   * offered "Casting is next." At EPISODE_CAP a miss is Production + Reunion.
    */
   if (seasonOver(room)) {
     enterReunionLive(room);

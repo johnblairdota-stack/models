@@ -27,7 +27,7 @@ import { tallyVote, executioner, nominate, reckoningClosed, canLynchVote, assume
 import { accusationFinished, accusationSpan } from '../game/accusation-stage.js';
 import { foldWin, OUTCOME, WIN_TARGETS } from './win.js';
 import { reunion } from './reunion.js';
-import { PHASE } from './phases.js';
+import { PHASE, EPISODE_CAP } from './phases.js';
 import { cleanLook } from './look.js';
 import { STALE_MAX, intelFor } from './intel.js';
 import { coverageRoomOf } from './mansion.js';
@@ -423,8 +423,8 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     state.phase = p;
     state.tick += 1;
     /*
-     * CASTING / VERDICT carry the episode on the air so the fold and the
-     * night book see the same number. Empty `{}` left episode at 1 all night.
+     * H278. CASTING / VERDICT carry the episode on the air so foldWin's W5
+     * can see the cap. Empty `{}` left episode at 1 and the fold said RENEWED.
      */
     const data = (p === 'CASTING' || p === 'VERDICT')
       ? { episode: state.airingEpisode ?? state.episode }
@@ -768,8 +768,8 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
    * correct. Growing a second copy of the win rule in `net/party/local.mjs` is the same mistake
    * one layer down — the two would drift, and each would have a gate saying it was right.
    *
-   * Cap is not a Production door. H278's "a RENEWED at the cap is a CANCELLED"
-   * is overruled — do not coerce it here. Trust the fold.
+   * `EPISODE_CAP` is enforced here and nowhere else: a RENEWED at the cap is a CANCELLED,
+   * because a season that runs out of episodes without lighting its cameras is one Production won.
    * ============================================================================================= */
   function foldVerdict() {
     const align = Object.fromEntries(deal.seats.map((s) => [s.id, s.alignment]));
@@ -792,11 +792,10 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     const aired = state.airingEpisode ?? state.episode;
     const w = foldWin(log.all(), { count, alignmentOf: (id) => align[id], aired });
     /*
-     * Trust the fold. A belt that coerced RENEWED → CANCELLED at the cap stole
-     * CAST7's last vote. Cap miss is RENEWED; do not restore a cameras-short
-     * Production rewrite here.
+     * Belt: foldWin now refuses RENEWED at the cap when targets are missed (H278).
+     * Keep the coerce so a future W5 hole cannot air "the season continues".
      */
-    state.outcome = w.outcome;
+    state.outcome = w.outcome === OUTCOME.RENEWED && aired >= EPISODE_CAP ? OUTCOME.CANCELLED : w.outcome;
     /*
      * 🚨 `fed` IS SEALED AND MUST STAY SEALED. `win.checked` is VIS.SEALED and carries it;
      * `verdict.aired` is VIS.PUBLIC and does not. `rrr-social-round.md` §4: the feed gauge is a
@@ -848,14 +847,10 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     /** Mid-game replay for one socket — what a reconnecting phone is caught up with. */
     replayFor: (sock) => log.replayFor({ playerId: sock.playerId, alignment: sock.alignment, isTV: sock.isTV }),
     playEpisode,
-    /**
-     * Run episodes until a win predicate fires. foldWin owns the stop.
-     * A camera miss at the cap is RENEWED — play on, full order, not a hang
-     * and not a vote-only beat. Breaking on EPISODE_CAP here Reunion-from-cap'd
-     * a night the fold said continue.
-     */
+    /** Run episodes until a win predicate fires or the cap is reached. Always terminates. */
     playMatch(opts = {}) {
       while (!state.outcome || state.outcome === OUTCOME.RENEWED) {
+        if (state.episode > EPISODE_CAP) break;
         playEpisode(typeof opts === 'function' ? opts(state.episode) : opts);
       }
       return state.outcome;
@@ -1056,8 +1051,9 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
      *
      * 🚨 **THE SKIP IS RECORDED BEFORE THE PHASE, AND THE ORDER IS THE WHOLE CORRECTNESS.**
      * `foldWin` resolves by LOG ORDER and breaks on the first rule that fires — so writing
-     * `phase.VERDICT` first would let any later rule beat the host's own call by one sequence
-     * number. Skip first; then the phase; then fold.
+     * `phase.VERDICT` first would let W5 (RENEWED at the cap is a CANCELLED) beat the host's own
+     * call by one sequence number, and a night the host abandoned would be recorded as a win for
+     * Production. Skip first; then the phase; then fold.
      *
      * ⚠️ **AN ALREADY-DECIDED SEASON IS NOT OVERWRITTEN, AND THAT IS NOT A BUG.** If a rule fired
      * earlier in the log it is earlier in the log, and the fold keeps it: the host pressing SKIP
