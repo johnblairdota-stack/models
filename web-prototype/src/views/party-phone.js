@@ -1495,7 +1495,24 @@ export default async function partyPhone({ params }) {
    * `bez.runs` arrives as CSS pixels around the perimeter and can span two edges at a corner —
    * `intel-pad.js` `runsOf` does the wrapping, so there is no geometry in this function at all.
    */
-  function bezelHtml(bez) {
+  /**
+   * 🚨 **SPLIT SO `patchLive` CAN REWRITE THE SEGMENT WITHOUT REBUILDING THE SHEET.**
+   *
+   * The bezel is a BEARING and a bearing is only useful while it is current — it has to move as the
+   * runner walks and swing round the moment her guide re-pins. It was drawn once per sheet rebuild,
+   * and the runner's stamp carries no term that changes when she moves, so it was frozen for the
+   * whole expedition: `runnerPad` was called on every paint and its answer thrown away. Found
+   * 2026-09-02 alongside the guide's frozen chip row, which is the same bug on the other pad.
+   *
+   * ⚠️ **AND THE FIX HAD TO BE A PATCH, NOT A STAMP TERM — THE OPPOSITE OF THE GUIDE'S.** Her sheet
+   * has no stick, so a rebuild per doorway costs nothing. HIS DOES. The whole reason the structural
+   * stamp exists is that rebuilding the runner's sheet destroys `#stick` and its
+   * `setPointerCapture` under a moving thumb, and a bearing that updated twice a second by rebuild
+   * would drop every drag in the game. So the two pads take opposite fixes for one bug, and the
+   * reason is that only one of them is holding a control. `[data-bezel]` is `pointer-events:none`
+   * and contains no interactive element, so its innards can be rewritten freely.
+   */
+  function bezelInner(bez) {
     const rails = ['top', 'right', 'bottom', 'left']
       .map((e) => `<i class="bz-rail bz-${e}"></i>`).join('');
     const lit = (bez.runs ?? []).map((r) => {
@@ -1504,10 +1521,31 @@ export default async function partyPhone({ params }) {
         ? `<i class="bz-lit bz-${r.edge}" style="left:${r.from}px;width:${len}px"></i>`
         : `<i class="bz-lit bz-${r.edge}" style="top:${r.from}px;height:${len}px"></i>`;
     }).join('');
-    return `<div class="bezel${bez.whole ? ' armed' : ''}" data-bezel aria-hidden="true">${rails}${lit}</div>
+    return rails + lit;
+  }
+
+  /*
+   * 🚨 **`function`, NOT `const` ARROWS — AND THIS FILE HAS NOW BILLED THAT LESSON TWICE IN ONE
+   * DAY.** `patchLive` runs off a socket message and `paint()` is reached from the mount path, so a
+   * `const` declared beside `bezelHtml` is in its temporal dead zone for anything the phone does
+   * before execution walks past this line. The first version of these two threw *"Cannot access
+   * 'ze' before initialization"* out of the minified bundle, exactly as `let scopeMemo` had thrown
+   * *"'ne'"* an hour earlier. `phone-accusation` PA8 caught both; no node gate executes `paint()`,
+   * so none of them could. A hoisted declaration has no dead zone — use one.
+   */
+  function bezelCap(bez) {
+    return bez.whole ? 'Armed — whole bezel' : (bez.pinned ? 'Your guide pinned' : 'No map here');
+  }
+
+  function bezelWord(bez) {
+    return bez.whole ? 'SWING NOW' : (bez.pinned ? bez.words : 'the TV is the picture');
+  }
+
+  function bezelHtml(bez) {
+    return `<div class="bezel${bez.whole ? ' armed' : ''}" data-bezel aria-hidden="true">${bezelInner(bez)}</div>
       <div class="bz-read${bez.whole ? ' armed' : ''}" data-bezel-read>
-        <span class="bz-cap">${bez.whole ? 'Armed — whole bezel' : (bez.pinned ? 'Your guide pinned' : 'No map here')}</span>
-        <span class="bz-word">${esc(bez.whole ? 'SWING NOW' : (bez.pinned ? bez.words : 'the TV is the picture'))}</span>
+        <span class="bz-cap">${esc(bezelCap(bez))}</span>
+        <span class="bz-word">${esc(bezelWord(bez))}</span>
       </div>`;
   }
 
@@ -1630,6 +1668,27 @@ export default async function partyPhone({ params }) {
 
     const hereEl = root.querySelector('[data-here]');
     if (hereEl) hereEl.textContent = hereLabel(frame?.you?.here);
+
+    /*
+     * 🧭 **THE BEARING, REWRITTEN IN PLACE — see `bezelInner`'s header for why it is here and the
+     * guide's chips are in the stamp instead.** A bearing that only redraws on a sheet rebuild is
+     * a bearing that is wrong the moment the runner takes a step, and the runner's sheet is the
+     * one sheet that must NOT rebuild while a thumb is on the stick.
+     */
+    const bezel = root.querySelector('[data-bezel]');
+    if (bezel) {
+      const bez = runnerPad(frame?.you?.at ?? null, frame?.you?.pin ?? null, false);
+      bezel.classList.toggle('armed', !!bez.whole);
+      bezel.innerHTML = bezelInner(bez);
+      const read = root.querySelector('[data-bezel-read]');
+      if (read) {
+        read.classList.toggle('armed', !!bez.whole);
+        const cap = read.querySelector('.bz-cap');
+        const word = read.querySelector('.bz-word');
+        if (cap) cap.textContent = bezelCap(bez);
+        if (word) word.textContent = bezelWord(bez);
+      }
+    }
 
     const foot = root.querySelector('[data-foot-cue]');
     if (foot) {

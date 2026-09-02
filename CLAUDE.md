@@ -84,7 +84,7 @@ decision, not a refactor.
   and no target, drawn as a mesh so the four-light rig did not grow; it is **not the hunter, and
   the hunter is still a door that is shut**. The clock keeps running while hidden. Every decision
   lives in `src/game/runner-intel.js`, which is pure and **imports nothing**, so a node gate
-  executes the shipped functions. Gate: `runner-intel` (97 checks), `party-warm` W26g/W26g2/W26g3.
+  executes the shipped functions. Gate: `runner-intel` (102 checks), `party-warm` W26g/W26g2/W26g3.
 - **The pin is on the wire at audience `crew`, and the TV is told it and may not draw it.**
   Stage 3 of `docs/slices/task-runner-intel.md`, landed 2026-09-01. `you.pin.{x,z,roomId,kind}`
   are `crew` rows — `all` would put the target's bearing on eight screens and delete the guide's
@@ -288,16 +288,29 @@ rebuild per doorway is the bargain `camStamp` already takes for the runner's cam
 that demanded the stamp would redden the day somebody does the other one correctly. Gate:
 `runner-intel` RI21–RI21d, whose control runs the SHIPPED stamp through the same predicate.
 
-**And the fix for it threw on every paint, which only the BROWSER gate could see** (same day). The
-memo added to stop `planRegions` being built twice per frame was `let scopeMemo` beside its helper —
-but `guideScopeFor` is a hoisted `function` called from the stamp hundreds of lines ABOVE that
-declaration, so the `let` was in its temporal dead zone on every paint and the whole phone threw
-*"Cannot access 'ne' before initialization"*, minified, from inside the guide's own sheet.
-`phone-accusation` **PA8** caught it; **no node gate could have**, because none of them execute
-`paint()`. It lives on `state` now — an object literal fully built before any of this runs, so there
-is no dead zone at all. Two standing lessons: **a hoisted function that reads a `let` declared later
-in the same closure is a trap the bundler will not warn about**, and *"the node gates are green"* is
-not the same sentence as *"the page loads"*.
+**And the runner's BEARING was frozen the same way, with the opposite fix** (2026-09-02). Found by
+asking whether RI21's bug had a twin: it did. `bezelHtml` was rendered once per sheet rebuild and
+the runner's stamp carries no term that changes when she moves, so `runnerPad` was called on every
+paint and its answer **thrown away** — Runner D's whole reason to exist (*"the bearing is the EDGE
+OF THE PHONE"*) frozen at whatever it read on the first expedition frame, which before any pin
+exists is *"no map here"*, for the entire run. ⚠️ **It could not take the guide's fix.** Her sheet
+has no stick; **his is the one sheet the structural stamp exists to protect**, because rebuilding it
+destroys `#stick` and its `setPointerCapture` under a moving thumb, so a bearing that updated by
+rebuild at 2 Hz would drop every drag in the game. `patchLive` rewrites `[data-bezel]` instead —
+legal because it is `pointer-events:none` and holds no interactive element. **Two pads, one bug,
+opposite fixes, and the reason is that only one of them is holding a control.** Gate: `runner-intel`
+RI22–RI22e, same disjunction shape as RI21 so each pad may answer its own way.
+
+**A `const` arrow beside a helper that runs off a socket frame is a temporal dead zone, and this
+file billed it TWICE in one hour** (2026-09-02). `let scopeMemo` threw *"Cannot access 'ne' before
+initialization"*; the fix for the bezel then shipped `const bezelCap` / `const bezelWord` and threw
+*"'ze'"*. Both were minified, both came out of the guide's or runner's own sheet, and **only
+`phone-accusation` PA8 could see either — no node gate executes `paint()`.** Hoisted `function`
+declarations have no dead zone; per-phone state belongs on the `state` literal, which is fully built
+before anything runs. `runner-intel` **RI22d** now asks the question mechanically — *is everything
+`patchLive` calls a hoisted declaration?* — with `patchLive`'s own locals cut out of the haystack
+(`put` is a `const` arrow declared four lines above its use inside the function and is not a hazard).
+Standing lesson: **"the node gates are green" is not the same sentence as "the page loads."**
 
 **A gate must survive the fault it exists to catch, and a ban must be asked of CODE** (2026-09-02).
 Three of this pass's checks were written wrong first and each is a reusable shape. (1) RI3c banned

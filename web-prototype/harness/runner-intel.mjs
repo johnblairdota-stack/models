@@ -1104,6 +1104,102 @@ console.log('\n  and her chips are not a photograph');
 }
 
 /* =================================================================================================
+ * RI22 · THE RUNNER'S BEARING IS LIVE, AND NOTHING `patchLive` CALLS IS IN A DEAD ZONE
+ *
+ * 🚨 **THE SAME BUG AS RI21, ON THE OTHER PAD, WITH THE OPPOSITE FIX.** `bezelHtml` was rendered
+ * once per sheet rebuild and the runner's stamp carries no term that changes when she moves — so
+ * `runnerPad` was called on every paint and its answer thrown away, and Runner D's entire reason to
+ * exist (*"the bearing is the EDGE OF THE PHONE"*) was frozen at whatever it read on the first
+ * expedition frame. Before a pin exists that is *"no map here"*, for the whole run.
+ *
+ * ⚠️ **AND IT COULD NOT TAKE RI21's FIX.** The guide's sheet has no stick, so a rebuild per doorway
+ * costs nothing; **the runner's sheet is the one sheet the structural stamp exists to protect**,
+ * because rebuilding it destroys `#stick` and its `setPointerCapture` under a moving thumb. A
+ * bearing that updated by rebuild at 2 Hz would drop every drag in the game. So the two pads take
+ * opposite fixes for one bug and the reason is that only one of them is holding a control — which
+ * is why RI21 and RI22 are written as the same DISJUNCTION and each is allowed its own answer.
+ *
+ * 🚨 **RI22c IS THE ONE THAT WOULD HAVE SAVED TWO HOURS.** Both halves of this fix shipped a
+ * TEMPORAL DEAD ZONE first — `let scopeMemo`, then `const bezelCap` — because `patchLive` and the
+ * stamp run off a socket message while a `const` beside its helper is still uninitialised. The
+ * bundle threw *"Cannot access 'ne' before initialization"* and then *"'ze'"*, minified, and only
+ * `phone-accusation` PA8 could see either: no node gate executes `paint()`. So this asks the
+ * mechanical question directly — **is everything `patchLive` calls a HOISTED declaration?**
+ * ============================================================================================== */
+
+console.log('\n  and his bearing is not a photograph either');
+
+{
+  const phone = codeOf(src('src/views/party-phone.js'));
+  const stampExpr = phone.slice(phone.indexOf('const camStamp'), phone.indexOf('if (liveStamp &&'));
+  const patchBody = phone.slice(phone.indexOf('function patchLive'), phone.indexOf('function mapNote'));
+
+  /** Can the bearing change when the runner takes a step? Two legal answers, same as RI21. */
+  const liveBearing = (stamp, patch) => ({
+    inStamp: /you\?\.at|bearing|bezel/.test(stamp),
+    inPatch: /data-bezel/.test(patch) && /runnerPad\(/.test(patch),
+  });
+  const now = liveBearing(stampExpr, patchBody);
+  t('RI22 · the bearing follows the runner — by the stamp, or by the patch',
+    now.inStamp || now.inPatch,
+    `stamp: ${now.inStamp} · patchLive rewrites the bezel: ${now.inPatch}`);
+
+  const OLD_PATCH = `function patchLive(frame) {
+    const slot = root.querySelector('[data-intel]');
+    const map = root.querySelector('.guide-map');
+    if (!slot && !map && !root.querySelector('#stick')) return false;
+    const hereEl = root.querySelector('[data-here]');
+    if (hereEl) hereEl.textContent = hereLabel(frame?.you?.here);
+    return true;`;
+  const old = liveBearing(stampExpr, OLD_PATCH);
+  t('RI22b control · the `patchLive` that SHIPPED never touched it — the bug, run through the predicate',
+    !old.inPatch && !old.inStamp,
+    'a bearing drawn once and never again');
+
+  /*
+   * ⚠️ **AND THE FIX MUST NOT HAVE BOUGHT IT WITH A REBUILD.** The runner's half of the stamp may
+   * not grow a term that changes as she walks, or every drag dies with the stick it was captured
+   * on — which is the failure the stamp was introduced to stop in the first place.
+   */
+  t('RI22c · the runner\'s sheet still does not rebuild when she moves — the stick survives',
+    !/camStamp[^\n]*you\?\.at/.test(stampExpr)
+    && /const camStamp = iAmRunner \? `:\$\{frame\?\.you\?\.view \|\| 'chase'\}` : '';/.test(stampExpr)
+    && /guideStamp = iAmGuide/.test(stampExpr),
+    'the bearing is patched, the chips are stamped, and only the guide seat pays a rebuild');
+
+  /*
+   * 🚨 **THE DEAD-ZONE GUARD.** Everything `patchLive` calls that this file also declares must be a
+   * HOISTED `function`. A `const`/`let` arrow is uninitialised until execution walks past its line,
+   * and `patchLive` runs off a socket message — which is how two separate helpers in this one fix
+   * shipped as *"Cannot access X before initialization"* inside the minified bundle.
+   */
+  /*
+   * ⚠️ **THE PATCH'S OWN LOCALS ARE NOT A DEAD ZONE, AND THE FIRST DRAFT FLAGGED ONE.** `put` is a
+   * `const` arrow declared inside `patchLive`, four lines above its first call — it is initialised
+   * by the time anything reaches it, every time, because control entered the function at the top.
+   * The hazard is only ever a helper declared ELSEWHERE in the closure and called from here, so the
+   * body is cut out of the haystack rather than the finding being waved through.
+   */
+  const outside = phone.replace(patchBody, '');
+  const arrowDecls = new Set([...outside.matchAll(
+    /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>/gm,
+  )].map((m) => m[1]));
+  const called = [...new Set([...patchBody.matchAll(/(?:^|[^.\w$])([A-Za-z_$][\w$]*)\s*\(/g)].map((m) => m[1]))];
+  const dead = called.filter((n) => arrowDecls.has(n));
+  t('RI22d · nothing `patchLive` calls is a `const` arrow — no temporal dead zone off a socket frame',
+    dead.length === 0,
+    `${called.length} calls checked against ${arrowDecls.size} arrow declarations in the file`
+    + (dead.length ? ` · DEAD ZONE: ${dead.join(', ')}` : ' · none'));
+  t('RI22e control · the sweep can see one — a planted `const` arrow helper is caught',
+    (() => {
+      const planted = new Set([...arrowDecls, 'bezelCap']);
+      return ['bezelCap'].filter((n) => planted.has(n)).length === 1
+        && called.includes('bezelCap');
+    })(),
+    'the predicate finds the exact shape that shipped twice today');
+}
+
+/* =================================================================================================
  * RI18 · THE LIVE ROOM — the pin's journey, photographed on real frames
  *
  * 🚨 **EVERYTHING ABOVE THIS LINE IS ABOUT BYTES AND TABLES, AND THAT IS THE `whisper-split`
