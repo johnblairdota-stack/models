@@ -52,9 +52,9 @@ export const HUNTER_PACK = {
  * seconds from clip start to the leading fist's arrival. Numbers are asserted against
  * a fresh FK pass by `harness/hunter-door.mjs` (tolerance 0.03 s).
  *
- * `duration`/`contact`/`hand` here are 0 / '?' until the pack is on disk and the gate
- * re-derives them (`node harness/hunter-door.mjs --write`). Lumi stand-in numbers
- * 1.050 / 1.504 are invalid for this pack and the gate refuses them.
+ * Numbers below were written by `harness/hunter-door.mjs --write` from the Meshy
+ * GLBs (2026-09-02). Lumi stand-in numbers 1.050 / 1.504 are invalid for this
+ * pack and the gate refuses them. Re-run `--write` if the pack files change.
  */
 export const HUNTER_SWINGS = [
   { role: 'attack', clip: 'attack', file: 'attack.glb', duration: 2.833, contact: 1.100, hand: 'RightHand',

@@ -38,13 +38,14 @@ the pack exists on disk at the Documents path. The Lumi stand-in was the wrong b
 ## What genuinely works (wins, kept measured)
 
 - The doorway A/B is still the judging instrument.
-- Strike contact is measured from **these** GLBs (FK at 240 Hz). Gate `hunter-door`
-  D2 re-derives on every run when the files are present; Lumi 1.050 / 1.504 are
-  refused. When the files are absent the gate skips D1/D2/D4 rather than asserting
-  a stand-in.
+- Strike contact is measured from **these** GLBs (FK at 240 Hz, `--write` 2026-09-02):
+  `attack.glb` **1.100 s / 2.833 s** RightHand, `double-combo-attack.glb`
+  **0.679 s / 2.867 s** RightHand. Lumi 1.050 / 1.504 are refused. When the files
+  are absent the gate skips D1/D2/D4 rather than asserting a stand-in.
 
 ## Method notes
 
 This cloud checkout does not hold the gitignored GLBs, so round 2 does not re-file
-a pixel verdict. After copy: `node harness/hunter-door.mjs --write`, then
-`?view=hunter.animated&proc=0`, then run `rrr-critique` against the hero.
+a pixel verdict. Contact numbers above were measured on the machine that holds the
+pack. After copy: `?view=hunter.animated&proc=0`, then run `rrr-critique` against
+the hero.

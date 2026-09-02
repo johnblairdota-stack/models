@@ -38,8 +38,10 @@ the `.glb` files.
   `Heavy_Hammer_Swing`. The Lumi Bot stand-in is gone.
 - Baked Meshy textures stay. No `shellWhite`, no hunter grime ramp.
 - Game owns root XZ (`stripRootXZ`).
-- Strike contact is **measured** (FK over GLB tracks, 240 Hz) once the pack is on disk.
-  Lumi numbers 1.050 / 1.504 are invalid for this pack.
+- Strike contact is **measured** from the Meshy GLBs (FK at 240 Hz, 2026-09-02):
+  `attack.glb` **1.100 s / 2.833 s** RightHand, `double-combo-attack.glb`
+  **0.679 s / 2.867 s** RightHand. Lumi 1.050 / 1.504 are invalid. Pack absent:
+  D2 skips, it does not pass.
 - **FINDING:** extra-arm skin weights (Meshy biped auto-rig) vs the locked six-arm art —
   do not fake-paint in JS. Judge in the doorway. Hunter stays a door; no camera was
   invented.

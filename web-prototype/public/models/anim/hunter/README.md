@@ -42,16 +42,19 @@ not overwritten with `shellWhite` or the hunter grime ramp.
 
 `stripRootXZ` pins hip X/Z to frame 0 at load (game owns root XZ; Y keeps the bob).
 
-After copying, re-measure strike contact:
+## Measured strike contact (do not hand-edit — the gate re-derives these)
 
-```bash
-node harness/hunter-door.mjs --write    # patch HUNTER_SWINGS from FK at 240 Hz
-node harness/hunter-door.mjs            # must go green
-```
+Written 2026-09-02 from the on-disk Meshy GLBs (`node harness/hunter-door.mjs --write`):
 
-If the files are missing, that gate **skips** D1/D2/D4 (bind, contact, control)
-and still checks wiring. A skip is not a pass of the measurement. CI has no
-GLBs; a red gate on a missing gitignored file would redden every push.
+| file | duration | contact (leading fist arrives) | hand |
+|---|---|---|---|
+| `attack.glb` | 2.833 s | **1.100 s** | RightHand |
+| `double-combo-attack.glb` | 2.867 s | **0.679 s** | RightHand |
+
+Lumi stand-in numbers 1.050 / 1.504 are invalid for this pack. Method: FK over the
+raw GLB tracks at 240 Hz. If the files are missing, the gate **skips** D1/D2/D4
+(bind, contact, control) and still checks wiring. Re-run `--write` if the pack
+files change. Do not commit the `.glb` files.
 
 ## What is still a FINDING
 
