@@ -201,7 +201,9 @@ console.log('\n  auto-walk');
    */
   t('RI3 · the bed asks the house live, from where she is standing, on every replan',
     /room\.pathPortals\?\.\(runner\.pos, _goal, ROUTE_MIN_W, ROUTE_MIN_H\)/.test(bedSrc)
-    && /perf\.legs = \[\];\n\s*const goal = pinGoal\(\);\n\s*if \(!goal\) return;/.test(bedSrc)
+    && /perf\.legs = \[\];\n\s*const goal = walkGoal\(\);\n\s*if \(!goal\) return;/.test(bedSrc)
+    && /function walkGoal/.test(bedSrc)
+    && /function pinGoal/.test(bedSrc)
     && /legsFor\(portals, goal\)/.test(bedSrc),
     'replanToPin clears, then re-asks');
   t('RI3b control · no authored waypoint list re-appeared (D4)',

@@ -562,8 +562,8 @@ t('H10 · seatedAim is a visor-height torso when Head is missing',
     introSrc.indexOf('function afterBodies'),
   );
   const camFn = introSrc.slice(
-    introSrc.indexOf("if (exec.phase !== 'off')"),
-    introSrc.indexOf("if (exec.phase !== 'off')") + 900,
+    introSrc.indexOf('const useTalk = talking'),
+    introSrc.indexOf('const useTalk = talking') + 800,
   );
   t('H17f · linger on the HIT clock is 5.00 — CAST8-class 18s overrun is red',
     /elapsed = exec\.t - exec\.hitAt/.test(stepFn)
