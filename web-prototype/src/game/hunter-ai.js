@@ -197,6 +197,12 @@ export class HunterAI {
     this._swing = 0;
     this._atkGap = Infinity;
 
+    // ---- the OPT-IN mesh body (`?hunterm=1`). The AI never drives it directly — the view
+    // ticks `meshAvatar.update()` — but the strike clock cues it here so the clip's MEASURED
+    // contact frame (hunter-mesh-avatar.js `HUNTER_SWINGS`) lands on the damage frame. Null
+    // on the default procedural path and everything below behaves exactly as before.
+    this.meshAvatar = o.meshAvatar ?? null;
+
     // ---- the commit tell. `_committed` is a LATCH, not a state test: PURSUE is entered and
     // left many times in a chase and the player needs the announcement once, at the top.
     this._committed = false;
@@ -1093,12 +1099,16 @@ export class HunterAI {
     // OPENING an encounter, or continuing one? A fresh windup every time would be exploitable
     // by stutter-stepping across the reach boundary; inheriting one is what caused the coin
     // flip. `_atkGap` is the only input to that decision and it is measured, not remembered.
-    if (this._wind == null || this._atkGap > ATTACK_REGRIP) this._wind = ATTACK_WINDUP;
+    if (this._wind == null || this._atkGap > ATTACK_REGRIP) {
+      this._wind = ATTACK_WINDUP;
+      this.meshAvatar?.cueStrike('attack', this._wind);
+    }
     this._atkGap = 0;
 
     this._wind -= dt;
     if (this._wind > 0) return;
     this._wind = ATTACK_CADENCE;
+    this.meshAvatar?.cueStrike('combo', ATTACK_CADENCE);
     const c = this.target;
     if (!c?.rig) return;
     // it takes a LIMB, not hit points

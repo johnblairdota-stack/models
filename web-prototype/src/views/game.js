@@ -537,6 +537,31 @@ export default async function view(args = {}) {
   hunter.setTargets([playerBody]);
   weapons.addBody(hunter.body);
 
+  /**
+   * `?hunterm=1` — the OPT-IN Meshy stage-3 hunter (`PLAYHUNTER.bat`). Default stays
+   * procedural. The avatar rides `hunter.model` so the AI's root motion carries it; the
+   * procedural stage rigs are hidden, not removed, so the flag is a pure visual swap.
+   * Awaited BEFORE the first frame: a body that pops in mid-round would be a tell.
+   * Contact timing: `hunter.meshAvatar` is cued by the AI's own strike clock — see
+   * hunter-ai.js and HUNTER_SWINGS in hunter-mesh-avatar.js (measured, gated).
+   * Missing pack falls back to procedural and names the Documents copy path — it does
+   * not stand the Lumi Bot in as a fake hunter.
+   */
+  let hunterMesh = null;
+  if (new URLSearchParams(location.search).get('hunterm') === '1') {
+    try {
+      const { createHunterMeshAvatar } = await import('../characters/hunter-mesh-avatar.js');
+      hunterMesh = await createHunterMeshAvatar({ height: 1.7 });
+      hunter.model.add(hunterMesh.group);
+      for (const s of [1, 2, 3]) hunter.rigs[s].root.visible = false;
+      hunter.meshAvatar = hunterMesh;
+      console.log('[hunterm] mesh avatar on — Meshy stage-3 pack; pending:', hunterMesh.pending);
+    } catch (e) {
+      console.error('[hunterm] Meshy pack failed to load, falling back to the procedural hunter:', e);
+      hunterMesh = null;
+    }
+  }
+
   // ---------------------------------------------------------------- gadgets IN THE WORLD
   //
   // ⚠️ WITHOUT THIS THE PLAYER CAN NEVER HOLD ANY GADGET BUT THE NAIL GUN. `play-critic-4`
@@ -3045,6 +3070,16 @@ export default async function view(args = {}) {
     // `onBreak`): a noise made this frame is on the bus by the time the ear that wants it looks.
     noise.update(dt);
     hunter.update(dt, t);
+    if (hunterMesh) {
+      // stage swaps on GROW keep the procedural rigs hidden. The mesh IS stage-3;
+      // setStage is a no-op (baked Meshy textures stay).
+      if (hunterMesh._stage !== hunter.stage) {
+        hunterMesh._stage = hunter.stage;
+        hunterMesh.setStage(hunter.stage);
+        for (const s of [1, 2, 3]) hunter.rigs[s].root.visible = false;
+      }
+      hunterMesh.update(dt, { speed: hunter.speed, state: hunter.state });
+    }
     limbField.update(dt, t);
     room.update(dt);
     debris.update(dt);

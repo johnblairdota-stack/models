@@ -1,0 +1,11 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 1280, "h": 840, "title": "Pitch" },
+    { "file": "Build.dc.html", "x": 1380, "y": 0, "w": 1280, "h": 940, "title": "Build" },
+    { "file": "Verify.dc.html", "x": 2760, "y": 0, "w": 1280, "h": 780, "title": "Verify" }
+  ],
+  "annotations": [
+    { "id": "read-order", "x": 0, "y": -140, "w": 420, "text": "Read left to right: Pitch (why the doorway is the bar) -> Build (silhouette / bind / contact, live cards from the tree) -> Verify (the gate, and the honest look verdict). Every claim names its gate." }
+  ],
+  "launch": { "view": "canvas" }
+}

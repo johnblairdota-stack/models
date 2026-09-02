@@ -23,3 +23,8 @@ __pycache__/
 # Seeded design canvases (2.5 MB payload each; rebuild with the _build scripts + /design)
 web-prototype/docs/design/refs-loop-redesign/artboards/*.html
 !web-prototype/docs/design/refs-loop-redesign/artboards/*.dc.html
+
+# Meshy stage-3 hunter pack (~30MB). Copy from
+# C:\Users\John\Documents\Run Robot Run\web-prototype\public\models\anim\hunter\
+# into web-prototype/public/models/anim/hunter/ — do not commit the GLBs.
+web-prototype/public/models/anim/hunter/*.glb

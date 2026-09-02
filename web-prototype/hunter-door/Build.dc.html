@@ -1,0 +1,92 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap');
+    body { margin: 0; background: #0d0d10; font-family: 'Space Grotesk', 'Segoe UI', system-ui, sans-serif; color: #e8e4dc; }
+    a { color: #f2c66d; } a:hover { color: #ffdb96; }
+    .card { background: #16161b; border: 1px solid #26262d; border-radius: 3px; padding: 20px 22px; display: flex; flex-direction: column; gap: 10px; }
+    .tag { font-family: 'IBM Plex Mono', Consolas, monospace; font-size: 11px; letter-spacing: 0.16em; }
+    .mono { font-family: 'IBM Plex Mono', Consolas, monospace; }
+    .body { font-size: 14px; line-height: 1.55; color: #b9b4aa; }
+    .gate { font-family: 'IBM Plex Mono', Consolas, monospace; font-size: 11.5px; color: #f2c66d; }
+  </style>
+</helmet>
+<div style="width: 1280px; min-height: 900px; background: #0d0d10; padding: 52px 64px; box-sizing: border-box; display: flex; flex-direction: column; gap: 28px;">
+
+  <div style="display: flex; align-items: baseline; gap: 18px;">
+    <div class="tag" style="color: #f2c66d;">BUILD · SILHOUETTE / BIND / CONTACT</div>
+    <div style="flex: 1; height: 1px; background: #2a2a30;"></div>
+    <div class="tag" style="color: #8a857b;">LIVE CARDS, SEEDED FROM THE TREE</div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px;">
+
+    <div style="display: flex; flex-direction: column; gap: 20px;">
+      <div style="font-size: 22px; font-weight: 700;">Silhouette</div>
+      <div class="card" style="border-left: 3px solid #ff2418;">
+        <div class="tag" style="color: #ff5d4d;">FINDING · NOT FIXABLE IN JS</div>
+        <div style="font-size: 16px; font-weight: 500; line-height: 1.35;">Extra-arm weights: Meshy biped auto-rig vs locked six-arm art.</div>
+        <div class="body">The Lumi Bot stand-in is gone. <span class="mono" style="font-size:12px;">createHunterMeshAvatar</span> loads John's Meshy stage-3 pack (<span class="mono" style="font-size:12px;">walking.glb</span> as the body). Extra arms were auto-rigged as a biped; grafted-limb weights may deform wrong against Dev Art <span class="mono" style="font-size:11.5px;">1785288883855</span>. <b style="color:#e8e4dc;">No JS weight paint.</b> Judge the silhouette in the doorway. Hunter stays a door — no camera was invented. GLBs stay gitignored; copy from Documents.</div>
+        <div class="gate">gate: none possible — board FINDING · re-judge in hunter.animated after copy</div>
+      </div>
+      <div class="card">
+        <div class="tag" style="color: #8a857b;">SHIPPED THIS BRANCH</div>
+        <div style="font-size: 16px; font-weight: 500; line-height: 1.35;">The doorway bench — the A/B the sofa lock demands</div>
+        <div class="body"><span class="mono" style="font-size:12px;">?view=hunter.animated</span> (<span class="mono" style="font-size:12px;">NEWHUNTER.bat</span>) stands the Meshy stage-3 pack in a lit doorway beside the procedural stage-3 in an identical doorway. Silhouette-in-the-door is the bar; extra-arm weights are the FINDING, judged here, not painted over.</div>
+        <div class="gate">gate: hunter-door D3 · verdict: hunter-door/VERDICT.md</div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 20px;">
+      <div style="font-size: 22px; font-weight: 700;">Bind</div>
+      <div class="card">
+        <div class="tag" style="color: #8a857b;">SHIPPED THIS BRANCH</div>
+        <div style="font-size: 16px; font-weight: 500; line-height: 1.35;">Walking as carrier; other files bind by bone name, or the load THROWS</div>
+        <div class="body"><span class="mono" style="font-size:12px;">createHunterMeshAvatar</span> loads <span class="mono" style="font-size:12px;">walking.glb</span> as the skinned body and <span class="mono" style="font-size:12px;">bindClipToRig</span> rewrites running / attack / double-combo onto that skeleton (prefix remap). A TRS track that resolves to no bone fails the load with both name lists — no silent limb fade. Baked Meshy textures stay; no <span class="mono" style="font-size:12px;">shellWhite</span>.</div>
+        <div class="gate">gate: hunter-door D1 · skip-honest when the gitignored pack is absent</div>
+      </div>
+      <div class="card" style="border-left: 3px solid #f2c66d;">
+        <div class="tag" style="color: #4fca6a;">CORRECTED FACT</div>
+        <div style="font-size: 16px; font-weight: 500; line-height: 1.35;">Combo is double-combo-attack.glb — a real clip</div>
+        <div class="body">The Lumi mapping of <span class="mono" style="font-size:12px;">combo</span> to <span class="mono" style="font-size:12px;">Heavy_Hammer_Swing</span> is gone. <span class="mono" style="font-size:12px;">HUNTER_PACK.files.combo</span> is <span class="mono" style="font-size:12px;">double-combo-attack.glb</span>. Copy the four files from Documents into <span class="mono" style="font-size:12px;">public/models/anim/hunter/</span>; they stay gitignored.</div>
+        <div class="gate">gate: hunter-door D3 (combo file) · D1 binds it when the pack is on disk</div>
+      </div>
+      <div class="card">
+        <div class="tag" style="color: #8a857b;">RULE KEPT</div>
+        <div style="font-size: 16px; font-weight: 500; line-height: 1.35;">Game owns root XZ</div>
+        <div class="body">Every clip keys <span class="mono" style="font-size:12px;">Hips.translation</span>. <span class="mono" style="font-size:12px;">stripRootXZ</span> pins hip X/Z to frame 0 at load and keeps the Y bob, so the AI's root motion is the only thing that moves the body.</div>
+        <div class="gate">wired in hunter-mesh-avatar.js · same rule the player path learned the hard way</div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 20px;">
+      <div style="font-size: 22px; font-weight: 700;">Contact</div>
+      <div class="card" style="border-left: 3px solid #f2c66d;">
+        <div class="tag" style="color: #4fca6a;">MEASURED FROM THE MESHY GLBs · 2026-09-02</div>
+        <div style="font-size: 16px; font-weight: 500; line-height: 1.35;">Lumi 1.050 / 1.504 are gone. These numbers are from the pack.</div>
+        <div class="body">Contact is FK over the raw tracks of <span class="mono" style="font-size:12px;">attack.glb</span> and <span class="mono" style="font-size:12px;">double-combo-attack.glb</span> at 240 Hz — not the Lumi library. A 0.60 placeholder is still RED. Pack absent: D2 skips, it does not pass. Re-run <span class="mono" style="font-size:12px;">--write</span> if the files change.</div>
+        <div class="gate">gate: hunter-door D2 — rejects Lumi numbers AND recomputes from the Meshy GLB</div>
+      </div>
+      <div class="card">
+        <div class="tag" style="color: #8a857b;">MEASURED · FK OVER GLB TRACKS · 240 Hz</div>
+        <div style="font-size: 16px; font-weight: 500; line-height: 1.35;">The fist arrives at a known frame</div>
+        <div class="body" style="display: flex; flex-direction: column; gap: 6px;">
+          <div style="display:flex; justify-content:space-between;"><span class="mono" style="font-size:12.5px; color:#e8e4dc;">attack.glb</span><span class="mono" style="font-size:12.5px;">contact 1.100 s / 2.833 s · RightHand</span></div>
+          <div style="display:flex; justify-content:space-between;"><span class="mono" style="font-size:12.5px; color:#e8e4dc;">double-combo-attack.glb</span><span class="mono" style="font-size:12.5px;">contact 0.679 s / 2.867 s · RightHand</span></div>
+          <div>Method: peak leading-hand speed, then maximum horizontal reach from the hips. The AI cues <span class="mono" style="font-size:12px;">cueStrike(role, windLeft)</span> when its strike clock starts, so the clip's contact frame lands exactly on the damage frame — the AI's clocks are untouched.</div>
+        </div>
+        <div class="gate">gate: hunter-door D2 · drift &gt; 0.03 s from a fresh FK pass is RED</div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
