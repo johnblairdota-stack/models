@@ -197,7 +197,9 @@ export function rollCallRevealed(elapsedMs, seats) {
 }
 
 /**
- * Server-owned. Expedition is immediate so the TV is never waiting on a click.
+ * Server-owned. Expedition is no longer immediate — after the pair locks, the seated
+ * circle plays the pair-lock sendoff (SETTLE+FADE on Casting), then `setShow('expedition')`.
+ * The 3·2·1 is still the lock; this wait is not a click and not a SHOW beat.
  *
  * 🎬 **THE RUN NOW ENDS WHEN THE MISSION ENDS, AND THE CLOCK IS A BACKSTOP RATHER THAN THE BEAT.**
  *

@@ -70,6 +70,7 @@ import { createRoom } from '../src/party/room.js';
 import { feedCount, selfNamingLines, speakerNamed } from '../src/party/reunion.js';
 import { foldWin, WIN_TARGETS } from '../src/party/win.js';
 import { CAST_BACKSTOP_MS, shouldArmCastSend, livingFromPublic } from '../src/party/ballot.js';
+import { PAIR_LOCK_MS } from '../src/game/pair-lock-stage.js';
 import { readFile } from 'node:fs/promises';
 
 const PORT = 5351;
@@ -268,10 +269,14 @@ const killedId = phones[KILLED].welcome?.playerId;
    * gates should do.
    */
   const after = castingBackstop(room);
-  await sleep(200);
+  t('RG1e0 · the net locks a pair without pinning expedition over the sendoff',
+    after === 'casting' && room.show === 'casting'
+      && room.game.state.pair?.runner != null && room.game.state.pair?.guide != null,
+    JSON.stringify({ after, show: room.show, pair: room.game.state.pair }));
+  await sleep(PAIR_LOCK_MS + 80);
   const pair = room.game.state.pair || {};
   t('RG1e · the SERVER leaves casting with a real pair, seven ballots and one dark handset',
-    after !== 'casting' && room.show !== 'casting'
+    room.show !== 'casting'
       && pair.runner != null && pair.guide != null && pair.runner !== pair.guide,
     `beat=${room.show} · runner ${names[pair.runner] ?? '—'} · guide ${names[pair.guide] ?? '—'}`);
   t('RG1f · and the seven pads that are still holding a screen were told the room moved on',

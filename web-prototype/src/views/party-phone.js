@@ -757,7 +757,8 @@ export default async function partyPhone({ params }) {
         ${roster(c.lobby)}`;
     } else if (beat === 'casting' && (pair.runner || recap.runner)) {
       body += `<h1>Locked.</h1>
-        <p class="hint">${esc(playerName(players, pair.runner || recap.runner))} walks · ${esc(playerName(players, pair.guide || recap.guide))} talks.</p>`;
+        <p class="hint">${esc(playerName(players, pair.runner || recap.runner))} walks · ${esc(playerName(players, pair.guide || recap.guide))} talks.</p>
+        <p class="hint">Watch the TV.</p>`;
     } else if (beat === 'expedition') {
       if (iAmRunner) {
         /*

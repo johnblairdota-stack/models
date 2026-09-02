@@ -117,6 +117,7 @@ import { startServer, enterBeatLive, seatedPlayerIds, livingSeatedIds } from '..
 import { PartyNightClient } from '../src/party/night-client.js';
 import { SHOW_BEATS } from '../src/party/show.js';
 import { BEAT_CLAIM_MS, UNLOCK_ON_BEATS, resolveBeatClaim } from '../src/views/party-host.js';
+import { PAIR_LOCK_MS } from '../src/game/pair-lock-stage.js';
 
 const PORT = 5207;
 const PHONES = 5;
@@ -157,7 +158,7 @@ function openPhone(url) {
  * H8 binds this stand-in to `party-host.js` so the two cannot drift.
  */
 async function television(url, { recover }) {
-  const ui = { beat: 'lobby', locked: false, claim: null, sendArmed: false, sendUntil: 0, firstBallotAt: 0 };
+  const ui = { beat: 'lobby', locked: false, claim: null, sendArmed: false, sendUntil: 0, firstBallotAt: 0, sendoff: false };
   let fanouts = 0;
   const settle = () => {
     if (!recover) return false;
@@ -170,7 +171,12 @@ async function television(url, { recover }) {
   const client = new PartyNightClient({
     url,
     onMessage: (m) => {
-      if (m.t === 'show' && m.beat) { fanouts++; ui.beat = m.beat; settle(); }
+      if (m.t === 'show' && m.beat) {
+        fanouts++;
+        ui.beat = m.beat;
+        if (m.beat === 'expedition') ui.sendoff = false;
+        settle();
+      }
     },
   });
   await client.connect();
@@ -183,13 +189,13 @@ async function television(url, { recover }) {
       ui.beat = beat;
       if (recover) ui.claim = { beat, until: Date.now() + BEAT_CLAIM_MS };
     },
-    /** The shipped `sendThemIn`, minus the DOM: the guard, the lock, the send, the claim. */
+    /** The shipped `sendThemIn`: lock the pair, stay on Casting for the sendoff. */
     sendThemIn() {
-      if (ui.locked) return false;
+      if (ui.locked || ui.sendoff) return false;
       if (!(client.ballots || []).length) return false;
-      ui.locked = true;
+      ui.sendoff = true;
       client.send({ t: 'episode', opts: {} });
-      this.claimBeat('expedition');
+      this.claimBeat('casting');
       return true;
     },
     close() { clearInterval(timer); client.close(); },
@@ -319,7 +325,7 @@ const shipStuck = measure(A);
   await ballotAll(A);
   const held = (A.tv.client.ballots || []).length;
   const sent = A.tv.sendThemIn();
-  await sleep(260);
+  await sleep(PAIR_LOCK_MS + 80);
   const m = measure(A);
   t(`H3 · ground truth — ${held} real ballots went in after the recovery and the television actually sent the pair`,
     held === PHONES && sent === true && A.room.ballots.size === PHONES,
@@ -377,8 +383,9 @@ const shipStuck = measure(A);
     readyState !== 1 && sent === true && D.room.show === showBefore && D.room.ballots.size === boxBefore
       && !D.room.game.state.pair?.runner,
     `readyState ${readyState} · room ${D.room.show} · box ${D.room.ballots.size}`);
-  t('H5b · the television painted EXPEDITION for a message nobody sent',
-    D.tv.ui.beat === 'expedition' && D.tv.ui.locked === true);
+  t('H5b · sendThemIn stays on Casting — it does not paint expedition over a send nobody heard',
+    D.tv.ui.beat === 'casting' && D.tv.ui.locked === false && D.tv.ui.sendoff === true,
+    `tv ${D.tv.ui.beat} · locked ${D.tv.ui.locked} · sendoff ${D.tv.ui.sendoff}`);
   await sleep(BEAT_CLAIM_MS + 400);
   t('H5c · SHIPPED — the same reconciliation covers it: back to the last beat the server named, unlocked',
     D.tv.ui.beat === D.tv.client.beat && D.tv.ui.beat === 'casting' && D.tv.ui.locked === false,

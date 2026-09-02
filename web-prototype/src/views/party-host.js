@@ -87,8 +87,8 @@ export function audioSilenced(params, nav) {
  * 📺 **AN OPTIMISTIC BEAT IS A CLAIM, NOT A FACT — AND NOTHING EVER CHECKED IT.**
  *
  * Three places on this television move `ui.beat` before the server has said anything:
- * `startNight` (casting), `sendThemIn` (expedition) and `setBeat` (the dev `]` key and the
- * host's "Watch the run"). That is deliberate — a party screen that goes dead for a round trip
+ * `startNight` (casting), `sendThemIn` (stays on casting for the sendoff) and `setBeat` (the
+ * dev `]` key and the host's "Watch the run"). That is deliberate — a party screen that goes dead for a round trip
  * on the biggest cut of the night reads as a crash — but every one of them was a ONE-WAY door.
  *
  * 🩸 THE REPRODUCTION — `harness/host-desync.mjs`, and `PRIME-TIME-STATE.md` §4 called this the
@@ -230,6 +230,8 @@ export default async function partyHost({ params }) {
      * a remote gets sat on. Epoch ms, so the arm expires on its own — see `SKIP_ARM_MS`.
      */
     skipArmedUntil: 0,
+    /** True while the pair-lock sendoff is the picture — still Casting, overlay down. */
+    sendoff: false,
     /**
      * Epoch ms the Reunion started on this screen. The Reunion is the one beat with no server
      * clock (see `REUNION_PLAN`'s header), so the television paces itself — and a TV that joins
@@ -327,6 +329,7 @@ export default async function partyHost({ params }) {
          * ready-tally comment describes, and it is worth writing twice.
          */
         if (m.beat === 'reunion' && ui.beat !== 'reunion') ui.reunionAt = Date.now();
+        if (!(m.beat === 'casting' && prevBeat === 'casting')) ui.sendoff = false;
         ui.beat = m.beat;
         ui.runEnd = m.end || null;
         ui.showUntil = Number.isFinite(m.until) ? m.until : null;
@@ -530,6 +533,7 @@ export default async function partyHost({ params }) {
     const r = resolveBeatClaim({
       claim: ui.claim, beat: ui.beat, serverBeat: client.beat, locked: ui.locked,
     });
+    const sendoffWas = ui.sendoff;
     const changed = r.beat !== ui.beat || r.locked !== ui.locked;
     ui.beat = r.beat;
     ui.claim = r.claim;
@@ -541,8 +545,13 @@ export default async function partyHost({ params }) {
       ui.sendArmed = false;
       ui.sendUntil = 0;
       ui.firstBallotAt = 0;
+      ui.sendoff = false;
     }
-    return changed;
+    // Silent t:'episode' refusal: we claimed Casting (already the server beat) so the 4s
+    // claim cannot roll back, and ui.sendoff would otherwise stick the overlay down and
+    // kill later 3·2·1s the same way ui.locked used to.
+    if (ui.sendoff && !client.frame?.pair?.runner && !r.claim) ui.sendoff = false;
+    return changed || ui.sendoff !== sendoffWas;
   }
 
   function setBeat(beat) {
@@ -1031,11 +1040,15 @@ export default async function partyHost({ params }) {
    * caption, not anybody's plate.
    */
   function cuePairs() {
+    const locked = client.frame?.pair || {};
+    const sendoff = ui.beat === 'casting' && !!(locked.runner && locked.guide);
     const live = isTalkBeat(ui.beat);
     const pairs = live
       ? (client.links?.pairs || []).map((p) => ({ a: p.a, b: p.b, name: p.name }))
-      : [];
-    const key = `${ui.beat}|${pairs.map((p) => `${p.a}>${p.b}=${p.name}`).join(',')}`;
+      : (sendoff
+        ? [{ a: String(locked.runner), b: String(locked.guide) }]
+        : []);
+    const key = `${ui.beat}|${pairs.map((p) => `${p.a}>${p.b}=${p.name || ''}`).join(',')}`;
     if (key === ui.pairKey) return;
     if (sendCue({ kind: 'pair', pairs })) ui.pairKey = key;
   }
@@ -1241,18 +1254,18 @@ export default async function partyHost({ params }) {
   }
 
   function sendThemIn() {
-    if (ui.locked) return;
+    if (ui.locked || ui.sendoff) return;
     if (!(client.ballots || []).length) return;
     ui.sitCued = false;
-    ui.locked = true;
     ui.sendArmed = false;
     ui.sendUntil = 0;
     ui.firstBallotAt = 0;
+    ui.sendoff = true;
     client.send({ t: 'episode', opts: {} });
-    // Optimistic — the server fans expedition to every socket including this TV. A CLAIM, not a
-    // fact: `t:'episode'` is refused in silence when the server holds no valid ballots, and this
-    // screen used to sit on a locked expedition for the rest of the night. See resolveBeatClaim.
-    claimBeat('expedition');
+    // Stay on Casting for the sendoff. Painting expedition here used to cover the
+    // stands (and lock the 3·2·1 for the rest of the night when the send was refused).
+    // claimBeat('casting') so a silent refusal still has a claim the clock can heal.
+    claimBeat('casting');
     paint();
   }
 
@@ -1262,7 +1275,7 @@ export default async function partyHost({ params }) {
    * while late phones still pick. Empty never arms (empty-never-invent).
    */
   function armSendCountdown(canLock, show) {
-    if (ui.locked || show === 'expedition' || ui.beat === 'expedition') return;
+    if (ui.locked || ui.sendoff || show === 'expedition' || ui.beat === 'expedition') return;
     if (show !== 'casting') {
       ui.sendArmed = false;
       ui.sendUntil = 0;
@@ -1287,7 +1300,7 @@ export default async function partyHost({ params }) {
 
   /** Clock tick — the 20s backstop must fire without a new socket message. */
   function maybeArmFromBackstop() {
-    if (ui.locked || ui.sendArmed) return;
+    if (ui.locked || ui.sendoff || ui.sendArmed) return;
     if (ui.beat !== 'casting') return;
     const phase = client.frame?.phase || client.lobby?.phase || '';
     const votes = client.ballots || [];
@@ -1466,6 +1479,7 @@ export default async function partyHost({ params }) {
     const hasPair = !!pair.runner;
     armSendCountdown(canLock, show);
     const sendLeft = sendCountdownLeft();
+    const onSendoff = show === 'casting' && ui.introsDone && sendLeft == null && (ui.sendoff || hasPair);
     const onStage = isTalkBeat(show);
     /*
      * ⚠️ **DERIVED, NOT RE-LISTED.** This was a hand-written copy of `TALK_BEATS` plus `recap`,
@@ -1660,6 +1674,12 @@ export default async function partyHost({ params }) {
       if (showingIntros) {
         body += `<div class="intro-frame" aria-label="Player intros"></div>
           <p class="intro-hint">the cast, walking in · phones are voting</p>`;
+      } else if (onSendoff) {
+        /*
+         * 🎭 Pair locked. Drop the ballot overlay so the seated circle is the picture.
+         * The plates already name the two. Not a SHOW beat.
+         */
+        body += `<p class="intro-hint">the pair is locked</p>`;
       } else if (ui.introsSent) {
         /*
          * 🎬 **THE BOARD HAS TO OUTLIVE THE ROLE-CARD WINDOW OR ITS COUNTER IS A LIE.**
@@ -1702,7 +1722,7 @@ export default async function partyHost({ params }) {
         body += `<div class="send-go"><div class="send-go-k">they go in</div>
           <div class="send-count" data-send-count>${n}</div></div>`;
       }
-      if (hasPair) body += `<button class="btn ghost" id="to-run">Watch the run</button>`;
+      if (hasPair) body += `${onSendoff ? '' : `<button class="btn ghost" id="to-run">Watch the run</button>`}`;
       body += `</div>`;
       if (episode === 1 && !showingIntros && !ui.introsSent) {
         // One line, not two: this sat 40px under "No ballots yet — phones pick a runner and a
@@ -1767,7 +1787,7 @@ export default async function partyHost({ params }) {
      * is what lifts the night above the camera plate and takes the chrome bands away. See the
      * `.night.on-cast` block in `night-skin.js` for why the stacking has to move with it.
      */
-    const onCast = show === 'casting' && ui.introsSent && ui.introsDone;
+    const onCast = show === 'casting' && ui.introsSent && ui.introsDone && !onSendoff;
     /*
      * 🎴 **THE ROLE-CARD WINDOW IS ITS OWN SCREEN, AND IT WAS USING HALF OF ONE.** Photographed
      * at `progress/r5/01-tv-casting-cards.png`: strapline, kicker, headline, eight lamps, bake
@@ -1776,7 +1796,7 @@ export default async function partyHost({ params }) {
      * is what lets the same five elements use the height they are sitting in front of.
      */
     const onCards = show === 'casting' && !ui.introsSent;
-    const onTalkFrame = onStage || onRecap || onCast;
+    const onTalkFrame = onStage || onRecap || onCast || onSendoff;
     /* =========================================================================================
      * ⏱️ ONE CLOCK. NOT TWO.
      *

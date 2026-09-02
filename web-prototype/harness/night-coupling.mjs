@@ -43,6 +43,7 @@ import { recapFromEvents } from '../src/party/recap.js';
 import { missionFor } from '../src/party/mission.js';
 import { kindsForJob, objectiveGoal, isObjectivePin } from '../src/party/objectives.js';
 import { PIN_WIRE_KEYS } from '../src/party/follow.js';
+import { PAIR_LOCK_MS } from '../src/game/pair-lock-stage.js';
 
 const PORT = 5232;
 let pass = 0, fail = 0;
@@ -84,7 +85,7 @@ a.send({ t: 'ballot', runner: b.welcome.playerId, guide: a.welcome.playerId });
 b.send({ t: 'ballot', runner: a.welcome.playerId, guide: b.welcome.playerId });
 await sleep(80);
 host.send({ t: 'episode', opts: {} });
-await sleep(220);
+await sleep(PAIR_LOCK_MS + 80);
 /*
  * The TV's first 2 Hz world report. Not decoration: `playEpisode` clears every seatRole and
  * `setWorld` re-asserts them from `state.pair`, and `you.pin` only rides a frame whose socket
@@ -196,7 +197,7 @@ await sleep(120);
   da.send({ t: 'ballot', runner: db.welcome.playerId, guide: da.welcome.playerId });
   await sleep(80);
   dtv.send({ t: 'episode', opts: {} });
-  await sleep(220);
+  await sleep(PAIR_LOCK_MS + 80);
   da.send({ t: 'world', runner: { room: 'gallery', x: 1, z: 1 }, hunter: null, mission: { phase: 'return', room: 'ballroom' } });
   db.send({ t: 'world', runner: { room: 'gallery', x: 1, z: 1 }, hunter: null, mission: { phase: 'return', room: 'ballroom' } });
   await sleep(80);

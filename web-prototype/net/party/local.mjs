@@ -49,6 +49,7 @@ import {
 } from '../../src/party/show.js';
 import { reckoningSeconds } from '../../src/party/phases.js';
 import { reactCheck } from '../../src/party/react.js';
+import { pairLockMs } from '../../src/game/pair-lock-stage.js';
 import {
   freshLinks, pruneLinks, publicLinks, linkBlock, requestLink, acceptLink, declineLink, unlink,
   whisperAudience, whisperViolations, cleanWhisper, isLinkBeat, expirePending, expirePairs,
@@ -455,6 +456,7 @@ function setShow(room, beat, end = null) {
   if (room.show !== beat) clearLinks(room);
   if (room.show !== beat) (room.beatLog ||= []).push(beat);
   room.show = beat;
+  if (beat !== 'casting') room.pairLocking = false;
   if (beat === 'expedition' || beat === 'lobby' || beat === 'casting') {
     if (beat === 'expedition') room.runEnd = null;
     room.showUntil = null;
@@ -489,8 +491,16 @@ function validCastBallots(room) {
 /**
  * Resolve casting into a live expedition. The TV's `t:'episode'` and the server backstop both
  * come through here, so there is exactly one answer to "how does casting resolve".
+ *
+ * 🎭 **THE PAIR LOCKS, THEN THE CIRCLE STANDS, THEN THE RUN.** Expedition used to pin
+ * immediately — "so the TV is never waiting on a click" — which cut the first two names
+ * of the night into the mansion. Accusation already waits its own span before a second
+ * nom; this is that class of wait on Casting. Empty still never invents a pair. The
+ * sendoff does not skip, including in the sim: there is no `pairLockNow`.
  */
 function runEpisodeFromBallots(room, votes, opts = {}) {
+  if (room?.pairLocking) return;
+  if (room?.show === 'expedition') return;
   const seated = seatedPlayerIds(room);
   room.game.playEpisode({
     ...opts,
@@ -499,9 +509,27 @@ function runEpisodeFromBallots(room, votes, opts = {}) {
     // Live night: mansion reports cameras/alarms — do not invent gate scaffold on the TV.
     scaffold: false,
   });
-  // Durable show: expedition now, recap when the mission says so. Do not pin CASTING.
-  startShowClock(room);
+  // Pair is public now so phones can hold Locked. while the circle stands.
   fanout(room, lobbySnapshot(room));
+  startPairLock(room);
+}
+
+/**
+ * Wait SETTLE+FADE on Casting, then pin expedition. Replaces the 45s casting net while
+ * the scene is up so CASTING_BACKSTOP_MS cannot fire the run mid-sendoff. If that net
+ * hits during the scene, `castingBackstop` sees `pairLocking` and lets this timer finish.
+ */
+function startPairLock(room) {
+  clearShowClock(room);
+  room.pairLocking = true;
+  room.showClock = setTimeout(() => {
+    room.showClock = null;
+    room.pairLocking = false;
+    if (!room || room.show !== 'casting') return;
+    startShowClock(room);
+    fanout(room, lobbySnapshot(room));
+  }, pairLockMs());
+  room.showClock.unref?.();
 }
 
 function startCastingClock(room) {
@@ -521,6 +549,8 @@ function startCastingClock(room) {
  */
 export function castingBackstop(room) {
   if (!room || room.show !== 'casting') return null;
+  // Mid-sendoff: finish the scene, then expedition. Do not playEpisode again.
+  if (room.pairLocking) return 'casting';
   const votes = validCastBallots(room);
   if (!votes.length) {
     startCastingClock(room);
@@ -997,6 +1027,11 @@ export function enterBeatLive(room, beat) {
   if (!room || !isShowBeat(beat)) return room?.show ?? null;
   // Rule 1. The wire still carries the repeat; the transition does not run twice.
   if (room.show === beat) { fanout(room, showPayload(room)); return room.show; }
+  // Sendoff wait does not skip. Watch the run / `]` must not pin expedition over the stands.
+  if (beat === 'expedition' && room.pairLocking) {
+    fanout(room, showPayload(room));
+    return room.show;
+  }
   /*
    * 🫀 SAME PAGE. A jump that walks BACKWARDS along the talk chain (vote → reckoning, etc.)
    * is a repaint pretending to be a transition — DUSK6 ep1 strobed those two ~35 times.
