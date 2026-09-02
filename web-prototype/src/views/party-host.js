@@ -1124,7 +1124,7 @@ export default async function partyHost({ params }) {
      * being photographed. During that window the screen says "Counting the ballot." and this
      * says nothing, because there is nothing painted to be the sound of.
      */
-    if (show === 'execution' && airedHit(client)?.held) {
+    if (show === 'execution' && client.lynchResult && airedHit(client)?.held) {
       const out = !!airedHit(client).hit; // held HIT only — CAST8 OUT-without-driver is red
       const key = `${episode}|${out}`;
       if (key !== audioSeen.evict) {
