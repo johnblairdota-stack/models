@@ -492,7 +492,7 @@ function validCastBallots(room) {
  * Resolve casting into a live expedition. The TV's `t:'episode'` and the server backstop both
  * come through here, so there is exactly one answer to "how does casting resolve".
  *
- * 🎭 **THE PAIR LOCKS, THEN THE CIRCLE STANDS, THEN THE RUN.** Expedition used to pin
+ * 🎭 **THE PAIR LOCKS, THEN THE CIRCLE WALKS TO RING CENTER, THEN THE RUN.** Expedition used to pin
  * immediately — "so the TV is never waiting on a click" — which cut the first two names
  * of the night into the mansion. Accusation already waits its own span before a second
  * nom; this is that class of wait on Casting. Empty still never invents a pair. The
@@ -509,15 +509,16 @@ function runEpisodeFromBallots(room, votes, opts = {}) {
     // Live night: mansion reports cameras/alarms — do not invent gate scaffold on the TV.
     scaffold: false,
   });
-  // Pair is public now so phones can hold Locked. while the circle stands.
+  // Pair is public now so phones can hold Locked while the sendoff plays.
   fanout(room, lobbySnapshot(room));
   startPairLock(room);
 }
 
 /**
- * Wait SETTLE+FADE on Casting, then pin expedition. Replaces the 45s casting net while
+ * Wait HOLD+FADE on Casting, then pin expedition. Replaces the 45s casting net while
  * the scene is up so CASTING_BACKSTOP_MS cannot fire the run mid-sendoff. If that net
  * hits during the scene, `castingBackstop` sees `pairLocking` and lets this timer finish.
+ * The number is `pairLockMs()` — this hop does not grow a second timer.
  */
 function startPairLock(room) {
   clearShowClock(room);
