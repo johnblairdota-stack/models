@@ -1271,6 +1271,10 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     if (exec.showrunner && !exec.hit && exec.victim && exec.t >= EXECUTE.RISE_DUR + SHOW_CONTACT_S) {
       beginHit(t);
     }
+    if (!exec.hit && exec.victim && exec.swung && exec.swingAt
+      && exec.t >= exec.swingAt + SWING_DUR) {
+      beginHit(t);
+    }
     if (exec.hit) {
       const elapsed = exec.t - exec.hitAt;
       if (lingerBeat(elapsed) === 'group' && exec.swinger && !exec.swinger.wrecked && !exec.strikerSat) {

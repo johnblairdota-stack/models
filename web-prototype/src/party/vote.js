@@ -194,3 +194,35 @@ export function executioner(state, executed, takenThisEpisode = []) {
   if (!nom) return null;
   return takenThisEpisode.includes(nom.nominator) ? SHOWRUNNER : nom.nominator;
 }
+
+/**
+ * Standing names always have a printed count, including 0. Empty chromeTally
+ * with a living pile is the H379 hole (CAST8 Gus standing, tally blank).
+ *
+ * @param {{counts?:Record<string,number>}|null} result
+ * @param {Array<{target:string}|string>} standing
+ * @returns {Record<string,number>}
+ */
+export function standingTally(result, standing) {
+  const ids = (standing || []).map((s) => (typeof s === 'string' ? s : s?.target)).filter(Boolean);
+  const counts = result?.counts || {};
+  const out = {};
+  for (const id of ids) out[id] = Number(counts[id] || 0);
+  return out;
+}
+
+/**
+ * Driver and TV share HIT or no-HIT. OUT is only legal after this returns a
+ * hit. Do not invent a lynch the board did not print.
+ *
+ * @returns {{hit:boolean, executed:string|null}|null} null = not yet held
+ */
+export function heldHit(driver, chrome) {
+  if (!driver || !chrome) return null;
+  if (!Object.prototype.hasOwnProperty.call(driver, 'executed')) return null;
+  if (!Object.prototype.hasOwnProperty.call(chrome, 'executed')) return null;
+  const d = driver.executed ?? null;
+  const c = chrome.executed ?? null;
+  if (String(d ?? '') !== String(c ?? '')) return null;
+  return { hit: !!d, executed: d };
+}

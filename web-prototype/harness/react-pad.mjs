@@ -251,6 +251,16 @@ const OK = { reaction: 'CLAP', beat: 'expedition', alive: true, lastAt: null, no
     && /m\.t === 'ballots'/.test(hostSrc)
     && /paintVotePopups\(\)/.test(hostSrc)
     && !/class="cast-overlay"/.test(hostSrc));
+  t('R70d · CAST8-class casting beat: no 26% plate; role-card uses the fading mount',
+    !/class="cast-overlay"/.test(hostSrc)
+    && /body \+= castStage\(\{/.test(hostSrc)
+    && /function paintVotePopups/.test(hostSrc)
+    && /m\.t === 'ballots'/.test(hostSrc)
+    && /ui\.beat === 'casting'/.test(hostSrc)
+    && /return;/.test(hostSrc.slice(hostSrc.indexOf("if (m.t === 'ballots')"), hostSrc.indexOf("if (m.t === 'ballots')") + 520))
+    && REACT_HOLD_MS === 10000
+    && !/\.cast-overlay \{[^}]*26%/.test(lookSrc),
+    'popups · REACT_HOLD_MS · ballot does not paint()');
 }
 
 // ---------------------------------------------------------------- R50 · the faces

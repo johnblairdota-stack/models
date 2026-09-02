@@ -16,6 +16,11 @@
  */
 
 import { tallyCasting, refuse, seededPick, describeCastTiebreaks, historyFromCastEvents, previewCastTiebreaks, shouldArmCastSend, CAST_BACKSTOP_MS, castLockoutId, deadIdsFromPublic, livingFromPublic } from '../src/party/ballot.js';
+import { heldHit, standingTally, tallyVote, NO_ONE } from '../src/party/vote.js';
+import { hitHoldReady, EPISODE_ORDER } from '../src/party/phases.js';
+import { TICK_ORDER } from '../src/party/win.js';
+import { SHOW_BEATS } from '../src/party/show.js';
+import { CUE_KINDS } from '../src/party/follow.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -271,6 +276,56 @@ const NO_LOCK = { runner: null, guide: null };
     && !/\.cast-overlay \{[^}]*26%/.test(lookSrc)
     && /data-cast-votes/.test(hostSrc),
     'fade like emotes · no 26% column');
+}
+
+{
+  /*
+   * CAST8 Vote→HIT: driver fell:nobody / lynched:null while TV/Reunion said OUT.
+   * H379: standing Gus, sent 4, thresh 5 of 5, tally empty. Hold until they agree.
+   * Do not invent a SHOW beat. W5 stays gone. 2g1e last vote stays.
+   */
+  const hostSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'src/views/party-host.js'), 'utf8').replace(/\r\n/g, '\n');
+  const winSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'src/party/win.js'), 'utf8').replace(/\r\n/g, '\n');
+  t('B16 · CAST8-class driver no-eviction vs chrome OUT is not a held HIT',
+    heldHit({ executed: null }, { executed: 'Ada' }) === null
+    && heldHit({ executed: null }, { executed: null })?.hit === false
+    && heldHit({ executed: 'Fox' }, { executed: 'Fox' })?.hit === true
+    && hitHoldReady({ executed: null }, { executed: 'Eli' }) === false
+    && hitHoldReady({ executed: null }, { executed: null }) === true
+    && /function airedHit/.test(hostSrc)
+    && /whoSub: !held\?\.held \? 'counting'/.test(hostSrc)
+    && /airedHit\(client\)/.test(hostSrc),
+    'OUT only after held HIT');
+
+  const standing = [{ nominator: 'p1', target: 'gus' }];
+  const empty = standingTally({ counts: {} }, standing);
+  const piled = standingTally({ counts: { gus: 4 } }, standing);
+  t('B16b · empty tally with a living standing pile is red — H379 class',
+    empty.gus === 0
+    && Object.keys(empty).length === 1
+    && piled.gus === 4
+    && /standingTally\(result, standingIds\)/.test(hostSrc)
+    && /standing\.length && !Object\.keys\(r\.counts/.test(hostSrc),
+    'pile always prints a count; empty wire counts are not a HIT');
+
+  const five = ['ada', 'ben', 'cy', 'eli', 'gus'];
+  const box = Object.fromEntries(five.map((id, i) => [id, i < 4 ? 'gus' : NO_ONE]));
+  const result = tallyVote({ living: five, nominations: standing }, box);
+  t('B16c · honour standing names + printed threshold — do not invent a miss',
+    result.counts.gus === 4
+    && result.threshold === 3
+    && result.executed === 'gus'
+    && result.counts.gus * 2 > five.length,
+    `Gus ${result.counts.gus} of ${five.length} · thresh ${result.threshold} · ${result.executed}`);
+
+  t('B16d · no new SHOW beat or CUE_KIND; W5 stays gone; TICK_ORDER is W1 W3 W2 W4',
+    TICK_ORDER.join(' ') === 'W1 W3 W2 W4'
+    && !TICK_ORDER.includes('W5')
+    && !/fire\('W5'/.test(winSrc)
+    && SHOW_BEATS.join(',') === 'lobby,casting,expedition,recap,debrief,reckoning,vote,execution,verdict,reunion'
+    && !EPISODE_ORDER.includes('HIT')
+    && CUE_KINDS.join(',') === 'intros,run,move,shot,idle,noms,pair,execute,pin',
+    `${TICK_ORDER.join(' ')} · ${SHOW_BEATS.length} beats`);
 }
 
 console.log(`\ncast-ballot: ${pass} passed, ${fail} failed`);
