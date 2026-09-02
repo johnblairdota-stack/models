@@ -27,6 +27,7 @@ import { applyCastLock, applyCastTap, ballotFromCast, CAST_BLOCK_WHY, castPrompt
 import { createRoom } from '../src/party/room.js';
 import { NO_ONE } from '../src/party/vote.js';
 import { accusationSpan } from '../src/game/accusation-stage.js';
+import { PAIR_LOCK_MS } from '../src/game/pair-lock-stage.js';
 import { OUTCOME, outcomeLine } from '../src/party/win.js';
 
 /*
@@ -461,7 +462,16 @@ t('N7 · casting ballots are public and attributed',
   JSON.stringify(ballots?.votes));
 
 host.send({ t: 'episode', opts: {} });
-await sleep(220);
+await sleep(80);
+{
+  const frame = last(host, 'state')?.frame;
+  t('N10c0 · after t:\'episode\' the pair is locked and expedition has not aired — sendoff is still Casting',
+    frame?.pair?.runner && frame?.pair?.guide
+    && last(host, 'show')?.beat !== 'expedition'
+    && srv.rooms.get('night')?.show === 'casting',
+    JSON.stringify({ show: last(host, 'show')?.beat, room: srv.rooms.get('night')?.show, pair: frame?.pair }));
+}
+await sleep(PAIR_LOCK_MS + 80);
 
 {
   const frame = last(host, 'state')?.frame;
@@ -972,7 +982,7 @@ t('N13c · a refresh resumes the server show beat, not casting',
     }));
     await sleep(60);
     tvc.send({ t: 'episode', opts: {} });
-    await sleep(160);
+    await sleep(PAIR_LOCK_MS + 80);
     /*
      * ⚠️ **THE RUN HAS TO BE ENDED, AND FORGETTING THAT COST THIS GATE ITS FIRST DRAFT.**
      * `progressShow` walks the AFTER-run chain. Expedition used to be a hole in `nextShowBeat`
@@ -1216,7 +1226,7 @@ t('N14 · host can pace the room onto the recap beat',
   await sleep(60);
 
   castingBackstop(net);
-  await sleep(40);
+  await sleep(PAIR_LOCK_MS + 80);
   t('N20c · with the TV gone but ballots in, the net resolves casting into the expedition',
     net.show === 'expedition' && net.game.state.pair.runner != null && net.game.state.pair.guide != null,
     JSON.stringify({ show: net.show, pair: net.game.state.pair }));

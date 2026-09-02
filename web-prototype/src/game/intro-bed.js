@@ -19,6 +19,9 @@ import {
   createAccusationStage, planExecute,
 } from './accusation-stage.js';
 import {
+  PAIR, createPairLockStage,
+} from './pair-lock-stage.js';
+import {
   HIT_CONTACT, HIT_SLACK, SHOW_CONTACT_S,
   LAST_LOOK, contactMix, retargetHead, occupies, execCamMode,
   stepLastLook, wreckPose, chairTopple, chairEyeline, seatedAim,
@@ -31,6 +34,10 @@ export {
   createAccusationStage, nomKey, nomRows, planAccusation, planExecute,
   reactorSeats, settleClip, gaspClip, pickAllowed, seatedReactionAllow,
 } from './accusation-stage.js';
+export {
+  PAIR, PAIR_CLIPS, PAIR_LOCK_MS, pairLockMs,
+  createPairLockStage, pairKey, pairRows, planPairLock,
+} from './pair-lock-stage.js';
 
 /**
  * 🎬 **THE INTROS — the joined cast walking to their chairs in the ballroom, one at a time.**
@@ -1349,6 +1356,29 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     mark: (targets) => { nominatedIds = targets; repaintTags(); },
   });
 
+  /*
+   * 🎭 The pair-lock sendoff. Same machine shape as the accusation: keyed `runner>guide`,
+   * sitLock stays on, the clip does the travelling. Reactors: none. Driven after 3·2·1,
+   * before expedition. See `pair-lock-stage.js`.
+   */
+  const pairLock = createPairLockStage({
+    seatCount: robots.length,
+    seatOf: (id) => {
+      const i = robots.findIndex((r) => String(r.seat.id) === String(id));
+      return i >= 0 ? i : null;
+    },
+    play: (seatIndex, clip, hold) => {
+      const av = robots[seatIndex]?.body?.avatar;
+      if (typeof av?.playSeated !== 'function') return false;
+      if (hold && av.clip === clip) return true;
+      return av.playSeated(clip, { hold: !!hold, fade: PAIR.FADE }) === true;
+    },
+    rest: (seatIndex) => {
+      const r = robots[seatIndex];
+      if (r && !r.wrecked) parkSit(r);
+    },
+  });
+
   if (wreckWant.size) applyWreck([...wreckWant]);
 
   return {
@@ -1394,6 +1424,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
          * back (never the one-shots), so the circle does not re-gasp on every beat.
          */
         stage.reapply();
+        pairLock.reapply();
       }
     },
 
@@ -1402,6 +1433,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
      * Everyone else stays in their chair. Chairs stay in the world.
      */
     holdForRun(runnerId) {
+      pairLock.set([]);
       heldRunner = runnerId ?? null;
       for (const r of robots) {
         const mine = heldRunner != null && String(r.seat.id) === String(heldRunner);
@@ -1422,6 +1454,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       // Same reason as `setTalk`: this sweep re-idles the circle, and a live accusation has to
       // survive it. Nominations are normally empty by here, in which case this does nothing.
       stage.reapply();
+      pairLock.reapply();
     },
 
     /**
@@ -1446,6 +1479,21 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       const ids = new Set((standing || []).map((n) => String(n?.target ?? n)));
       for (const r of robots) setNomineeBang(r.bang, ids.has(String(r.seat.id)));
       stage.set(standing);
+    },
+
+    /**
+     * 🎭 **Casting after lock: the circle PERFORMS the sendoff.** Runner stands at 0,
+     * guide at 0.40, both hold `Sit_to_Stand_Transition_M`. Keyed `runner>guide` — a
+     * re-cue of the same pair is a no-op. Empty clears. Seat lock stays on.
+     *
+     * Also reached from `setPairs` when the host sends a nameless `{a,b}` pair during
+     * sendoff (the whisper `pair` cue carries a merged name; a nameless pair is this).
+     */
+    setPairLock(runnerId, guideId) {
+      const runner = String(runnerId || '');
+      const guide = String(guideId || '');
+      if (!runner || !guide) { pairLock.set([]); return pairLock.keys().length; }
+      return pairLock.set([{ runner, guide }]);
     },
 
     /**
@@ -1519,19 +1567,27 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
      */
     setPairs(pairs) {
       pairNameById.clear();
+      const nameless = [];
       for (const p of pairs || []) {
-        if (!p?.name) continue;
+        if (!p?.a || !p?.b) continue;
+        if (!p?.name) { nameless.push(p); continue; }
         pairNameById.set(String(p.a), p.name);
         pairNameById.set(String(p.b), p.name);
       }
       repaintTags();
+      /*
+       * A nameless pair is the locked runner+guide, not a whisper merge. Debrief pairs
+       * carry a merged name and must not stand anyone. Empty clears a leftover sendoff.
+       */
+      if (nameless.length === 1) pairLock.set([{ runner: nameless[0].a, guide: nameless[0].b }]);
+      else if (!(pairs || []).length) pairLock.set([]);
       /*
        * 🟢 …and the data crossing the room between them. The merged plate is a change to
        * something the room has already read and stopped looking at; the stream is a new thing
        * moving in the middle of the picture, which is what actually gets noticed.
        */
       const tagOf = (id) => robots.find((r) => String(r.seat.id) === id)?.tag || null;
-      stream.sync(pairs || [], tagOf);
+      stream.sync((pairs || []).filter((p) => p?.name), tagOf);
     },
 
     /** Harness hook: how many streams are flying, and how lit they are. */
@@ -1548,6 +1604,13 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       pending: stage.pending(),
       performing: stage.performing(),
       skinned: [...nominatedIds],
+    }),
+
+    pairLockReport: () => ({
+      keys: pairLock.keys(),
+      pending: pairLock.pending(),
+      performing: pairLock.performing(),
+      finished: pairLock.finished(),
     }),
 
     /**
@@ -1656,6 +1719,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       // The accusation's stagger runs on the frame clock like everything else here. A
       // `setTimeout` would keep firing into a disposed bed and would drift against a hidden tab.
       stage.step(dt);
+      pairLock.step(dt);
       stepExecute(dt, t);
       for (const r of robots) driveOne(r, dt, t);
       afterBodies(dt);
@@ -1665,6 +1729,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     step(dt, t) {
       clock += dt;
       stage.step(dt);
+      pairLock.step(dt);
       stepExecute(dt, t);
       for (const r of robots) driveOne(r, dt, t);
       afterBodies(dt);
