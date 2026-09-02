@@ -18,13 +18,29 @@
  * phone derives it, and neither can be handed a different one because neither is asked.
  *
  * ⚠️ **NO THREE, NO DOM, AND THAT IS LOAD-BEARING.** The guide's map is a PHONE surface.
- * `src/world/genplan.js` imports `game/connectors.js` -> `destruction/wall.js` -> THREE, so a
- * phone that imported it would pull the whole renderer into its chunk. `harness/genspike.mjs`
- * imports **nothing at all** and exports `buildPlan` directly; `genplan.js` itself reaches into
- * `harness/` by relative path for the same reason, so this is a precedent rather than a new sin.
+ * `harness/genspike.mjs` imports **nothing at all** and exports `buildPlan` directly; `genplan.js`
+ * itself reaches into `harness/` by relative path for the same reason, so this is a precedent
+ * rather than a new sin.
+ *
+ * 🚨 **THE `genplan.js` HALF OF THAT WARNING WAS TRUE AND IS NOT ANY MORE — MEASURED, 2026-08-28.**
+ * It used to read *"`src/world/genplan.js` imports `game/connectors.js` -> `destruction/wall.js`
+ * -> THREE, so a phone that imported it would pull the whole renderer into its chunk"*, and that
+ * chain no longer reaches THREE: `wall.js` and `game/run.js` have **no imports at all** today, so
+ * `genplan.js`'s whole static graph is `genspike.mjs` + `connectors.js` + `wall.js` + `run.js` +
+ * `portal-clearance.js` — pure node, which is also why `harness/target-sight.mjs` G8 can walk it
+ * and find no bare specifier. The import below was added on that measurement, for the reason in
+ * `pickPlanSeed`, and the price was weighed rather than waved through: measured on `npm run build`,
+ * the phone's STATIC chunk graph goes from 563.1 kB / **168.1 kB gzipped** to 581.3 kB /
+ * **174.9 kB gzipped** — `+6.8 kB gz`, 4%, because `genspike.mjs` was already in that graph and
+ * only `genplan.js` + `connectors.js` + `wall.js` + `run.js` are new. That is the cost of the
+ * guide's phone agreeing with the TV about which house is playable; the alternative was a second
+ * copy of `generatedTables`' portal rules, which is the drift this repo has been bitten by twice.
+ * **The rule itself stands**: no THREE, no DOM, and a `three` edge appearing anywhere under
+ * `genplan.js` puts this import back on the table.
  */
 
 import { buildPlan, roomAtEnvCorner } from '../../harness/genspike.mjs';
+import { generatedTables } from '../world/genplan.js';
 import { portalFacesPlayable } from '../game/portal-clearance.js';
 
 /** The two rooms the night's mission needs. Both are `genspike.mjs` `LIBRARY` types. */
@@ -123,6 +139,38 @@ function connected(plan, ai, bi) {
  * change, not a fix for the sliver bug, and `planPasses` is exported so W6d can prove it still
  * rejects a house that genuinely lacks a gallery rather than asserting on a loop that never runs.
  *
+ * 🚨 **THAT LAST PARAGRAPH CAME TRUE, AND `tablesPass` IS THE ANSWER TO IT (2026-08-28).**
+ * `harness/target-sight.mjs` T1 walked the BUILT tables of 256 world seeds and found **five
+ * sealed mission rooms** — chapels on `ws` 60, 72, 81 and 247 and, worst of all, the GALLERY on
+ * 164, which is the premiere's smash room. `ws=60`'s `r5.chapel` has zero interior portals: its
+ * only connector is `x.g4`, an EXIT to `outside`. The region graph says it is connected, because
+ * at region level it is — the door it was going to get lands on `c0.2`, a corridor rect that
+ * survives into `SPACES` **0.2 m wide**, and `genplan.js`'s own `portalFacesPlayable(rows, ...)`
+ * then refuses to cut a hole into something thinner than a body. That is the sliver defect
+ * arriving exactly where this header said the region check could not see it.
+ *
+ * So the second check asks the question of `generatedTables` — the rows and portals the builder
+ * actually emits — instead of the plan's regions. It is the same shape of check one stage later
+ * and it is still pure: `generatedTables` returns its own `plan`, so `planPasses` runs on that
+ * rather than building a second one, and `pickPlanSeed` memoises, which it did not before.
+ * Measured: **0.81 -> 1.98 ms per uncached world seed, 0 ms cached.** Over 256 world seeds
+ * **13 first candidates are refused (5%), never more than 3 tries to land, none unsatisfiable.**
+ *
+ * 🚨 **AND ONE OF THE THIRTEEN IS ws17, WHICH IS INSIDE EVERY GATE'S OWN 0..23 SWEEP.** Seed 17
+ * is not a sealed chapel — it is a **sealed BALLROOM**, the room the night starts in, spawns in,
+ * and has to walk back to. `r0.ballroom`'s only interior portal is to `c3.2`, a 27.2 x 1.7 m
+ * corridor rect with **no other portal of its own**: it is a rect of region `c3` that shares no
+ * wall run with `c3.0`/`c3.1` 7.3 m away, so genplan's internal-joint loop never joins them and
+ * the gallery's door lands on `c3.0` instead. Under the old check `pickPlanSeed(17)` returned
+ * seed 17 and that house shipped — a night where nobody can leave the ballroom. It now returns
+ * seed 18 on the second candidate.
+ *
+ * ⚠️ **THAT MOVES A NUMBER TWO `party-warm` ASSERTIONS PRINT**, and it is the guard firing, not a
+ * regression: `W6d2` (L340) and `W14c` (L741) both count `picked.tries === 1` over ws 0..23 and
+ * read `sameSeed === 24` / `firstTry === 24`. The honest values are **23/24**, because ws17's
+ * first candidate is refused for cause. Nothing else about them changes — every pick is still
+ * `ok` (never the fallback) and `W14b`'s corner ballroom is still 24/24.
+ *
  * If all `PLAN_TRIES` candidates fail, take candidate 0 and report it. A playable-but-wrong house
  * beats a throw on the biggest screen in the room; `ok:false` is how the caller can say so.
  */
@@ -143,13 +191,72 @@ export function planPasses(plan) {
   return connected(plan, gi, bi) && connected(plan, ci, bi);
 }
 
+/**
+ * 🚪 **CAN YOU WALK FROM THE BALLROOM TO BOTH SMASH ROOMS IN THE HOUSE THAT GETS BUILT?**
+ *
+ * The rows-and-portals twin of `connected` above, asked of `generatedTables` output. Two rules,
+ * both taken from the built table rather than invented here:
+ *
+ *   · an `outside` end is never a way IN — `x.g*` EXIT panels leave the plan, they do not join it
+ *     (`portal-clearance.js` `portalFacesPlayable` refuses one for the same reason);
+ *   · a BREACHABLE leaf IS a door — you smash it and walk through, which is what the whole game
+ *     is about. At `PLAN_OPTS.doors === 'open'` there are none between rooms, so this arm is for
+ *     the day that option changes rather than for today.
+ *
+ * Nothing about geometry is re-derived here: portals only exist in that table if `genplan.js`
+ * already decided both landings are walkable floor.
+ */
+export function tablesPass(tables) {
+  const rows = tables?.spaces ?? [];
+  const roomOf = (type) => rows.find((r) => r.roomType === type);
+  const gal = roomOf(MISSION_ROOM);
+  const ball = roomOf(HOME_ROOM);
+  const chapel = roomOf('chapel');
+  if (!gal || !ball || !chapel) return false;
+
+  const adj = new Map();
+  const link = (a, b) => {
+    if (!a || !b || a === 'outside' || b === 'outside') return;
+    if (!adj.has(a)) adj.set(a, []);
+    if (!adj.has(b)) adj.set(b, []);
+    adj.get(a).push(b);
+    adj.get(b).push(a);
+  };
+  for (const p of tables.portals ?? []) link(p.a, p.b);
+  for (const p of tables.panels ?? []) link(p.a, p.b);
+
+  const seen = new Set([ball.id]);
+  const q = [ball.id];
+  while (q.length) {
+    const u = q.pop();
+    for (const v of adj.get(u) ?? []) if (!seen.has(v)) { seen.add(v); q.push(v); }
+  }
+  return seen.has(gal.id) && seen.has(chapel.id);
+}
+
+/**
+ * The chosen seed for one world seed. Pure, and now memoised: `party-phone.js` asks for it inside
+ * a render path (L693, L1083) and the answer cannot change for a given world seed.
+ */
+const seedCache = new Map();
+/** A night sees a handful of world seeds; a long-lived tab must not accumulate them forever. */
+const SEED_CACHE_MAX = 64;
+
 export function pickPlanSeed(worldSeed) {
   const base = Number(planSeedString(worldSeed)) | 0;
+  const hit = seedCache.get(base);
+  if (hit) return { ...hit };
+  if (seedCache.size >= SEED_CACHE_MAX) seedCache.clear();
+  let picked = { seed: String(base), tries: PLAN_TRIES, ok: false };
   for (let i = 0; i < PLAN_TRIES; i++) {
     const seed = String(base + i);
-    if (planPasses(buildPlan(seed, PLAN_OPTS))) return { seed, tries: i + 1, ok: true };
+    const tables = generatedTables(seed, PLAN_OPTS);
+    if (!planPasses(tables.plan) || !tablesPass(tables)) continue;
+    picked = { seed, tries: i + 1, ok: true };
+    break;
   }
-  return { seed: String(base), tries: PLAN_TRIES, ok: false };
+  seedCache.set(base, picked);
+  return { ...picked };
 }
 
 /**

@@ -288,5 +288,33 @@ t('S7 · the allow-list only names real Meshy sit clips',
     && /Spine02/.test(avatarSrc));
 }
 
+{
+  // S13 — DUSK 28 Aug. A second intros cue during debrief must NOT dispose the
+  // circle (chairs AND robots vanished, then the empty-room lobby dolly). Recap
+  // / debrief is releaseRun + setTalk; talk plates look at robot bodies, not
+  // empty rug centre. Idle with no intro rebuilds talk:true, never warmStep.
+  const introSrc = readFileSync(join(ROOT, '..', 'src', 'game', 'intro-bed.js'), 'utf8');
+  const fb = readFileSync(join(ROOT, '..', 'src', 'game', 'follow-bed.js'), 'utf8');
+  const introsAt = fb.indexOf("c.kind === 'intros'");
+  const introsBlk = introsAt >= 0 ? fb.slice(introsAt, introsAt + 1100) : '';
+  t('S13 · a second talk intros during debrief does not dispose the circle',
+    /have === ids \|\| c\.talk/.test(introsBlk)
+    && /if\s*\(\s*!c\.talk\s*\)\s*intro\?\.dispose\(\)/.test(introsBlk)
+    && /intro\.releaseRun/.test(introsBlk)
+    && /intro\.setTalk/.test(introsBlk));
+  t('S13b · talk plates look at robot bodies (pair/wide/push/across), not empty centre',
+    /posOf\(a\)/.test(introSrc)
+    && /posOf\(far\)/.test(introSrc)
+    && /name: 'wide'/.test(introSrc)
+    && /name: 'push'/.test(introSrc)
+    && /WIDE_Y = 2\.28/.test(introSrc)
+    && !/look\.set\(cx,\s*LOOK_Y,\s*cz\)/.test(introSrc));
+  t('S13c · idle with no intro rebuilds the seated circle instead of the lobby dolly',
+    /IDLE IS "SIT THE RUNNER BACK DOWN"/.test(fb)
+    && /talk: true/.test(fb)
+    && /mode = intro \? 'intros' : 'warm'/.test(fb)
+    && !/mode = intro \? 'intros' : 'warm';\s*warmStep/.test(fb));
+}
+
 console.log(`\nsit-in-chair: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

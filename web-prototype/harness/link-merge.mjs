@@ -31,10 +31,9 @@ import {
   mergeName, MERGE_BLOCK, freshLinks, requestLink, acceptLink, declineLink, unlink, linkBlock,
   pairOf, partnerOf, linkedIds, pruneLinks, whisperAudience, whisperViolations, cleanWhisper,
   publicLinks, isLinkBeat, LINK_BEATS, WHISPER_MAX, LINK_INK, usedIds, MAX_PAIRS, LINK_BLOCK_WHY,
-  PAIR_MS, expirePairs, pairRemaining, finishPair, isDone, bothDone,
+  PAIR_MS, expirePairs, pairRemaining, finishPair, isDone, bothDone, NAME_CAP,
 } from '../src/party/link.js';
 import { fanoutViolations, FANOUT_KEYS, applyLinkRequest, applyLinkAccept, roomLinks as linksOfRoom } from '../net/party/local.mjs';
-import { NAME_CAP } from '../src/characters/chest-nameplate.js';
 import { cueViolations } from '../src/party/follow.js';
 import { createRoom } from '../src/party/room.js';
 import { readFile } from 'node:fs/promises';
@@ -343,6 +342,11 @@ console.log('\nlink-merge — JELLIE, and the channel nobody else can read\n');
     /export function setNameTagLabel/.test(plate)
       && /old\.dispose\?\.\(\)/.test(plate)
       && LINK_INK === '#1F7A3D');
+  t('L22b · the plate and the merge share one NAME_CAP, and neither imports THREE for it',
+    NAME_CAP === 8
+      && /export const NAME_CAP = 8/.test(plate)
+      && !/from '\.\.\/characters\/chest-nameplate\.js'/.test(
+        await readFile(new URL('../src/party/link.js', import.meta.url), 'utf8')));
 }
 
 /* =============================================================================================
@@ -814,10 +818,19 @@ console.log('\nlink-merge — JELLIE, and the channel nobody else can read\n');
    * line only when NOTHING was happening — so the beat's own end condition vanished from the
    * television the instant anybody reached out.
    */
-  t('L74 · the ready count is the kicker, not a fallback that link activity hides',
-    /kicker: readyKicker\(ui, 'Talk\. A majority taps READY to move on\.'\), beat: 'debrief'/.test(host)
-      && /aside: pairBoard\(/.test(host),
-    'pairs moved to the side board; the count stays put');
+  /*
+   * ⚠️ **THE COUNT IS NOW AN ELEMENT, NOT A KICKER ARGUMENT — the stronger form of L74.** It was
+   * a string `readyKicker` folded into the kicker, which is what made it replaceable in the
+   * first place; it is now `state`, its own slot in the band, which nothing else is passed into.
+   * (And it left the kicker entirely: printing the count in both would have been one fact twice
+   * in two sizes — see `party-warm` W37c for the same defect on the Execution.)
+   */
+  t('L74 · the ready count is its own element, not a fallback that link activity hides',
+    /state: readyState\(\)/.test(host)
+      && /function readyState/.test(host)
+      && /aside: pairBoard\(/.test(host)
+      && !/kicker: readyKicker\(/.test(host),
+    'pairs on the side board; the count has its own slot');
   t('L74b · and the Debrief lower-third no longer names the expedition runner',
     /who: 'The circle',\s*\r?\n\s*whoSub: 'live · debrief'/.test(host),
     'the biggest thing in the band was about the wrong beat');
@@ -986,12 +999,22 @@ console.log('\nlink-merge — JELLIE, and the channel nobody else can read\n');
     /state\.wasDone \? 'Finished\. Slot back to the room\.' : 'They disconnected\.'/.test(phone));
 
   /*
-   * L94 · THE TV TOLD THE ROOM TO NOMINATE DURING THE VOTE. `nomBoard`'s empty state is the
-   * Reckoning's instruction and it rendered on the Vote beat too, where it is impossible.
+   * L94 · THE TV TOLD THE ROOM TO NOMINATE DURING THE VOTE. `nomBoard`'s empty state was the
+   * Reckoning's instruction and it rendered on the Vote beat too, where it is impossible. The
+   * first fix gated that copy on the beat.
+   *
+   * ⚠️ **THE COPY IS NOW GONE ENTIRELY, WHICH IS THE STRONGER FORM OF THE SAME GUARANTEE.** An
+   * empty board reserved `.talk-side` — a fifth of the television — to print one grey sentence
+   * that the kicker under the picture was already saying, so `nomBoard` returns '' when it has
+   * no rows and the ballroom takes the width back (`party-warm` W37b). A board that draws
+   * nothing when empty cannot ask for a nomination on any beat, correct or otherwise, so this
+   * gate now asserts the absence rather than the beat check. `beat` stays in the signature: the
+   * Vote and Execution still pass it and it still selects the row styling.
    */
-  t('L94 · the nomination board only asks for nominations during the Reckoning',
+  t('L94 · an empty nomination board draws nothing at all, on every beat',
     /function nomBoard\(standing, names, lobby, beat\)/.test(host)
-      && /beat === 'reckoning'\s*\?\s*'Waiting on phones — nominate\.'/.test(host));
+      && /if \(!rows\) return '';/.test(host)
+      && !/Waiting on phones — nominate\./.test(host));
 
   /*
    * L95 · THE NOMINEE'S BALLOT PROMISED A CHOICE SHE DID NOT HAVE. "Pick one standing nominee,

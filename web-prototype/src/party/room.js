@@ -23,13 +23,20 @@ import { createLog, visibleTo } from './log.js';
 import { hunterVisibleToGuide, ROOMS } from './coverage.js';
 import { applyTake, resolveContact, MODE, PLATE } from './taken.js';
 import { tallyCasting } from './ballot.js';
-import { tallyVote, executioner, nominate, reckoningClosed, canLynchVote, assumedLynchVotes, nominatorLockedChoice, NO_ONE } from './vote.js';
-import { foldWin, OUTCOME } from './win.js';
+import { tallyVote, executioner, nominate, reckoningClosed, canLynchVote, assumedLynchVotes, nominatorLockedChoice, acceptLynchVotes, NO_ONE } from './vote.js';
+import { foldWin, OUTCOME, WIN_TARGETS } from './win.js';
+import { reunion } from './reunion.js';
 import { PHASE, EPISODE_CAP } from './phases.js';
 import { cleanLook } from './look.js';
 import { STALE_MAX, intelFor } from './intel.js';
 import { coverageRoomOf } from './mansion.js';
 import { mapFeed } from './mapfeed.js';
+import { missionFor } from './mission.js';
+import { drillShotFor, FAIL_CHROME, JOB } from './jobs.js';
+import { isObjectivePin } from './objectives.js';
+// 📍 The pin's shape lives with the rest of the follow wire, so the TV, the server and the phone
+// all read one schema. See `follow.js` `PIN_WIRE_KEYS`.
+import { pinWireShape } from './follow.js';
 
 export const PHASES = ['LOBBY', 'CASTING', 'EXPEDITION', 'DEBRIEF', 'VERDICT'];
 
@@ -89,7 +96,10 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     // guide nobody can ever catch lying. One establishing camera puts episode one at 33%
     // coverage (deliberately above T3's band) and the broadcast has something to cut to on
     // frame one, which the Director needs anyway.
-    cameras: { unlocked: 1, needed: deal.cameras },
+    cameras: { unlocked: 1, needed: deal.cameras, tool: null },
+    /** Hall/floor from a finished drill. Revealed on the NEXT casting, not tonight's recap. */
+    pendingTool: null,
+    failChromeSent: false,
     incident: { alarms: 0 },
     /**
      * 🌍 **WHERE THE BODIES ARE, AS LAST REPORTED BY THE TV.**
@@ -104,10 +114,45 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
      * is applied, and only ever as `you.intel`.
      */
     world: null,
+    /**
+     * 📍 **THE GUIDE'S ONE PIN, ONCE — and "one" is the whole of D2.**
+     *
+     * *"A second tap REPLACES the pin; it does not append to it. There is no pin list, no
+     * ordering, no undo stack."* So it is a single slot holding `{x, z, roomId, kind}` or null,
+     * and `setPin` ASSIGNS — assignment is what "replaces" means, and there is no array here for
+     * a route to accumulate in. `src/party/follow.js` `pinWireShape` is the only thing that may
+     * build the value, so a widened message cannot widen this.
+     *
+     * ⚠️ **IT IS CLEARED BY A NEW CASTING, NOT BY A CLOCK.** A pin has no expiry (D2), and the
+     * thing that ends its meaning is a different pair standing up. Left alive across a Casting it
+     * would send the NEXT runner at a door the LAST guide picked, which is a route surviving the
+     * conversation that made it.
+     */
+    pin: null,
     /** A hunter sighting up to `STALE_MAX` old — what a good player is allowed to be told. */
     worldStale: null,
     /** Monotonic, so the vague read can be sporadic without a clock or an RNG. */
     worldTick: 0,
+  };
+
+  /**
+   * ⚠️ **`state.players` IS THE BROADCAST ROW, SO A FACT THAT IS NOT FOR THE WIRE DOES NOT GO ON
+   * IT** — and `applyTake` returns one that is not.
+   *
+   * `fullFor` spreads these rows into `base.players` wholesale, so every key here is offered to
+   * the entitlement matrix, and `taken: true` (`taken.js` L69) has no row. Deny-by-default was
+   * therefore deleting it from every frame in silence — no leak, but no error either, and the
+   * same silence a genuinely secret field would have got. Found by `party-isolation` I1c the hour
+   * it was written, which is the argument for I1c.
+   *
+   * The take is already fully described by two rowed fields the room does publish — `alive:false`
+   * and `plate: FACE_DOWN` — plus `player.taken` / `player.sealed` in the log, which is what the
+   * Reunion reads. Nothing anywhere reads `state.players[].taken`. So it stays where it belongs:
+   * on `applyTake`'s return, which `party-taken` asserts, and off the row that gets projected.
+   */
+  const landTake = (victim, player) => {
+    const { taken, ...row } = player;
+    Object.assign(victim, row);
   };
 
   const record = (e) => {
@@ -141,9 +186,11 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
        * No `you` means no role, which is the correct thing to tell a chair nobody is sitting in.
        */
     } else {
-      // Host/TV is a spectator. `playEpisode` writes covers into `players[].claim` so the
-      // Reunion has a finalClaim; that field is phones-only. Strip it here too so a later
-      // matrix-row mistake cannot put covers on the TV frame.
+      // Host/TV is a spectator. `players[].claim` is a `phones` row, and it is stripped HERE as
+      // well so a later matrix-row mistake cannot put a published nameplate on the shared screen
+      // — DevTools on the host tab is not a nameplate. Belt and braces on purpose: the value
+      // this used to carry was the Glitched's cover (see `playEpisode`), and the row was the only
+      // thing standing between it and the television.
       base.players = base.players.map((p) => {
         const { claim, ...row } = p;
         return row;
@@ -178,6 +225,44 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
      */
     if (!sock.isTV && sock.seatRole === 'runner' && base.you && state.world?.runner?.room) {
       base.you = { ...base.you, here: state.world.runner.room };
+    }
+    /*
+     * …and WHERE in that room. Same seat, same reasoning, one step finer — see `you.at` in
+     * `entitle.js`. It is the other end of the bezel's bearing: the pin arrived on the wire
+     * tonight and `bezelOf` needs two points to draw one segment. Set separately from `here` so a
+     * report carrying a coordinate but no room still delivers it.
+     */
+    if (!sock.isTV && sock.seatRole === 'runner' && base.you
+      && Number.isFinite(Number(state.world?.runner?.x))) {
+      base.you = { ...base.you, at: { x: state.world.runner.x, z: state.world.runner.z } };
+    }
+    /*
+     * WHICH CAMERA THE SHOW IS ON — the same seat, the same reasoning, one field wider.
+     *
+     * The runner's controls change with the perspective: absolute under the plan-locked top-down,
+     * camera-relative with a look stick on the ground. A pad that did not know which was live
+     * would print the wrong instructions over the right sticks. Set separately from `here` so a
+     * report that carries a view but no room still delivers it.
+     */
+    if (!sock.isTV && sock.seatRole === 'runner' && base.you && state.world?.view) {
+      base.you = { ...base.you, view: state.world.view };
+    }
+    /*
+     * 📍 **THE PIN REACHES BOTH SEATS, AND THE GUIDE IS NOT AN AFTERTHOUGHT ON THAT LIST.**
+     *
+     * The runner needs it because her bezel points at it and her body walks it. The guide needs it
+     * back off the wire — rather than trusting the copy on her own handset — for the reason
+     * `party-host.js` `resolveBeatClaim` was written: a locally-set fact is PROVISIONAL until the
+     * server names it, and a guide whose phone shows a pin the server refused would be shouting
+     * about a door nobody is walking to.
+     *
+     * `crew` is stated once, in `entitle.js`. This block only decides that the field is OFFERED to
+     * the table; the table decides who is entitled. A seated phone and the television both fall
+     * out here because neither carries a `crew` seat role, and the TV carries no `you` at all.
+     */
+    if (!sock.isTV && base.you && state.pin
+      && (sock.seatRole === 'runner' || sock.seatRole === 'guide')) {
+      base.you = { ...base.you, pin: { ...state.pin } };
     }
     /*
      * 🗺️ **`|| state.world` — AND WITHOUT IT THE GUIDE'S NEW MAP IS A FLOOR PLAN WITH NO MARKS ON
@@ -264,12 +349,24 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
        */
       base.flyover = { hunter: seen, jam: feed.jammed, marks };
     }
-    // ---- the four injected leaks. `harness/party-isolation.mjs` I9 requires each to turn
-    // exactly one named assertion red; a control that stops failing means the gate is blind.
+    // ---- the injected leaks. `harness/party-isolation.mjs` I9 requires each to turn exactly the
+    // named set of assertions red; a control that stops failing means the gate is blind.
     // Leaks 1 and 3 are VALUE and ORDER leaks: they pass through the filter untouched, because
     // the key is rowed and the audience is satisfied. Those are the ones a matrix cannot catch,
     // and they are I3's and I4b's whole reason for existing.
+    // Leak 5 lives in `playEpisode` rather than here, because the bug it reproduces was stateful:
+    // it wrote `state.players[].claim` and a PUBLIC event, not a field on one frame.
     if (leak === 1) base.you = { ...(base.you || {}), role: deal.seats[0].role, alignment: deal.seats[0].alignment };
+    /*
+     * 🚨 LEAK 6 IS THE ONE THAT NEVER REACHES A FRAME, AND THAT IS THE POINT OF IT.
+     *
+     * `castSeed` has no matrix row, on purpose (`cast.js`'s header) — so `project` drops it and
+     * pushes the path onto `unrowed`, and every socket's transcript is byte-identical to a clean
+     * run. I1 walks what a socket ACTUALLY GOT, so I1 cannot see this: an unrowed field announces
+     * itself as a silence. `unrowedSeen` below is what turns that silence into a red line, and
+     * this is the control that proves it can go red.
+     */
+    if (leak === 6) base.castSeed = castSeed;
     if (leak === 3) base.players = base.players.slice().sort((a, b) => {
       const al = (id) => deal.seats.find((s) => s.id === id).alignment;
       return al(a.id).localeCompare(al(b.id));
@@ -277,13 +374,35 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     return base;
   }
 
+  /**
+   * 📋 **EVERY FIELD THE MATRIX HAD NO ROW FOR — KEPT, BECAUSE `project` DROPS THEM IN SILENCE.**
+   *
+   * Deny-by-default is right and it is quiet. An unrowed path is deleted before it reaches a
+   * socket, and `party-isolation` walks what a socket ACTUALLY GOT — so I1 is structurally unable
+   * to see one. `project` has returned `unrowed` since it was written (`entitle.js` L211) and
+   * every caller in this file threw it away, which meant a field added six months from now would
+   * announce itself as an absence rather than as an error. That is the exact failure mode
+   * `entitle.js`'s header says deny-by-default exists to prevent, half-built.
+   *
+   * PATHS ONLY, NEVER VALUES, AND A `Set` — this is a schema record about a room, it is not a
+   * frame, it never goes near `send`, and it must not grow with the length of the night.
+   */
+  const unrowedSeen = new Set();
+
+  /** Project for one socket and bank whatever the matrix had no row for. */
+  function projectFor(sock) {
+    const ctx = {
+      playerId: sock.playerId, alignment: sock.alignment, isTV: sock.isTV,
+      seatRole: sock.seatRole, ownerId: sock.playerId,
+    };
+    const { frame, unrowed } = project(fullFor(sock), ctx);
+    for (const p of unrowed) unrowedSeen.add(p);
+    return frame;
+  }
+
   function broadcast() {
     for (const sock of sockets) {
-      const ctx = {
-        playerId: sock.playerId, alignment: sock.alignment, isTV: sock.isTV,
-        seatRole: sock.seatRole, ownerId: sock.playerId,
-      };
-      const { frame } = project(fullFor(sock), ctx);
+      const frame = projectFor(sock);
       // 🚨 Leaks 2 and 4 attach AFTER the projection, because that is the shape a real leak
       // takes: nobody edits the matrix to allow a leak, they attach a field downstream of it.
       // (An earlier draft injected both upstream and deny-by-default silently swallowed them —
@@ -299,7 +418,14 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
   function setPhase(p) {
     state.phase = p;
     state.tick += 1;
-    record(makeEvent(`phase.${p}`, VIS.PUBLIC, {}));
+    /*
+     * H278. CASTING / VERDICT carry the episode on the air so foldWin's W5
+     * can see the cap. Empty `{}` left episode at 1 and the fold said RENEWED.
+     */
+    const data = (p === 'CASTING' || p === 'VERDICT')
+      ? { episode: state.airingEpisode ?? state.episode }
+      : {};
+    record(makeEvent(`phase.${p}`, VIS.PUBLIC, data));
     broadcast();
   }
 
@@ -332,7 +458,7 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
           state.takenThisEpisode || [],
         );
         const { player, events } = applyTake(victim);
-        Object.assign(victim, player);
+        landTake(victim, player);
         record(makeEvent('player.executed', VIS.PUBLIC, { id: victim.id, seat: victim.seat, executioner: swinger }));
         for (const e of events.filter((e) => e.type !== 'player.taken')) record(makeEvent(e.type, e.vis, e.data));
       }
@@ -446,6 +572,7 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
      * run, so frame.episode would say 2 on the first walk. Sibling of #18 VERDICT lie.
      */
     state.airingEpisode = state.episode;
+    state.pin = null;                               // 📍 same rule as `beginCasting`. One pair, one pin.
     setPhase('CASTING');
     // 🚨 THE PAIR COMES OUT OF A BALLOT, NOT A SEAT INDEX. `ballot.js` resolves every tie
     // deterministically and publicly, so casting never stalls and never waits on a human.
@@ -506,26 +633,75 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       const r = resolveContact({ mode: MODE.PARTY, occupiedSockets: 0 });
       if (r.outcome === 'taken') {
         const { player, events } = applyTake(victim);
-        Object.assign(victim, player);
+        landTake(victim, player);
         takenThisEpisode.push(victim.id);
         for (const e of events) record(makeEvent(e.type, e.vis, e.data));
       }
     }
 
-    // Claims are published from a phone at any time; the stub sets one per episode so the roll
-    // call has a `finalClaim` to put beside the truth.
-    for (const p of state.players.filter((x) => x.alive)) {
-      /*
-       * ⚠️ `state.players` IS THE CAPACITY AND `deal.seats` MAY NOT BE. Once `dealRoles` re-deals
-       * for the phones that actually joined, chairs 3..8 exist as players and hold no card — so
-       * this lookup can miss, and it used to throw right here in the middle of an episode.
-       * A chair nobody sat in publishes nothing rather than publishing a default nameplate.
-       */
-      const seat = deal.seats.find((s) => s.id === p.id);
-      if (!seat) continue;
-      const claim = seat.cover ?? 'contestant';
-      p.claim = claim;
-      record(makeEvent('player.claim_set', VIS.PUBLIC, { id: p.id, claim }));
+    /*
+     * ---------------------------------------------------------------------------------------
+     * 🚨 **THE SERVER DOES NOT AUTHOR CLAIMS — AND WHEN IT DID, IT NAMED THE GLITCHED TO EVERY
+     *    PHONE IN THE ROOM, ON EVERY LIVE EPISODE.**
+     * ---------------------------------------------------------------------------------------
+     * What stood here called itself a stub and was on the live wire. For every living player it
+     * wrote a nameplate the player had never said out loud:
+     *
+     *     const claim = seat.cover ?? 'contestant';
+     *     p.claim = claim;
+     *     record(makeEvent('player.claim_set', VIS.PUBLIC, { id: p.id, claim }));
+     *
+     * `cast.js` L196-201 sets `seat.cover` on EXACTLY ONE seat — `if (seat.role !== 'glitched')
+     * continue;`. So that loop published a column reading `contestant` for everybody and one
+     * informing role name for one player, and `players[].claim` is a `phones` row
+     * (`entitle.js` L103). Every phone could read the Glitched straight off its own screen:
+     *
+     *     castSeed  5 · glitched p2 → p2=cameraOp,    every other row contestant
+     *     castSeed 17 · glitched p5 → p5=cameraOp
+     *     castSeed 42 · glitched p3 → p3=focusPuller
+     *
+     * `roles.js` L19-24 is what that costs: without the Glitched *"the Camera Op and the Focus
+     * Puller are oracles and the game solves itself."* Naming them also hands the room a second
+     * player confirmed GOOD by inference, and `players[].alignment` is the matrix's loudest
+     * absence — *"NO ROW. Nobody, ever, pre-REUNION."* `GUARANTEED[5]` and `[6]` both contain
+     * `glitched` (`cast.js` L98-99), so at five and six players it fired every single game.
+     *
+     * ⚠️ **IT WAS NEVER BEHIND `scaffold`.** The `if (scaffold)` block above opens at the miss/
+     * alarm stubs and closes before the take; this loop sat outside it, so `scaffold: false` —
+     * the flag whose own comment reads LIVE NIGHT PASSES `scaffold: false` — did not turn it
+     * off. The word "stub" in the comment, in `log.js`'s filter and in the matrix row was doing
+     * all the reassuring while the code ran on the real night.
+     *
+     * A claim is something a PLAYER does — the Method Actor's nameplate, `roles.js` L82 — and
+     * until that verb exists the honest number of claims on any wire is zero. So:
+     *
+     *   · `players[].claim` STAYS in the frame, as `null`. I7 asserts that no survivor's frame
+     *     changes shape, and a field that appears the moment somebody publishes would change it;
+     *     present-and-null says the same thing without announcing anything by its presence.
+     *   · `players[].claim` KEEPS its `phones` row. The row is right; what was wrong was who
+     *     wrote the value.
+     *   · `reunion.js`'s `finalClaim` now reads `null` for everybody, which is the truth —
+     *     nobody claimed anything — rather than a cover its holder never uttered. `rollCall`
+     *     already names the cover under `believedTheyWere`, from the SEALED deal, so the Reunion
+     *     loses nothing it is entitled to.
+     *
+     * Gates: `party-isolation` I3b (provenance — a claim the driver did not publish is a leak,
+     * asserted against the DRIVER'S record and never against the server's own event) and I3c
+     * (the three seeds above, replayed as a live-night room). Control: `leak: 5` restores exactly
+     * the loop that was here, and both go red.
+     */
+    if (leak === 5) {
+      for (const p of state.players.filter((x) => x.alive)) {
+        // ⚠️ `state.players` IS THE CAPACITY AND `deal.seats` MAY NOT BE — once `dealRoles`
+        // re-deals for the phones that actually joined, chairs 3..8 exist as players and hold
+        // no card, and this lookup used to throw mid-episode. Kept so the control reproduces
+        // the shipped loop exactly rather than a tidied-up version of it.
+        const seat = deal.seats.find((s) => s.id === p.id);
+        if (!seat) continue;
+        const claim = seat.cover ?? 'contestant';
+        p.claim = claim;
+        record(makeEvent('player.claim_set', VIS.PUBLIC, { id: p.id, claim }));
+      }
     }
 
     setPhase('RECAP');
@@ -541,7 +717,13 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       for (const n of state.nominations) record(makeEvent('nom.made', VIS.PUBLIC, n));
 
       setPhase('VOTE');
-      const ballotBox = votes || Object.fromEntries(living.map((id) => [id, NO_ONE]));
+      /*
+       * 📊 HONEST SCOREKEEPER. The driver used to pass `votes` straight into the log — a
+       * nominator's recast wish counted, `ballotOk` was ignored, and a season JSON could print
+       * 5–3 while the board (the live path, `assumedLynchVotes`) printed 4–4. DUSK6 ep2. The
+       * box we record is the box the SERVER would have accepted.
+       */
+      const ballotBox = acceptLynchVotes({ living, nominations: state.nominations }, votes);
       const result = tallyVote({ living, nominations: state.nominations }, ballotBox);
       // §4: the full vote record is AIRED, attributed. Who you voted for is the cheapest
       // deduction fuel in the game and hiding it would buy nothing.
@@ -555,7 +737,7 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
         const victim = state.players.find((p) => p.id === result.executed);
         const swinger = executioner({ living, nominations: state.nominations }, result.executed, takenThisEpisode);
         const { player, events } = applyTake(victim);
-        Object.assign(victim, player);
+        landTake(victim, player);
         record(makeEvent('player.executed', VIS.PUBLIC, { id: victim.id, seat: victim.seat, executioner: swinger }));
         for (const e of events.filter((e) => e.type !== 'player.taken')) record(makeEvent(e.type, e.vis, e.data));
       }
@@ -563,17 +745,97 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     }
 
     // ---- the win machine, folded over the log we just wrote
-    const align = Object.fromEntries(deal.seats.map((s) => [s.id, s.alignment]));
-    const w = foldWin(log.all(), { count, alignmentOf: (id) => align[id] });
-    state.outcome = w.outcome === OUTCOME.RENEWED && state.episode >= EPISODE_CAP ? OUTCOME.CANCELLED : w.outcome;
-    record(makeEvent('win.checked', VIS.SEALED, { outcome: state.outcome, rule: w.rule, camerasLit: w.camerasLit, fed: w.fed }));
-    record(makeEvent('verdict.aired', VIS.PUBLIC, {
-      status: state.outcome, camerasLit: w.camerasLit, alarms: state.incident.alarms,
-    }));
+    foldVerdict();
 
     state.lastPair = { ...state.pair };
     for (const s of sockets) s.seatRole = null;
     state.episode += 1;
+  }
+
+  /* =============================================================================================
+   * ⚖️ **THE EPISODE'S VERDICT — ONE COPY, TWO CALLERS.**
+   *
+   * This was six lines buried at the end of `playEpisode`, which is the OFFLINE machine only
+   * gates run. The live wire never folded the win at all: `enterExecution()` set the phase and
+   * stopped, so no live night has ever had an outcome, and `state.outcome` stayed null forever.
+   *
+   * ⚠️ **EXTRACTED, NOT COPIED, AND THAT IS THE WHOLE POINT.** `harness/episode-order.mjs` exists
+   * because the designed order and the live wire once disagreed while both halves were gated as
+   * correct. Growing a second copy of the win rule in `net/party/local.mjs` is the same mistake
+   * one layer down — the two would drift, and each would have a gate saying it was right.
+   *
+   * `EPISODE_CAP` is enforced here and nowhere else: a RENEWED at the cap is a CANCELLED,
+   * because a season that runs out of episodes without lighting its cameras is one Production won.
+   * ============================================================================================= */
+  function foldVerdict() {
+    const align = Object.fromEntries(deal.seats.map((s) => [s.id, s.alignment]));
+    /*
+     * 🚨 **`airingEpisode`, NOT `episode` — AND THIS IS THE SECOND HALF OF THE DOUBLE-BUMP BUG.**
+     *
+     * The two callers reach this line at different moments in the episode. Offline, `playEpisode`
+     * folds and THEN does `state.episode += 1`, so `state.episode` is the episode that just aired.
+     * Live, `playEpisode` has already returned — bump included — before the Verdict beat starts,
+     * so `state.episode` is the episode being SET UP. Comparing that to `EPISODE_CAP` ended a live
+     * season one episode early: `party-night` N17n drove a real room and it stopped after four of
+     * five, while `win-machine` W10c drove the offline one and it stopped after five. Two machines
+     * disagreeing while both had a gate calling them correct is precisely what `episode-order`
+     * exists for, one layer up.
+     *
+     * `state.airingEpisode` is the episode ON THE AIR and is set by both paths at the top of the
+     * episode, so it means the same thing in both. Offline it is identical to `state.episode`
+     * here, so nothing about the gates' existing behaviour moves.
+     */
+    const aired = state.airingEpisode ?? state.episode;
+    const w = foldWin(log.all(), { count, alignmentOf: (id) => align[id], aired });
+    /*
+     * Belt: foldWin now refuses RENEWED at the cap when targets are missed (H278).
+     * Keep the coerce so a future W5 hole cannot air "the season continues".
+     */
+    state.outcome = w.outcome === OUTCOME.RENEWED && aired >= EPISODE_CAP ? OUTCOME.CANCELLED : w.outcome;
+    /*
+     * 🚨 `fed` IS SEALED AND MUST STAY SEALED. `win.checked` is VIS.SEALED and carries it;
+     * `verdict.aired` is VIS.PUBLIC and does not. `rrr-social-round.md` §4: the feed gauge is a
+     * deliberately lossy proxy, and evil losing a partner looks exactly like evil winning — so
+     * airing the number would hand the room a deduction the design spent a whole beat denying it.
+     * Anything reading `foldWin`'s result for a payload must pick fields, never spread it.
+     */
+    record(makeEvent('win.checked', VIS.SEALED, { outcome: state.outcome, rule: w.rule, camerasLit: w.camerasLit, fed: w.fed }));
+    record(makeEvent('verdict.aired', VIS.PUBLIC, {
+      status: state.outcome, camerasLit: w.camerasLit, alarms: state.incident.alarms,
+    }));
+    /*
+     * 📷 **THE TARGET TRAVELS WITH THE COUNT.** `foldWin` decides W2 against
+     * `WIN_TARGETS[n].cameraTarget`. Chrome `needed` is `COMPOSITION[n].cameras`.
+     * At eight those used to be 4 and 3; 30 Aug locked them both at 4.
+     * The plate still reports THIS fold's `need`, never a second table.
+     */
+    return {
+      outcome: state.outcome, rule: w.rule,
+      camerasLit: w.camerasLit, need: WIN_TARGETS[count]?.cameraTarget ?? null,
+      episode: aired,
+    };
+  }
+
+  /**
+   * Job landed (`mission.return`). Public camera unlock. Recap reads
+   * `run.camera_lit`. Live nights never hit the playEpisode scaffold.
+   * Smash always returns on a hit. Drill only returns when the mount finished
+   * — a dark mount never enters return, so it never lights.
+   */
+  function lightCameraFromJob(job) {
+    state.cameras.unlocked += 1;
+    record(makeEvent('run.camera_lit', VIS.PUBLIC, {
+      camera: state.cameras.unlocked,
+      episode: state.airingEpisode ?? state.episode,
+      job: job ?? null,
+    }));
+  }
+
+  function revealPendingTool() {
+    if (!state.pendingTool) return;
+    state.cameras.tool = state.pendingTool;
+    record(makeEvent('run.cam_tool', VIS.PUBLIC, { shot: state.pendingTool }));
+    state.pendingTool = null;
   }
 
   return {
@@ -612,6 +874,11 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       state.pair = { runner: null, guide: null };
       state.liveLiving = null;
       state.lynchVotes = {};
+      state.failChromeSent = false;
+      // 📍 A pin belongs to the pair that made it. See `state.pin`'s header — kept alive across a
+      // Casting it would send the NEXT runner at a door the LAST guide picked.
+      state.pin = null;
+      revealPendingTool();
       for (const s of sockets) {
         if (s.isTV) continue;
         s.seatRole = null;
@@ -722,6 +989,59 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       setPhase('EXECUTION');
     },
     /**
+     * ⚖️ **THE LIVE VERDICT BEAT — a RE-FOLD, and deliberately nothing else.**
+     *
+     * ⚠️ I first wrote this to bump `state.episode`, reasoning that the live wire never called
+     * `playEpisode` so nothing counted episodes. **That was wrong and `party-night` N17h caught
+     * it**: `runEpisodeFromBallots` in `net/party/local.mjs` calls `playEpisode` when casting
+     * resolves, so the bump — and `lastPair`, and clearing `seatRole` — already happen there.
+     * Doing them again here counted every episode twice.
+     *
+     * So this folds and airs, full stop. Re-folding is not redundant: `playEpisode` runs at
+     * CASTING time, over a log that does not yet contain the expedition, the nominations or the
+     * execution. By the time the verdict beat is reached the log has all three, and `foldWin` is
+     * a pure fold over the whole log — so the second answer is the true one.
+     *
+     * ⚠️ **KNOWN WART, STATED RATHER THAN HIDDEN.** That means a live episode records
+     * `win.checked` / `verdict.aired` twice: once early and stale, once complete. The fix is to
+     * stop `playEpisode` folding when the live wire is driving, which means teaching it that it
+     * is not the whole episode — a bigger change than this beat, and its own slice.
+     *
+     * Returns what the TV needs to air. `fed` is deliberately not in it — see `foldVerdict`.
+     */
+    enterVerdict() {
+      setPhase('VERDICT');
+      return foldVerdict();
+    },
+    /* ===========================================================================================
+     * 🛑 **THE HOST CALLS THE NIGHT — the one control that ends a session by hand.**
+     *
+     * `win.js` W6 has anticipated this since the fold was written: `host.skip` fires ABANDONED,
+     * and until now **nothing in the codebase had ever emitted the event**. A rule with no
+     * emitter is a rule nobody has ever seen run.
+     *
+     * 🚨 **THE SKIP IS RECORDED BEFORE THE PHASE, AND THE ORDER IS THE WHOLE CORRECTNESS.**
+     * `foldWin` resolves by LOG ORDER and breaks on the first rule that fires — so writing
+     * `phase.VERDICT` first would let W5 (RENEWED at the cap is a CANCELLED) beat the host's own
+     * call by one sequence number, and a night the host abandoned would be recorded as a win for
+     * Production. Skip first; then the phase; then fold.
+     *
+     * ⚠️ **AN ALREADY-DECIDED SEASON IS NOT OVERWRITTEN, AND THAT IS NOT A BUG.** If a rule fired
+     * earlier in the log it is earlier in the log, and the fold keeps it: the host pressing SKIP
+     * after the cameras came up does not take the win away from the cast. What the skip
+     * guarantees is that the night ENDS, not that nobody won it.
+     *
+     * ABANDONED is public: `rrr-social-round.md` gives no side the win, so there is nothing to
+     * conceal about it. The alignments it stops short of are still the Reunion's to reveal.
+     * =========================================================================================== */
+    skipToReunion() {
+      record(makeEvent('host.skip', VIS.PUBLIC, { episode: state.episode }));
+      setPhase('VERDICT');
+      return foldVerdict();
+    },
+    /** The session's outcome so far, or null while it is still RENEWED. */
+    outcome: () => state.outcome,
+    /**
      * Published nameplate. 12 chars, same cap as the phone spec's cheap join. Does not broadcast —
      * the transport decides when a frame or lobby snapshot should follow.
      */
@@ -751,10 +1071,34 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
      *
      * @returns {boolean} true when the mission phase changed, so the transport can act on it
      */
-    setWorld({ runner = null, hunter = null, mission = null } = {}) {
+    /**
+     * 📍 **THE GUIDE PINS A DOOR. The room decides whether that is allowed, and stores ONE.**
+     *
+     * ⚠️ **THE SENDER CHECK IS HERE AS WELL AS ON THE TRANSPORT, AND THAT IS NOT BELT-AND-BRACES
+     * FOR ITS OWN SAKE.** `net/party/local.mjs` already refuses a `t:'pin'` from anybody who is
+     * not `pair.guide`, exactly as it refuses a `t:'move'` from anybody who is not `pair.runner`.
+     * But `setWorld` right below has a header explaining that `playEpisode` CLEARS every
+     * `seatRole` before the live run is over and has to re-assert them from `state.pair` — so
+     * "who is the guide" has two answers in this file depending on when you ask, and the durable
+     * one is `state.pair`. Asking it here means the store cannot be written by a stale seat.
+     *
+     * Returns the stored pin, or `null` when it was refused — so the transport can tell the TV
+     * about a pin that actually landed rather than about one that was merely sent.
+     */
+    setPin(playerId, pin) {
+      if (!playerId || state.pair?.guide !== playerId) return null;
+      const clean = pinWireShape(pin);
+      // 🚨 ASSIGNMENT, NOT PUSH. D2: a second tap REPLACES. A null clears, which is how a guide
+      // takes a bad call back without inventing an undo stack to do it with.
+      state.pin = clean;
+      broadcast();
+      return clean;
+    },
+
+    setWorld({ runner = null, hunter = null, mission = null, view = null } = {}) {
       const wasPhase = state.world?.mission?.phase ?? 'none';
       state.worldTick += 1;
-      state.world = { runner, hunter, mission };
+      state.world = { runner, hunter, mission, view };
 
       /*
        * ⚠️ **RE-ASSERT THE SEAT ROLES, BECAUSE `playEpisode` CLEARS THEM BEFORE THE RUN IS OVER.**
@@ -785,6 +1129,23 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
 
       const phase = mission?.phase ?? 'none';
       const moved = phase !== wasPhase;
+      /*
+       * 📍 **AN OBJECTIVE PIN DIES WITH THE JOB IT NAMED, AND THIS IS NOT TIDYING.**
+       *
+       * Found while walking the loop end to end, 2026-09-02. The guide pins LEFT FACE, the runner
+       * smashes it, and `armMission` moves `mission.room` to the ballroom for the walk home — so
+       * `objectives.js` `objectiveGoal` correctly refuses the pin (she is no longer in the mission
+       * room) and the body stands still, which is right. What was WRONG is that the pin was still
+       * on her bezel, pointing at a canvas she had already broken: the one screen the runner is
+       * told to trust, aimed at a destination that no longer exists, with nothing on it saying so.
+       * One tap of a door chip recovered it, and *"the guide has to speak"* is the design — but a
+       * stale bearing is not silence, it is a wrong answer.
+       *
+       * ⚠️ **ONLY THE OBJECTIVE KINDS, AND ONLY OFF `seek`.** A DOOR pin is still exactly as valid
+       * after the smash as before it — it is how the guide walks her home — so clearing every pin
+       * here would delete a live instruction to solve a problem it does not have.
+       */
+      if (moved && phase !== 'seek' && isObjectivePin(state.pin?.kind)) state.pin = null;
       if (moved && phase !== 'none') {
         /*
          * 🚨 PUBLIC, AND CARRYING NO ATTRIBUTION. `party-anon` A4's rule applies to a mission
@@ -793,7 +1154,35 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
          * the pair is already public on `pair`.
          */
         record(makeEvent(`mission.${phase}`, VIS.PUBLIC, { room: mission?.room ?? null }));
-        if (phase === 'done') setPhase('RECAP');
+        /*
+         * Job landed. Recap CAM LIT reads `run.camera_lit` from the vis log.
+         * Live Send-them-in never emitted it (scaffold-only in playEpisode), so
+         * every execute recap printed CAM DARK after cameras 1/3. party-loop.md:
+         * cameras unlock as the goods' public reward when the task lands; a
+         * take leaves that terminal dark. `return` is the smash or a finished
+         * mount. `done` is home. A drill that never mounted never returns.
+         */
+        if (phase === 'return') {
+          const spec = missionFor(state.airingEpisode ?? state.episode);
+          const job = mission?.job === JOB.DRILL || mission?.job === JOB.SMASH
+            ? mission.job
+            : spec.job;
+          lightCameraFromJob(job);
+          if (job === JOB.DRILL) {
+            state.pendingTool = drillShotFor(state.worldSeed, state.airingEpisode ?? state.episode);
+          }
+        }
+        if (phase === 'done') {
+          const nail = mission?.emptyNail;
+          if (nail === 'left' || nail === 'right') {
+            record(makeEvent('run.wall_still', VIS.PUBLIC, { emptyNail: nail, job: JOB.SMASH }));
+          }
+          setPhase('RECAP');
+        }
+      }
+      if (mission?.heard && !state.failChromeSent) {
+        state.failChromeSent = true;
+        record(makeEvent('run.fail_chrome', VIS.PUBLIC, { line: FAIL_CHROME.take }));
       }
       broadcast();
       return moved;
@@ -815,12 +1204,43 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     syncOne(socketId) {
       const sock = sockets.find((s) => s.id === socketId);
       if (!sock) return;
-      const ctx = {
-        playerId: sock.playerId, alignment: sock.alignment, isTV: sock.isTV,
-        seatRole: sock.seatRole, ownerId: sock.playerId,
-      };
-      const { frame } = project(fullFor(sock), ctx);
-      send(sock.id, frame);
+      send(sock.id, projectFor(sock));
+    },
+    /**
+     * Field paths this room built that the entitlement matrix had no row for. Empty on a healthy
+     * room. Belongs to the gate — `party-isolation` I1c — and to nobody else: it is the only way
+     * a silently-dropped field can be seen from outside `project`. See `unrowedSeen`.
+     */
+    unrowed: () => [...unrowedSeen],
+    /* ===========================================================================================
+     * 🏆 **THE REUNION SPECIAL, COMPUTED — the room's whole night, read back off its own log.**
+     *
+     * `src/party/reunion.js` has been written, complete and fully exercised by
+     * `harness/reunion-truth.mjs` since long before anything called it: six exported queries and
+     * no product caller. This is the caller.
+     *
+     * 🚨 **THERE IS NO SECOND REVEAL PIPELINE, AND THIS IS THE LINE THAT KEEPS THAT TRUE.** It
+     * passes `log.all()` — the same stream the live filter reads — so a leak and a missing reveal
+     * are the same bug, and the only way to add something to the Reunion is to write the event
+     * during play. A hand-assembled reveal payload would let the two drift for a month.
+     *
+     * ⚠️ **IT DOES NOT CHECK THE PHASE, AND IT MUST NOT.** Deciding when the reveal is allowed is
+     * the transport's job (`enterReunionLive`), and putting a second guard here would make the
+     * real one look optional. This is a query; the room decides when to ask it.
+     * =========================================================================================== */
+    reunionSpecial() {
+      const align = Object.fromEntries(deal.seats.map((s) => [s.id, s.alignment]));
+      /*
+       * 🍖 `targets` is the SAME `WIN_TARGETS[count]` row `foldVerdict` handed `foldWin` — read
+       * off the same `count`, not a second table. The bar the Reunion prints beside the feed
+       * count has to be the bar the season was actually judged against, or the payday explains
+       * the wrong game. This is the `COMPOSITION` / `WIN_TARGETS` disagreement (still John's
+       * call, still 3-against-4 at eight) staying decided in exactly one place.
+       */
+      return reunion(log.all(), {
+        alignmentOf: (id) => align[id],
+        targets: WIN_TARGETS[count] ?? null,
+      });
     },
     /** Ground truth. Belongs to the gate and the Reunion. Never to a socket. */
     truth: () => ({

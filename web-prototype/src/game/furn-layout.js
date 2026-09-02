@@ -28,9 +28,13 @@
 
 import { FURN_SMASH_ASSETS, FURN_FIT_BOOST } from './furn-catalog.js';
 import {
+  blockedBy,
   blockedByOpenings,
   openingsFromRoom,
+  propFootprint,
 } from './portal-clearance.js';
+import { MISSION_PAINTING, MISSION_DRILL } from '../party/mission.js';
+import { camHang, twinHang, TWIN, TWIN_OFFSET, WALL_CAM } from '../party/jobs.js';
 
 export { openingsFromRoom } from './portal-clearance.js';
 
@@ -61,7 +65,34 @@ export const CATALOG_ROOM_ASSIGN = {
   fireplace:      { rooms: ['study'], note: 'against a wall, never a doorway' },
   gramophone:     { rooms: ['study'], note: 'parlour machine' },
   'grand-piano':  { rooms: ['ballroom'], note: 'John: ballroom' },
-  chandelier:     { rooms: ['ballroom'], note: 'John: ballroom, hanging — two on the long axis' },
+  /*
+   * 🚨 **NOT IN THE BALLROOM, AND THIS IS THE FIX FOR "NONE OF THE CHANDELIERS ARE LIT".**
+   * John: *"there are two placed chandeliers that are lower seen in wide. Delete them from the
+   * ballroom spawn. the other two are part of the asset."*
+   *
+   * There are two independent chandelier sources in that room and only one belongs to it.
+   * `lighting/ballroom-rig.js` hangs the ASSET's crystal fixtures off the order plan, with their
+   * coronas at ~7.3 m, lit — measured: their candle cores and flames deliver a mean luma of 225
+   * against a whole-frame mean of 57. This entry hung a CATALOG GLB as well, at `liftY 2.85` in a
+   * **9.6 m** room: a static mesh with modelled candles and no flames at all, floating at eye
+   * level right where the show's cameras look. It is the huge cold fixture in the `wide`
+   * photograph and both of the low ones at `mirror`, and it is why the room read as having no
+   * lit chandeliers when its real ones were burning six metres overhead.
+   *
+   * ⚠️ **IT IS REHOMED, NOT ORPHANED, AND THAT IS NOT TIDINESS.** The obvious edit is
+   * `rooms: []`, and it breaks a standing lock: `party-warm` W14n requires a full authored house
+   * to place **every one of the 24 smash ids**, so a catalog asset that spawns nowhere is a
+   * smashable nobody can ever smash. Nothing is wrong with this prop — `liftY 2.85` is a normal
+   * hang. It is wrong in a **9.60 m** room. The gallery is 5.60 m (`spaces.js` ROOMS), the
+   * grandest room in the house that is not the ballroom, and 2.85 m there is about half height:
+   * where a chandelier belongs.
+   *
+   * ⚠️ **`avoid` IS SEPARATE FROM `rooms` AND BOTH PASSES READ IT.** `rooms` is a preference the
+   * leftover pass is allowed to override when a generated house has no gallery; `avoid` is not.
+   * Without it, any house missing a gallery drops this prop straight back into the ballroom.
+   * Gates: `harness/ballroom-dress.mjs` B14-B17 (B17 runs the planner), `party-warm` W14m.
+   */
+  chandelier:     { rooms: ['gallery'], avoid: ['ballroom'], note: 'gallery is 5.60 m; the 9.6 m ballroom has the rig\'s own lit fixtures' },
   'rug-circle':   { rooms: ['ballroom'], note: 'thin floor; chair-ring centre' },
   torchiere:      { rooms: ['ballroom', 'gallery'], note: 'standing lamp, wall-inboard' },
   'card-table':   { rooms: ['ballroom', 'study'], note: 'side table, clear of the chair ring' },
@@ -120,6 +151,153 @@ export function walkHalf(spec) {
   // non-thin meshes by `FURN_FIT_BOOST`; a keep-out that ignores it leaves a crate
   // (catalog maxSpan 0.63 after ×0.7 → ~0.98 m on the floor) filling a 1.90 m door.
   return halfSpan(spec) * FURN_FIT_BOOST;
+}
+
+/**
+ * 📏 **HOW MUCH FLOOR THE PROP IS DRAWN OVER — which is NOT `walkHalf` and NOT `halfSpan`.**
+ *
+ * `walkHalf` answers "what can I walk through": it is 0 for anything hung and a sliver for a rug,
+ * because you walk under a chandelier and over a carpet. That is the right answer for a doorway
+ * and the WRONG one for a wall inset, where the question is where the prop's BODY ends.
+ *
+ * `halfSpan` is the catalog's pre-boost span, and `fitCatalogProp` draws every non-thin mesh at
+ * `FURN_FIT_BOOST`. Using it to inset a prop off a wall is the same mistake W34d/W34j fixed for
+ * doorways, one wall over: **`vitrine` is authored at inset 0.62 with a drawn half of 0.651, so
+ * its case stood 3 cm THROUGH the gallery's north wall** — and straight through the mission
+ * painting hung 22 cm off it, on 12 of 64 world seeds (`harness/target-sight.mjs` T2, T6: 13% of
+ * the frame left visible). `console` (0.845 vs 1.031) and a fallback `bookcase` (0.912 vs 1.086)
+ * had the same arithmetic and only missed the painting on height.
+ */
+export function drawHalf(spec) {
+  if (spec?.thin) return halfSpan(spec);
+  return halfSpan(spec) * FURN_FIT_BOOST;
+}
+
+/**
+ * 🖼️ **THE TWO THINGS IN THE ROOM THIS PLACER DOES NOT PLACE — and used to hang furniture through.**
+ *
+ * `follow-bed.js` hangs both mission targets itself and neither is a `FurnProp`, so nothing here
+ * ever saw them. `candidatesFor`'s `cam-wall` slots are the same wall mouths the two hang formulas
+ * use, character for character — `{ x: space.x0 + 0.22, z: c.z }` / `{ x: space.x1 - 0.22, z: c.z }`
+ * against `twinHang` / `camHang`'s own `wallInset` of 0.22. **Two placers owned one slot and
+ * neither knew it**, twice over:
+ *
+ *   · the **twin paintings** (episode 1) — `buildTwinPaintings`, the longest wall, two 1.46 m
+ *     frames at `cx ± TWIN_OFFSET`. Caught by `target-sight` T2 on 12 of 64 world seeds.
+ *   · the **wall camera** (episodes 2+) — `buildWallCam`, the OPPOSITE long wall, one 0.48 m box
+ *     at 1.72 m. Caught by `target-sight` T2 on 11 of 192 targets, and it survived the first
+ *     keep-out because that rect only ever covered the paintings.
+ *
+ * `accept`'s 0.45 m clamp is all that ever stood between them and it is smaller than a frame's own
+ * 0.73 m half-width, so it does not separate anything.
+ *
+ * So the placer is told, and it is told by **asking `jobs.js` where the targets went** rather than
+ * by re-typing the formula: `twinHang` / `camHang` are the same pure functions `follow-bed.js`
+ * builds the real meshes from, and this file's old copy of the numbers was already stale — it
+ * described ONE centred 1.46 m frame, which stopped being true the day the twins shipped, and its
+ * rect reached ±1.41 m where the pair reaches ±2.33 m. A second copy of a formula is a debt; the
+ * only way to stop paying it is to not have one.
+ *
+ * Each rect is the target's own footprint grown by a body DIAMETER (`Player.radius` =
+ * `height * 0.20` = 0.34 m at the 1.7 m default `follow-bed` builds with) on the sides that face
+ * the room: laterally, so a runner can stand square-on to any part of it; forward, so there is a
+ * lane to stand in and swing (or drill) from. Backwards it stops at the wall, because there is no
+ * floor behind a wall to keep clear.
+ */
+export const PAINTING_WALL_OFF = TWIN.wallInset;
+export const PAINTING_W = TWIN.frameW;
+export const PAINTING_D = TWIN.frameD;
+/** `Player`: `this.radius = this.height * 0.20`, and `follow-bed` builds the runner at 1.7 m. */
+export const RUNNER_R = 0.34;
+
+/** The lane a runner needs beside and in front of a target they were sent to work on. */
+const KEEP_LANE = 2 * RUNNER_R;
+
+/**
+ * One wall-hung target's keep-out, from the hang `jobs.js` actually produces.
+ * `alongX` says the thing spans x and hangs on a z wall; `inward` is the sign that points into
+ * the room from that wall, so the lane is grown on the room side only.
+ */
+function hangKeepOut(space, id, hang, halfW, halfD) {
+  if (!hang) return null;
+  const hw = halfW + KEEP_LANE;
+  const hd = halfD + KEEP_LANE;
+  if (hang.alongX) {
+    const wall = hang.z < mid(space).z ? space.z0 : space.z1;
+    const inward = hang.z < mid(space).z ? 1 : -1;
+    const a = wall, b = hang.z + inward * hd;
+    return { id, x0: hang.x - hw, x1: hang.x + hw, z0: Math.min(a, b), z1: Math.max(a, b) };
+  }
+  const wall = hang.x < mid(space).x ? space.x0 : space.x1;
+  const inward = hang.x < mid(space).x ? 1 : -1;
+  const a = wall, b = hang.x + inward * hd;
+  return { id, x0: Math.min(a, b), x1: Math.max(a, b), z0: hang.z - hw, z1: hang.z + hw };
+}
+
+/** Both twin faces, as one rect — they share a wall and the lane between them is not a slot. */
+export function paintingKeepOut(space) {
+  if (!space) return null;
+  const w = space.x1 - space.x0, d = space.z1 - space.z0;
+  if (!(w > 0) || !(d > 0)) return null;
+  const hang = twinHang(space, 'left');
+  if (!hang) return null;
+  // One rect over the PAIR: a face half-width plus the offset that separates the two.
+  return hangKeepOut(space, `${space.id}.painting`, hang,
+    TWIN_OFFSET + TWIN.frameW / 2, TWIN.frameD / 2);
+}
+
+/**
+ * The episodes-2+ drill targets — **BOTH brackets**, one rect each.
+ *
+ * 🚨 **THE SECOND RECT IS NOT DECORATION.** `jobs.js` `camHang` now answers for two mount points
+ * because the guide pins one of them, and a bracket the placer is free to stand a vitrine in
+ * front of is exactly the bug `target-sight` was written to catch — *24 of 64 seeds place a
+ * prop's body through the mission painting* is the same failure one wall over. The keep-out has
+ * to grow with the target list or the gate measures half the job.
+ *
+ * `${id}.wallcam` keeps its name so nothing that already looks for it has to change; the new one
+ * is `${id}.wallcam-floor`.
+ */
+export function camKeepOut(space) {
+  return camKeepOuts(space)[0] ?? null;
+}
+
+export function camKeepOuts(space) {
+  if (!space) return [];
+  const w = space.x1 - space.x0, d = space.z1 - space.z0;
+  if (!(w > 0) || !(d > 0)) return [];
+  const out = [];
+  for (const [shot, id] of [['hall', `${space.id}.wallcam`], ['floor', `${space.id}.wallcam-floor`]]) {
+    const rect = hangKeepOut(space, id, camHang(space, 0, shot), WALL_CAM.w / 2, WALL_CAM.d / 2);
+    if (rect) out.push(rect);
+  }
+  return out;
+}
+
+/**
+ * Every rect a catalog prop may not stand in, for one set of spaces. Two rects per mission room —
+ * the twin paintings' and the wall camera's — and they are derived rather than passed so that a
+ * caller cannot forget one: `dressCatalogFurniture` and `party-warm` and `target-sight` all call
+ * `catalogPlacements(spaces, openings)` and all three must get the same house.
+ *
+ * Both jobs live in the SAME room (`mission.js`: `MISSION_PAINTING.room` and `MISSION_DRILL.room`
+ * are both `gallery`) on opposite long walls, which is why one loop yields both. The equality is
+ * asserted rather than assumed — the day they part company this returns rects for each room the
+ * two name, instead of silently keeping only the first one clear.
+ */
+export function missionKeepOuts(spaces = []) {
+  const out = [];
+  for (const s of spaces ?? []) {
+    const kind = spaceKind(s);
+    if (kind === MISSION_PAINTING.room) {
+      const rect = paintingKeepOut(s);
+      if (rect) out.push(rect);
+    }
+    if (kind === MISSION_DRILL.room) {
+      out.push(...camKeepOuts(s));
+    }
+  }
+  return out;
 }
 
 function wallSlot(s, wall, t, inset) {
@@ -197,9 +375,10 @@ const RECIPES = [
 function pickSpaces(spaces, assign, pick) {
   const found = [];
   const seen = new Set();
+  const avoid = new Set(assign.avoid ?? []);
   for (const kind of assign.rooms) {
     for (const s of roomsOfKind(spaces, kind)) {
-      if (seen.has(s.id)) continue;
+      if (seen.has(s.id) || avoid.has(spaceKind(s))) continue;
       seen.add(s.id);
       found.push(s);
     }
@@ -212,10 +391,16 @@ function pickSpaces(spaces, assign, pick) {
 function candidatesFor(recipe, space, spec) {
   const minDim = Math.min(space.x1 - space.x0, space.z1 - space.z0);
   if (minDim < 1.6 && recipe.place !== 'hang') return [];
-  const half = Math.max(0.35, halfSpan(spec));
+  /*
+   * The inset is measured to the prop's CENTRE, so it has to clear the prop's DRAWN half or the
+   * body stands through the wall — see `drawHalf`. The room clamp keeps a prop out of its own
+   * middle third; where a prop is too big for that, the clamp yields to the wall line rather
+   * than pushing the body back through it. `inset >= half` therefore holds on every branch.
+   */
+  const half = Math.max(0.35, drawHalf(spec));
   const inset = Math.min(
     Math.max(recipe.inset ?? 0.8, half + 0.18),
-    minDim * 0.38,
+    Math.max(minDim * 0.38, half),
   );
   const out = [];
   if (recipe.place === 'hang') {
@@ -266,7 +451,7 @@ function candidatesFor(recipe, space, spec) {
   return out;
 }
 
-function accept(space, spec, slot, openings, placed, recipe) {
+function accept(space, spec, slot, openings, placed, recipe, keepOuts = []) {
   const margin = Math.max(0.45, walkHalf(spec) * 0.35);
   const p = clampIn(space, slot.x, slot.z, margin);
   if (p.x <= space.x0 + 0.2 || p.x >= space.x1 - 0.2) return null;
@@ -277,6 +462,14 @@ function accept(space, spec, slot, openings, placed, recipe) {
     if (Math.hypot(p.x - c.x, p.z - c.z) < recipe.clearCentre) return null;
   }
   if (blockedByOpenings(p.x, p.z, half, half, openings)) return null;
+  /*
+   * The mission keep-out is asked of the DRAWN body, not `walkHalf`: a hung cam-wall has no
+   * footprint to walk around and still hangs through the canvas, which is the 12-seed defect.
+   * World-space, so a prop in the room NEXT DOOR whose body reaches through the shared wall is
+   * refused by the same rect that refuses one in the gallery.
+   */
+  const body = drawHalf(spec);
+  if (body > 0 && blockedBy(propFootprint(p.x, p.z, body, body), keepOuts)) return null;
   const minDist = Math.max(1.35, halfSpan(spec) + 0.45);
   if (!farEnough(p.x, p.z, placed, minDist)) return null;
   return { x: p.x, z: p.z, rotY: slot.rotY ?? 0 };
@@ -304,6 +497,7 @@ export function openingsArg(openingsOrOpts) {
  */
 export function catalogPlacements(spaces = [], openings = []) {
   openings = openingsArg(openings);
+  const keepOuts = missionKeepOuts(spaces);
   const out = [];
   const used = new Set();
 
@@ -323,7 +517,7 @@ export function catalogPlacements(spaces = [], openings = []) {
       // One room may take several copies (two chandeliers, up to three knights).
       for (const slot of candidatesFor(recipe, space, spec)) {
         if (n >= want) break;
-        const hit = accept(space, spec, slot, openings, out, recipe);
+        const hit = accept(space, spec, slot, openings, out, recipe, keepOuts);
         if (!hit) continue;
         out.push({
           id: `${space.id}.${recipe.id}.${n}`,
@@ -346,11 +540,24 @@ export function catalogPlacements(spaces = [], openings = []) {
     const spec = BY_ID.get(id);
     const assign = CATALOG_ROOM_ASSIGN[id];
     if (!spec || !assign) continue;
+    /*
+     * 🚨 **`avoid` IS HONOURED HERE TOO, AND FORGETTING IT IS HOW THE FIRST CUT OF THIS FIX
+     * FAILED.** This leftover pass exists so a prop whose preferred room is missing from a
+     * generated house still lands somewhere, so it deliberately ignores `rooms` — a preference.
+     * `avoid` is not a preference. Taking the catalog chandelier out of the ballroom made the
+     * main pass skip it, which sent it straight down here, and this pass put it back in the
+     * ballroom at 2.85 m: the exact defect the removal was for, with the gate above still green
+     * because the binding really had changed. A room a prop must never be in has to be excluded
+     * from BOTH passes or from neither.
+     * Gate: `harness/ballroom-dress.mjs` B17, which runs the planner instead of reading it.
+     */
+    if (!assign.rooms?.length) continue;
+    const avoid = new Set(assign.avoid ?? []);
     const recipe = RECIPES.find((r) => r.id === id) ?? { id, place: 'inboard', ox: 0, oz: 0, rotY: 0 };
-    const fallback = spaces.filter((s) => Math.min(s.x1 - s.x0, s.z1 - s.z0) >= 2.4);
+    const fallback = spaces.filter((s) => Math.min(s.x1 - s.x0, s.z1 - s.z0) >= 2.4 && !avoid.has(spaceKind(s)));
     for (const space of fallback) {
       for (const slot of candidatesFor({ ...recipe, place: recipe.place ?? 'wall', walls: WALLS_ALL, inset: 0.9 }, space, spec)) {
-        const hit = accept(space, spec, slot, openings, out, recipe);
+        const hit = accept(space, spec, slot, openings, out, recipe, keepOuts);
         if (!hit) continue;
         out.push({
           id: `${space.id}.${id}.fb`,

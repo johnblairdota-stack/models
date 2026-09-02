@@ -1,5 +1,6 @@
 import { VIEWS, VIEW_BY_ID, GROUPS } from './views.js';
 import { debugChrome } from './core/debug.js';
+import { paintViewFail, clearViewFail } from './party/follow.js';
 
 const params = new URLSearchParams(location.search);
 const viewId = params.get('view') ?? 'mat.marble';
@@ -14,6 +15,16 @@ const errEl = document.getElementById('err');
 
 function fail(e) {
   const text = (e && (e.stack || e.message)) || String(e);
+  /*
+   * Live party.follow must not own the TV. Episode 3 VERDICT after Fox
+   * painted VIEW FAILED and left it up through Reckoning — phones moved
+   * on, the red plate never hid. Boot failures still paint.
+   */
+  const live = document.body.dataset.rrrFollow === 'live';
+  if (!paintViewFail({ viewId, live })) {
+    console.error('[follow] live throw — picture stays', e);
+    return;
+  }
   errEl.style.display = 'block';
   errEl.textContent = `VIEW "${viewId}" FAILED\n\n${text}`;
   bootEl.classList.add('gone');
@@ -21,6 +32,15 @@ function fail(e) {
   window.__rrrError = text;
   console.error(e);
 }
+
+function recoverViewFail() {
+  clearViewFail({
+    errEl,
+    body: document.body,
+    clearError: () => { window.__rrrError = null; },
+  });
+}
+window.__rrrClearViewFail = recoverViewFail;
 
 window.addEventListener('error', (e) => fail(e.error ?? e.message));
 window.addEventListener('unhandledrejection', (e) => fail(e.reason));

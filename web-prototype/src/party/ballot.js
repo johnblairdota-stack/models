@@ -96,6 +96,31 @@ export function castLockoutId(lastPair, livingCount, slot) {
  */
 export const CAST_BACKSTOP_MS = 20000;
 
+/**
+ * Who is out of the show, from public facts only — `alive:false` on the frame
+ * and `player.executed` / `player.taken` in the log. Alignment stays off.
+ * Episode-2 casting must not wait on a dead phone.
+ */
+export function deadIdsFromPublic({ players = [], events = [] } = {}) {
+  const dead = new Set();
+  for (const p of players || []) {
+    if (p && p.alive === false && p.id) dead.add(String(p.id));
+  }
+  for (const e of events || []) {
+    const t = e?.type;
+    if (t !== 'player.executed' && t !== 'player.taken') continue;
+    const id = e.data?.id;
+    if (id) dead.add(String(id));
+  }
+  return dead;
+}
+
+/** Seat ids still in the living ballot. Dead do not need to lock a pick. */
+export function livingFromPublic({ ids = [], players = [], events = [] } = {}) {
+  const dead = deadIdsFromPublic({ players, events });
+  return (ids || []).map((id) => (id == null ? '' : String(id))).filter((id) => id && !dead.has(id));
+}
+
 export function shouldArmCastSend({ livingIds, votes, firstBallotAt, now = Date.now() } = {}) {
   const ballots = Array.isArray(votes) ? votes : [];
   if (!ballots.length) return false;

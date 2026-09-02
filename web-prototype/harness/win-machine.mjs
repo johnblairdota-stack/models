@@ -10,8 +10,9 @@
  * the same two events in both orders and requires the winner to swap.
  */
 
-import { foldWin, WIN_TARGETS, OUTCOME, TICK_ORDER } from '../src/party/win.js';
+import { foldWin, WIN_TARGETS, OUTCOME, TICK_ORDER, outcomeLine } from '../src/party/win.js';
 import { EPISODE_CAP } from '../src/party/phases.js';
+import { createRoom } from '../src/party/room.js';
 
 let pass = 0, fail = 0;
 const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' · ' + d : ''}`); } else { fail++; console.log(`  FAIL ${n}${d ? ' · ' + d : ''}`); } return c; };
@@ -111,6 +112,84 @@ const fold = (evts, count = 8, alignmentOf = align8) => foldWin(mk(evts), { coun
   const evilFed = fold([DEAL, ...['p7', 'p8', 'p1'].map((id) => ({ type: 'player.taken', data: { id } }))]);
   t('W9c control · an evil player taken by the Hunter does not feed it',
     evilFed.rule === 'W1' && evilFed.fed === 0, `fed=${evilFed.fed}, ended on ${evilFed.rule}`);
+}
+
+// ---------------------------------------------------------------- W10 · a session actually ends
+/* =================================================================================================
+ * 🏁 **THE ASSERTION THAT COULD NOT BE WRITTEN UNTIL 2026-08-28 — a session TERMINATES.**
+ *
+ * Every rule above was gated against a hand-built log, which proves the fold and proves nothing
+ * about the game: `PRIME-TIME-STATE.md` §2 said it flatly — *"Nothing ever ends a session."*
+ * `EPISODE_CAP` was a number in a table no code enforced, `foldWin`'s only caller was the offline
+ * `playEpisode`, and W6 had no emitter. So this is the missing half: drive real rooms and assert
+ * they stop.
+ *
+ * ⚠️ **THE CONTROL IS THE INTERESTING ARM.** A machine that always ends is not the property —
+ * `playMatch`'s own `while` would satisfy "it terminates" by hanging up on episode 1. What has to
+ * hold is that it ends for a REASON the fold names, and never on RENEWED.
+ * ================================================================================================= */
+{
+  let unended = null, noRule = null;
+  const rules = new Set();
+  for (const seed of [3, 5, 7, 9, 11, 13, 17, 19]) {
+    const r = createRoom({ count: 8, castSeed: seed * 7, worldSeed: seed, send: () => {}, emit: () => {} });
+    r.start();
+    r.playMatch({ hunterRoom: 'cellar' });
+    const out = r.state.outcome;
+    if (!out || out === OUTCOME.RENEWED) { unended = `seed ${seed} finished on ${out}`; break; }
+    const checked = r.log.all().filter((e) => e.type === 'win.checked').at(-1);
+    if (!checked?.data?.rule && out !== OUTCOME.CANCELLED) noRule = noRule || `seed ${seed}: ${out} with no rule`;
+    if (checked?.data?.rule) rules.add(checked.data.rule);
+    if (r.state.episode > EPISODE_CAP + 1) { unended = `seed ${seed} ran past the cap to ${r.state.episode}`; break; }
+  }
+  t('W10 · every match ends, inside the cap, on an outcome that is not RENEWED',
+    unended === null, unended || `8 seeds · rules seen: ${[...rules].join(',') || 'cap only'}`);
+  t('W10b · and each ending names the rule that caused it', noRule === null, noRule || 'all attributed');
+
+  /*
+   * The cap is the backstop and `foldVerdict` is the only place it is enforced: a season that runs
+   * out of episodes without lighting its cameras is one Production won. Asserted here as the
+   * TERMINATION guarantee — with no rule firing at all, the night still has to stop.
+   */
+  const quiet = createRoom({ count: 8, castSeed: 4242, worldSeed: 42, send: () => {}, emit: () => {} });
+  quiet.start();
+  for (let i = 0; i < EPISODE_CAP + 3; i++) {
+    if (quiet.state.outcome && quiet.state.outcome !== OUTCOME.RENEWED) break;
+    quiet.playEpisode({ scaffold: false, hunterRoom: 'cellar' });
+  }
+  t('W10c · a night where nothing happens still ends at EPISODE_CAP, and evil takes it',
+    quiet.state.outcome === OUTCOME.CANCELLED && quiet.state.episode > EPISODE_CAP,
+    `${quiet.state.outcome} after ${quiet.state.episode - 1} episodes, cap ${EPISODE_CAP}`);
+  t('W10d · and the last aired verdict is CANCELLED — never RENEWED at the cap (H278)',
+    quiet.log.all().filter((e) => e.type === 'verdict.aired').at(-1)?.data?.status === OUTCOME.CANCELLED
+      && quiet.log.all().filter((e) => e.type === 'win.checked').at(-1)?.data?.rule === 'W5',
+    JSON.stringify(quiet.log.all().filter((e) => e.type === 'verdict.aired').at(-1)?.data));
+}
+
+// ---------------------------------------------------------------- W11 · H278 · cap miss is never RENEWED
+{
+  const dusk = foldWin(mk([DEAL, { type: 'phase.VERDICT', data: {} }]), {
+    count: 8, alignmentOf: align8, aired: EPISODE_CAP,
+  });
+  t('W11 · at the cap with 0 of 4 cameras the fold is CANCELLED, never RENEWED',
+    dusk.outcome === OUTCOME.CANCELLED && dusk.rule === 'W5' && dusk.camerasLit === 0,
+    `${dusk.outcome} · ${dusk.rule} · ${dusk.camerasLit} cam`);
+  t('W11b · chrome for that fold is Production, not "the season continues"',
+    outcomeLine(dusk.outcome).includes('Production wins')
+      && !outcomeLine(dusk.outcome).includes('continues'));
+
+  const short = fold([
+    DEAL,
+    ...Array(WIN_TARGETS[8].cameraTarget - 1).fill({ type: 'run.camera_lit' }),
+    { type: 'phase.VERDICT', data: { episode: EPISODE_CAP } },
+  ]);
+  t('W11c · one camera short at the cap is still a miss — CANCELLED',
+    short.outcome === OUTCOME.CANCELLED && short.rule === 'W5' && short.camerasLit === 3,
+    `${short.camerasLit} lit · ${short.outcome}`);
+
+  const mid = fold([DEAL, { type: 'phase.VERDICT', data: { episode: 2 } }]);
+  t('W11d control · before the cap, 0 cameras is still RENEWED',
+    mid.outcome === OUTCOME.RENEWED && mid.rule === null);
 }
 
 console.log(`\nwin-machine: ${pass} passed, ${fail} failed`);

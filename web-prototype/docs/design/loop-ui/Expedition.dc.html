@@ -1,0 +1,96 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; }
+    a { color: #f5a14a; } a:hover { color: #ffbe7d; }
+  </style>
+</helmet>
+
+<!-- ═══════ F6 · THE RIBBON RAIL KEEPS ITS LABELS ═══════
+     Photographed today (progress/r5/02b-tv-casting-ballots.png): during the run the rail
+     collapses to 22px, which is the locked Direction B rule and correct — but at that height
+     only the CURRENT beat keeps a label and the other eight become 1px lines with no text. It
+     does not read as "the schedule, minimised"; it reads as a rendering artifact, and it takes
+     away the one thing the rail exists for: where are we in the night.
+
+     The fix is not to grow the rail — the picture keeps its 90%. It is to spend the 22px
+     differently: 9px labels survive at this height, the past beats dim rather than vanish, and
+     the current one keeps its fill. Same height, same rule, a schedule you can still read.
+
+     ═══════ F1 · AND THE RUN'S SCOREBOARD STOPS BEING 12px ═══════
+     "CAMERAS 1 / 3 · ALARMS 0" is the entire scoreboard of the expedition — the only numbers
+     that say whether the run is going well — and today it is set smaller than the dev badge. -->
+
+<div style="width: 1600px; height: 900px; position: relative; background: #0c0a08; color: #f3ece3; overflow: hidden;">
+
+  <div style="position: absolute; left: 22px; top: 8px; display: flex; align-items: center; gap: 9px; font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: #f5a14a; font-weight: 700;">
+    <span style="width: 8px; height: 8px; border-radius: 50%; background: #ff8a7a;"></span> Prime Time
+  </div>
+  <div style="position: absolute; right: 22px; top: 7px; font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: #8a7d70;">Episode 1 · Expedition</div>
+
+  <!-- The 22px ribbon — labels intact. -->
+  <div style="position: absolute; left: 22px; right: 22px; top: 28px; height: 22px; display: flex; gap: 6px; align-items: flex-end;">
+    <sc-for list="{{rail}}" as="r" hint-placeholder-count="9">
+      <div style="flex-grow: 1;">
+        <div style="font-size: 9px; letter-spacing: .14em; text-transform: uppercase; font-weight: 700; text-align: center; color: {{r.ink}}; white-space: nowrap; overflow: hidden;">{{r.k}}</div>
+        <div style="margin-top: 4px; height: 3px; border-radius: 2px; background: {{r.bar}};"></div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="position: absolute; left: 22px; right: 22px; top: 62px; bottom: 104px; border-radius: 10px; border: 2px solid rgba(245,161,74,.35); overflow: hidden; background: linear-gradient(180deg, #1d1710 0%, #100c08 70%);">
+    <div style="position: absolute; left: 50%; top: 52%; transform: translate(-50%,-50%); text-align: center;">
+      <div style="font-size: 13px; letter-spacing: .28em; text-transform: uppercase; font-weight: 700; color: #f5a14a;">chase · live</div>
+      <div style="margin-top: 12px; font-size: 34px; font-weight: 800; color: rgba(243,236,227,.35);">the mansion, from behind the runner</div>
+    </div>
+  </div>
+
+  <!-- The run band: who is in there, and the two numbers that say how it is going. -->
+  <div style="position: absolute; left: 22px; right: 22px; bottom: 0; height: 104px; display: flex; align-items: center; gap: 34px;">
+    <div>
+      <div style="font-size: 34px; font-weight: 800; line-height: 1;">Sam walks · Ellie talks</div>
+      <div style="margin-top: 7px; font-size: 13px; letter-spacing: .22em; text-transform: uppercase; color: #8a7d70;">runner · guide</div>
+    </div>
+
+    <div style="display: flex; gap: 12px; margin-left: auto;">
+      <sc-for list="{{facts}}" as="f" hint-placeholder-count="2">
+        <div style="min-width: 160px; padding: 12px 20px 10px; border-radius: 10px; background: rgba(0,0,0,.6); border-left: 6px solid {{f.tint}};">
+          <div style="font-size: 11px; letter-spacing: .24em; text-transform: uppercase; font-weight: 700; color: #8a7d70;">{{f.k}}</div>
+          <div style="margin-top: 5px; font-size: 40px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; color: {{f.tint}};">{{f.v}}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"cameras":{"editor":"int","default":1,"min":0,"max":3},"alarms":{"editor":"int","default":0,"min":0,"max":9}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const cams = this.props.cameras ?? 1;
+    const alarms = this.props.alarms ?? 0;
+    const beats = ['lobby', 'casting', 'expedition', 'recap', 'debrief',
+      'reckoning', 'vote', 'execution', 'verdict'];
+    const now = beats.indexOf('expedition');
+    return {
+      rail: beats.map((k, i) => ({
+        k,
+        ink: i === now ? '#f5a14a' : (i < now ? '#6a5f54' : (k === 'verdict' ? '#3a342e' : '#8a7d70')),
+        bar: i === now ? '#f5a14a' : (i < now ? 'rgba(245,161,74,.42)' : 'rgba(245,161,74,.14)'),
+      })),
+      facts: [
+        { k: 'Cameras', v: `${cams} / 3`, tint: cams >= 3 ? '#9ff2c8' : '#f5a14a' },
+        { k: 'Alarms', v: String(alarms), tint: alarms > 0 ? '#ff8a7a' : '#9ff2c8' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -82,7 +82,7 @@ export const COMPOSITION = {
   5: { informed: 3, contestant: 0, outsider: 1, minion: 0, producer: 1, cameras: 2 },
   6: { informed: 3, contestant: 0, outsider: 1, minion: 1, producer: 1, cameras: 2 },
   7: { informed: 3, contestant: 1, outsider: 1, minion: 1, producer: 1, cameras: 3 },
-  8: { informed: 4, contestant: 0, outsider: 2, minion: 1, producer: 1, cameras: 3 },
+  8: { informed: 4, contestant: 0, outsider: 2, minion: 1, producer: 1, cameras: 4 },
 };
 
 /** Roles the table guarantees at a count, so a script's spine is stable game to game. */

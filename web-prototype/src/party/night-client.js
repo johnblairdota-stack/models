@@ -11,7 +11,9 @@ export {
   SHOW_BEATS, AFTER_RUN_BEATS, TALK_BEATS, isShowBeat, isTalkBeat, recapAfterMs, nextShowBeat,
   holdMsFor, remainingMs, formatRemain,
   RECAP_HOLD_MS, DEBRIEF_HOLD_MS, RECKONING_HOLD_MS, VOTE_HOLD_MS, EXECUTION_HOLD_MS,
+  VERDICT_HOLD_MS,
   LATE_DEBRIEF_MS, EMPTY_RECKONING_EXTEND_CAP,
+  REUNION_PLAN, reunionBeatAt, rollCallRevealed,
 } from './show.js';
 
 export function makeCode(rand = Math.random) {
@@ -67,6 +69,30 @@ export class PartyNightClient {
     this.links = { pending: [], pairs: [], used: [] };
     /** Reaction taps, newest last. `onAir()` in react.js decides what is still on screen. */
     this.reacts = [];
+    /**
+     * 🏁 The Showrunner's aired verdict — `{status, camerasLit, need, episode}` and nothing else.
+     *
+     * 🚨 **THERE IS NO `fed` ON THIS AND THERE MUST NEVER BE ONE.** `foldWin` returns the feed
+     * count right beside `camerasLit`, and `rrr-social-round.md` §4 holds it back until the
+     * Reunion: the camera gauge is a deliberately lossy proxy, and evil losing a partner looks
+     * exactly like evil winning. The server does not send it (`FANOUT_KEYS.verdict`); this is
+     * the client half of the same promise, and `party-night` N17h0b is the control arm.
+     *
+     * It is NOT cleared on a beat change — the plate has to survive a TV refresh mid-Verdict —
+     * and the next episode's Verdict simply overwrites it.
+     */
+    this.verdict = null;
+    /** The season's final status, once the night is over. Null every episode that is RENEWED. */
+    this.season = null;
+    /**
+     * 🎭 **THE REVEAL — roll call, awards, the decisive episode, the unmixed chat.**
+     *
+     * Null until the server sends it, and the server sends it exactly once, inside
+     * `enterReunionLive`. **Do not default this to an empty shape.** A `{seats: []}` default reads
+     * as "the Reunion says nobody was anybody", and every view that draws it would then be
+     * correct-looking and wrong; `null` means "not yet" and forces the caller to say so.
+     */
+    this.reveal = null;
     /** Aired lynch ballots — empty until tallied. */
     /** What the server says I voted. Null until it answers. */
     this.myBallot = null;
@@ -152,7 +178,7 @@ export class PartyNightClient {
          */
         if (m.t === 'react' && typeof m.from === 'string') {
           this.reacts.push({ from: m.from, r: m.r, at: Number(m.at) || Date.now() });
-          if (this.reacts.length > 64) this.reacts.splice(0, this.reacts.length - 64);
+          if (this.reacts.length > 256) this.reacts.splice(0, this.reacts.length - 256);
         }
         /*
          * 🍮 Who is paired, and what they are called now. PUBLIC — every socket gets this, the
@@ -161,6 +187,20 @@ export class PartyNightClient {
          * its own closure so nothing on the shared client object can leak them to another view.
          */
         if (m.t === 'links') this.links = { pending: m.pending || [], pairs: m.pairs || [], used: m.used || [] };
+        if (m.t === 'verdict') {
+          this.verdict = {
+            status: m.status, camerasLit: m.camerasLit | 0,
+            need: Number.isFinite(m.need) ? m.need | 0 : null,
+            episode: m.episode | 0,
+          };
+        }
+        if (m.t === 'season') this.season = m.status || null;
+        if (m.t === 'reveal') {
+          this.reveal = {
+            seats: m.seats || [], awards: m.awards || [],
+            decisive: m.decisive || null, chat: m.chat || [],
+          };
+        }
         if (m.t === 'lynch') {
           this.lynchVotes = m.votes || [];
           this.lynchResult = m.result || null;

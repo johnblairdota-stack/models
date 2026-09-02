@@ -26,11 +26,12 @@
 
 import { readFile } from 'node:fs/promises';
 import {
-  CUE_CAST_KEYS, CUE_KEYS, CUE_KINDS, CUE_NOM_KEYS, FOLLOW_FORBIDDEN, FOLLOW_INSTRUMENTS,
+  CUE_CAST_KEYS, CUE_KEYS, CUE_KINDS, CUE_NOM_KEYS, CUE_EXECUTE_KEYS, FOLLOW_FORBIDDEN, FOLLOW_INSTRUMENTS,
   FOLLOW_KEYS, FOLLOW_VIEW,
   IDENTITY_SECRETS, INTRO_FOV, INTRO_FRAME_PCT, MISSION_PHASES, MOVE_KEYS, RING_OUT, SPATIAL_WORDS,
   STICK_DEADZONE, STICK_RELEASE, STICK_TURN, TALK_FOV, TV_FRAME_PCT,
   WARM_KEYS, WARM_STAGES, WORLD_KEYS, chaseOrbitOffset, cueViolations, followParams, followUrl,
+  idleRebuildCast, liveTexture, dropDeadMaps, paintViewFail, clearViewFail,
   followViolations,
   liveRunShot, runPerspective, LOOK_PITCH_MAX, LOOK_PITCH_MIN, lookYaw, moveViolations, stepLookOrbit,
   stickCamMove, stickHeading, stickMag, stickRef, warmLabel, warmPct,
@@ -45,7 +46,7 @@ import {
 import {
   HOME_ROOM, MISSION_ROOM, PLAN_OPTS, PLAN_TRIES,
   coverageRoomOf, homeIsCorner, pickPlanSeed, planFor, planOptsFor, planPasses, planRegions,
-  planRoomLabels, roomLabel, spaceLabel,
+  planRoomLabels, planSeedString, roomLabel, spaceLabel, tablesPass,
 } from '../src/party/mansion.js';
 import { lockedSeatCount, seatCircleRadius, rugSpanForSeats, SIT_IDLE_CLIPS, SIT_CLIP_ALLOW } from '../src/game/chair-seats.js';
 import {
@@ -59,12 +60,27 @@ import {
   portalFacesPlayable, uHitsAnyOpening, MIN_LANDING_SPAN,
 } from '../src/game/portal-clearance.js';
 import { generatedTables } from '../src/world/genplan.js';
+
+function skippedForCause(ws) {
+  const base = Number(planSeedString(ws)) | 0;
+  const picked = pickPlanSeed(ws);
+  if (!picked.ok) return { ok: false, why: `ws${ws}: no candidate passed at all` };
+  for (let i = 0; i < (picked.tries - 1); i++) {
+    const tables = generatedTables(String(base + i), PLAN_OPTS);
+    if (planPasses(tables.plan) && tablesPass(tables)) {
+      return { ok: false, why: `ws${ws}: skipped candidate ${base + i}, which PASSES — that is luck, not cause` };
+    }
+  }
+  return { ok: true, why: `ws${ws}: ${picked.tries - 1} skipped, all refused for cause` };
+}
+
 import {
   AFTER_RUN_BEATS, DEBRIEF_HOLD_MS, RECAP_BACKSTOP_MS, RECAP_HOLD_MS, SHOW_BEATS,
   RUNDOWN_BEATS, holdMsFor, missionEndsRun, nextShowBeat, railDrainPct, recapAfterMs,
-  remainingMs, rundownRibbon, RUN_END,
+  remainingMs, rundownRibbon, RUN_END, isTalkBeat,
+  REUNION_PLAN, reunionBeatAt, rollCallRevealed,
 } from '../src/party/show.js';
-import { missionFor, MISSION_TABLE } from '../src/party/mission.js';
+import { missionFor, MISSION_DRILL } from '../src/party/mission.js';
 import { ROOMS, hunterVisibleToGuide } from '../src/party/coverage.js';
 import { buildPlan } from './genspike.mjs';
 import { DROP_RATE, GRADES, STALE_MAX, gradeFor, intelFor, intelLine } from '../src/party/intel.js';
@@ -76,10 +92,11 @@ import {
 } from '../src/party/look.js';
 import { COMPOSITION, dealCast } from '../src/party/cast.js';
 import { isNightToken } from '../src/party/palette.js';
-import { BALLROOM_POINTS } from '../src/lighting/ballroom-rig.js';
 import { leftoverRuns, barrierFillForEdge } from '../src/game/dig-policy.js';
 import { MATRIX } from '../net/party/entitle.js';
-import { FANOUT_KEYS, fanoutViolations } from '../net/party/local.mjs';
+import { FANOUT_FORBIDDEN, FANOUT_KEYS, fanoutViolations } from '../net/party/local.mjs';
+import { OUTCOME, outcomeLine } from '../src/party/win.js';
+import { PHASE, SECONDS } from '../src/party/phases.js';
 import { existsSync, openSync, readSync, closeSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -159,6 +176,14 @@ console.log('\nparty-warm — the lobby-warm night');
     { kind: 'noms', standing: [{ nominator: 'p1', target: 'p2' }] },
     // 🍮 The merged pair. Name only — the words are pushed to two sockets and are not a cue.
     { kind: 'pair', pairs: [{ a: 'p1', b: 'p2', name: 'JELLIE' }] },
+    // 🔨 The nominator swings. Public ids; SHOWRUNNER is the taken-nominator sentinel.
+    { kind: 'execute', executioner: 'p1', target: 'p2' },
+    /*
+     * 📍 Where the guide sent her. The one cue the television is TOLD and may not DRAW — the
+     * mansion lives in the follow slot, so a door tapped on a handset becomes a destination here
+     * or nowhere. `runner-intel.mjs` RI9 is the control that keeps it off the picture.
+     */
+    { kind: 'pin', x: 1.5, z: -2.0, roomId: 'r0.hall', pinKind: 'room' },
   ];
   let clean = 0;
   for (const cue of GOOD) {
@@ -220,6 +245,19 @@ console.log('\nparty-warm — the lobby-warm night');
     && CUE_KEYS.noms.includes('standing')
     && CUE_NOM_KEYS.every((k) => FANOUT_KEYS.nomRow.includes(k))
     && cueViolations({ kind: 'noms', standing: [{ nominator: 'p1', target: 'p2', role: 'PLANT' }] }).length > 0);
+  t('W3j · execute is a closed public cue — nominator swings, no role, no ninth body',
+    cueViolations({ kind: 'execute', executioner: 'p1', target: 'p2' }).length === 0
+    && cueViolations({ kind: 'execute', executioner: 'SHOWRUNNER', target: 'p2' }).length === 0
+    && cueViolations({ kind: 'execute', executioner: '', target: '' }).length === 0
+    && CUE_EXECUTE_KEYS.includes('executioner') && CUE_EXECUTE_KEYS.includes('target')
+    && FANOUT_KEYS.lynchResult.includes('executioner')
+    && FANOUT_KEYS.lynchResult.includes('executed')
+    && cueViolations({ kind: 'execute', executioner: 'p1', target: 'p2', role: 'PLANT' }).length > 0);
+  t('W3k · intros may name public-dead wreckage — ids, never a role',
+    cueViolations({ kind: 'intros', cast: CAST, wrecked: ['p8'] }).length === 0
+    && CUE_KEYS.intros.includes('wrecked')
+    && cueViolations({ kind: 'intros', cast: CAST, wrecked: ['p8'], alignment: 'evil' }).length > 0
+    && cueViolations({ kind: 'intros', cast: CAST, wrecked: [1] }).length > 0);
 }
 
 // ---- W4 · the pad and the world report -------------------------------------------------------
@@ -308,6 +346,29 @@ console.log('\nparty-warm — the lobby-warm night');
   t('W6b · the seed is stringified identically on both sides',
     planOptsFor(7).seed === '7' && planOptsFor('7').seed === '7' && planOptsFor(null).seed === '0');
 
+  /*
+   * ⚠️ **W6d2 AND W14c USED TO PIN THE COUNT 24, AND THAT WAS THE WRONG SURFACE.**
+   *
+   * Both asked `tries === 1` on all 24 seeds and read a bare `24/24`. The sentence they carry is
+   * "accepted on their merits, not by fallback" / "not by retry luck" — and a count cannot say
+   * that. A retry is only luck if the candidate it skipped was FINE; a retry that steps over a
+   * genuinely broken house is the picker working. When `tablesPass` landed and started refusing
+   * ws17 — whose ballroom's only portal opens into a 27.2x1.7 m corridor with no onward portal,
+   * so the runner spawns in the ballroom and cannot leave — both went red for the picker doing
+   * exactly its job, and the tempting fix was to write 23.
+   *
+   * That is the `episode-order` lesson again (`CLAUDE.md`): assert that the machines AGREE, never
+   * a fixed answer, or the gate has to be edited every time the world legitimately changes and
+   * nobody can tell an edit-for-cause from an edit-to-green. So these now assert the INVARIANT —
+   * every seed lands an `ok` pick and never the fallback, and every candidate skipped on the way
+   * was refused by `planPasses`/`tablesPass` rather than passed over. A picker that started
+   * skipping good houses goes red; a world that grows one more broken seed does not.
+   */
+  const causeAudit = [];
+  for (let ws = 0; ws < 24; ws++) causeAudit.push(skippedForCause(ws));
+  const causeBad = causeAudit.filter((r) => !r.ok);
+  const retried = causeAudit.filter((r) => !/: 0 skipped/.test(r.why));
+
   let allOk = true, worst = 0, sameSeed = 0;
   for (let ws = 0; ws < 24; ws++) {
     const picked = pickPlanSeed(ws);
@@ -337,7 +398,12 @@ console.log('\nparty-warm — the lobby-warm night');
   t('W6d control · the check really does reject a house without the mission rooms in it',
     rejected > 0, `${rejected}/24 three-room plans refused — this is why PLAN_OPTS.rooms is 6`);
   t('W6d2 · and the six-room plans it accepts are accepted on their merits, not by fallback',
-    pickPlanSeed(0).ok && sameSeed === 24, `${sameSeed}/24 clean on the first candidate`);
+    allOk && causeBad.length === 0,
+    `24/24 landed an ok pick, never the fallback; ${retried.length} needed a retry and every `
+    + `candidate skipped was refused for cause${causeBad.length ? ` — ${causeBad[0].why}` : ''}`);
+  t('W6d3 control · a candidate that PASSES is never skipped — this is what "not by luck" means',
+    skippedForCause(17).ok && /refused for cause/.test(skippedForCause(17).why),
+    `ws17 is the live case: ${skippedForCause(17).why}`);
   t('W6e · the pick is deterministic — the TV and the phone derive the same house',
     pickPlanSeed(11).seed === pickPlanSeed(11).seed && pickPlanSeed(11).seed === pickPlanSeed('11').seed);
 
@@ -737,8 +803,10 @@ console.log('\nparty-warm — the lobby-warm night');
   }
   t('W14b · every world seed 0..23 puts the ballroom in an env corner',
     corners === 24, `${corners}/24`);
+  const cornerCause = Array.from({ length: 24 }, (_, ws) => skippedForCause(ws)).filter((r) => !r.ok);
   t('W14c · and homeCorner does that on the first candidate, not by retry luck',
-    firstTry === 24, `${firstTry}/24 first-try`);
+    corners === 24 && cornerCause.length === 0,
+    `${firstTry}/24 first-try; the rest retried past candidates refused for cause, not skipped`);
 
   let rejectedCorner = 0;
   for (let s = 0; s < 48; s++) {
@@ -863,7 +931,17 @@ console.log('\nparty-warm — the lobby-warm night');
     && spaceKind({ id: 'study_w', order: 'study' }) === 'study'
     && spaceKind({ id: 'c0.3' }) === null
     && byAuth('grand-piano').every((p) => p.spaceId === 'ballroom')
-    && byAuth('chandelier').length === 2 && byAuth('chandelier').every((p) => p.spaceId === 'ballroom')
+    /*
+     * 🔄 **THIS LINE USED TO REQUIRE TWO CHANDELIERS IN THE BALLROOM. JOHN REVERSED IT**
+     * (2026-08-28): *"there are two placed chandeliers that are lower seen in wide. Delete them
+     * from the ballroom spawn. the other two are part of the asset."* The catalog GLB hangs at
+     * `liftY 2.85` in a 9.60 m room, at eye level, unlit — while `lighting/ballroom-rig.js` hangs
+     * the asset's own LIT fixtures at ~7.3 m in the same room. The prop is rehomed to the gallery
+     * rather than deleted, because W14n below still requires all 24 smash ids to be placed.
+     * The assertion is kept and inverted rather than dropped: the ballroom is the room it must
+     * never be in, and that is now the thing under lock.
+     */
+    && byAuth('chandelier').length >= 1 && byAuth('chandelier').every((p) => p.spaceId !== 'ballroom')
     && ['wingback', 'settee', 'chaise', 'ottoman'].every((id) => byAuth(id).every((p) => p.spaceId === 'study_w'))
     && byAuth('armor').length >= 1 && byAuth('armor').every((p) => p.spaceId === 'service')
     && byAuth('table-round').every((p) => p.spaceId === 'chapel')
@@ -1102,9 +1180,20 @@ console.log('\nparty-warm — the lobby-warm night');
 
   const phonePad = await readFile(new URL('../src/views/party-phone.js', import.meta.url), 'utf8');
   const bedSrcFeel = await readFile(new URL('../src/game/follow-bed.js', import.meta.url), 'utf8');
-  t('W15p · the phone nub and the bed both read the exported zone, not a restated 0.12',
+  /*
+   * ⚠️ **`stickCamMove(` LEFT THE BED ON 2026-09-01 AND THIS CHECK HAD TO STOP ASKING FOR IT.**
+   * John's lock: the runner AUTO-WALKS the guide's pin and *"the STICK is a lateral dodge only"*,
+   * so the driven branch no longer turns a 2-axis thumb into camera-relative strafe — it turns
+   * one axis into a lateral through `runner-intel.js` `dodgeLateral`. The RULE this line is about
+   * is unchanged and is the reason it still greps for two things: the deadzone is EXPORTED and
+   * read, on both machines, rather than restated as a number in either. `stickMag` is still the
+   * bed's own reader; `DODGE.dead` is the dodge's, and it is exported for exactly this reason.
+   */
+  const intelSrcFeel = await readFile(new URL('../src/game/runner-intel.js', import.meta.url), 'utf8');
+  t('W15p · the phone nub and the bed both read an exported zone, not a restated 0.12',
     /STICK_DEADZONE/.test(phonePad) && !/> 0\.12/.test(phonePad)
-    && /stickCamMove\(/.test(bedSrcFeel) && /stickMag\(/.test(bedSrcFeel));
+    && /stickMag\(/.test(bedSrcFeel)
+    && /DODGE\.dead/.test(intelSrcFeel) && !/> 0\.12/.test(bedSrcFeel));
 }
 
 // ---- W16 · PR B cyan policy (THREE-free) — envelope keeps G, inter-room does not ------------
@@ -1360,7 +1449,7 @@ console.log('\nparty-warm — the lobby-warm night');
     /armMission\(c\.episode \?\? 1\)/.test(bedSrc) && /function armMission/.test(bedSrc));
 }
 
-// ---- W20 · WORD FROM THE HOUSE IS FOR THE CHAIRS ---------------------------------------------
+// ---- W20 · WORD FROM THE HOUSE IS GONE FROM THE CHAIRS TOO -----------------------------------
 //
 // John, playing the GOOD guide: the map was drawing its static — which is that guide's blindness,
 // working as designed — with *"No word on the hunter"* printed six pixels underneath it. Two
@@ -1368,8 +1457,9 @@ console.log('\nparty-warm — the lobby-warm night');
 // close, arriving from the other side.
 //
 // #12 took the strip off the RUNNER on the same argument: that seat already has a channel — a human
-// being talking to them. The guide's channel is the map. The one seat the strip was ever for is the
-// CHAIR, where it is a watcher's whole contribution.
+// being talking to them. The guide's channel is the map. DUSK then took it off the WATCHERS too:
+// the house-word block was sitting between the emote pad and "Your card — HOLD TO READ." Watchers
+// react; they do not get a house line. Production guides still get their feed.
 //
 // ⚠️ Asserted from SOURCE, because `views/party-phone.js` is a DOM view and this gate runs in bare
 // node with no `npm install`. The rendered claim is `party-playtest-drive.mjs` E6d.
@@ -1391,8 +1481,8 @@ console.log('\nparty-warm — the lobby-warm night');
     && !/intelBlock\(frame\)/.test(guideBranch));
   t('W20b · the runner\'s pad still has no intel block at all',
     !/intelBlock\(/.test(runnerBranch));
-  t('W20c control · a SEATED watcher keeps it — the strip was moved to one seat, not deleted',
-    /intelBlock\(frame\)/.test(seatedBranch));
+  t('W20c · a SEATED watcher has no house-word block — the strip is gone from the chairs too',
+    !/intelBlock\(/.test(seatedBranch));
 
   /*
    * 🚨 **AND IT IS KEYED TO THE ALIGNMENT, NOT TO THIS TICK'S GRADE.** `intelFor` returns null
@@ -1597,11 +1687,18 @@ console.log('\nparty-warm — the lobby-warm night');
 
 // ---- W27 — NIGHT LOOP: RECAP → DEBRIEF → CASTING, CHAPEL TABLE ON EP2 ----------------------
 {
-  t('W27 · debrief is a show beat — Recap is not the end of the night',
+  /*
+   * ⚠️ **INVERTED 2026-08-28 — `execution` no longer hands straight back to Casting.**
+   * The chain grew a seventh beat between them, so the assertion that used to pin
+   * `nextShowBeat('execution') === 'casting'` was pinning the ABSENCE of an ending. It now pins
+   * the walk through the Verdict, and `nextShowBeat('verdict')` is Casting only as the DEFAULT —
+   * `progressShow` overrules it on a finished season (`party-night` N17h / N17j gate both sides).
+   */
+  t('W27 · debrief is a show beat, and the run walks all the way to the Verdict',
     SHOW_BEATS.includes('debrief') && SHOW_BEATS.includes('reckoning')
-      && AFTER_RUN_BEATS.join(',') === 'recap,debrief,reckoning,vote,execution,casting'
+      && AFTER_RUN_BEATS.join(',') === 'recap,debrief,reckoning,vote,execution,verdict,casting'
       && nextShowBeat('recap') === 'debrief' && nextShowBeat('debrief') === 'reckoning'
-      && nextShowBeat('execution') === 'casting');
+      && nextShowBeat('execution') === 'verdict' && nextShowBeat('verdict') === 'casting');
   // Debrief 75s -> 300s on 2026-08-25: a CEILING now, ended by a majority tapping READY
   // (`party-night` N21). What the change cost the night budget is argued in `round-loop` R2.
   t('W27a · holds are the shooting-schedule seconds, not a silent second table',
@@ -1612,27 +1709,41 @@ console.log('\nparty-warm — the lobby-warm night');
     && /function enterNextCasting/.test(localSrc)
     && /scheduleShowProgress\(room\)/.test(localSrc)
     && /function endRunOnMission/.test(localSrc));
+  t('W27b2 · enterNextCasting asks the fold before opening another Casting (H277)',
+    /function enterNextCasting[\s\S]{0,500}seasonOver\(room\)/.test(localSrc)
+    && /function seasonOver/.test(localSrc));
   t('W27c · mission done still posts SMASHED and then schedules the walk, not a soft end',
     /setShow\(room, 'recap', RUN_END\.SMASHED\)/.test(localSrc)
     && /scheduleShowProgress\(room\)/.test(localSrc));
   t('W27d · CAUGHT is still reserved — hunter take is still the next slice',
     !/RUN_END\.CAUGHT/.test(localSrc));
   const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
-  t('W27e · debrief is not painted as a run, and the host canLock looks at this pair not last episode\'s',
-    /const onTalk = show === 'recap' \|\| show === 'debrief'/.test(hostSrc)
+  /*
+   * ⚠️ **REWRITTEN 2026-08-28 — this pinned a HAND-WRITTEN COPY of TALK_BEATS.** It asserted the
+   * literal text `const onTalk = show === 'recap' || show === 'debrief'`, which locked in the
+   * second table rather than the behaviour: `onRun` reads `onTalk`, and `hasPair` is still true at
+   * the Verdict, so the first beat the copy had never heard of would have painted the expedition
+   * over the Showrunner. It is derived now, and the assertion follows — plus the control that
+   * `show.js` really does class every seated beat as one, so "derived" is not derived from a lie.
+   */
+  t('W27e · the host derives its seated beats from TALK_BEATS, and canLock looks at this pair',
+    /const onTalk = show === 'recap' \|\| onStage;/.test(hostSrc)
+    && !/const onTalk = show === 'recap' \|\| show === 'debrief'/.test(hostSrc)
+    && ['debrief', 'reckoning', 'vote', 'execution', 'verdict', 'reunion'].every(isTalkBeat)
+    && !isTalkBeat('recap') && !isTalkBeat('expedition') && !isTalkBeat('casting')
     && /!pair\.runner/.test(hostSrc)
     && /show === 'debrief'/.test(hostSrc));
-  t('W27f · episode 2+ smashes the chapel catalog table-round, not a invented GLB',
-    missionFor(1).target === 'painting' && missionFor(2).target === 'table-round'
-      && missionFor(2).room === 'chapel'
-      && missionFor(undefined).target === 'painting'
-      && MISSION_TABLE.catalogId === 'table-round'
-      && FURN_SMASH_ASSETS.some((a) => a.id === 'table-round' && a.file === 'rrr_prop_table-round_v1.glb')
-      && CATALOG_ROOM_ASSIGN['table-round'].rooms[0] === 'chapel');
+  t('W27f · episode 1 is the twin smash; episode 2+ is the gallery drill, not a chapel table',
+    missionFor(1).target === 'twin-painting' && missionFor(2).target === 'wall-cam'
+      && missionFor(2).room === 'gallery'
+      && missionFor(undefined).target === 'twin-painting'
+      && MISSION_DRILL.job === 'drill'
+      && missionFor(3) === MISSION_DRILL);
   const bedSrc = await readFile(new URL('../src/game/follow-bed.js', import.meta.url), 'utf8');
-  t('W27g · the follow bed finds the dressed table-round and keeps the ep1 painting',
-    /function findTableRound/.test(bedSrc)
-    && /buildPainting\(gallery/.test(bedSrc)
+  t('W27g · the follow bed builds twin paintings and a wall cam, and re-arms per episode',
+    /function buildTwinPaintings/.test(bedSrc)
+    && /function buildWallCam/.test(bedSrc)
+    && /buildTwinPaintings\(gallery/.test(bedSrc)
     && /armMission/.test(bedSrc)
     && /missionFor/.test(bedSrc));
   t('W27h · beginCasting clears the last pair so episode 2 can ballot',
@@ -1718,17 +1829,26 @@ console.log('\nparty-warm — the lobby-warm night');
   t('W28f · talk/lynch beats are matched before the lobby sheet',
     talkIdx >= 0 && lobbyIdx >= 0 && talkIdx < lobbyIdx,
     `talk@${talkIdx} lobby@${lobbyIdx}`);
-  t('W28g · empty Reckoning hold is the timer path — progressShow still walks for gates',
+  t('W28g · empty Reckoning is one clock — zero standing skips the vote, it does not re-arm',
     /export function expireShowHold/.test(localSrc)
-    && /reckoningEmptyExtends/.test(localSrc)
-    && /EMPTY_RECKONING_EXTEND_CAP/.test(localSrc)
-    && /export function applyNominate/.test(localSrc));
+    && /export function applyNominate/.test(localSrc)
+    && /why: 'clock'/.test(localSrc)
+    && /nominations\?\.length \?\? 0\) === 0/.test(localSrc)
+    && /enterVerdictLive\(room\)/.test(localSrc)
+    && !/reckoningEmptyExtends = used \+ 1/.test(localSrc));
   t('W28h · Reckoning buzzes the pad so a face-down phone wakes',
     /beat === 'reckoning'/.test(phoneSrc)
     && /padFx\('Reckoning\.'/.test(phoneSrc)
     && /\[0, 45, 55, 120\]/.test(phoneSrc));
-  t('W28i · TV empty standing says waiting on phones, not a silent skip',
-    /Waiting on phones — nominate/.test(hostSrc));
+  /*
+   * W28i moved with the round-2 hierarchy pass (W37b). The concern is unchanged — an empty
+   * Reckoning must not read as a silent skip — but the instruction no longer lives in the side
+   * board's empty state, because that state was reserving a fifth of the television to duplicate
+   * a sentence the kicker under the picture was already carrying. The kicker IS the instruction
+   * now, and it is the one the room could always read; this asserts it is still on the beat.
+   */
+  t('W28i · the Reckoning still tells the room to nominate — from the kicker, not an empty board',
+    /kicker: 'Nominate\. First tap stands\.', beat: 'reckoning'/.test(hostSrc));
   t('W28j · nominated players do not see themselves on the lynch ballot',
     /function paintLynchVote/.test(phoneSrc)
     && /n\.target !== me\.playerId/.test(phoneSrc));
@@ -1755,8 +1875,10 @@ console.log('\nparty-warm — the lobby-warm night');
     && /name: 'orbit'/.test(introSrc)
     && /name: 'across'/.test(introSrc)
     && /name: 'pair'/.test(introSrc)
+    && /name: 'wide'/.test(introSrc)
+    && /name: 'push'/.test(introSrc)
     && /function talkFrame/.test(introSrc)
-    && /if \(talk\)/.test(introSrc));
+    && /if \(talk && !deadAtSpawn\)/.test(introSrc));
   t('W31c · casting intros keep the snap-to-new-robot path; talk does not steal it',
     /if \(i !== focusI\)/.test(introSrc) && /INTRO_FOV/.test(introSrc)
     && /talking \? TALK_FOV : INTRO_FOV/.test(introSrc));
@@ -1794,13 +1916,18 @@ console.log('\nparty-warm — the lobby-warm night');
     && /space\.colliders\.push\(box\)/.test(introSrc)
     && /r\.via/.test(introSrc)
     && /c\._noSight/.test(roomSrc));
+  // W32b moved with the casting redress (W36 below). Casting no longer runs through `talkStage`,
+  // so `beat: 'casting'` and the `aside: ballotBoard` side column are gone with the rest of that
+  // beat's chrome. The invariant this gate was actually protecting — casting and recap both sit
+  // on the seated-circle picture rather than a black plate — is unchanged, and is what it still
+  // asserts, now against `castStage`'s frame.
   t('W32b · Casting and Recap keep the seated-circle talk picture, not a black plate',
     /const onCircle = /.test(hostSrc)
     && /onRecap \|\| onCastPicture/.test(hostSrc)
     && /show === 'casting' && ui\.introsDone/.test(hostSrc)
     && /beat: 'recap'/.test(hostSrc)
-    && /beat: 'casting'/.test(hostSrc)
-    && /aside: ballotBoard/.test(hostSrc));
+    && /function castStage/.test(hostSrc)
+    && /intro-frame talk-frame/.test(hostSrc));
   t('W32c · expedition hides the runner twin and keeps the chairs — it does not dispose the circle',
     /holdForRun/.test(bedSrc)
     && /intro\?\.holdForRun\?/.test(bedSrc)
@@ -1873,12 +2000,44 @@ console.log('\nparty-warm — the lobby-warm night');
   const followSrc = await readFile(new URL('../src/party/follow.js', import.meta.url), 'utf8');
   const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
   const localSrc = await readFile(new URL('../net/party/local.mjs', import.meta.url), 'utf8');
-  t('W26g · the bed drives with stickCamMove + the operator basis, not heading+forward-only',
-    /stickCamMove\(/.test(bedSrc)
-    && /operator\.basisYaw\(/.test(bedSrc)
+  const intelSrc = await readFile(new URL('../src/game/runner-intel.js', import.meta.url), 'utf8');
+  /*
+   * 🚶 **THIS ASSERTION USED TO SAY THE OPPOSITE, AND JOHN REVERSED IT ON 2026-09-01.**
+   *
+   * It read *"the bed drives with `stickCamMove` + the operator basis, not heading+forward-only"*,
+   * and that was the right rule for a night when the phone WAS the body: a free 2-axis stick has
+   * to be camera-relative or pushing up walks out of frame, and a heading-plus-forward drive was
+   * the old broken shape that read as a robot on rails.
+   *
+   * The lock that replaced it: the runner AUTO-WALKS the guide's pin one door at a time, and
+   * *"the STICK is a lateral dodge only… cannot steer into another room."* So heading-plus-forward
+   * is now exactly what the bed must do — the heading comes from `pathPortals` toward a door a
+   * HUMAN tapped, and the thumb's whole authority is the lateral. Three arguments, from the sofa:
+   * a body that finds the gallery by itself makes the guide decorative and kills the twin-painting
+   * lie; driving a first-person body through a generated house on a phone is a worse game than
+   * listening to somebody shout at you; and a free stick lets an evil runner burn the clock
+   * standing in a corridor with nothing for the room to argue about.
+   *
+   * 🚨 **THE OLD RULE IS RE-STATED AS AN EXECUTED NEGATIVE, NOT DELETED** — `friday-couch` FC4f's
+   * discipline. If the camera-relative drive ever comes back into the driven branch this reddens,
+   * rather than the reversal being a thing a reader has to remember.
+   */
+  t('W26g · the bed AUTO-WALKS the pin and the thumb is a lateral dodge only',
+    /autoWalkInput\(/.test(bedSrc)
+    && /dodgeLateral\(/.test(bedSrc)
+    && /clampToRoom\(/.test(bedSrc)
+    && /pathPortals\?\.\(runner\.pos/.test(bedSrc)
     && /liveRunShot\(/.test(bedSrc)
     && !/perf\.stickRef/.test(bedSrc)
     && !/move: \{ x: 0, y: mag \}/.test(bedSrc));
+  t('W26g2 control · the camera-relative free stick is GONE from the driven branch',
+    !/const move = stickCamMove\(s\.x, s\.y\)/.test(bedSrc)
+    && !/aimYaw: operator\.basisYaw\(\),\n\s*\}\);\n\s*missionTick/.test(bedSrc.replace(/\r\n/g, '\n')));
+  t('W26g3 · and the forward axis is dropped in ONE place, in the brain, not on the phone',
+    /export function dodgeLateral/.test(intelSrc)
+    && /stickX/.test(intelSrc)
+    && !/stickY/.test(intelSrc)
+    && /'t', 'x', 'y', 'lookX', 'lookY', 'run', 'swing', 'act', 'hide'/.test(followSrc));
   /*
    * ⚠️ **THE RULE IS UNCHANGED; THE FUNCTION THAT ENFORCES IT MOVED.** A live run still refuses a
    * mid-run cut to shoulder / lead / doorway — those invert a camera-relative stick and take the
@@ -1892,19 +2051,58 @@ console.log('\nparty-warm — the lobby-warm night');
     /liveRunShot\(mode, opts\.pinShot\) === 'chase'\) return/.test(bedSrc)
     && /lockShot: want/.test(bedSrc)
     && /const want = runPerspective\(mode, opts\.pinShot, perf\.perspective\)/.test(bedSrc)
-    && /if \(PERSPECTIVES\.includes\(c\.shot\)\) \{ perf\.perspective = c\.shot; return; \}/.test(bedSrc)
+    && /if \(PERSPECTIVES\.includes\(c\.shot\)\) \{ perf\.perspective = c\.shot; perf\.pinned = true; return; \}/.test(bedSrc)
     && /until = 1e9/.test(bedSrc));
+  /*
+   * 🚪 **AND THE EXPEDITION NOW PICKS ITS OWN CAMERA, WITH `P` AS AN OVERRIDE THAT EXPIRES.**
+   * John: *"each expedition takes place outside the ball room… it's top down perspective."* So
+   * two authorities write `perf.perspective` and they need a rule rather than a race: the
+   * ballroom threshold writes it on a crossing and clears any pin, the dev key writes it and
+   * raises one. That keeps `P` usable for inspecting ceiling art in play (`ballroom-next.md`)
+   * without letting it strand the show in a perspective the expedition never asked for.
+   */
+  t('W26h3 · the ballroom threshold owns the camera, and a crossing takes it back from `P`',
+    /const loopWant = stepBallroomView\(perf\.loopView, runner\.pos, ballroom\);/.test(bedSrc)
+    && /perf\.pinned = false;\s+\/\/ a crossing is the loop taking its camera back/.test(bedSrc)
+    && /\} else if \(!perf\.pinned\) \{/.test(bedSrc));
   t('W26h2 control · and a director shot can still never be held on a run unless it was TYPED',
     ['shoulder', 'lead', 'doorway'].every((s) => runPerspective('run', null, s) === 'chase')
       && runPerspective('run', 'shoulder', null) === 'shoulder',
     'only ?shot= pins a director shot');
-  t('W26i · the runner phone is a pad — two sticks, no chase embed, eyes on the TV',
+  t('W26i · the runner phone is a pad — no chase embed, eyes on the TV',
     !/warmUrl\(/.test(phoneSrc)
     && !/runner-chase-layer/.test(phoneSrc)
     && !/sendChaseCue/.test(phoneSrc)
     && /id="stick"/.test(phoneSrc)
     && /id="stick-look"/.test(phoneSrc)
     && /Eyes on the TV/.test(phoneSrc));
+  /*
+   * 🎥 **AND THE PAD HAS TWO SHAPES NOW, so asserting that the source CONTAINS a look stick is
+   * no longer the same as asserting the player gets one.** Both branches live in this file, so a
+   * grep for `id="stick-look"` passes whatever the top-down sheet actually renders. What has to
+   * hold is the CONDITION: the look stick is inside a `topDown ? '' : ...` arm, the copy differs
+   * between the two, and the camera is in the repaint key or the pad would keep the wrong shape
+   * for the rest of the night.
+   */
+  /*
+   * ⚠️ **THE THIRD CLAUSE CHANGED ON 2026-09-01 BECAUSE THE COPY IT QUOTED BECAME FALSE.**
+   * It read *"The stick is the room — push where you want to go"*, which was the absolute
+   * top-down stick's own sentence. Under John's auto-walk lock the stick no longer takes you
+   * anywhere: the body walks the guide's pin and the thumb only steps sideways. The two things
+   * this check is really about are unchanged and still asserted — the top-down branch renders NO
+   * look stick, and the two camera arms carry DIFFERENT copy, so a phone that took the wrong
+   * shape still reddens.
+   */
+  t('W26i2 · under a plan-locked top-down the look stick is not rendered at all',
+    /const topDown = camView === 'top' \|\| camView === 'iso';/.test(phoneSrc)
+    && /\$\{topDown \? '' : `<div class="stick-col">\s*\n\s*<div class="stick stick-look"/.test(phoneSrc)
+    && /The stick only steps you left or right/.test(phoneSrc)
+    && /the right stick looks/.test(phoneSrc));
+  t('W26i3 · and the camera is part of the sheet\'s repaint key, so it re-shapes on the crossing',
+    /const camStamp = iAmRunner \? `:\$\{frame\?\.you\?\.view \|\| 'chase'\}` : '';/.test(phoneSrc)
+    && /\$\{hasCard\(\) \? 'card' : 'nocard'\}\$\{camStamp\}/.test(phoneSrc));
+  t('W26i4 · the phone learns the camera from its own seat only — never from the TV',
+    /frame\?\.you\?\.view/.test(phoneSrc));
   t('W26j · the guide path is still the map — chase is not mounted on that sheet',
     /guideMapSvg\(/.test(phoneSrc)
     && /iAmGuide/.test(phoneSrc)
@@ -2017,7 +2215,12 @@ console.log('\nparty-warm — the lobby-warm night');
       && RUNDOWN_BEATS[0] === 'lobby'
       && RUNDOWN_BEATS.includes('verdict')
       && !RUNDOWN_BEATS.includes('reunion')
-      && !SHOW_BEATS.includes('verdict'));
+      /* ⚠️ INVERTED 2026-08-28. This read `!SHOW_BEATS.includes('verdict')` and that was the
+         gate FOR the stub — the chip was grey because no beat lit it. Verdict is on the wire
+         now, so the rail lights it with no change to `rundownRailHtml` at all: `live` is
+         `SHOW_BEATS.includes(id)`. The Reunion stays OFF the rail on purpose — the rundown is
+         one EPISODE's schedule, and the Reunion is what happens when there are no more. */
+      && SHOW_BEATS.includes('verdict'));
 
   const lobby = rundownRailHtml({ beat: 'lobby' });
   const debrief = rundownRailHtml({ beat: 'debrief' });
@@ -2060,9 +2263,17 @@ console.log('\nparty-warm — the lobby-warm night');
     && /data-rail-drain/.test(hostSrc)
     && /ON AIR/.test(hostSrc));
 
-  t('W30f · guide map is still never on the TV, and verdict is a stub on the rail',
+  /*
+   * ⚠️ **INVERTED 2026-08-28 — the grey chip lights.** `stub` is the rail's word for "on the
+   * schedule, but nothing on the wire ever reaches it", and Verdict wore it from the day the rail
+   * shipped. It is now `next` from the lobby like every other beat ahead of the playhead. The
+   * control half of this — that NOTHING is a stub any more — is deliberately asserted too: if a
+   * future beat is drawn on the rail before it is wired, this fails and says so.
+   */
+  t('W30f · guide map is still never on the TV, and the verdict chip is no longer a stub',
     !/guideMapSvg/.test(hostSrc) && !/GUIDE_MAP/.test(hostSrc)
-      && lobby.includes('class="show-rail-seg stub" data-rail-seg="verdict"')
+      && lobby.includes('class="show-rail-seg next" data-rail-seg="verdict"')
+      && !lobby.includes('show-rail-seg stub')
       && debrief.includes('class="show-rail-seg on" data-rail-seg="debrief"'));
 
   t('W30g · rail CSS stays inside the shared chrome string — tokens, no hex, no backticks',
@@ -2107,8 +2318,14 @@ console.log('\nparty-warm — the lobby-warm night');
       && /\$\{facts \|\| ''\}/.test(hostSrc)
       && !/function recapBoard/.test(hostSrc));
 
+  /*
+   * The strapline suppression list GROWS — `onCards` joined it when the role-card window stopped
+   * printing SHOW_LINE directly above its own kicker, where the two competed. So this asserts
+   * the terms the recap needs are in the list rather than pinning the list's exact shape; the
+   * `!/onCards/` half of that would just be a spelling test on a growing list.
+   */
   t('W31a · recap hides the show line and locks night-main to one viewport',
-    /onRun \|\| onStage \|\| onRecap \|\| show === 'lobby'/.test(hostSrc)
+    /onRun \|\| onStage \|\| onRecap \|\|[^?]*show === 'lobby'/.test(hostSrc)
       && /\.night\.on-talk \.night-main, \.night\.on-recap \.night-main \{ padding:0 16px 10px; overflow:hidden/.test(skin)
       && /\.night\.on-talk \.night-line, \.night\.on-recap \.night-line \{ display:none/.test(skin));
 
@@ -2225,10 +2442,13 @@ console.log('\nparty-warm — the lobby-warm night');
     && rugSpanForSeats(2.4) >= 2.4
     && /rugScaleForSeats/.test(introSrc)
     && /scaleBallroomRug/.test(introSrc));
-  t('W33e · talk camera walks the outside arc at human speed, lookAt centre',
+  t('W33e · talk camera walks the outside arc at human speed, looking at robots not empty parquet',
     /function walkCamOnRing/.test(introSrc)
     && /CAM_WALK = 1\.35/.test(introSrc)
-    && /look\.set\(cx, LOOK_Y, cz\)/.test(introSrc)
+    && /WIDE_Y = 2\.28/.test(introSrc)
+    && /posOf\(a\)/.test(introSrc)
+    && /name: 'push'/.test(introSrc)
+    && !/look\.set\(cx, LOOK_Y, cz\)/.test(introSrc)
     && /RING_OUT/.test(introSrc));
   t('W33f · a red billboard bang sits above the name tag for standing nominees',
     /attachNomineeBang/.test(introSrc)
@@ -2259,6 +2479,186 @@ console.log('\nparty-warm — the lobby-warm night');
   t('W33j · sitLock pins the model so gait offset cannot unseat the clip',
     /if \(this\.sitLock\) \{[\s\S]*?this\.model\.position\.set\(0, 0, 0\)/.test(playerSrc)
     && /sitIdle = sitIdleM \|\| sitIdleF/.test(await readFile(new URL('../src/characters/mesh-avatar.js', import.meta.url), 'utf8')));
+  /*
+   * John, room DUSK: two accusers clipped then it cut. The nominator already swings in
+   * `executioner()`; Execution was sending an empty `noms` cue and sitting everyone down.
+   * W33o is the picture: that nominator stands, walks the inner ring, swings the existing
+   * sledge. Showrunner is a hold on the accused, not a ninth robot. Grip lock untouched.
+   */
+  const meshSrc = await readFile(new URL('../src/characters/mesh-avatar.js', import.meta.url), 'utf8');
+  const stageSrc = await readFile(new URL('../src/game/accusation-stage.js', import.meta.url), 'utf8');
+  t('W33o · Execution stages the nominator — stand, walk, sledge — or a Showrunner hold',
+    /function cueExecute/.test(hostSrc)
+    && /kind === 'execute'/.test(bedSrc)
+    && /setExecute\(/.test(introSrc)
+    && /function planExecute/.test(stageSrc)
+    && /playLoco/.test(introSrc)
+    && /dropChair/.test(introSrc)
+    && /fillExecuteEye/.test(introSrc)
+    && /SHOWRUNNER/.test(introSrc)
+    && /mountProp\(obj/.test(meshSrc)
+    && /playAttack\(dur/.test(meshSrc)
+    && /GRIP_MOUNT/.test(meshSrc)
+    && !/god-view|setLid\(false\)/.test(introSrc.slice(introSrc.indexOf('function fillExecuteEye'))));
+  /*
+   * John, room DUSK, closed mid-debrief: chairs AND robots gone, then the empty-room
+   * lobby dolly. Two holes: a talk intros with a drifted id-list disposed the bed,
+   * and idle with intro=null flipped mode to warm. Sit was latched once and never
+   * retried on follow `ready`.
+   */
+  t('W33p · a second talk intros during debrief does not dispose the circle',
+    /have === ids \|\| c\.talk/.test(bedSrc)
+    && /A TALK SIT NEVER DISPOSES/.test(bedSrc)
+    && /if\s*\(\s*!c\.talk\s*\)\s*intro\?\.dispose\(\)/.test(bedSrc)
+    && /intro\.releaseRun/.test(bedSrc)
+    && /intro\.setTalk/.test(bedSrc));
+  t('W33q · talk plates look at robot bodies, never the empty rug centre',
+    /WIDE_Y = 2\.28/.test(introSrc)
+    && /name: 'wide'/.test(introSrc)
+    && /name: 'push'/.test(introSrc)
+    && /posOf\(a\)/.test(introSrc)
+    && /posOf\(far\)/.test(introSrc)
+    && !/look\.set\(cx, LOOK_Y, cz\)/.test(introSrc));
+  t('W33r · idle with no intro rebuilds the seated circle, it does not fall into warm',
+    /IDLE IS "SIT THE RUNNER BACK DOWN"/.test(bedSrc)
+    && /idleRebuildCast\(intro, introCast\)/.test(bedSrc)
+    && /talk: true/.test(bedSrc)
+    && /mode = intro \? 'intros' : 'warm'/.test(bedSrc));
+  t('W33s · the TV retries sit on follow ready, same shape as cueRun',
+    /function shouldSit/.test(hostSrc)
+    && /cueSitDown\(\{ retry: true \}\)/.test(hostSrc)
+    && /if \(show === 'expedition'\) ui\.sitCued = false/.test(hostSrc)
+    && /talk:\s*true/.test(hostSrc));
+  /*
+   * John, 29 Aug, LastLook board. The walk-up already existed. The HIT did not:
+   * Attack chopped the floor, Sit_Dodge sat back at t=2s, the chair instance
+   * never toppled, and C was not a picture. W33t is that picture: sledge head
+   * on the seated torso, limp/damaged victim, loose chair, B (or A) as the
+   * main lens, C live then hard-cut gone.
+   */
+  const hitSrc = await readFile(new URL('../src/game/execute-hit.js', import.meta.url), 'utf8');
+  const chromeSrc = await readFile(new URL('../src/party/follow.js', import.meta.url), 'utf8');
+  const viewSrc = await readFile(new URL('../src/views/party-follow.js', import.meta.url), 'utf8');
+  /*
+   * ⚠️ The empty-body ban is scoped to `cloneMeshAvatar`, not the whole file.
+   * A historical note that literally wrote `setLimbVisible() {}` in a comment
+   * made W33t red on 43e9034 while both real implementations were already
+   * `setLimbVisible(socket, visible)`. A comment is not a stub.
+   */
+  const cloneFn = meshSrc.slice(meshSrc.indexOf('export function cloneMeshAvatar'));
+  t('W33t · Execution hit — retarget, wreck, loose chair, last-look C, camera B/A',
+    /function retargetSledge/.test(introSrc)
+    && /function beginHit/.test(introSrc)
+    && /function breakChairOut/.test(introSrc)
+    && /function fillExecuteB/.test(introSrc)
+    && /lastLook\(\)/.test(introSrc)
+    && /HIT_CONTACT = 0\.381/.test(hitSrc)
+    && /THEIR EYES/.test(chromeSrc)
+    && /setScissorTest\(true\)/.test(viewSrc)
+    && /lastLook: \(\) => intro\?\.lastLook/.test(bedSrc)
+    && /setLimbVisible\(socket, visible\)/.test(cloneFn)
+    && !/^\s*setLimbVisible\(\) \{\s*\}/m.test(cloneFn)
+    && !/settleClip/.test(introSrc.slice(introSrc.indexOf('function stepExecute'), introSrc.indexOf('function afterBodies'))));
+  /*
+   * John, sofa, 29 Aug. Episode-2 CASTING sat Ada back in chair 7 and waited
+   * on her empty ballot. W33u is the persist: clearExecute must not parkSit
+   * the victim, the chair stays broken out, and the living list that arms
+   * 3·2·1 reads public deaths. Alignment still hidden until Reunion.
+   */
+  const clearFn = introSrc.slice(introSrc.indexOf('function clearExecute'), introSrc.indexOf('function clearExecute') + 900);
+  const parkFn = introSrc.slice(introSrc.indexOf('function parkSit'), introSrc.indexOf('function parkSit') + 280);
+  const ballotSrc = await readFile(new URL('../src/party/ballot.js', import.meta.url), 'utf8');
+  t('W33u · executed stay wreckage; episode-2 casting living excludes them',
+    /if \(r\.wrecked\) return;/.test(parkFn)
+    && !/parkSit\(exec\.victim\)/.test(clearFn)
+    && !/wrecked\s*=\s*false/.test(clearFn)
+    && !/restoreLooseChair/.test(clearFn)
+    && /looseChairs:\s*\[\]/.test(introSrc)
+    && /function livingFromPublic/.test(ballotSrc)
+    && /function deadIdsFromPublic/.test(ballotSrc)
+    && /livingFromPublic\(\{/.test(hostSrc)
+    && /paintDeadWatch/.test(phoneSrc)
+    && /dead-watch/.test(phoneSrc)
+    && /iAmDead/.test(phoneSrc)
+    && /seatedLivingIds\(\)/.test(hostSrc));
+  t('W33v · wreck is standing set dressing — talk plate + persist across dispose',
+    /WRECK_SHOT/.test(introSrc)
+    && /function applyWreck/.test(introSrc)
+    && /wreckedSeen/.test(bedSrc)
+    && /function sendIntros/.test(hostSrc)
+    && /wreckedCueIds/.test(hostSrc)
+    && /deadIdsFromPublic/.test(hostSrc)
+    && /wrecked: \[\.\.\.wreckedSeen\]/.test(bedSrc)
+    && !/function restoreLooseChair/.test(introSrc));
+  t('W33y · executed wreck is frozen dead — no Idle_M / loco idle, chair offset from torso',
+    /holdDead/.test(introSrc)
+    && /pose = 'dead'/.test(meshSrc)
+    && /if \(pose === 'dead'\)/.test(meshSrc)
+    && /mixer\.stopAllAction/.test(meshSrc)
+    && !/playLoco/.test(introSrc.slice(introSrc.indexOf('function applyWreck'), introSrc.indexOf('function stepWreck')))
+    && !/body\.update\(/.test(introSrc.slice(introSrc.indexOf('function stepWreck'), introSrc.indexOf('function lastLookPose')))
+    && /pitch: 1\.52/.test(hitSrc)
+    && /ux \* 1\.18/.test(hitSrc)
+    && !/function restoreLooseChair/.test(introSrc));
+  t('W33z · wreck smashLook does not dim the shell — face lamp off only',
+    /isFaceScreenName/.test(introSrc)
+    && /emissiveIntensity = 0/.test(introSrc)
+    && !/multiplyScalar\(0\.42\)/.test(introSrc)
+    && !/setLimbVisible\?\.\('shoulderL', false\)/.test(introSrc)
+    && /function smashLook/.test(introSrc));
+  /*
+   * John, 30 Aug, Episode 3 VERDICT after Fox. The follow iframe remounted
+   * (CAM DARK / CAMERA WARMING). introCast was still null. Verdict sit sends
+   * idle first because cuedRunner is set. `introCast.length` threw and painted
+   * VIEW "party.follow" FAILED over a live show. Eight phones kept going.
+   * The overlay said `.length` (John recalled `.image`). Same hole.
+   */
+  t('W33w · idle with a null last-cast does not throw — Verdict after execute',
+    idleRebuildCast(null, null) === null
+    && idleRebuildCast(null, undefined) === null
+    && idleRebuildCast(null, []) === null
+    && idleRebuildCast({ ok: 1 }, [{ id: 'p1' }]) === null
+    && idleRebuildCast(null, [{ id: 'p1' }])?.length === 1
+    && /idleRebuildCast\(intro, introCast\)/.test(bedSrc)
+    && /cue failed/.test(viewSrc));
+  /*
+   * John, same CAST6 table, 30 Aug ~4:09pm. The `.length` hole was the first
+   * throw. The overlay that stayed through Reckoning said `.image`. A render
+   * throw painted `#err` and never hid it. Phones moved on; the TV stayed red.
+   * liveTexture drops a null `.image` / `.images` / missing cube face.
+   * paintViewFail is false once the follow is live. smashLook calls dropDeadMaps
+   * so a wreck still sits on the floor for a late watcher.
+   */
+  const mainSrc = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
+  const dead = { image: null };
+  const cubeMiss = { image: [null, {}, {}, {}, {}, {}] };
+  const ok = { image: { width: 4, height: 4 } };
+  const wiped = { map: dead, envMap: ok, needsUpdate: false };
+  const plate = { style: { display: 'block' }, textContent: 'VIEW FAILED' };
+  t('W33x · verdict after execute cannot throw on null .image; live follow never keeps the red plate',
+    liveTexture(null) === null
+    && liveTexture({ image: null }) === null
+    && liveTexture({ images: null }) === null
+    && liveTexture(cubeMiss) === null
+    && liveTexture(ok) === ok
+    && dropDeadMaps(wiped) === 1
+    && wiped.map === null
+    && wiped.envMap === ok
+    && paintViewFail({ viewId: 'party.follow', live: true }) === false
+    && paintViewFail({ viewId: 'party.follow', live: false }) === true
+    && paintViewFail({ viewId: 'mat.marble', live: true }) === true
+    && clearViewFail({ errEl: plate }) === true
+    && plate.style.display === 'none'
+    && plate.textContent === ''
+    && /paintViewFail\(\{ viewId, live \}\)/.test(mainSrc)
+    && /__rrrClearViewFail/.test(mainSrc)
+    && /dropDeadMaps\(m\)/.test(introSrc)
+    && /picture failed/.test(viewSrc)
+    && /guardSceneTextures/.test(viewSrc)
+    && /function goLive/.test(viewSrc)
+    && /__rrrClearViewFail\?\.\(\)/.test(viewSrc)
+    && /goLive\(\)/.test(viewSrc)
+    && !/function restoreLooseChair/.test(introSrc));
 }
 
 // ---- W34 · NO DOORWAY INTO VOID, AND NOTHING OCCUPIES THE APERTURE --------------------------
@@ -2401,7 +2801,7 @@ console.log('\nparty-warm — the lobby-warm night');
    */
   t('W35c · casting draws the room while every player is head-down on a card',
     /function castBoard/.test(hostSrc)
-      && /body \+= castBoard\(client\.lobby, votes, castWarm\(\)\)/.test(hostSrc)
+      && /body \+= castBoard\(client\.lobby, votes, castWarm\(\), seatedLivingIds\(\)\)/.test(hostSrc)
       && SHOW_CHROME_CSS.includes('.cast-lamp'));
   /*
    * ⚠️ **THE FOOT OF THAT BOARD MUST BE A NUMBER THAT CAN MOVE.** The first cut printed
@@ -2528,9 +2928,16 @@ console.log('\nparty-warm — the lobby-warm night');
    * `step` is the talk beats and `holdStep` is the run, and a stream frozen mid-expedition would
    * be a line of static glyphs hanging in the ballroom.
    */
+  /*
+   * ⚠️ The window was 160 characters and that made it a spelling test. The accusation stage
+   * added `stage.step(dt)` and a comment at the top of `holdStep`, which pushed `stream.step`
+   * past it — the stream was still being stepped on the very next line. The claim is "the
+   * stream is stepped inside holdStep", not "it is the first thing in it", so the window is
+   * wide enough to survive a neighbour being added and still far too tight to jump a function.
+   */
   t('W36a · and it is STEPPED from both bed loops, not merely built',
     (bedSrc.match(/stream\.step\(dt, engine\.camera\);/g) || []).length === 2
-      && /holdStep\(dt, t\) \{[\s\S]{0,160}?stream\.step/.test(bedSrc));
+      && /holdStep\(dt, t\) \{[\s\S]{0,600}?stream\.step/.test(bedSrc));
 
   /*
    * 🔒 THE PRIVACY CONTROL, AND IT IS THE MOST IMPORTANT ASSERTION IN THIS BLOCK.
@@ -2716,7 +3123,11 @@ console.log('\nparty-warm — the lobby-warm night');
    * meshes back regardless, so a build that mounted three chandeliers and forgot `points` would
    * hang three unlit props in a dark room and satisfy any check that counted objects. John chose
    * the NIGHT reading of the asset: the fixtures are the light source.
+   *
+   * Read out of source: `ballroom-rig.js` imports THREE and CI has no `npm install`.
    */
+  const rigSrc = await readFile(new URL('../src/lighting/ballroom-rig.js', import.meta.url), 'utf8');
+  const BALLROOM_POINTS = Number((rigSrc.match(/export const BALLROOM_POINTS = (\d+)/) || [])[1]);
   t('W37a control · and it asks for point lights, or the fixtures are unlit props in a brown box',
     /points: 3,/.test(bedSrc2) && BALLROOM_POINTS === 0,
     `the rig defaults to ${BALLROOM_POINTS}; the party night asks for 3`);
@@ -3216,21 +3627,32 @@ console.log('\nparty-warm — the lobby-warm night');
     'height stays a max, shrink stays enabled');
 
   /*
-   * THE STRIP IS PATCHED PER PLAYER. It used to assign `innerHTML` for the whole row, which
-   * destroys and recreates all six chips whenever any one of them changes — several times a
-   * second during a run — restarting every entrance animation and making the strip judder under
-   * the picture. Keyed on the player and ordered by SEAT so nobody's chip moves when someone
-   * else reacts; a moved node restarts its animation just as a rebuilt one does.
+   * THE STRIP IS PATCHED PER EVENT. It used to assign `innerHTML` for the whole row, which
+   * destroys and recreates every chip whenever any one of them changes — several times a
+   * second during a run — restarting every rise. It then keyed on the PLAYER, which swallowed
+   * spam: a second clap from the same seat reused the node. Keyed on `{from, at}` now, newest
+   * first, with --dx so stacked taps do not ride the same path.
    */
   const host = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
   // `\r?\n`, for the same reason W17a-pre carries it: a Windows checkout writes `}\r\n`.
   const painter = host.match(/function paintReactStrip\(\)[\s\S]*?\r?\n {2}\}\r?\n/)?.[0] ?? '';
   t('W45-pre · the strip painter was extracted', painter.length > 400, `${painter.length} chars`);
-  t('W45 · one arrival touches one chip · the row is never rebuilt, and it is ordered by seat',
+  t('W45 · one arrival is one chip keyed on the EVENT, not the player · spam stacks with --dx/--dy',
     !/mount\.innerHTML\s*=/.test(painter)
-      && /dataset\.rk === e\.from/.test(painter)
-      && /sort\(\(a, b\) => seatOf\(a\.from\) - seatOf\(b\.from\)\)/.test(painter)
-      && /el\.remove\(\)/.test(painter));
+      && /dataset\.rk = rk/.test(painter)
+      && !/dataset\.rk === e\.from/.test(painter)
+      && /--dx/.test(painter)
+      && /--dy/.test(painter)
+      && /\(\(e\.at % 11\) - 5\) \* 12/.test(painter)
+      && /\(\(e\.at % 7\) - 3\) \* 8/.test(painter)
+      && /b\.at - a\.at/.test(painter)
+      && /el\.remove\(\)/.test(painter)
+      && /childElementCount === live\.length/.test(painter));
+  t('W45b · a stable expedition does not paint — world ticks patch facts, reacts patch the strip',
+    /prevBeat === 'expedition' && ui\.beat === 'expedition'/.test(host)
+    && /function patchRunChrome/.test(host)
+    && /m\.t === 'react'[\s\S]{0,80}paintReactStrip\(\)/.test(host)
+    && !/savedStrip/.test(host));
 
   /*
    * MOTION. Every loop rests at both ends and none alternate, so a chip replaced mid-flight
@@ -3250,6 +3672,451 @@ console.log('\nparty-warm — the lobby-warm night');
     /@media \(prefers-reduced-motion: reduce\)/.test(skin)
       && /\.bot-badge[\s\S]{0,160}animation: none !important/.test(skin),
     'badge · run-face · rec dot · react chip');
+}
+
+// ---- W36 · CASTING IS THE PICTURE — FULL-BLEED FEED, BALLOTS AS AN OVERLAY -----------------
+//
+// John, on the casting screen: drop the `n of m` ballot counter, the `live · casting · seat n`
+// lower third and the `ballots land here` kicker; drop the `X walks · Y talks` hero because it is
+// re-cast every episode; make the feed bigger and let it run into the right-hand column; and
+// float the ballot results over the feed instead of beside it.
+//
+// The four cuts are asserted ABSENT rather than merely removed — this block is what stops any of
+// them coming back the next time the beat is dressed. What is NOT cut is asserted too: the lamps
+// and the bake bar are the two things on this screen that carry a fact nothing else carries.
+{
+  const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
+  const skin = await readFile(new URL('../src/party/night-skin.js', import.meta.url), 'utf8');
+
+  t('W36 · post-walk casting is its own full-bleed stage, not a talk beat with a side column',
+    /function castStage/.test(hostSrc)
+    && /const onCast = show === 'casting' && ui\.introsSent && ui\.introsDone/.test(hostSrc)
+    && /onCast \? ' on-cast' : ''/.test(hostSrc)
+    && /body \+= castStage\(/.test(hostSrc)
+    && !/aside: ballotBoard/.test(hostSrc));
+
+  t('W36a · the frame takes all four edges — no padding, no letterbox, no side column',
+    /\.night\.on-cast \.night-main \{ position:relative; padding:0; overflow:hidden/.test(skin)
+    && /\.night\.on-cast \.intro-frame\.talk-frame \{ height:100%; width:100%/.test(skin)
+    && /aspect-ratio:auto; margin:0; border:0; border-radius:0;\s*\r?\n\s*background:transparent/.test(skin));
+
+  t('W36b · the overlay is bought by lifting night above the camera plate, not by inlining chrome',
+    /\.night\.on-cast \{ z-index:6; background:transparent/.test(skin)
+    && /body\.rrr-warming \.night\.on-cast \{ background:transparent/.test(skin)
+    && /body\.rrr-cast \.run-cam-layer\.intros/.test(skin)
+    && /classList\.toggle\('rrr-cast', onCast\)/.test(hostSrc)
+    && skin.indexOf('.night.on-cast .night-main') > skin.indexOf('.night.on-talk .night-main'));
+
+  t('W36c · ballots ride on the feed as slips, and the overlay language lives in look.js',
+    /function castOverlay/.test(hostSrc)
+    && /class="cast-overlay"/.test(hostSrc)
+    && /cast-slip/.test(hostSrc)
+    && SHOW_CHROME_CSS.includes('.cast-overlay')
+    && SHOW_CHROME_CSS.includes('.cast-slip')
+    && !/class="cast-overlay"/.test(SHOW_CHROME_CSS));
+
+  t('W36d · the four things John cut are gone from the casting beat and stay gone',
+    !/Ballots land here/.test(hostSrc)
+    && !/whoSub: 'live · casting'/.test(hostSrc)
+    && !/have sent a ballot/.test(hostSrc)
+    && !/walks · /.test(hostSrc));
+
+  // Control. The cuts were four NAMED lines, not "everything in the lower band": the lamp row is
+  // the only thing on this screen that says who has not sent yet, and the bake bar is the only
+  // honest progress during the window where no ballot can exist (W35c2). Both survive the
+  // redress — as a lower third over the picture rather than a band under it.
+  t('W36e control · the lamps and the bake bar survived the cut, as a strip over the picture',
+    /class="cast-strip"/.test(hostSrc)
+    && /board \? `<div class="cast-strip">/.test(hostSrc)
+    && /const foot = baking \? `<div class="cast-warm">/.test(hostSrc)
+    && /cast-lamp/.test(hostSrc)
+    && SHOW_CHROME_CSS.includes('.cast-strip .cast-lamp'));
+
+  // The strip and the 3·2·1 both want the bottom-left corner, so they are never on screen at once.
+  t('W36f · the lamp strip stands down for the countdown instead of sharing its corner',
+    /const counting = sendLeft != null \|\| hasPair/.test(hostSrc)
+    && /board: counting \? '' : castBoard\(/.test(hostSrc)
+    && /\.night\.on-cast \.actions \{ position:absolute/.test(skin));
+
+  t('W36g · talk beats keep their reserved bands — the overlay is a casting-only exemption',
+    /talk-chrome-bot/.test(hostSrc)
+    && /talk-side/.test(hostSrc)
+    && !/cast-overlay/.test(hostSrc.slice(0, hostSrc.indexOf('function castStage')))
+    && !/\.night\.on-talk \.cast-overlay/.test(skin)
+    && !/\.night\.on-talk \.cast-strip/.test(skin));
+}
+
+// ---- W37 · THE HIERARCHY IS THE RIGHT WAY UP ----------------------------------------------
+//
+// From the round-2 critic pass (`docs/design/loop-ui-critique.md`), whose thesis was one defect
+// repeated on every beat: **the furniture is big and the live state is small.** On four of the
+// eight beats the sentence that says what ENDS the beat was 12px grey at the bottom edge of a
+// 1080p screen, while a nameplate naming NOBODY sat above it at 36-56px.
+//
+// Each of these locks one of the four cuts. They are source assertions and they know it: the
+// claim "12px is unreadable from a sofa" is not a thing a regex can hold. What a regex CAN hold
+// is that the plate is gated on a real person, that the count exists as its own element, and
+// that the duplicated sentences are gone — and those are the changes.
+{
+  const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
+  const phoneSrc = await readFile(new URL('../src/views/party-phone.js', import.meta.url), 'utf8');
+  const skin = await readFile(new URL('../src/party/night-skin.js', import.meta.url), 'utf8');
+
+  t('W37 · a nameplate with nobody to name is not drawn',
+    /const plate = who && whoId/.test(hostSrc)
+    && /nameplateHtml\(\{ name: who/.test(hostSrc));
+
+  // Control. The fallback WORDS may stay as call-site arguments — they are harmless once the
+  // plate is gated on `whoId`, and `standingLead() || 'Reckoning'` still feeds other copy. What
+  // must not come back is a plate drawn from `who` alone.
+  t('W37 control · the gate is the player id, not the word — a beat name can never reach a plate',
+    !/const plate = who\s*$/m.test(hostSrc)
+    && !/const plate = who\s*\?/.test(hostSrc));
+
+  t('W37a · the beat count is its own element, at its own size, beside the plate',
+    /function readyState/.test(hostSrc)
+    && /state: readyState\(\)/.test(hostSrc)
+    // the count is in the band and NOT also in the kicker — one fact, once
+    && !/kicker: readyKicker\(/.test(hostSrc)
+    && /class="beat-state/.test(hostSrc)
+    && /class="talk-band"/.test(hostSrc)
+    && /\.beat-n \{ font-size:clamp\(38px/.test(skin)
+    && /\.talk-kicker \{ margin:6px 0 0; text-align:left; color:var\(--night-soft\)/.test(skin)
+    && !/\.talk-kicker \{[^}]*font-size:12px/.test(skin));
+
+  // `readyState` reads the same wire field the kicker always did. It must stay a COUNT.
+  t('W37a control · the promoted count still names nobody',
+    /const r = client\.ready;/.test(hostSrc)
+    && !/readyState[\s\S]{0,400}joinedName/.test(hostSrc)
+    && !/readyState[\s\S]{0,400}\.name/.test(hostSrc));
+
+  t('W37b · an empty board collapses its column instead of reserving a fifth of the TV',
+    /if \(!rows\) return '';/.test(hostSrc)
+    && /if \(!body\) return '';/.test(hostSrc)
+    && !/Nobody has reached out yet\./.test(hostSrc)
+    && !/Waiting on phones — nominate\./.test(hostSrc));
+
+  t('W37c · the Execution says each of its facts exactly once',
+    /function executionSwing/.test(hostSrc)
+    && /verdict: executionSwing\(/.test(hostSrc)
+    && /kicker: client\.lynchResult \? executionNextLine\(episode\) : 'Counting the ballot\.'/.test(hostSrc)
+    && /The Reunion is next/.test(hostSrc)
+    && /Casting is next/.test(hostSrc)
+    // the tell for the old defect: `kicker` and `verdict` fed the SAME builder
+    && !/kicker: executionLine\(/.test(hostSrc));
+
+  // Control. `executionLine` is still the whole sentence and still used — the phone and the
+  // event log want both facts in one string. Only the TV splits them.
+  t('W37c control · executionLine survives for the surfaces that want one sentence',
+    /function executionLine/.test(hostSrc));
+
+  /*
+   * ⚠️ **W37c2 · THE RESULT-LESS WINDOW.** Splitting one sentence into three elements deleted
+   * `executionLine`'s `!result` fallback along with the duplicate it was duplicating — and that
+   * fallback was the only thing on the screen when the Execution beat is reached before its
+   * result is (a reconnecting TV; the beat landing a tick early). Caught by photographing the
+   * beat with no `lynchResult` on the wire, where the screen announced the NEXT beat while this
+   * one had said nothing. Every element on this beat is now result-gated in the same direction.
+   */
+  t('W37c2 · with no result on the wire the beat says so, rather than pointing at the next one',
+    /kicker: client\.lynchResult \? executionNextLine\(episode\) : 'Counting the ballot\.'/.test(hostSrc)
+    && /if \(!result\) return '';/.test(hostSrc));
+
+  t('W37d · every tappable list on the phone carries the seat, the link list included',
+    /data-link="\$\{esc\(p\.id\)\}"[^]{0,120}\$\{seatChip\(c, p\.id\)\}/.test(phoneSrc)
+    && /\.picks button \{[^}]*display:flex/.test(skin)
+    && /\.picks button \.seat-chip/.test(skin));
+
+  // Control for W37d, and the reason the old gate missed this: counting CALL SITES is not the
+  // same as covering every list. Four tappable/aired lists, four calls.
+  t('W37d control · four lists, four seatChip calls — nominate, lynch, receipt, link',
+    (phoneSrc.match(/seatChip\(c, /g) || []).length >= 4);
+}
+
+// ---- W38 · ROUND 2, GROUP A — the four the critic left on the table ------------------------
+//
+// F7 the talk frame had no slate · F6 the ribbon rail was unlabelled hairlines · F5 the
+// role-card window used the top 45% of the screen · F12 the floating name tag was the last
+// public list with no seat number. All from `docs/design/loop-ui-critique.md`, all photographed.
+{
+  const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
+  const skin = await readFile(new URL('../src/party/night-skin.js', import.meta.url), 'utf8');
+  const plateSrc = await readFile(new URL('../src/characters/chest-nameplate.js', import.meta.url), 'utf8');
+  const bedSrc = await readFile(new URL('../src/game/intro-bed.js', import.meta.url), 'utf8');
+
+  // F7 · the Recap is reached with the follow still warming, so a talk frame with no slate is a
+  // black rectangle over three quarters of the television. Same fade contract as the run slate.
+  t('W38 · the talk frame has a slate, on the same .live contract as the run frame',
+    /function talkSlateHtml/.test(hostSrc)
+    && /talkSlateHtml\(beat\)/.test(hostSrc)
+    && /talkSlateHtml\('casting'\)/.test(hostSrc)
+    && /\.intro-frame\.live \.talk-slate \{ opacity:0/.test(skin));
+
+  // Control. The talk beats have no single subject — that is why the nameplate stopped being
+  // drawn on them — so the slate must not name anybody either.
+  t('W38 control · the slate names nobody and claims nothing about the room',
+    !/talkSlateHtml[\s\S]{0,400}joinedName/.test(hostSrc)
+    && !/talkSlateHtml[\s\S]{0,400}recap\./.test(hostSrc));
+
+  // F6 · Direction B's 22px ribbon is the rule and stays; what changed is that it no longer
+  // spends the height by deleting eight of the nine labels.
+  t('W38a · the ribbon rail keeps every label, dimmed by state rather than collapsed',
+    /\.show-rail\.ribbon \.show-rail-k \{[^}]*height:10px/.test(SHOW_CHROME_CSS)
+    && !/\.show-rail\.ribbon \.show-rail-k \{[^}]*height:0/.test(SHOW_CHROME_CSS)
+    && /\.show-rail\.ribbon \.show-rail-seg\.past \.show-rail-k \{ opacity/.test(SHOW_CHROME_CSS)
+    && /\.show-rail\.ribbon \{ height:22px/.test(SHOW_CHROME_CSS));
+
+  // F5 · the role-card window is its own screen and now uses its own height.
+  t('W38b · the role-card window lays out to the whole television',
+    /const onCards = show === 'casting' && !ui\.introsSent/.test(hostSrc)
+    && /onCards \? ' on-cards' : ''/.test(hostSrc)
+    && /\.night\.on-cards \.night-main \{ display:flex; flex-direction:column; justify-content:center/.test(skin)
+    && /\.night\.on-cards \.warm \{ max-width:none/.test(skin)
+    // the strapline stopped competing with the kicker directly beneath it
+    && /onRecap \|\| onCards \|\| show === 'lobby'/.test(hostSrc));
+
+  // F12 · APPROVED AMENDMENT to the locked tag spec (John, 2026-08-28). The NAME's treatment is
+  // untouched — black-outlined white, same stroke, same colours; a seat tab is added beside it.
+  t('W38c · the floating name tag carries the seat, like every other public list',
+    /function paintSeatTab/.test(plateSrc)
+    && /paintPlate\(text, skin, tab\?\.seat \?\? null, tab\?\.accent \?\? null\)/.test(plateSrc)
+    && /attachHeadNameTag\(body, seat\.name, \{ seat: seat\.seat, accent: seat\.accent \}\)/.test(bedSrc));
+
+  // Control. No new data and no new channel: `seat` and `accent` were already on the intros cue
+  // and already validated by `cueViolations`. If this ever needs a key that is not in
+  // CUE_CAST_KEYS, that is a wire change and a different review.
+  t('W38c control · the tab reads the cue it was already given, and adds no key to it',
+    CUE_CAST_KEYS.includes('seat') && CUE_CAST_KEYS.includes('accent')
+    && !/GLYPH_OUTLINE[\s\S]{0,80}strokeText/.test(plateSrc.slice(plateSrc.indexOf('function paintSeatTab'),
+      plateSrc.indexOf('function paintPlate'))));
+
+  /*
+   * ⚠️ **W38c2 · `Number(null)` IS 0.** The first cut guarded the tab with `Number.isFinite`
+   * alone, which passes for null and for '' — so every plate meant to have NO tab got a seat-1
+   * one, merged pairs included. It was invisible to inspection and obvious to measurement: with
+   * the bug, plates with and without a tab produced byte-identical glyph metrics, because both
+   * were drawing a tab. The absent cases must be rejected before the numeric coercion.
+   */
+  t('W38c2 control · an absent seat is rejected before Number() can coerce it to zero',
+    /if \(seat == null \|\| seat === ''\) return 0;/.test(plateSrc)
+    && plateSrc.indexOf("seat == null") < plateSrc.indexOf('const n = Number(seat)'));
+
+  // Control. A merged pair is ONE name over TWO robots: it has no single seat, so it gets no tab
+  // rather than a tab naming the wrong half. And the tab joins the idempotence key, or a robot
+  // coming back from a pair would keep the tabless plate for the rest of the night.
+  /*
+   * ⚠️ **THIS ASSERTED A CALL-SITE SPELLING AND THE CALL SITES LEGITIMATELY MOVED.** The
+   * accusation stage collapsed the two `setNameTagLabel` sites into one `repaintTags()`, because
+   * `setPairs` and `setNominees` write the SAME sprites and two writers racing one plate is its
+   * own bug. The third argument is now a `skin` variable rather than a literal `null`, so the old
+   * regex could not match code that behaves identically.
+   *
+   * What the control actually protects is unchanged and is what it now asserts: a merged pair
+   * gets `null` for the tab (a seat number on a shared two-robot plate names the wrong half of it
+   * half the time), and an unpaired robot's tab is rebuilt FROM `r.seat` on every repaint rather
+   * than remembered — which is what makes unpairing restore it.
+   */
+  t('W38d control · a merged pair wears no seat tab, and unpairing restores the one it had',
+    /if \(merged\) \{ setNameTagLabel\(r\.tag, merged, \{ ink: LINK_INK, chrome: LINK_CHROME \}, null\); continue; \}/.test(bedSrc)
+    && /const tab = \{ seat: r\.seat\.seat, accent: r\.seat\.accent \};/.test(bedSrc)
+    && /setNameTagLabel\(r\.tag, r\.seat\.name, skin, tab\)/.test(bedSrc)
+    && /sprite\.userData\.tagTab === tabKey/.test(plateSrc));
+}
+
+// ---- W47 · THE VERDICT AND THE REUNION REACH A SCREEN --------------------------------------
+//
+// The wire got the Verdict beat on 2026-08-28 (`party-night` N17h0, `episode-order` E2b). A beat
+// with no view is a black television for fifteen seconds, and a phone that goes blank because
+// `isTalkBeat` now claims a beat its sheet has never heard of. These are the screens.
+//
+// 🚨 **THE HALF THIS BLOCK EXISTS FOR IS WHAT IS *NOT* ON THEM.** `rrr-social-round.md` §4 holds
+// the feed count, every alignment and every role back until the Reunion — and `rule` is the same
+// leak in a costume, because W3 is "evil fed the Hunter enough goods" spelled out in words. The
+// server keeps them off the wire (`FANOUT_KEYS.verdict`); these keep them off the screen.
+{
+  const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
+  const phoneSrc = await readFile(new URL('../src/views/party-phone.js', import.meta.url), 'utf8');
+  const clientSrc = await readFile(new URL('../src/party/night-client.js', import.meta.url), 'utf8');
+
+  t('W47 · the TV has a Verdict branch and a Reunion branch, and neither is the chase',
+    /show === 'verdict'/.test(hostSrc) && /show === 'reunion'/.test(hostSrc)
+      && /verdictFacts\(/.test(hostSrc)
+      && isTalkBeat('verdict') && isTalkBeat('reunion'));
+
+  t('W47a · the phone draws both too — isTalkBeat now claims them, so a missing sheet is blank',
+    /beat === 'verdict'/.test(phoneSrc) && /beat === 'reunion'/.test(phoneSrc)
+      && /function paintVerdict/.test(phoneSrc) && /function paintReunion/.test(phoneSrc));
+
+  /*
+   * The sentence a status MEANS is one function in `win.js`, beside the machine that produces the
+   * statuses — because the TV and the phone both say it, and two copies that must agree and can
+   * drift is what `episode-order` exists to punish one layer up.
+   */
+  t('W47b · both screens read the outcome words from win.js — not a copy each',
+    /outcomeLine\(/.test(hostSrc) && /outcomeLine\(/.test(phoneSrc)
+      && !/'The season continues\. Casting is next\.'/.test(hostSrc)
+      && !/'The season continues\. Casting is next\.'/.test(phoneSrc)
+      && outcomeLine(OUTCOME.RENEWED).includes('continues')
+      && outcomeLine(OUTCOME.CANCELLED).includes('Production wins')
+      && outcomeLine(OUTCOME.FINALE).includes('cast wins')
+      && outcomeLine(OUTCOME.ABANDONED).includes('Nobody wins')
+      && outcomeLine(undefined).includes('deciding'),
+    Object.values(OUTCOME).map(outcomeLine).join(' | '));
+
+  /*
+   * ⚠️ These match CODE, not prose. A bare `/\bfed\b/` failed on this block's own explanation of
+   * why the feed count is withheld — a gate that forbids naming the thing it protects makes the
+   * next person delete the argument to get green. `.fed` / `fed:` is the read or the write.
+   *
+   * 🍖 **NARROWED 2026-08-31, AND THE OLD WORDING WAS A SYMPTOM RATHER THAN A RULE.** This used to
+   * ban `.fed` from ANYWHERE in either view, and it stayed green for months because the number
+   * had nowhere to go: `rrr-social-round.md` §4 seals it *"until the Reunion"* and the Reunion end
+   * of that sentence had never been built — no `reveal.feed` on the wire, no `feedCount` query, no
+   * screen able to print one. A whole-file ban is the right gate for "this number does not exist
+   * downstream"; it is the WRONG gate for "this number is withheld from ONE BEAT", and it silently
+   * became the enforcement of a bug (COUCH-PLAN Rung 4: the payday owes every pad the feed count).
+   *
+   * The invariant it was always reaching for is per-BEAT, so it is now measured per-beat: the
+   * VERDICT chrome may not name the number, the REUNION chrome must be the only thing that does,
+   * and no screen anywhere may touch the fold's `rule` — which is the same leak in words, W3 being
+   * *"evil fed the Hunter enough goods."* Gate on the other side: `room-ghosts` RG3/RG6.
+   */
+  const region = (src, from, to) => {
+    const a = src.indexOf(from);
+    if (a < 0) return ' NO-REGION';        // a moved function fails LOUDLY, never vacuously
+    const b = src.indexOf(to, a + from.length);
+    return src.slice(a, b < 0 ? src.length : b);
+  };
+  const FED = /\.fed\b|\bfed\s*[:=]/;
+  const hostVerdict = region(hostSrc, 'function verdictFacts(', '\nfunction ');
+  const phoneVerdict = region(phoneSrc, 'function paintVerdict(', '\n  function ');
+  const hostReunion = region(hostSrc, 'function reunionCentre(', '\nfunction ');
+  const phoneReunion = region(phoneSrc, 'function paintReunion(', '\n  function ');
+  // Every mention in the whole file, minus the ones inside the Reunion chrome, must be zero.
+  const strayFed = (src, reunion) =>
+    (src.match(/\.fed\b|\bfed\s*[:=]/g) || []).length
+    - (reunion.match(/\.fed\b|\bfed\s*[:=]/g) || []).length;
+
+  t('W47c control · the VERDICT names no feed count, and the Reunion is the only place that does',
+    !FED.test(hostVerdict) && !FED.test(phoneVerdict)
+      && strayFed(hostSrc, hostReunion) === 0 && strayFed(phoneSrc, phoneReunion) === 0
+      && !/verdict\.rule|v\.rule/.test(hostSrc) && !/verdict\.rule|v\.rule/.test(phoneSrc)
+      && !/\.rule\b/.test(clientSrc)
+      && /THERE IS NO `fed` ON THIS/.test(clientSrc),
+    `verdict chrome clean · ${(hostReunion.match(FED) ? 1 : 0) + (phoneReunion.match(FED) ? 1 : 0)}`
+      + ' of 2 reunion screens print it');
+
+  /*
+   * The other direction, and it is the half a "no `.fed` anywhere" ban could never have: the
+   * Reunion must actually PRINT it. A seal with nothing behind it looks identical to a seal that
+   * works, from the verdict's side, for a whole season.
+   */
+  t('W47c2 · and BOTH reunion screens really print it — the pad and the television',
+    FED.test(hostReunion) && FED.test(phoneReunion)
+      && /reveal\.feed|reveal\?\.feed/.test(hostSrc) && /reveal\.feed|reveal\?\.feed/.test(phoneSrc)
+      && FANOUT_KEYS.reveal.includes('feed'),
+    'reveal.feed on the wire and on both screens');
+
+  /*
+   * ⚠️ The camera count on the plate is measured against the target THE FOLD USED, not the one
+   * the running state carries. At eight, `COMPOSITION[8].cameras` and
+   * `WIN_TARGETS[8].cameraTarget` are both 4 (locked 30 Aug). A plate that read
+   * `frame.cameras.needed` would still be a second table — the wire carries `need`.
+   */
+  t('W47d · the plate counts cameras against the fold\'s own target, carried on the wire',
+    FANOUT_KEYS.verdict.includes('need') && FANOUT_KEYS.verdict.includes('camerasLit')
+      && !FANOUT_KEYS.verdict.includes('fed') && !FANOUT_KEYS.verdict.includes('rule')
+      && /v\.need/.test(hostSrc) && /v\.need/.test(phoneSrc)
+      && !/frame\?\.cameras/.test(hostSrc.slice(hostSrc.indexOf("show === 'verdict'"),
+        hostSrc.indexOf("show === 'casting'"))),
+    FANOUT_KEYS.verdict.join(','));
+  t('W47d2 · 8p chrome needed is WIN_TARGETS 4; a finished job return lights the camera',
+    COMPOSITION[8].cameras === 4
+    && /function lightCameraFromJob/.test(await readFile(new URL('../src/party/room.js', import.meta.url), 'utf8'))
+    && /phase === 'return'/.test(await readFile(new URL('../src/party/room.js', import.meta.url), 'utf8')));
+
+  /*
+   * 🛑 **SKIP TO REUNION.** One control, one call site, and both of its guards are behavioural
+   * rather than cosmetic: it is offered only from a chair (`onStage`, which `show.js` owns — never
+   * mid-expedition, where ending the session takes the run away from the one person playing), and
+   * it takes TWO taps, because a remote gets sat on and there is no undo on the other side of
+   * `host.skip`. The isTV half is the server's and is gated by `party-night` N17k.
+   */
+  t('W47f · SKIP TO REUNION is offered from a chair only, and it arms before it sends',
+    /id="to-reunion"/.test(hostSrc)
+      && /if \(onStage && show !== 'reunion'\)/.test(hostSrc)
+      && /SKIP_ARM_MS = \d+/.test(hostSrc)
+      && /ui\.skipArmedUntil = Date\.now\(\) \+ SKIP_ARM_MS/.test(hostSrc)
+      && /client\.send\(\{ t: 'skip' \}\)/.test(hostSrc)
+      // the send is behind the arm check, not beside it
+      && /if \(Date\.now\(\) < ui\.skipArmedUntil\)[\s\S]{0,140}client\.send\(\{ t: 'skip' \}\)/.test(hostSrc));
+
+  /* ===========================================================================================
+   * 🎭 **W47e — REPLACED 2026-08-28.** This asserted that the Reunion screens revealed NOTHING,
+   * which was true for exactly one commit: the payload was staged and the views were holding
+   * frames. Leaving it would have made the gate an argument against finishing the beat. What
+   * replaces it is the property that actually has to hold once the reveal exists.
+   *
+   * 🚨 **`null` IS DRAWN AS `null`.** The one risk the Reunion design has is a screen that renders
+   * the reveal a beat before the beat, and the way that happens is a defaulted empty shape that
+   * looks like an answer — `{seats: []}` reads as "the Reunion says nobody was anybody". Both
+   * views take the payload optionally and neither invents one.
+   * =========================================================================================== */
+  t('W47e · both Reunion screens draw the reveal, and neither defaults it into existence',
+    /client\.reveal/.test(hostSrc) && /c\.reveal/.test(phoneSrc)
+      && /this\.reveal = null/.test(clientSrc)
+      && !/reveal \|\| \{ seats/.test(clientSrc)
+      && /Do not default this to an empty shape/.test(clientSrc));
+
+  /*
+   * ⚠️ **THE PHONE'S REUNION CARD MUST NOT COME FROM `role.card`.** The card this view has held
+   * all game carries the player's COVER — the Glitched believes they are the Camera Op — so a
+   * Reunion sheet built from it would tell them the lie one last time on the one screen whose
+   * whole job is the truth. `reunion-truth` U2 caught exactly this substitution once already, in
+   * the other direction. `believedTheyWere` is where the cover belongs and it is named as such.
+   */
+  t('W47g · the phone\'s face-up card is the reveal\'s row for this seat, not the role card',
+    /c\.reveal\?\.seats \|\| \[\]\)\.find\(\(s\) => s\.id === me\?\.playerId\)/.test(phoneSrc)
+      && /believedTheyWere/.test(phoneSrc)
+      && !/state\.card[\s\S]{0,200}reunion/i.test(phoneSrc));
+
+  /*
+   * The Reunion is the one beat with no server clock — nothing after it decides what a phone may
+   * do — so the television paces itself off one table. The arithmetic is checkable in bare node,
+   * which is the whole reason the table is in `show.js` rather than four numbers in a view.
+   */
+  t('W47h · the Reunion\'s four beats spend exactly the budget phases.js set aside for them',
+    REUNION_PLAN.reduce((a, b) => a + b.ms, 0) === SECONDS[PHASE.REUNION] * 1000
+      && REUNION_PLAN.map((b) => b.beat).join(',') === 'rollCall,cut,awards,chat'
+      && reunionBeatAt(0).beat === 'rollCall'
+      && reunionBeatAt(SECONDS[PHASE.REUNION] * 1000 + 60_000).beat === 'chat'
+      && rollCallRevealed(0, 8) === 1
+      && rollCallRevealed(REUNION_PLAN[0].ms, 8) === 8
+      && rollCallRevealed(1e9, 8) === 8
+      && rollCallRevealed(1e9, 0) === 0,
+    `${REUNION_PLAN.reduce((a, b) => a + b.ms, 0) / 1000}s of ${SECONDS[PHASE.REUNION]}s`);
+
+  /*
+   * 🚨 The reveal is the ONLY message allowed to carry a role or an alignment, and the exemption
+   * is named rather than achieved by deleting the blocklist. `cover` is deliberately still
+   * forbidden even there — `reunion.js` calls it `believedTheyWere`, which is its name in the
+   * design and not a synonym invented to get past a list.
+   */
+  t('W47i · the reveal is a named exemption from FANOUT_FORBIDDEN, not a hole in it',
+    FANOUT_FORBIDDEN.includes('role') && FANOUT_FORBIDDEN.includes('alignment')
+      && FANOUT_FORBIDDEN.includes('cover') && FANOUT_FORBIDDEN.includes('castSeed')
+      && FANOUT_KEYS.revealSeat.includes('role') && FANOUT_KEYS.revealSeat.includes('alignment')
+      && !FANOUT_KEYS.revealSeat.includes('cover')
+      && FANOUT_KEYS.revealSeat.includes('believedTheyWere')
+      && fanoutViolations({
+        t: 'reveal', seats: [{ id: 'p1', seat: 0, role: 'fixer', alignment: 'evil',
+          believedTheyWere: null, finalClaim: null, death: null }], awards: [], decisive: null, chat: [],
+      }).length === 0
+      && fanoutViolations({
+        t: 'reveal', seats: [{ id: 'p1', cover: 'cameraOp' }], awards: [], decisive: null, chat: [],
+      }).length > 0
+      && fanoutViolations({ t: 'lobby', seats: [{ id: 'p1', alignment: 'evil' }] }).length > 0,
+    FANOUT_KEYS.revealSeat.join(','));
 }
 
 console.log(`\nparty-warm: ${pass} passed, ${fail} failed`);

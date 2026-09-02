@@ -14,17 +14,26 @@ import { injectNightSkin, markPartyReady, playerName } from '../party/night-skin
 import { ACCENTS, DEFAULT_LOOK, SHELLS, cleanLook, paintLook, robotFaceSvg } from '../party/look.js';
 import { REACTIONS, REACT_COOLDOWN_MS, REACT_MOOD, cleanReaction } from '../party/react.js';
 import { applyCastLock, applyCastTap, ballotFromCast, CAST_BLOCK_WHY, castPrompt, castRowBlock, castRowMark, freshCast, mergePublicNames, nominationPlayers, padlockSvg } from '../party/cast-ui.js';
-import { historyFromCastEvents } from '../party/ballot.js';
-import { linkBlock, mergeName, WHISPER_MAX, MAX_PAIRS, pairRemaining, isDone } from '../party/link.js';
+import { deadIdsFromPublic, historyFromCastEvents } from '../party/ballot.js';
+import { linkBlock, mergeName, WHISPER_MAX, MAX_PAIRS, pairRemaining, isDone, whisperLines } from '../party/link.js';
 import { cardFor, faceDownHtml, mountRoleCard, premiereHtml } from '../party/rolecard.js';
 import { EVIL } from '../party/cast.js';
 import { guideMapSvg } from '../party/guidemap.js';
+import { COMPASS_4, guidePad, pinDoor, pinShape, pinSpot, runnerPad } from '../party/intel-pad.js';
 import { pickPlanSeed, planRoomLabels, roomLabel } from '../party/mansion.js';
-import { missionFor } from '../party/mission.js';
+import { missionFor, seekLine } from '../party/mission.js';
+import {
+  // RUNNER_VOICE / GUIDE_VOICE are no longer imported: with the button rows gone there is nothing
+  // here to iterate. The words themselves are printed in the SAY line as plain copy, and `jobs.js`
+  // stays their one owner for the harness and the recap.
+  JOB, realFaceFor, drillShotFor, footstepsCue, wallWord, toolLabel,
+} from '../party/jobs.js';
 import { intelLine } from '../party/intel.js';
 import { STICK_DEADZONE, warmLabel } from '../party/follow.js';
 import { formatRemain, isTalkBeat, LATE_DEBRIEF_MS, remainingMs } from '../party/show.js';
+import { outcomeLine } from '../party/win.js';
 import { NO_ONE } from '../party/vote.js';
+import { clearsLine } from '../party/scorekeeper.js';
 
 export default async function partyPhone({ params }) {
   injectNightSkin();
@@ -52,11 +61,30 @@ export default async function partyPhone({ params }) {
     /** null · 'deal' while the backs are flying · 'premiere' while the card is first up. */
     stage: null,
     /**
+     * 📍 **THE GUIDE'S ONE PIN — D2, and the word "one" is the whole rule.**
+     *
+     * *"A second tap **replaces** the pin; it does not append to it. There is no pin list, no
+     * ordering, no undo stack."* So this is a single slot holding `{x, z, roomId, kind}` or null,
+     * and `pinDoor` returns a fresh object that is ASSIGNED here — assignment is what "replaces"
+     * means, and there is no array for a route to accumulate in.
+     *
+     * ⚠️ **LOCAL, AND ON PURPOSE.** It reaches the runner by the guide SAYING it, which is the
+     * locked *"voice is in the room"* rule — the same rule that already makes GO/HOLD and
+     * CLOSE/LATE/GOING mouth-to-ear and not pad-to-pad. Putting the pin on the wire is Stage 3 of
+     * `task-runner-intel.md` and wants its own review: it needs `crew` audience (runner or guide,
+     * never `all` — a seated phone must not learn where the target is) and a `MATRIX` row, and
+     * `MATRIX` is deny-by-default so a field without one is a hard red (`party-isolation` I1c).
+     */
+    pin: null,
+    /**
      * 🕹️ The pad's own state. `x`/`y` is the stick as a clamped unit vector; `sent` is the last
      * thing put on the wire, which is what makes the 20 Hz tick change-gated rather than a
      * metronome. See `startPad`.
      */
-    pad: { x: 0, y: 0, lookX: 0, lookY: 0, run: false, swing: false, sent: '', timer: 0 },
+    pad: {
+      x: 0, y: 0, lookX: 0, lookY: 0, run: false, swing: false, act: 0, hide: false,
+      sent: '', timer: 0,
+    },
     /**
      * 📳 The pad's answer to the last thing the thumb did. `label` is the word under the stick,
      * `kind` is the CSS modifier, `timer` wipes it. See `padFx`.
@@ -66,6 +94,18 @@ export default async function partyPhone({ params }) {
     reactAt: 0,
     /** The last `mission.*` this phone painted, so the BREAK can be told from the steady state. */
     missionSeen: null,
+    /*
+     * 🚨 **GUIDE E'S SCOPE, MEMOISED — AND IT LIVES ON `state` BECAUSE A `let` HERE IS A TRAP.**
+     *
+     * `guideScopeFor` is a hoisted `function` and the structural stamp calls it near the TOP of
+     * `paint()`, hundreds of lines above where the helper is written. A `let scopeMemo` beside the
+     * helper is therefore in its temporal dead zone on every paint, and the whole phone threw
+     * *"Cannot access 'ne' before initialization"* — minified, from inside the guide's own sheet.
+     * `harness/phone-accusation.mjs` PA8 caught it; nothing in node could have, because none of the
+     * node gates execute `paint()`. `state` is an object literal that is fully built before any of
+     * this runs, so a field on it has no dead zone at all.
+     */
+    scopeMemo: { key: '', scope: null },
     /** How far along the TV's mansion bake is — fanned to every phone, not just the host. */
     warm: '',
     warmPct: 0,
@@ -75,6 +115,19 @@ export default async function partyPhone({ params }) {
     dealPending: false,
     lastBeat: null,
     nominated: false,
+    /**
+     * 🔨 **WHAT THE SERVER DID WITH MY LAST NOMINATION TAP.** `{ok, target, why}` off the wire,
+     * or null before it has answered.
+     *
+     * ⚠️ **THIS IS SERVER STATE THAT HAPPENS TO BE PARKED HERE, NOT A SECOND `state.nominated`.**
+     * The distinction is the whole lesson of the old nominator receipt, which was driven by the
+     * optimistic local flag and therefore LIED — see `paintNominate`'s header. `nominated` is set
+     * by a thumb; this is set only by a `t:'nomOk'` frame, and it is the one thing on this screen
+     * entitled to say a tap was refused. It is kept in this closure rather than on the shared
+     * client object for the same reason the whispers are — no other view needs it — but its
+     * provenance rule is `client.myBallot`'s exactly: nothing writes it except an incoming frame.
+     */
+    nomOk: null,
     /** My own READY thumb this beat. The room total arrives on the wire. */
     ready: false,
     /** Whispers this pairing. Never leaves the phone; cleared with the pair. */
@@ -140,6 +193,26 @@ export default async function partyPhone({ params }) {
           state.warm = m.stage; state.warmPct = m.pct ?? 0;
           const el = root.querySelector('[data-warm-line]');
           if (el) { el.textContent = warmSummary(); return; }
+        }
+        /*
+         * 🔨 **THE ANSWER TO A TAP, AND THE ONLY THING THAT MAY RELEASE THE DEBOUNCE.**
+         *
+         * `state.nominated` is set the instant the thumb lands so a second tap cannot double-send.
+         * That is right while the tap is in flight and WRONG the moment the server says it did
+         * not take it — a phone left holding a debounce for a nomination that does not exist can
+         * never nominate again this episode, and its sheet reads `Sending your nomination…` until
+         * the beat ends. So a refusal, and only a refusal off the wire, hands the thumb back.
+         *
+         * An `ok` receipt deliberately does NOT feed the sheet's green plate: that plate quotes
+         * `c.noms`, the public row, because a receipt this phone holds privately cannot survive a
+         * reconnect and the public one can. See `paintNominate`'s header.
+         */
+        if (m.t === 'nomOk') {
+          state.nomOk = { ok: m.ok !== false, target: typeof m.target === 'string' ? m.target : '', why: m.why || '' };
+          if (!state.nomOk.ok) {
+            state.nominated = false;
+            padFx('Not recorded.', '', [0, 25, 40, 25]);
+          }
         }
         if (m.t === 'event' && m.ev?.type === 'role.card') dealt(!!m.replay);
         /*
@@ -474,6 +547,9 @@ export default async function partyPhone({ params }) {
     if (prevBeat !== null && beat !== prevBeat) {
       if (state.stage === 'premiere') state.stage = null;
       if (card.isOpen()) card.closeCard();
+      // A refusal belongs to the beat that refused it. `debrief is still talk` is advice about a
+      // window that has since opened, and a Reckoning refusal is not news in the Vote.
+      state.nomOk = null;
     }
     // Face-down phones after Debrief. Same smash pattern — two beats, not a drone.
     if (beat === 'reckoning' && prevBeat !== 'reckoning') {
@@ -531,9 +607,50 @@ export default async function partyPhone({ params }) {
       state.missionSeen = null;
     }
 
+    /*
+     * 🎥 **THE CAMERA IS PART OF THE SHEET'S SHAPE, so it belongs in the stamp.**
+     *
+     * `liveStamp` is what lets a world report patch the pad in place instead of rebuilding it —
+     * a rebuild destroys the stick under the player's thumb along with its `setPointerCapture`.
+     * The runner's sheet now has two SHAPES (a look stick on the ground, none under a plan-locked
+     * top-down), so the camera has to be in the key or the pad would keep the wrong one forever.
+     *
+     * It costs exactly one rebuild per crossing, which is the frame the player is watching a
+     * 1.35 s camera move on the television rather than their own hands.
+     */
+    const camStamp = iAmRunner ? `:${frame?.you?.view || 'chase'}` : '';
+    /*
+     * 🚨 **THE GUIDE'S CHIPS ARE PART OF HER SHEET'S SHAPE, AND LEAVING THEM OUT MADE THE WHOLE
+     * PAD A PHOTOGRAPH.** Found 2026-09-02 while walking the loop end to end.
+     *
+     * The stamp above is *"everything that changes the SHAPE of the screen"*, and until now the
+     * guide's half of it was `expedition:guide:{missionPhase}:{job}:{card}` — **not one term of
+     * which changes when the runner walks through a door.** `patchLive` writes the here-label, the
+     * intel strip, the two map marks and the sentence under them, and it has never touched the pin
+     * pad. So `guidePinPad(scope)` rendered ONCE, on the first expedition frame, with the runner
+     * still standing in the ballroom, and every chip on it stayed the ballroom's for the whole run.
+     *
+     * That is Guide E's premise inverted. The board's own argument is *"her rect plus the rects a
+     * door joins to it, RIGHT NOW"*; a frozen chip row means she taps NORTH and pins a doorway out
+     * of a room the runner left two rooms ago — and under auto-walk the body then walks to it.
+     * Tapping a chip was equally stuck: `bindPinPad` calls `paint()`, which matched the same stamp
+     * and patched, so neither the `on` highlight nor the say-line moved either.
+     *
+     * ⚠️ **THE FIX IS A STAMP TERM, NOT A NEW PATCH PATH, AND THE COST IS WHY.** Patching the chips
+     * in place means re-deriving the scope inside `patchLive` at 2 Hz and diffing four buttons and
+     * a sentence against the DOM — more machinery than the thing it saves. The guide's sheet has
+     * **no stick** (`bindPad` bails at `if (!stick)`), so the argument that put this stamp here in
+     * the first place — a rebuild destroys `setPointerCapture` under a thumb — does not apply to
+     * her seat at all. A rebuild per DOORWAY is the same bargain `camStamp` already takes for the
+     * runner's camera crossings, and `guideScope` is computed once per paint and reused below so
+     * the plan is not built twice.
+     */
+    const guideStamp = iAmGuide && beat === 'expedition'
+      ? `:${guideScopeFor(frame)?.hereId ?? '-'}:${state.pin ? `${state.pin.kind}@${state.pin.roomId}` : '-'}`
+      : '';
     const liveStamp = beat === 'expedition' && !state.stage
-      ? `${beat}:${iAmRunner ? 'run' : iAmGuide ? 'guide' : 'watch'}:${missionPhase}`
-        + `:${hasCard() ? 'card' : 'nocard'}`
+      ? `${beat}:${iAmRunner ? 'run' : iAmGuide ? 'guide' : 'watch'}:${missionPhase}:${missionFor(frame?.airingEpisode ?? 1).job}`
+        + `:${hasCard() ? 'card' : 'nocard'}${camStamp}${guideStamp}`
       : null;
     if (liveStamp && root.dataset.liveUi === liveStamp && patchLive(frame)) {
       window.__rrrPhone = { frame, beat, seat: me.seat, iAmRunner, iAmGuide };
@@ -542,6 +659,12 @@ export default async function partyPhone({ params }) {
 
     let body = '';
     if (state.err) body += `<div class="err">${esc(state.err)}</div>`;
+    /*
+     * Guide E's scope, hoisted so the chips can be bound after `root.innerHTML` is written.
+     * ⚠️ It cannot ride on `bindPad`: that function bails at `if (!stick)` and the guide sheet has
+     * no stick, so anything bound in there never runs on this seat.
+     */
+    let guideScope = null;
 
     if (beat !== 'casting') {
       state.cast = freshCast();
@@ -554,6 +677,10 @@ export default async function partyPhone({ params }) {
       // and the beat that opens casting has usually already arrived.
       body += premiereHtml();
     } else if (beat === 'casting' && !pair.runner) {
+      if (iAmDead(me, frame?.players, c.events)) {
+        paintDeadWatch(me, players);
+        return;
+      }
       paintCasting(nominees, me, frame?.airingEpisode || c.lobby?.airingEpisode || frame?.episode || 1);
       return;
     } else if (isTalkBeat(beat)) {
@@ -617,6 +744,10 @@ export default async function partyPhone({ params }) {
          * The list you name the dead from must be the one that still contains them.
          */
         body += paintExecution(players, c);
+      } else if (beat === 'verdict') {
+        body += paintVerdict(me, c);
+      } else if (beat === 'reunion') {
+        body += paintReunion(me, c);
       }
     } else if (beat === 'lobby' || phase === 'LOBBY') {
       body += `<h1>${esc(myName)}</h1>
@@ -629,6 +760,21 @@ export default async function partyPhone({ params }) {
         <p class="hint">${esc(playerName(players, pair.runner || recap.runner))} walks · ${esc(playerName(players, pair.guide || recap.guide))} talks.</p>`;
     } else if (beat === 'expedition') {
       if (iAmRunner) {
+        /*
+         * 🎥 **WHICH CAMERA THE SHOW IS ON, AND WHY THIS SHEET HAS TWO SHAPES.**
+         *
+         * D13's pad was written when there was one camera. There are four now, and the top-down
+         * one changes what the sticks MEAN: it is plan-locked, so screen direction is world
+         * direction and the stick is absolute — push where you want to go — and the look stick
+         * has nothing to swing, because a top-down you can turn is the rotating map the whole
+         * perspective exists to avoid. Printing "Right stick looks" over a dead control is worse
+         * than printing nothing.
+         *
+         * `frame.you.view` is runner-audience (`net/party/entitle.js`), so no other seat and not
+         * the TV is told which camera the show is on.
+         */
+        const camView = frame?.you?.view || 'chase';
+        const topDown = camView === 'top' || camView === 'iso';
         /*
          * 🕹️ **FULL CONTROL, NOT FOUR SPEEDS.** John: *"replace STILL/CREEP/WALK/RUN with full
          * movement control and freedom. Runner spawns equipped with the sledge."*
@@ -647,27 +793,64 @@ export default async function partyPhone({ params }) {
          *
          * ⚠️ **THE GUIDE'S SHEET LOST IT TOO** — see `intelBlock`. A good guide reads the map and
          * its static; the strip was answering the same question underneath with a different rule.
-         * SEATED players keep it, and that is the one seat it was always for: it is their whole
-         * contribution from a chair.
+         * SEATED watchers lost it as well (DUSK, expedition): the house-word block was sitting
+         * between the emote pad and the card tab, and watchers do not get a house line. Production
+         * guides still get their feed.
          */
-        body += `<h1>You walk.</h1>
-          <p class="hint">Eyes on the TV. Left stick walks into the shot. Right stick looks. Hold RUN, tap SWING.</p>
-          <p class="hint">Listen to your guide — they have the map, you have the hammer.</p>
-          ${missionLine(frame)}
+        const job = missionFor(frame?.airingEpisode ?? 1).job;
+        /*
+         * 📱 **RUNNER D · FRAME BEZEL.** John locked the board 2026-09-01
+         * (`docs/design/refs-runner-intel/canvas/RunnerPadD.dc.html`). The bearing is not a widget
+         * in the middle of the screen competing with the television for her eyes — it is a glowing
+         * segment of the phone's own EDGE at the pin's angle, which peripheral vision catches while
+         * she keeps watching the show. Under the plan-locked top-down the move stick is absolute,
+         * so screen direction IS world direction and the segment needs no rotation in her head:
+         * she pushes the thumb at the glow. Smash-ready takes the WHOLE bezel cyan — a state of the
+         * hammer, never a hint about where to walk.
+         *
+         * ✅ **THE PIN IS ON THE WIRE AS OF 2026-09-01, AND THE BEZEL POINTS AT A REAL DOOR.**
+         *
+         * ⚠️ **THIS COMMENT USED TO SAY THE OPPOSITE.** It read *"the pin and the ready flag have
+         * no wire yet, and the pad says so rather than pretending"* — true and honest while the
+         * pin lived on the guide's handset. `you.pin.*` now has four `crew` rows and `you.at.*`
+         * has two `runner` rows, so both ends of the bearing arrive and `bezelOf` can draw one.
+         *
+         * 🚨 **`ready` STILL HAS NO WIRE AND STILL SAYS SO.** Smash-ready is the sledge RAY
+         * intersecting the armed target (D7) and only the follow slot can cast it; there is no
+         * `you.smashReady` row and inventing one would be a second review. `false` is the honest
+         * value, and the whole-bezel arm is the shape waiting for it.
+         *
+         * ⚠️ **NO COORDINATE SURVIVES THIS CALL.** `bezelOf` returns `{edge, from, to}` pixels, a
+         * screen word and a range BAND — you cannot rebuild a map from a glowing segment, which
+         * is the entire reason a bearing is safe in a runner's hand and a map is not (D13).
+         */
+        const bez = runnerPad(frame?.you?.at ?? null, frame?.you?.pin ?? null, false);
+        body += `${bezelHtml(bez)}
+          <h1>${job === JOB.DRILL ? 'You drill.' : 'You smash.'}</h1>
+          <p class="hint">${topDown
+            ? 'Eyes on the TV. She walks to the door your guide pinned. The stick only steps you left or right.'
+            : 'Eyes on the TV. She walks to the pinned door on her own. The stick steps you sideways; the right stick looks.'}</p>
+          <p class="hint">${job === JOB.DRILL
+            ? 'No map. Say CLOSE, LATE or GOING out loud, then hold DRILL. HOLD from your guide means let go. Clock still runs.'
+            : 'Listen to your guide — they have the map, you have the hammer. Two identical faces. No mark on either.'}</p>
+          ${missionLine(frame, frame?.you?.here ?? null)}
           ${hereLine(frame)}
-          <div class="stick-wrap">
+          ${job === JOB.SMASH ? runnerSmashFaces() : runnerDrillPad(c.worldSeed, frame?.airingEpisode ?? 1)}
+          <div class="stick-wrap${topDown ? ' top' : ''}">
             <div class="stick-col">
               <div class="stick" id="stick"><div class="nub" data-nub></div></div>
-              <div class="stick-cap">Move</div>
+              <div class="stick-cap">Dodge</div>
             </div>
             <div class="stick-side">
               <button class="stick-btn" id="run-btn" type="button">Run</button>
-              <button class="stick-btn swing" id="swing-btn" type="button">Swing</button>
+              <button class="stick-btn swing" id="swing-btn" type="button">${job === JOB.SMASH ? 'Hit' : 'Swing'}</button>
+              <button class="stick-btn hide" id="hide-btn" type="button">Hide<span>needs cover</span></button>
+              ${job === JOB.DRILL ? '<button class="stick-btn drill" id="drill-btn" type="button">Drill<span>loud while down</span></button>' : ''}
             </div>
-            <div class="stick-col">
+            ${topDown ? '' : `<div class="stick-col">
               <div class="stick stick-look" id="stick-look"><div class="nub" data-nub-look></div></div>
               <div class="stick-cap">Look</div>
-            </div>
+            </div>`}
           </div>
           ${padFxHtml()}`;
       } else if (iAmGuide) {
@@ -701,8 +884,40 @@ export default async function partyPhone({ params }) {
          * guide would call it as "no camera" — the wrong sentence for a screen full of static.
          */
         const jam = !!frame?.flyover?.jam;
-        body += `<h1>You talk.</h1>
-          <p class="hint">The map is yours. The TV does not get it — call the rooms out loud.</p>
+        const job = missionFor(frame?.airingEpisode ?? 1).job;
+        /*
+         * 🗺️ **GUIDE E · NEIGHBOURS ONLY.** John locked the board 2026-09-01
+         * (`docs/design/refs-runner-intel/canvas/GuidePadE.dc.html`). She sees the runner's own
+         * room and only what its portals reach right now; everything else is fog, so the pad
+         * cannot hold a route even in principle — there is no second step on it to draw.
+         * `intel-pad.js` `guidePad` is the whole model and a node gate executes it directly.
+         *
+         * ⚠️ **NO `you` MARK, NO SCOPE — AND THE FALLBACK IS TODAY'S FLOOR PLAN.** With no idea
+         * where she is standing there is no "her room" for anything to be a neighbour of, and
+         * `party-warm` W8c already settled what a blind guide gets. `scope: null` is the shipped
+         * map, unchanged.
+         */
+        const scope = guideScopeFor(frame);
+        guideScope = scope;
+        /*
+         * 🗺️ **THE MAP IS THE PRIMARY SURFACE, AND THE ORDER OF THIS TEMPLATE IS THE WHOLE OF
+         * THAT.** John, 2026-09-01: *"Guide E neighbours map is the PRIMARY surface, readable at
+         * ~390x844. Pin chips in thumb country under the map… Real Aim stays a private one-liner
+         * and must not shrink the map."*
+         *
+         * What was above the map before: an `h1`, two hint paragraphs and, on a drill night, a
+         * whole three-button row further down that pushed the pin chips off the bottom of a 390×844
+         * screen. The map is what she is reading and the chips are what her thumb reaches, so the
+         * map goes FIRST at full width and the chips sit directly under it where a thumb rests.
+         * The heading is a single line above it; everything explanatory moved below the chips or
+         * out entirely.
+         *
+         * ⚠️ **`.guide-sheet` IS WHAT LETS THE MAP GROW.** `night-skin.js` gives the map a taller
+         * `max-height` inside this class only, so the unscoped map elsewhere is unchanged — see
+         * `GUIDE_MAP_CSS`'s own comment about a reskin that misses one surface.
+         */
+        body += `<div class="guide-sheet">
+          <h1 class="gs-title">${scope ? 'One door ahead.' : 'You talk.'}</h1>
           ${seed == null
             ? '<p class="hint gm-blind">Waiting for the house…</p>'
             : guideMapSvg({
@@ -711,11 +926,15 @@ export default async function partyPhone({ params }) {
               runner: meMark,
               flyover: hunterMark ? { hunter: hunterMark } : null,
               jam,
+              scope,
             })}
-          <p class="hint ${hunterMark ? '' : 'gm-blind'}" data-gm-note>${esc(mapNote(jam, hunterMark))}</p>
-          ${missionLine(frame)}
-          <p class="hint">Cameras live ${frame?.cameras?.unlocked ?? '—'}.</p>
-          ${intelBlock(frame, { productionOnly: true })}`;
+          ${guidePinPad(scope)}
+          <p class="hint gs-note ${hunterMark ? '' : 'gm-blind'}" data-gm-note>${esc(mapNote(jam, hunterMark))}</p>
+          ${missionLine(frame, scope?.hereId ?? null, 'scope')}
+          ${guideJobPad(job, c.worldSeed, frame?.airingEpisode ?? 1)}
+          <p class="hint gs-note">The TV does not get this map. Call the rooms out loud. Cameras live ${frame?.cameras?.unlocked ?? '—'}.</p>
+          ${intelBlock(frame, { productionOnly: true })}
+        </div>`;
       } else {
         /*
          * 👏 THE PAD SENDS. Until now these four buttons printed a word on this phone and
@@ -731,7 +950,6 @@ export default async function partyPhone({ params }) {
               <span>${r}</span>
             </button>`).join('')}
           </div>
-          ${intelBlock(frame)}
           ${state.flash ? `<p class="hint">${esc(state.flash)}</p>` : ''}`;
       }
     } else {
@@ -785,7 +1003,7 @@ export default async function partyPhone({ params }) {
      */
     window.__rrrPhone = { frame, beat, seat: me.seat, iAmRunner, iAmGuide, showUntil: c.showUntil };
 
-    if (beat !== 'reckoning' && beat !== 'debrief') state.nominated = false;
+    if (beat !== 'reckoning' && beat !== 'debrief') { state.nominated = false; state.nomOk = null; }
     if (beat !== 'vote') state.voted = false;
     // My thumb belongs to ONE beat. Carrying it into the next would silently hand the next
     // talk beat a majority nobody voted for.
@@ -804,6 +1022,7 @@ export default async function partyPhone({ params }) {
       c.send({ t: 'name', name: v });
     });
     bindPad();
+    bindPinPad(guideScope);
     /*
      * ⚠️ `e.target` IS THE SVG, NOT THE BUTTON. The old handler read `dataset.r` straight off the
      * target and worked only because the buttons were plain text — with a face and a label inside
@@ -911,9 +1130,53 @@ export default async function partyPhone({ params }) {
         // Straight after the send, so the buzz dates the message rather than the render. 18 ms is
         // a tick, not a rumble: this fires as fast as the player can tap and a long pattern would
         // queue up behind itself into one continuous drone.
-        padFx('Swing', '', 18);
+        padFx(swingBtn.textContent?.trim() === 'Hit' ? 'Hit' : 'Swing', '', 18);
         setTimeout(() => swingBtn.classList.remove('on'), 220);
       });
+    }
+    const drillBtn = root.querySelector('#drill-btn');
+    if (drillBtn) {
+      /*
+       * ⚠️ **THE OLD "HAVE YOU TAPPED A WORD YET" GUARD IS GONE, AND IT WAS THE SECOND REASON THE
+       * DRILL NEVER WORKED.** It refused to start the mount until the player had tapped one of
+       * the CLOSE / LATE / GOING buttons — buttons that sent nothing to anybody and are now
+       * removed (John, 2026-09-01: *"Drop fake tappable CLOSE/LATE/GOING and GO/HOLD cue
+       * BUTTONS"*), so it was a decorative prerequisite for a real action. The first reason was
+       * one hop further on: `party-host.js` `flushMove` dropped `act` entirely.
+       *
+       * The rule it was reaching for is unchanged and is enforced where it belongs — in the room.
+       * The guide says GO. Nothing on this pad can send that, so nothing on this pad can check it.
+       */
+      const down = () => {
+        state.pad.act = 1;
+        drillBtn.classList.add('on');
+        sendPad();
+      };
+      const up = () => {
+        state.pad.act = 0;
+        drillBtn.classList.remove('on');
+        sendPad();
+      };
+      drillBtn.addEventListener('pointerdown', down);
+      drillBtn.addEventListener('pointerup', up);
+      drillBtn.addEventListener('pointercancel', up);
+    }
+    /*
+     * 🫥 **HIDE — a HOLD, and the pad never learns whether it worked.**
+     *
+     * Deliberately: `runner-intel.js` `coverNear` refuses it in an open hall, and that refusal
+     * happens in the follow bed where the furniture is. A pad that lit up green only when cover
+     * was in reach would be a cover DETECTOR in the runner's hand — a second information channel
+     * on the thing she is holding, which is the exact thing D13 took off this screen. She looks at
+     * the television and sees whether the body ducked, like everybody else in the room does.
+     */
+    const hideBtn = root.querySelector('#hide-btn');
+    if (hideBtn) {
+      const down = () => { state.pad.hide = true; hideBtn.classList.add('on'); sendPad(); };
+      const up = () => { state.pad.hide = false; hideBtn.classList.remove('on'); sendPad(); };
+      hideBtn.addEventListener('pointerdown', down);
+      hideBtn.addEventListener('pointerup', up);
+      hideBtn.addEventListener('pointercancel', up);
     }
     startPad();
   }
@@ -982,8 +1245,12 @@ export default async function partyPhone({ params }) {
       lookY: Math.round(p.lookY * 100) / 100,
       run: !!p.run,
       swing: !!swing,
+      act: +p.act || 0,
+      // 🫥 HOLD to hide. A hold like `act`, so it joins the change-gated key below rather than
+      // becoming an edge — and it is a REQUEST: the bed refuses it with no furniture in reach.
+      hide: !!p.hide,
     };
-    const key = `${msg.x}|${msg.y}|${msg.lookX}|${msg.lookY}|${msg.run}`;
+    const key = `${msg.x}|${msg.y}|${msg.lookX}|${msg.lookY}|${msg.run}|${msg.act}|${msg.hide}`;
     if (!swing && key === p.sent) return;
     p.sent = key;
     state.client?.send(msg);
@@ -1000,6 +1267,8 @@ export default async function partyPhone({ params }) {
     clearTimeout(state.padFx.timer);
     state.padFx.label = '';
     state.padFx.kind = '';
+    state.pad.act = 0;
+    state.pad.hide = false;
     if (!state.pad.timer) return;
     clearInterval(state.pad.timer);
     state.pad.timer = 0;
@@ -1034,14 +1303,295 @@ export default async function partyPhone({ params }) {
     return '<p class="here">You are in <strong data-here>' + esc(hereLabel(frame?.you?.here)) + '</strong></p>';
   }
 
-  function missionLine(frame) {
+  function twinFaceHtml(face, { real = false } = {}) {
+    return `<div class="twin-face${real ? ' real' : ''}" data-face="${face}">
+      <div class="twin-canvas"></div>
+      <span class="twin-lab">${face.toUpperCase()}</span>
+      ${real ? '<span class="twin-stamp">REAL</span>' : ''}
+    </div>`;
+  }
+
+  function runnerSmashFaces() {
+    return `<div class="twin-row" data-job-pad="smash">
+      ${twinFaceHtml('left')}
+      ${twinFaceHtml('right')}
+      <p class="hint twin-note">Identical · same loudness · no mark on either</p>
+    </div>`;
+  }
+
+  /*
+   * 🗣️ **THE THREE TAPPABLE WORDS ARE GONE, AND THE RULE THEY WERE DRESSED AS IS STRONGER FOR IT.**
+   *
+   * John, 2026-09-01: *"Drop fake tappable CLOSE/LATE/GOING and GO/HOLD cue BUTTONS. Voice stays
+   * in the room. One SAY line of text is fine. FOOTSTEPS can stay as a small line, not a 3-button
+   * row."*
+   *
+   * The buttons were honest about themselves — they printed *"buttons send nothing"* right above
+   * a row of buttons — and that is exactly what was wrong with them. A control that does nothing
+   * teaches a player that the pad is where the game happens, on the one seat whose whole job is to
+   * be looking at a television and listening to a person. Worse, one of them had grown teeth: the
+   * DRILL button refused to start the mount until CLOSE / LATE / GOING had been tapped, so a
+   * decorative widget was gating a real action (see `startPad`).
+   *
+   * `jobs.js` `voiceSendsNothing()` is untouched and still returns true. It used to be a promise
+   * about six buttons; with nothing to press it is a statement about the whole pad.
+   */
+  function runnerDrillPad(seed, episode) {
+    const cue = footstepsCue(Date.now(), seed ?? 0);
+    return `<div class="voice-pad" data-job-pad="drill">
+      <p class="say-line">Say <strong>CLOSE</strong>, <strong>LATE</strong> or <strong>GOING</strong> out loud.</p>
+      <div class="voice-cue" data-foot-cue>FOOTSTEPS · ${esc(cue)}</div>
+    </div>`;
+  }
+
+  function guideJobPad(job, seed, episode) {
+    if (job === JOB.SMASH) {
+      const real = realFaceFor(seed, episode);
+      return `<div class="twin-row guide" data-job-pad="smash-guide">
+        ${twinFaceHtml('left', { real: real === 'left' })}
+        ${twinFaceHtml('right', { real: real === 'right' })}
+        <p class="voice-know">She cannot see this. Say <strong>${esc(wallWord(real))}</strong> out loud, and pin a face.</p>
+      </div>`;
+    }
+    const shot = drillShotFor(seed, episode);
+    return `<div class="voice-pad" data-job-pad="drill-guide">
+      <p class="say-line">Say <strong>GO</strong> when he cannot hear it. Say <strong>HOLD</strong> to stop her.</p>
+      <p class="voice-know">REAL is the <strong>${esc(toolLabel(shot))} MOUNT</strong>. Recap will say seated either way. She cannot see this.</p>
+    </div>`;
+  }
+
+  /**
+   * 🚪 **GUIDE E'S WHOLE CONTROL — one chip per door out of here, in thumb country.**
+   *
+   * The chips ARE the scope. There is a chip for each door out of the room she is looking at and
+   * there is nothing else to tap, so a route cannot be assembled by tapping twice: the second tap
+   * REPLACES the pin (D2) and the map redraws around wherever the runner has walked to. A
+   * direction with no door is drawn dim rather than omitted, because a missing chip and a chip for
+   * a wall look identical to a thumb but mean opposite things.
+   */
+  /**
+   * 🗺️ **GUIDE E'S SCOPE, BUILT AT MOST ONCE PER PAINT.**
+   *
+   * Two callers want it and they are on opposite sides of the structural stamp: the stamp itself
+   * needs `hereId` to know whether the sheet's SHAPE has changed, and the guide branch needs the
+   * whole thing to render. Calling `guidePad` twice would build `planRegions` twice per frame at
+   * 2 Hz, which is the kind of waste that later gets "fixed" by taking the term back out of the
+   * stamp — so the memo is here to make sure the honest version stays the cheap one.
+   *
+   * 🚨 **THE KEY IS EVERY INPUT, SO THIS CANNOT GO STALE.** Seed, the runner's mark, the pin, the
+   * mission room and the job — miss one and the memo is a lie. It is not a cache of the HOUSE:
+   * `neighbourScope`'s header forbids that in capitals and it is right, because the generator can
+   * move a wall. This is one frame's answer, thrown away the moment any input differs.
+   *
+   * ⚠️ **THE MISSION ROOM COMES OFF THE PUBLIC `mission.*` EVENT** — the same read `missionLine`
+   * already makes. `room.js` writes it at `VIS.PUBLIC`, so nothing new is asked for and nothing new
+   * is entitled; the chips it unlocks are two targets inside a room the runner is standing in,
+   * which the guide can already see the whole of.
+   */
+  function guideScopeFor(frame) {
+    const c = state.client;
+    const seed = c?.worldSeed == null ? null : pickPlanSeed(c.worldSeed).seed;
+    const meMark = (frame?.flyover?.marks ?? []).find((k) => k.kind === 'you') ?? null;
+    if (seed == null || !meMark) return null;
+    const missionRoom = [...(c.events ?? [])].reverse()
+      .find((e) => String(e.type ?? '').startsWith('mission.'))?.data?.room ?? null;
+    const job = missionFor(frame?.airingEpisode ?? 1).job;
+    const key = `${seed}|${meMark.x}|${meMark.z}|${JSON.stringify(state.pin ?? null)}|${missionRoom}|${job}`;
+    if (state.scopeMemo.key === key) return state.scopeMemo.scope;
+    state.scopeMemo = { key, scope: guidePad(seed, meMark, state.pin, { missionRoom, job }) };
+    return state.scopeMemo.scope;
+  }
+
+  function guidePinPad(scope) {
+    if (!scope) return '';
+    const gates = new Map((scope.gates ?? []).map((g) => [g.dir, g]));
+    const chips = COMPASS_4.map((dir) => {
+      const g = gates.get(dir);
+      const on = !!(g && state.pin && state.pin.roomId === g.toId);
+      return `<button type="button" class="pin-chip${g ? '' : ' none'}${on ? ' on' : ''}"
+        data-pin="${dir}"${g ? '' : ' disabled'}>
+        <span class="pin-dir">${dir}</span>
+        <span class="pin-to">${g ? esc(g.toLabel) : 'wall'}</span>
+      </button>`;
+    }).join('');
+    /*
+     * 🎯 **AND WHEN SHE IS STANDING IN THE MISSION ROOM, THE JOB'S OWN TARGETS.**
+     *
+     * John, 2026-09-02: *"Objective chips appear when the runner is in the mission room."*
+     * `intel-pad.js` `guidePad` decides that — one room id against one room id — and hands back an
+     * EMPTY `spots` everywhere else, so this renders nothing outside the gallery without a second
+     * copy of the rule living on the phone.
+     *
+     * ⚠️ **THE DOOR CHIPS STAY UP BESIDE THEM.** A guide who pins a face and then wants her runner
+     * back out of the room must not have to walk her out with a stick that no longer steers; the
+     * north/east/south/west row is how the expedition ends, and hiding it inside the mission room
+     * would be a dead end wearing a feature's clothes.
+     */
+    const spots = (scope.spots ?? []).map((s) => {
+      const on = !!(state.pin && state.pin.kind === s.kind);
+      return `<button type="button" class="pin-chip goal${on ? ' on' : ''}" data-spot="${s.kind}">
+        <span class="pin-dir">goal</span>
+        <span class="pin-to">${esc(s.label)}</span>
+      </button>`;
+    }).join('');
+    return `<div class="pin-pad" data-pin-pad>
+      <p class="hint">${spots
+        ? 'She is in the room. Pin what she should go at, and say it out loud.'
+        : 'Pin a door. She walks to it. Then say which one, out loud.'}</p>
+      <div class="pin-row">${chips}</div>
+      ${spots ? `<div class="pin-row pin-goals" data-goal-row>${spots}</div>` : ''}
+      <p class="pin-say" data-pin-say>${esc(scope.say)}</p>
+    </div>`;
+  }
+
+  /**
+   * 📍 **AND NOW THE PIN SENDS — Stage 3, 2026-09-01.**
+   *
+   * ⚠️ **THIS COMMENT USED TO SAY THE OPPOSITE AND THE OLD SENTENCE IS WORTH KEEPING.** The pin
+   * was LOCAL, on purpose, and *"Buttons send nothing"* was printed on this pad beside it: the pin
+   * reached the runner because the guide SAID it, which is the locked *"voice is in the room"*
+   * rule. John's lock replaces the reason rather than the rule — *"AUTO-WALK the guide's pin, one
+   * door at a time… the pin MUST go on the wire"* — because a body cannot walk a fact that never
+   * left the phone holding it. **The guide still has to say it out loud**; what changed is that
+   * the runner's feet now follow as well as her ears, and the two are allowed to disagree, which
+   * is the whole of the lie.
+   *
+   * Assignment stays assignment: `state.pin` is one slot, `pinDoor` returns a fresh object, and
+   * the message carries exactly `intel-pad.js` `PIN_KEYS`. The server refuses it from anybody who
+   * is not `pair.guide` and refuses any shape that is not those four fields.
+   */
+  function bindPinPad(scope) {
+    if (!scope) return;
+    /*
+     * 📍 ASSIGNMENT, not push. See `state.pin`'s header — one slot is the whole of D2. A door chip
+     * and an objective chip write the SAME slot through the SAME send, which is why a guide who
+     * taps LEFT FACE and then taps NORTH has one pin and not two: `pinDoor` and `pinSpot` both
+     * return a fresh object, and `state.pin = …` is what "replaces" means.
+     */
+    const tap = (pin) => {
+      state.pin = pin;
+      if (pin) {
+        const wire = pinShape(pin);
+        state.client?.send({ t: 'pin', x: wire.x, z: wire.z, roomId: wire.roomId, kind: wire.kind });
+      }
+      paint();
+    };
+    root.querySelectorAll('[data-pin]').forEach((btn) => {
+      btn.addEventListener('click', () => tap(pinDoor(scope, String(btn.dataset.pin || ''))));
+    });
+    root.querySelectorAll('[data-spot]').forEach((btn) => {
+      btn.addEventListener('click', () => tap(pinSpot(scope, String(btn.dataset.spot || ''))));
+    });
+  }
+
+  /**
+   * 📱 **RUNNER D'S BEZEL — fixed to the viewport, and deliberately not in the flow.**
+   *
+   * "The edge of the phone" has to actually be the edge of the phone, so this is a `position:fixed`
+   * overlay rather than a border on a card. It is `pointer-events:none` throughout: the whole point
+   * is that it is caught by peripheral vision while the thumb is on the stick and the eyes are on
+   * the television, so it must never be able to eat a touch meant for RUN or SWING.
+   *
+   * `bez.runs` arrives as CSS pixels around the perimeter and can span two edges at a corner —
+   * `intel-pad.js` `runsOf` does the wrapping, so there is no geometry in this function at all.
+   */
+  /**
+   * 🚨 **SPLIT SO `patchLive` CAN REWRITE THE SEGMENT WITHOUT REBUILDING THE SHEET.**
+   *
+   * The bezel is a BEARING and a bearing is only useful while it is current — it has to move as the
+   * runner walks and swing round the moment her guide re-pins. It was drawn once per sheet rebuild,
+   * and the runner's stamp carries no term that changes when she moves, so it was frozen for the
+   * whole expedition: `runnerPad` was called on every paint and its answer thrown away. Found
+   * 2026-09-02 alongside the guide's frozen chip row, which is the same bug on the other pad.
+   *
+   * ⚠️ **AND THE FIX HAD TO BE A PATCH, NOT A STAMP TERM — THE OPPOSITE OF THE GUIDE'S.** Her sheet
+   * has no stick, so a rebuild per doorway costs nothing. HIS DOES. The whole reason the structural
+   * stamp exists is that rebuilding the runner's sheet destroys `#stick` and its
+   * `setPointerCapture` under a moving thumb, and a bearing that updated twice a second by rebuild
+   * would drop every drag in the game. So the two pads take opposite fixes for one bug, and the
+   * reason is that only one of them is holding a control. `[data-bezel]` is `pointer-events:none`
+   * and contains no interactive element, so its innards can be rewritten freely.
+   */
+  function bezelInner(bez) {
+    const rails = ['top', 'right', 'bottom', 'left']
+      .map((e) => `<i class="bz-rail bz-${e}"></i>`).join('');
+    const lit = (bez.runs ?? []).map((r) => {
+      const len = Math.max(0, r.to - r.from);
+      return (r.edge === 'top' || r.edge === 'bottom')
+        ? `<i class="bz-lit bz-${r.edge}" style="left:${r.from}px;width:${len}px"></i>`
+        : `<i class="bz-lit bz-${r.edge}" style="top:${r.from}px;height:${len}px"></i>`;
+    }).join('');
+    return rails + lit;
+  }
+
+  /*
+   * 🚨 **`function`, NOT `const` ARROWS — AND THIS FILE HAS NOW BILLED THAT LESSON TWICE IN ONE
+   * DAY.** `patchLive` runs off a socket message and `paint()` is reached from the mount path, so a
+   * `const` declared beside `bezelHtml` is in its temporal dead zone for anything the phone does
+   * before execution walks past this line. The first version of these two threw *"Cannot access
+   * 'ze' before initialization"* out of the minified bundle, exactly as `let scopeMemo` had thrown
+   * *"'ne'"* an hour earlier. `phone-accusation` PA8 caught both; no node gate executes `paint()`,
+   * so none of them could. A hoisted declaration has no dead zone — use one.
+   */
+  function bezelCap(bez) {
+    return bez.whole ? 'Armed — whole bezel' : (bez.pinned ? 'Your guide pinned' : 'No map here');
+  }
+
+  function bezelWord(bez) {
+    return bez.whole ? 'SWING NOW' : (bez.pinned ? bez.words : 'the TV is the picture');
+  }
+
+  function bezelHtml(bez) {
+    return `<div class="bezel${bez.whole ? ' armed' : ''}" data-bezel aria-hidden="true">${bezelInner(bez)}</div>
+      <div class="bz-read${bez.whole ? ' armed' : ''}" data-bezel-read>
+        <span class="bz-cap">${esc(bezelCap(bez))}</span>
+        <span class="bz-word">${esc(bezelWord(bez))}</span>
+      </div>`;
+  }
+
+
+  /**
+   * 🧭 **AND IT ADVANCES ONCE SHE IS IN THE ROOM** — John, 2026-09-01: *"stop saying Find the
+   * gallery."*
+   *
+   * The room the job is in rides the PUBLIC `mission.*` event (`room.js` L1138), which is where
+   * the phase already comes from, so this is one more field off a record every phone gets.
+   * `here` is the seat's own room and differs per seat by design: `you.here` is `runner` audience
+   * and the guide has `scope.hereId` off her own map. A seated watcher passes neither and gets
+   * the unchanged line, which is correct — they are not in any room.
+   */
+  /**
+   * 🧭 **THE SEEK LINE'S WORDS. Split out because the line has to keep MOVING.**
+   *
+   * ⚠️ **`seekLine` HAS BEEN CORRECT AND THE SCREEN HAS BEEN WRONG SINCE IT SHIPPED.** John's lock
+   * is *"once the runner is in the mission room, advance the seek line (stop saying Find the
+   * gallery)"*, and `mission.js` `seekLine` does exactly that — `runner-intel` RI15 executes it and
+   * is green. But it advances on `here`, and `here` changes when a body walks through a doorway,
+   * which changes NO term of the runner's structural stamp and was written by no branch of
+   * `patchLive`. So the pad that told her to find the gallery kept telling her that while she stood
+   * in it, all run, on the one seat whose whole job is to be looking away at a television. The
+   * PHASE half worked, because `missionPhase` is in the stamp — which is exactly why nobody noticed.
+   *
+   * Third instance of one bug in one afternoon: the guide's chips (RI21), the runner's bearing
+   * (RI22), and this. A gate on the FUNCTION is not a gate on the SCREEN.
+   */
+  function goalText(frame, here = null) {
     const evs = state.client?.events ?? [];
     const last = [...evs].reverse().find((e) => String(e.type ?? '').startsWith('mission.'));
     const phase = last ? String(last.type).slice('mission.'.length) : 'seek';
-    const spec = missionFor(frame?.airingEpisode ?? 1);
-    if (phase === 'done') return `<p class="goal">Home. That is the run.</p>`;
-    if (phase === 'return') return `<p class="goal">${esc(spec.home)}</p>`;
-    return `<p class="goal">${esc(spec.seek)}</p>`;
+    return seekLine(missionFor(frame?.airingEpisode ?? 1), {
+      here, missionRoom: last?.data?.room ?? null, phase,
+    });
+  }
+
+  /**
+   * `from` says where `patchLive` should re-read `here`: `you` is the runner's own room off the
+   * frame, `scope` is the guide's `neighbourScope().hereId`, which is the RUNNER's room seen from
+   * her map. Two seats, two sources, one line — and naming the source on the element is what lets
+   * one patch serve both without guessing which sheet it is looking at.
+   */
+  function missionLine(frame, here = null, from = 'you') {
+    return `<p class="goal" data-goal="${from}">${esc(goalText(frame, here))}</p>`;
   }
 
   /**
@@ -1143,6 +1693,47 @@ export default async function partyPhone({ params }) {
     const hereEl = root.querySelector('[data-here]');
     if (hereEl) hereEl.textContent = hereLabel(frame?.you?.here);
 
+    /*
+     * 🧭 **THE BEARING, REWRITTEN IN PLACE — see `bezelInner`'s header for why it is here and the
+     * guide's chips are in the stamp instead.** A bearing that only redraws on a sheet rebuild is
+     * a bearing that is wrong the moment the runner takes a step, and the runner's sheet is the
+     * one sheet that must NOT rebuild while a thumb is on the stick.
+     */
+    const bezel = root.querySelector('[data-bezel]');
+    if (bezel) {
+      const bez = runnerPad(frame?.you?.at ?? null, frame?.you?.pin ?? null, false);
+      bezel.classList.toggle('armed', !!bez.whole);
+      bezel.innerHTML = bezelInner(bez);
+      const read = root.querySelector('[data-bezel-read]');
+      if (read) {
+        read.classList.toggle('armed', !!bez.whole);
+        const cap = read.querySelector('.bz-cap');
+        const word = read.querySelector('.bz-word');
+        if (cap) cap.textContent = bezelCap(bez);
+        if (word) word.textContent = bezelWord(bez);
+      }
+    }
+
+    /*
+     * 🧭 **THE SEEK LINE, RE-READ FROM WHEREVER THE ELEMENT SAYS ITS ROOM COMES FROM.** See
+     * `goalText`'s header: `seekLine` has always advanced correctly and the SCREEN never did,
+     * because `here` changes when a body walks through a doorway and no term of the runner's stamp
+     * does. `data-goal` names the source so one patch serves both sheets without guessing.
+     */
+    const goalEl = root.querySelector('[data-goal]');
+    if (goalEl) {
+      const here = goalEl.dataset.goal === 'scope'
+        ? (guideScopeFor(frame)?.hereId ?? null)
+        : (frame?.you?.here ?? null);
+      goalEl.textContent = goalText(frame, here);
+    }
+
+    const foot = root.querySelector('[data-foot-cue]');
+    if (foot) {
+      const cue = footstepsCue(Date.now(), state.client?.worldSeed ?? 0);
+      foot.textContent = `FOOTSTEPS · ${cue}`;
+    }
+
     if (slot) {
       const intel = frame?.you?.intel;
       // A slot stamped `production` stays Production's, whatever this tick's read grades as. See
@@ -1207,6 +1798,30 @@ export default async function partyPhone({ params }) {
     if (jam) return 'The feed is being eaten. Call what you remember, not what you can see.';
     if (hunterMark) return 'A camera has the hunter. The red mark is live.';
     return 'No camera has the hunter. You are calling this one blind.';
+  }
+
+  /**
+   * Dead do not lock a runner. `me` is the welcome handshake — it has no `alive` —
+   * so this reads public facts: `players[].alive` and `player.executed` / `player.taken`.
+   * A missing frame falls back to lobby seats as alive:true; the log is what still
+   * keeps Ada off the episode-2 ballot. Nameplate stays face-down; no READING sheet.
+   */
+  function iAmDead(me, players, events) {
+    const id = me?.playerId;
+    if (!id) return false;
+    return deadIdsFromPublic({ players, events }).has(String(id));
+  }
+
+  function paintDeadWatch(me, players) {
+    stopPad();
+    const who = playerName(players, me.playerId) || me.name || 'You';
+    root.innerHTML = `
+      <div class="phone-top"><span>${esc(state.code.toUpperCase())}</span><span>${esc(who)} · out</span></div>
+      <div class="cast-step">
+        <h1>You are out.</h1>
+        <p class="hint">Your nameplate is face-down. Watch the TV. The living pick the next pair — you do not lock a ballot.</p>
+      </div>`;
+    root.dataset.castUi = 'dead-watch';
   }
 
   function paintCasting(players, me, episode) {
@@ -1463,24 +2078,219 @@ export default async function partyPhone({ params }) {
     return `<span class="seat-chip" style="background:${esc(look.accent)}">${esc(String(seat.seat + 1))}</span>`;
   }
 
+  /* ==========================================================================================
+   * 🩸 **THE STANDING BOARD — WHO HAS BEEN NAMED, BY WHOM, AND WHETHER IT IS YOU.**
+   *
+   * MEASURED FIRST (`harness/phone-accusation.mjs`, 2026-08-28, eight phones, two nominations
+   * standing and confirmed on the television). What the phones said before this existed:
+   *
+   *   TV `.nom-board`      "1 Sam NAMED BY JOHN 3 · 2 Bo NAMED BY ELLIE 5", 2 seat chips
+   *   nominator (John)     "You have nominated. Watch the TV."   0 names · 0 chips · 0 receipts
+   *   nominee   (Sam, 3)   "Standing: Sam, Bo"                   0 chips  — byte-identical to
+   *   bystander (Alex, 7)  "Standing: Sam, Bo"                   0 chips    the bystander's copy
+   *
+   * Three separate holes, and the middle one is the product one:
+   *
+   * 1. **`Standing: Sam` NAMES NOBODY IN A ROOM WITH TWO SAMS.** Duplicate names are a locked
+   *    rule, and the seat chip is the whole answer to it — it is already on every tappable row,
+   *    the vote list, the vote receipt and the TV's own board. It was on the one line that says
+   *    who is on the block. Alexandria's sheet offered her `4 Sam` to tap while telling her
+   *    `Sam` was standing, and those are two different people.
+   * 2. **THE PERSON WHO WAS JUST NAMED IS NOT TOLD.** Sam's sheet and the bystander's sheet
+   *    carried the same sentence. The television announces the accusation, her robot wears a red
+   *    tag, and the thing in her hand said nothing — so the one player who has to answer it is
+   *    the one player reading it off someone else's screen.
+   * 3. **THE NOMINATOR HAD NO RECEIPT, AND THE PLACEHOLDER COULD LIE.** Every other beat gives
+   *    one: the Vote's is `The room recorded · [3] Sam` and `loop-ui-play` S1 gates it. The
+   *    Reckoning's was `You have nominated. Watch the TV.` — no name, no seat, and driven by the
+   *    OPTIMISTIC local `state.nominated` rather than by the server's fanout. That is not
+   *    theoretical: a run of the harness above drove a Reckoning the server had not entered, it
+   *    refused all eight nominations with `not reckoning`, and every phone still read
+   *    "You have nominated." over an empty ballot. Same bug the vote receipt's own header was
+   *    written about; same fix, which is to quote `c.noms` and never `state.nominated`.
+   *
+   * 🚨 **THE ONLY TWO FIELDS TOUCHED ARE `nominator` AND `target`, AND BOTH ARE ALREADY PUBLIC.**
+   * `FANOUT_KEYS.nomRow` (`net/party/local.mjs`) and `CUE_NOM_KEYS` (`src/party/follow.js`) are
+   * both exactly `['nominator','target']`, the television has printed both since #34, and
+   * `standingNames()` below has computed `by` all along and thrown it away. Names, seats and
+   * accents are `players[].name` / the lobby seat list, every one of them an `all` row in
+   * `net/party/entitle.js`. **No new field crosses any wire for this** — if a future line here
+   * wants one that has no matrix row, that is a design decision and `party-isolation` I1c is
+   * the thing that will say so out loud.
+   *
+   * Rendered entirely in CSS that already exists (`night-skin.js` owns the sheet, not this
+   * file): `.pick-list button.locked-out` is the dashed, un-tappable row the cast list already
+   * uses for a blocked pick, `.self-pick` is its gold "this one is you" inset, and `.receipt` /
+   * `.receipt.coerced` are the green and red receipt the ballot already speaks in. Nothing here
+   * animates or holds state across a repaint — `paint()` rebuilds `root.innerHTML` on every
+   * socket message and anything stateful would strobe.
+   * ========================================================================================== */
+
+  /** One standing nomination as a row: WHO is on the block, and WHO put them there. */
+  function standingRow(n, me, c) {
+    const mine = n.target === me.playerId;
+    const byMe = n.nominator === me.playerId;
+    return `<button type="button" class="locked-out${mine ? ' self-pick' : ''}" disabled
+        aria-disabled="true" data-standing="${esc(n.target)}">
+      ${seatChip(c, n.target)}
+      <span style="min-width:0">
+        <span style="display:block">${esc(n.name)}${mine ? ' · YOU' : ''}</span>
+        <span class="hint" style="display:flex;align-items:center;gap:7px;margin-top:4px">
+          named by ${seatChip(c, n.nominator)}<span>${esc(n.by)}${byMe ? ' · you' : ''}</span>
+        </span>
+      </span>
+    </button>`;
+  }
+
+  /** The board every phone sees, plus the red plate the named player sees and nobody else does. */
+  function standingBoard(standing, me, c) {
+    if (!standing.length) return '';
+    const onMe = standing.find((n) => n.target === me.playerId);
+    let html = '';
+    if (onMe) {
+      html += `<div class="receipt coerced">
+        <div class="receipt-k">You have been named by</div>
+        <div class="receipt-v">${seatChip(c, onMe.nominator)}<span>${esc(onMe.by)}</span></div>
+        <p class="hint">You are standing. The room votes next.</p>
+      </div>`;
+    }
+    html += `<p class="hint">Standing — ${standing.length === 1 ? 'one name' : `${standing.length} names`}, and who said them</p>
+      <div class="pick-list">${standing.map((n) => standingRow(n, me, c)).join('')}</div>`;
+    return html;
+  }
+
+  /* ==========================================================================================
+   * 🔨 **THE TAP THAT DID NOT LAND — and why this is a plate rather than a whole new mechanic.**
+   *
+   * `net/party/local.mjs`'s `t:'nominate'` handler computed `applyNominate`'s answer and threw it
+   * away, so a refused nomination said NOTHING to the handset that made it. The visible symptom
+   * was not silence, which would at least look like nothing had happened: `state.nominated` was
+   * already true from the thumb, `c.noms` never named this phone, so the `already` branch below
+   * printed **`Sending your nomination…` for the rest of the beat** over a server that had
+   * finished with the message. A dead handset and a refusal look identical from the sofa.
+   *
+   * 🚨 **EVERY REFUSAL THIS SCREEN CAN ACTUALLY MEET IS A RACE, AND THAT IS THE PRODUCT CASE.**
+   * The pick list already prevents each rule locally — it filters out yourself, the dead, anyone
+   * already standing, and it hides itself once your own nomination is on the board. So the only
+   * taps that reach a refusal are the ones where the sheet was RIGHT when the player looked at it
+   * and STALE by the time the thumb landed: two handsets naming the same person in the same
+   * second, or the Reckoning clock expiring in flight. Those are exactly the moments a player
+   * cannot reconstruct from the television, because the board simply shows somebody else's
+   * nomination where they expected their own.
+   *
+   * ⚠️ **THE TABLE COVERS REASONS THIS SHEET CANNOT REACH, ON PURPOSE.** `no self-nomination` and
+   * a dead NOMINATOR's `not living` are prevented by the list above and by "The dead do not
+   * nominate"; `standing-nomination cap reached` is unreachable from a live wire at all, because
+   * `reckoningClosed` ends the beat on the third standing name before a fourth can be refused
+   * (`nom-receipt` NR8 proves it rather than asserting it). They are here so that the sheet
+   * cannot go blank, and for the same reason the `default` prints the server's own string
+   * verbatim: the failure being fixed is a player told nothing, and a reason nobody predicted
+   * must not reproduce it.
+   *
+   * 🚨 **THE ONE PIECE OF INTERPRETATION IS DONE HERE, FROM PUBLIC STATE, NOT BY THE SERVER.**
+   * `already nominated this episode` is TWO different refusals wearing one string — `canNominate`
+   * means *you have spent yours*, `canBeNominated` means *they are already on the block* — and
+   * telling a player the wrong one is worse than telling them nothing. The disambiguation reads
+   * `c.noms`, the public standing board this phone already holds, and nothing else. The server
+   * does not author it: a receipt reports what the server DID, and what it meant for this player
+   * is a question only this player's screen has the context to answer (`CLAUDE.md`, 2026-08-28).
+   *
+   * Rendered in CSS that already exists — `.receipt.coerced` is the red plate the vote receipt
+   * and the "you have been named" plate already speak in — and it holds no state across a
+   * repaint: `state.nomOk` is written by an incoming frame and by nothing else, which is the
+   * exact distinction the old lying receipt got wrong.
+   * ========================================================================================== */
+  function nomRefusalLine(refused, standing, target, alive) {
+    switch (refused.why) {
+      case 'not reckoning':
+        return 'The Reckoning had closed before your tap arrived.';
+      case 'debrief is still talk':
+        return 'Not yet — the Debrief is still talk. Naming opens at the end of it.';
+      case 'already nominated this episode':
+        return standing.some((n) => n.target === target)
+          ? 'Somebody named them first. Their nomination stands, not yours — name someone else.'
+          : 'You have already named someone this episode. One nomination each.';
+      case 'standing-nomination cap reached':
+        return 'The block is full — three names already stand.';
+      case 'no self-nomination':
+        return 'You cannot name yourself.';
+      /*
+       * ⚠️ `not living` IS ALSO TWO REFUSALS IN ONE STRING — `canNominate` means *you* are not
+       * in the show, `canBeNominated` means *they* are not. The nominator half is very nearly
+       * unreachable here, because a dead player never gets this far: `iCanAct` has already
+       * printed "The dead do not nominate" and returned. So the target reading is the default,
+       * and the other is chosen only when the public board says the target IS alive — which
+       * leaves the server's living list as the only thing that can have disagreed.
+       */
+      case 'not living':
+        return alive === true
+          ? 'The room does not count you among the living, so it took no nomination from you.'
+          : 'They are not in the show — the room will not put a name on them.';
+      default:
+        return refused.why || 'The room did not take it.';
+    }
+  }
+
+  /** The red plate a refused nominator gets, and nobody else — `state.nomOk` is theirs alone. */
+  function nomRefusalHtml(me, c, standing) {
+    const refused = state.nomOk;
+    if (!refused || refused.ok) return '';
+    // A nomination of mine that STANDS supersedes anything the server said about an earlier tap.
+    if (standing.some((n) => n.nominator === me.playerId)) return '';
+    const all = mergePublicNames(c.frame?.players, c.lobby);
+    const row = all.find((p) => p.id === refused.target) || null;
+    const line = nomRefusalLine(refused, standing, refused.target, row?.alive);
+    // Duplicate names are legal, so the seat travels with the name — same rule as every other
+    // row on this sheet. With no resolvable player the plate carries the reason alone.
+    const who = row
+      ? `<div class="receipt-v">${seatChip(c, refused.target)}<span>${esc(row.name)}</span></div>`
+      : '';
+    return `<div class="receipt coerced" data-nom-refused="${esc(refused.why || 'refused')}">
+      <div class="receipt-k">The room did not record that</div>
+      ${who}
+      <p class="hint">${esc(line)}</p>
+    </div>`;
+  }
+
   function paintNominate(players, me, c, opts = {}) {
     const late = !!opts.late;
     const standing = standingNames(players, c);
-    const already = standing.some((n) => n.nominator === me.playerId) || state.nominated;
+    /*
+     * ⚠️ **THE RECEIPT IS THE SERVER'S ROW; THE HIDE IS THE LOCAL FLAG.** `state.nominated` is
+     * set the instant the thumb lands so a second tap cannot double-send — that is a debounce
+     * and it stays. It is NOT evidence that anything was recorded, so it never gets to write a
+     * name onto this sheet. See the header, and the vote receipt's.
+     */
+    const mine = standing.find((n) => n.nominator === me.playerId);
+    const already = !!mine || state.nominated;
     const targets = (players || []).filter((p) => p.id !== me.playerId && p.alive !== false
       && !standing.some((n) => n.target === p.id));
+    /* The lead is an instruction, so it is printed only when there is something to tap. It used
+     * to be unconditional and sat directly above "You have nominated" — the sheet telling you to
+     * do the thing it had just told you you had already done. */
+    const canTap = iCanAct(players, me) && !already && targets.length > 0;
     let html = late
-      ? `<p class="hint">Talk's ending — name someone</p>`
-      : `<h1>Reckoning.</h1>${phoneClock(c)}<p class="hint">Tap who you name</p>`;
-    if (standing.length) {
-      html += `<p class="hint">Standing: ${esc(standing.map((n) => n.name).join(', '))}</p>`;
+      ? (canTap ? `<p class="hint">Talk's ending — name someone</p>` : '')
+      : `<h1>Reckoning.</h1>${phoneClock(c)}${canTap ? '<p class="hint">Tap who you name</p>' : ''}`;
+    html += standingBoard(standing, me, c);
+    if (c.tally?.need && c.tally?.living) {
+      html += `<p class="hint" data-clears>${esc(clearsLine({ need: c.tally.need, living: c.tally.living }))}</p>`;
     }
     if (!iCanAct(players, me)) {
       html += `<p class="hint">The dead do not nominate.</p>`;
       return html;
     }
+    // Below the board, above the buttons — where the eye goes next after a tap that vanished.
+    // A refusal has already cleared the local debounce, so the pick list underneath is live again.
+    html += nomRefusalHtml(me, c, standing);
     if (already) {
-      html += `<p class="hint">You have nominated. Watch the TV.</p>`;
+      html += mine
+        ? `<div class="receipt">
+            <div class="receipt-k">The room recorded your nomination</div>
+            <div class="receipt-v">${seatChip(c, mine.target)}<span>${esc(mine.name)}</span></div>
+            <p class="hint">Your nomination is your vote. You do not vote again.</p>
+          </div>`
+        : `<p class="hint">Sending your nomination…</p>`;
       return html;
     }
     if (!targets.length) {
@@ -1497,6 +2307,9 @@ export default async function partyPhone({ params }) {
     // John (2026-08-24): you shouldn't be able to vote for yourself after being nominated.
     const standing = standingNames(players, c).filter((n) => n.target !== me.playerId);
     let html = `<h1>Vote.</h1>${phoneClock(c)}`;
+    if (c.tally?.need && c.tally?.living) {
+      html += `<p class="hint" data-clears>${esc(clearsLine({ need: c.tally.need, living: c.tally.living }))}</p>`;
+    }
     if (c.lynchResult) {
       html += `<p class="hint">${c.lynchResult.executed ? 'The vote is in.' : 'Nobody cleared.'}</p>`;
       return html;
@@ -1567,6 +2380,107 @@ export default async function partyPhone({ params }) {
     }
     const who = playerName(players, r.executed);
     html += `<p class="hint">${esc(who)} is out. The nameplate is face-down. Nothing about alignment.</p>`;
+    return html;
+  }
+
+  /* ===========================================================================================
+   * ⚖️ **THE PHONE DOES ALMOST NOTHING FOR FIFTEEN SECONDS, AND THAT IS THE POINT.**
+   *
+   * The Verdict is the Showrunner's announcement on the TELEVISION. A pad that competed with it
+   * would split the room's attention at the one moment the night is being summarised — the same
+   * argument that took WORD FROM THE HOUSE off the runner's sheet. So: the status, the one line
+   * that says what happens next, whether this seat is still in the show, and nothing to press.
+   *
+   * 🚨 **NO ALIGNMENT, NO ROLE, NO FEED COUNT.** `alive` is already public (it is on every frame
+   * and the TV shows the nameplate go down), so saying it here leaks nothing. Everything else
+   * about what a player WAS is the Reunion's, and a sheet that said it a beat early would undo
+   * the beat the whole design is borrowing against.
+   * =========================================================================================== */
+  function paintVerdict(me, c) {
+    const v = c.verdict;
+    const status = v?.status || '…';
+    const line = v ? outcomeLine(v.status) : 'The Showrunner is deciding.';
+    const cams = v ? `${v.camerasLit}${v.need == null ? '' : ` of ${v.need}`} cameras lit.` : '';
+    let html = `<h1>${esc(status)}</h1>${phoneClock(c)}
+      <p class="hint">${esc(line)}${cams ? ` ${esc(cams)}` : ''}</p>`;
+    if (me && me.alive === false) {
+      html += `<p class="hint">You are out of the show. Your nameplate is face-down — and nobody
+        has been told what you were. You can still talk.</p>`;
+    }
+    html += `<p class="hint">Eyes on the TV. Nothing to press.</p>`;
+    return html;
+  }
+
+  /* ===========================================================================================
+   * 🎬 **THE ONE MOMENT THE ROLE CARD IS ALLOWED TO BE FACE-UP.**
+   *
+   * All night the card is hold-to-reveal and blurred at rest, so a neighbour's glance at an
+   * unattended phone learns nothing. At the Reunion that rule expires: the TV is turning over
+   * every nameplate anyway. This is the personal half of the roll call — the TV says what you
+   * were, this says what it cost you.
+   *
+   * 🚨 **IT DRAWS `c.reveal` OR IT DRAWS NOTHING — never `role.card`.** The card this view has
+   * held all game carries the player's COVER, not their truth: the Glitched believes they are the
+   * Camera Op, and a Reunion sheet that read the card would tell them the lie one last time, on
+   * the one screen whose entire job is the truth. `reunion.js` names the cover separately, as
+   * `believedTheyWere`, and that distinction is what `reunion-truth` U2 caught once already.
+   *
+   * ⚠️ **NULL IS DRAWN AS NULL.** If the payload has not arrived this points at the television and
+   * names nobody. A defaulted empty shape is how a reveal renders a beat before the beat.
+   * =========================================================================================== */
+  function paintReunion(me, c) {
+    const status = c.season || c.verdict?.status || 'THE SEASON IS OVER';
+    let html = `<h1>${esc(status)}</h1>
+      <p class="hint">${esc(outcomeLine(c.season || c.verdict?.status))}</p>`;
+    /*
+     * 🍖 **THE SEASON'S LEDGER, ABOVE THE PERSONAL CARD AND OUTSIDE THE `mine` GUARD.**
+     *
+     * The feed count is a ROOM fact, not a seat fact: it is the number the Verdict withheld all
+     * season because *"evil losing a partner looks exactly like evil winning"*, and the Reunion is
+     * where the room finally gets to tell those two apart. So it prints for a pad that has no seat
+     * in the reveal too — a spectator, a phone that joined late, a handset whose player was never
+     * dealt in. COUCH-PLAN Rung 4 is explicit that the payday reaches EVERY living pad; a room
+     * fact hidden behind "did I get a card" would repeat exactly the ghosting the rung is named
+     * for. Gate: `room-ghosts` RG3c.
+     *
+     * Cameras ride beside it because the Verdict aired that number every episode and never this
+     * one, and side by side is the first time the scoreboard has had both halves.
+     */
+    if (c.reveal?.feed) {
+      const f = c.reveal.feed;
+      const bar = (n, of) => (of == null ? String(n) : `${n} of ${of}`);
+      html += `<p class="hint reunion-ledger">The house ledger, unsealed:
+        <b>${esc(bar(f.fed, f.feedTarget))}</b> fed to the Hunter ·
+        <b>${esc(bar(f.camerasLit, f.cameraTarget))}</b> cameras lit.</p>`;
+    }
+    const mine = (c.reveal?.seats || []).find((s) => s.id === me?.playerId);
+    if (!mine) {
+      html += `<p class="hint">The Reunion is on the TV: the roll call, then the awards. Every
+        nameplate gets turned over.</p>`;
+      return html;
+    }
+    /*
+     * The same `.role-card` the deal drew, with no hold-to-reveal over it. Reusing the class is
+     * the point: the card the player has been protecting all night is the card that goes face-up,
+     * and a second look for the same object would read as a different thing.
+     */
+    html += `<div class="role-card reunion-card">
+      <div class="rule">Your card · face up at last</div>
+      <div class="role">${esc(mine.role)}</div>
+      <div class="side">${esc(mine.alignment === 'evil' ? 'Production' : 'The cast')}</div>
+    </div>`;
+    if (mine.believedTheyWere && mine.believedTheyWere !== mine.role) {
+      html += `<p class="hint">You spent the whole night believing you were the
+        ${esc(mine.believedTheyWere)}. Nobody was going to tell you.</p>`;
+    }
+    if (mine.finalClaim) html += `<p class="hint">What you told them: “${esc(mine.finalClaim)}”</p>`;
+    html += `<p class="hint">${mine.death
+      ? `You were ${mine.death.by === 'EXECUTED' ? 'executed' : 'taken'}.`
+      : 'You made it to the end.'}</p>`;
+    const won = (c.reveal?.awards || []).filter((a) => a.winner === me?.playerId);
+    for (const a of won) {
+      html += `<p class="hint"><b>${esc(a.award)}</b> — ${esc(a.why)}</p>`;
+    }
     return html;
   }
 
@@ -1753,8 +2667,22 @@ export default async function partyPhone({ params }) {
             : 'Reach out to one person. The room sees who — not what.'))}</p>
       <div class="picks">${others.map((p) => {
     const block = why(L, me, p.id, living, c?.beat);
+    /*
+     * 🔢 **WHICH SAM — AND THIS IS THE LIST WHERE IT MATTERS MOST.**
+     *
+     * Every other tappable or aired list already carries the seat chip: `paintNominate`,
+     * `paintLynchVote`, the vote receipt, the TV's nominee board, the casting lamps. This one
+     * did not, and it is the list where you pick who to have a PRIVATE conversation with — so
+     * on a table with two players called Sam it offered two identical buttons and no way to
+     * tell which one you were about to open a channel to. Photographed at N=8 in
+     * `progress/r5/05-phone-debrief.png`; duplicate names are a locked rule, not an accident.
+     *
+     * ⚠️ `party-warm` W35e could not catch this: it asserts three `seatChip(` CALL SITES exist
+     * in the source, and all three did. A fourth list that never called it was invisible to a
+     * source grep. `loop-ui-play` L1 counts rendered chips against tappable rows instead.
+     */
     return `<button type="button" data-link="${esc(p.id)}" ${block ? 'disabled aria-disabled="true"' : ''}>
-          ${esc(p.name || p.id)}${MARK[block] || ''}
+          ${seatChip(c, p.id)}<span>${esc(p.name || p.id)}${MARK[block] || ''}</span>
         </button>`;
   }).join('')}</div>
     </div>`;
@@ -1766,10 +2694,17 @@ export default async function partyPhone({ params }) {
     return linkBlock(L, from, to, { living, beat });
   }
 
+  /*
+   * 🔒 THE PRIVATE HALF OF THE SPLIT, and the list itself now lives in `link.js` beside the
+   * public half. It used to be built inline here, which meant the one screen that is SUPPOSED to
+   * carry the words could only be quoted from a browser — so "the partner pad shows the words"
+   * was a claim about a template literal no node gate could execute. `whisperLines` is pure, both
+   * ends call it, and `harness/whisper-split.mjs` renders this exact element from real socket
+   * bytes. Escaping stays here, where the HTML is.
+   */
   function whisperListHtml() {
-    const me = meId();
-    return (state.whispers || []).slice(-30).map((w) =>
-      `<p class="whisper${w.from === me ? ' me' : ''}">${esc(w.text)}</p>`).join('');
+    return whisperLines(state.whispers, meId()).map((w) =>
+      `<p class="whisper${w.mine ? ' me' : ''}">${esc(w.text)}</p>`).join('');
   }
 
   /** In place, never through `paint()`. See the block header. */

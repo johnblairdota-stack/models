@@ -25,7 +25,7 @@
  *   E3  a thumb dragged left moves the body left, through the phone -> server -> TV chain
  *   E4  there is no Recap button anywhere on the television
  *   E5  the picture is about 90% of the screen, measured against the viewport
- *   E6  the runner's pad has no house-word block, and the seated chairs still do
+ *   E6  the runner's pad has no house-word block, and neither do the seated chairs
  *   E7  the guide's map does what this guide's ALIGNMENT says it should
  *   E8  a tapped SWING buzzes the phone and writes a word, and the word does not move the stick
  *
@@ -450,9 +450,12 @@ try {
       const chair = await seated.page.evaluate(() => ({
         intel: !!document.querySelector('[data-intel]'),
         k: document.querySelector('[data-intel-k]')?.textContent?.trim() ?? '',
+        text: document.querySelector('.night.phone')?.textContent ?? '',
       }));
-      t('E6c control · a SEATED player keeps it — the block was stripped from one pad, not deleted',
-        chair.intel, chair.k || 'present');
+      t('E6c · a SEATED watcher has no WORD FROM THE HOUSE — chairs watch, they do not get a house line',
+        !chair.intel && !/word from the house/i.test(chair.text)
+        && !/no word on the hunter/i.test(chair.text),
+        chair.k || 'clean');
     }
   }
 

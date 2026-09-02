@@ -35,7 +35,9 @@ import {
   cardFor, dealDeckHtml, faceDownHtml, premiereHtml, roleCardFaceHtml, roleLine, roleName, sideLabel,
 } from '../src/party/rolecard.js';
 
-const PORT = 5199;
+/* ⚠️ Was 5199 — The Desk (`desk/server.mjs`, its own worktree) holds 5199 on John's machine,
+ * and a gate that binds a live product's port dies EADDRINUSE locally while CI stays green. */
+const PORT = 5226;
 let pass = 0, fail = 0;
 const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' · ' + d : ''}`); } else { fail++; console.log(`  FAIL ${n}${d ? ' · ' + d : ''}`); } return c; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

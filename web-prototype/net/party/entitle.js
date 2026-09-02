@@ -90,6 +90,56 @@ export const MATRIX = [
    * checkable. Audience is runner — seated phones and the TV never see it.
    */
   ['you.here',                 'runner'],
+  /*
+   * ---- and where in that room she is standing. PROPRIOCEPTION, not intel, and not the map.
+   *
+   * `you.here` above is the same argument one step coarser — *"a person in a room knows which room
+   * they are in"* — and a person also knows where in it they are. What this is FOR is the Runner D
+   * bezel: `intel-pad.js` `bezelOf(pin, at)` needs both ends of a bearing, and the pin arrived on
+   * the wire tonight while the other end never had a row.
+   *
+   * 🚨 **NOTHING BUILT FROM IT LEAVES THE PHONE, AND `bezelOf`'s RETURN VALUE IS THE PROOF.** It
+   * hands back pixels on a phone edge, a screen word and a range BAND — no world coordinate of any
+   * kind — so this row buys a glowing segment and cannot buy a map. `runner` audience: a seated
+   * phone has no body in the house to be proprioceptive about, and the TV computed it.
+   */
+  ['you.at.x',                 'runner'],
+  ['you.at.z',                 'runner'],
+  /*
+   * ---- which camera the show is on, so the pad can match the controls to it.
+   *
+   * Not intel, not the map, not a position — a perspective NAME from a closed list of four. The
+   * runner's stick is absolute under the plan-locked top-down and camera-relative on the ground,
+   * so a pad that did not know which was live would be lying about its own labels. Audience is
+   * `runner` for the same reason `you.here` is: nobody else is steering, and the TV must not be
+   * told anything it did not itself compute.
+   */
+  ['you.view',                 'runner'],
+
+  /*
+   * ---- 📍 THE GUIDE'S PIN. Stage 3 of `docs/slices/task-runner-intel.md`, landed 2026-09-01.
+   *
+   * 🚨 `crew`, AND THE OTHER TWO CANDIDATE AUDIENCES ARE BOTH WRONG, FOR OPPOSITE REASONS.
+   *   · `all` puts the target's direction on eight screens. The slice says it in one line — *"a
+   *     seated phone must not learn where the target is"* — and it would hand the whole room the
+   *     one thing the guide is supposed to have to SAY out loud.
+   *   · `guide` alone is what shipped before tonight, and it is why the pin was local: with no
+   *     row the runner's bezel had nothing to point at, so `bezelOf` was called with a null pin
+   *     and the pad printed "No map here" honestly but uselessly. John's lock 1 makes the body
+   *     WALK this, and the person steering has to be able to see where she is being sent.
+   * `crew` is exactly the two people in the expedition, which is the two people the pin is a
+   * conversation between.
+   *
+   * The television gets no row and needs none: `fullFor` gives a TV socket no `you` at all
+   * (`role-peek` W4). It learns the pin as a directed CONTROL INPUT, the same way it learns a
+   * thumb stick — see `src/party/follow.js` `PIN_WIRE_KEYS`. That split is what keeps
+   * `party-loop.md`'s "Do not" #1 true while the body still walks: the TV is TOLD the pin and
+   * never RENDERS it, and `harness/runner-intel.mjs` RI9 is the control that proves it.
+   */
+  ['you.pin.x',                'crew'],
+  ['you.pin.z',                'crew'],
+  ['you.pin.roomId',           'crew'],
+  ['you.pin.kind',             'crew'],
 
   // ---- the room
   ['players[].id',             'all'],
@@ -100,7 +150,7 @@ export const MATRIX = [
   ['players[].accent',         'all'],   // lobby cosmetic. Public. Not a role.
   // 'players[].hunter'                  NO ROW. Cosmetics are not a hole for a later secret.
   // 'players[].deal'                    NO ROW. Ditto.
-  ['players[].claim',          'phones'], // published nameplates. Never the TV — the stub writes covers here.
+  ['players[].claim',          'phones'], // published nameplates. Never the TV — see log.js `player.claim_set`.
   ['players[].plate',          'all'],   // undeclared/drafting/published/face-down. Never the role.
   // 'players[].alignment'               NO ROW. Nobody, ever, pre-REUNION.
   // 'players[].role'                    NO ROW. Ditto.
@@ -111,6 +161,8 @@ export const MATRIX = [
   ['pair.guide',               'all'],
   ['cameras.unlocked',         'all'],
   ['cameras.needed',           'all'],
+  // Next night's public tool picture (HALL / FLOOR). Not a person. Not tonight's recap.
+  ['cameras.tool',             'all'],
 
   // ---- the guide's map. party-loop.md puts this under "Do not" in its own words.
   ['flyover.marks[].x',        'guide'],

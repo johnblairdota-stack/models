@@ -34,7 +34,7 @@ import { chromium } from 'playwright';
 import { writeFileSync, rmSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { robotFaceSvg, SHELLS, ACCENTS } from '../src/party/look.js';
-import { REACT_MOOD, REACT_MAX_ON_AIR } from '../src/party/react.js';
+import { REACT_MOOD } from '../src/party/react.js';
 
 let pass = 0, fail = 0;
 const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' · ' + d : ''}`); } else { fail++; console.log(`  FAIL ${n}${d ? ' · ' + d : ''}`); } return c; };
@@ -121,7 +121,7 @@ for (const r of rows) {
    * layout change, at four of these five resolutions.
    */
   t(`F2 · and every player's NAME is on the screen at ${r.w}x${r.h}`,
-    nameCut === 0 && r.names.length === REACT_MAX_ON_AIR,
+    nameCut === 0 && r.names.length === CAST.length,
     `${r.names.length} names · ${nameCut.toFixed(0)}px cut`);
 }
 

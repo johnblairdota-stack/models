@@ -347,18 +347,48 @@ try {
     !!inside && inside.tris > 8000 && inside.calls > 20,
     inside ? `${(inside.tris / 1000).toFixed(1)}k tris, ${inside.calls} calls` : '—');
 
-  // ------------------------------------------------------------- D5 · no god-view
+  /* ============================================================================================
+   * D5 · no god-view
+   *
+   * 🚨 **THIS GATE USED TO PROTECT THE DEFAULT AND CALL IT THE CAPABILITY, AND THAT IS WHY IT
+   * HAS BEEN REWRITTEN RATHER THAN RELAXED.**
+   *
+   * It read: *"the lens stays at head height and the ceilings never come off"*, asserting
+   * `maxY < storey - 1.0 && setLid(false) called 0 times`. Both halves were already false of the
+   * shipped feature the day perspectives landed — `iso` and `top` put the eye above the storey
+   * BY DESIGN and take the roof off to do it — and the gate stayed green only because this drive
+   * never presses `P`. It was measuring a camera nobody had asked to move. Worse, it is not in
+   * `gates:party`, so the day the expedition started choosing top-down on its own it would have
+   * gone red late, in a manual run, long after the change that broke it.
+   *
+   * The rule it was written to defend is `party-loop.md`'s "Do not" #1 — the TV must not become
+   * the guide's map — and that rule is NARROWED here, not repealed. John ratified the narrowing
+   * after `CRITIC-LEDGER` round 8 raised it. What still must hold, and is asserted below:
+   *
+   *   · the roof comes off only over the rooms RESIDENCY admits — never the whole house
+   *   · the ground rigs still clamp under the storey, so the exemption is two rigs wide
+   *   · the overhead eye is bounded ABOVE too: a camera that keeps climbing is the fly-over
+   *     coming back in disguise
+   *
+   * `setLid` is still wrapped, but it now records the SCOPE of every call rather than counting
+   * them, because "how many times" was never the question — "over how much of the house" is.
+   * ============================================================================================ */
   const camYs = [];
   const storeys = [];
   const lidCalls = await tv.evaluate(() => {
     const w = document.querySelector('iframe.run-cam')?.contentWindow;
     const room = w?.__rrrFollow?.room;
     if (!room) return -1;
-    // Wrap `setLid` for the rest of the run. If anything reaches for the flyover's ceiling
-    // removal from here on, it is counted rather than argued about.
-    w.__lidCalls = 0;
+    w.__lidScopes = [];
+    const total = (room.lidCensus?.() ?? {}).spaces?.length ?? 0;
+    w.__lidSpaceTotal = total;
     const orig = room.setLid?.bind(room);
-    if (orig) room.setLid = (on) => { if (on === false) w.__lidCalls++; return orig(on); };
+    if (orig) {
+      room.setLid = (on, ids = null) => {
+        if (on === false) w.__lidScopes.push(ids == null ? total : (ids.length ?? total));
+        return orig(on, ids);
+      };
+    }
     return 0;
   });
 
@@ -435,11 +465,38 @@ try {
 
   const maxY = camYs.length ? Math.max(...camYs) : Infinity;
   const minStorey = storeys.length ? Math.min(...storeys) : 0;
-  const lidsOff = await tv.evaluate(() =>
-    document.querySelector('iframe.run-cam')?.contentWindow?.__lidCalls ?? -1);
-  t('D5 · no god-view — the lens stays at head height and the ceilings never come off',
-    camYs.length > 0 && maxY < minStorey - 1.0 && lidCalls === 0 && lidsOff === 0,
-    `cam y max ${maxY} under a ${minStorey} m storey · setLid(false) called ${lidsOff}x`);
+  const lid = await tv.evaluate(() => {
+    const w = document.querySelector('iframe.run-cam')?.contentWindow;
+    const f = w?.__rrrFollow;
+    return {
+      scopes: w?.__lidScopes ?? null,
+      total: w?.__lidSpaceTotal ?? 0,
+      resident: f?.room?.residentIds?.()?.length ?? null,
+      shot: f?.cam?.()?.shot ?? null,
+      rigHeight: f?.cam?.()?.rigHeight ?? null,
+    };
+  });
+  const widest = (lid.scopes && lid.scopes.length) ? Math.max(...lid.scopes) : 0;
+  const overhead = lid.rigHeight != null && lid.rigHeight > minStorey;
+
+  /*
+   * The drive never presses `P` and walks a scripted route that stays in the ballroom, so this
+   * observes the DEFAULT camera — which is still the chase. The three assertions are written to
+   * hold on either arm, so the day the expedition starts craning during this drive they measure
+   * the new behaviour rather than going red at it.
+   */
+  t('D5 · no god-view — the roof comes off only over the runner\'s own rooms, and a ground rig '
+    + 'still stays under the storey',
+    camYs.length > 0
+      && (overhead || maxY < minStorey - 1.0)
+      && widest < lid.total
+      && (lid.resident == null || widest <= Math.max(lid.resident, 1) + 1),
+    `shot ${lid.shot} · cam y max ${maxY} under a ${minStorey} m storey`
+      + ` · roof off over at most ${widest} of ${lid.total} spaces`
+      + ` (${lid.resident ?? '—'} resident)`);
+  t('D5b · and the overhead eye is bounded ABOVE too — a camera that keeps climbing is the '
+    + 'fly-over in disguise',
+    maxY < 14, `cam y max ${maxY} m`);
 
   // ------------------------------------------------------------- D6 · no guide map
   const leak = await tv.evaluate(() => {

@@ -15,6 +15,7 @@
  */
 
 import { cleanLook } from './look.js';
+import { OBJECTIVE_KINDS } from './objectives.js';
 
 /** The only beat that mounts a camera. Casting, recap and lobby get no follow. */
 export const FOLLOW_BEATS = ['expedition'];
@@ -134,6 +135,92 @@ export const PERSPECTIVES = ['chase', 'wide', 'iso', 'top'];
 export const OVERHEAD = ['iso', 'top'];
 export const isOverhead = (name) => OVERHEAD.includes(String(name || ''));
 
+/* =============================================================================================
+ * 🧭 **PLAN NORTH — the yaw a map-like perspective is nailed to, and why it is exactly π.**
+ *
+ * `orbit: false` was written to stop the LOOK STICK swinging an overhead view. It did not stop
+ * the BODY swinging it: `_solve` placed every non-chase rig from `runner.facing`, so the whole
+ * "stable map" turned with the robot — the D-pad-on-a-rotating-map problem the rig table's own
+ * comment says `top` exists to avoid, arriving through the other door.
+ *
+ * So a plan-locked rig is nailed to one compass bearing and translates only. The bearing is the
+ * one the guide's map already draws in (`rrr-phone-ux.md` §4: screen-up is world −Z, screen-right
+ * is +X), so the guide and the television finally agree about the word "left".
+ *
+ * 🚨 **AND THE SAME CONSTANT IS THE CONTROL SCHEME, WHICH IS WHY THERE IS NO SECOND MOVEMENT
+ * MODEL IN THIS SLICE.** `player.js` `_stepGround` is aim-relative:
+ *
+ *     want = ( sin(aimYaw)·mv.y − cos(aimYaw)·mv.x , 0 , cos(aimYaw)·mv.y + sin(aimYaw)·mv.x )
+ *
+ * At `aimYaw = π` that is stick-up → world `(0,0,−1)` and stick-right → world `(+1,0,0)`. Screen
+ * direction IS world direction, on both axes, with `player.js` untouched. The absolute top-down
+ * stick is this constant and nothing else.
+ * ============================================================================================= */
+export const PLAN_YAW = Math.PI;
+/**
+ * A rig the look stick may not swing is a rig that must not turn under the body either — the two
+ * are the same promise. Derived from the table rather than kept as a second list, so a future rig
+ * cannot be added to one and forgotten in the other.
+ */
+export const isPlanLocked = (name) =>
+  !(PERSPECTIVE_RIG[String(name || '')] ?? PERSPECTIVE_RIG.chase).orbit;
+
+/**
+ * ⏱️ **HOW LONG THE CRANE TAKES, AND WHY THE TWO NUMBERS DIFFER.**
+ *
+ * Going out is the reveal: the player is being told, without a caption, that the view and their
+ * controls have changed, and that reading takes a beat. Coming home is a release — the mission
+ * is done and the ballroom is on screen — so making them watch the same move in reverse for as
+ * long would be charging them for information they already have.
+ */
+export const RISE_SECONDS = 1.35;
+export const DROP_SECONDS = 1.10;
+
+/* =============================================================================================
+ * 🚪 **THE EXPEDITION CHOOSES ITS OWN CAMERA — the ballroom threshold is the switch.**
+ *
+ * John: *"each expedition takes place outside the ball room where the hunter stalks them from
+ * the shadows. It's top down perspective… the ballroom remains how it is currently with the
+ * players locked in the seat or the chase camera when you are exiting into the house. That
+ * means there is an exact transition phase for the camera."*
+ *
+ * So the perspective stops being a thing a developer presses and becomes a property of WHERE THE
+ * RUNNER IS. The predicate is the ballroom AABB the mission phase already uses for `done` — the
+ * same one, extracted, because a second copy of a room test is a thing that drifts.
+ *
+ * ⚠️ **HYSTERESIS, OR THE CAMERA STROBES IN THE DOORWAY.** A bare in/out test flips every time a
+ * body jitters across the line, and a 1.35 s crane restarting twice a second is worse than no
+ * crane at all. Leaving needs the runner outside the box GROWN by `VIEW_MARGIN`; returning needs
+ * them inside it SHRUNK by the same. One signed margin does both, so the two halves cannot be
+ * given different values by accident.
+ * ============================================================================================= */
+export const VIEW_MARGIN = 1.10;
+export const EXPEDITION_PERSPECTIVE = 'top';
+export const BALLROOM_PERSPECTIVE = 'chase';
+
+/**
+ * Is this point inside the ballroom rectangle? A POSITIVE margin shrinks the box (you must be
+ * well in), a NEGATIVE one grows it (you must be well out). Y is ignored, as it is everywhere
+ * else this house tests rooms.
+ */
+export function insideBallroom(pos, room, margin = 0) {
+  if (!pos || !room) return false;
+  return pos.x > room.x0 + margin && pos.x < room.x1 - margin
+    && pos.z > room.z0 + margin && pos.z < room.z1 - margin;
+}
+
+/**
+ * Which perspective the night wants, given where the body is. Pure, and deliberately ignorant of
+ * cranes and pins: it answers only "ballroom or house", and the bed decides what that costs.
+ */
+export function stepBallroomView(current, pos, room, margin = VIEW_MARGIN) {
+  if (!room) return current;
+  if (current === EXPEDITION_PERSPECTIVE) {
+    return insideBallroom(pos, room, margin) ? BALLROOM_PERSPECTIVE : current;
+  }
+  return insideBallroom(pos, room, -margin) ? current : EXPEDITION_PERSPECTIVE;
+}
+
 /**
  * Where each perspective puts the eye, as an offset from the runner, and how it frames them.
  *
@@ -159,15 +246,75 @@ export function nextPerspective(name) {
   return PERSPECTIVES[(i < 0 ? 0 : i + 1) % PERSPECTIVES.length];
 }
 
+/** Smootherstep. Zero velocity at BOTH ends, which is what stops a crane having a stop frame. */
+export function smootherstep(x) {
+  const t = Math.max(0, Math.min(1, Number(x) || 0));
+  return t * t * t * (t * (t * 6 - 15) + 10);
+}
+
+/**
+ * 🎬 **THE CRANE INTERPOLATES THE RIG, NOT A PITCH — and that is not a workaround, it is the
+ * only move compatible with the decision above.**
+ *
+ * `perspectiveEye` refuses a pitch for an overhead rig on purpose: *"a top-down view you can
+ * tilt is a chase camera with extra steps."* So a ground→overhead transition cannot be a boom
+ * swinging up an arc, because the arc IS a pitch and halfway through it the view would be the
+ * exact tilted thing that decision forbids.
+ *
+ * Blending the four numbers instead gives a camera that rises and pulls in without ever being
+ * "a tilted top-down" at any point on the path — at every value of `s` the result is a legal
+ * rig, just not one in the table. `orbit` does not interpolate: it belongs to the rig you are
+ * arriving at the moment you leave, so the look stick stops steering the instant a plan-locked
+ * destination is chosen rather than fading out.
+ */
+export function lerpRig(a, b, s) {
+  const t = smootherstep(s);
+  const mix = (x, y) => x + (y - x) * t;
+  return {
+    dist: mix(a.dist, b.dist),
+    height: mix(a.height, b.height),
+    lateral: mix(a.lateral, b.lateral),
+    fov: mix(a.fov, b.fov),
+    orbit: t <= 0 ? a.orbit : b.orbit,
+  };
+}
+
+/**
+ * 🗺️ **HOW MUCH OF A MAP THIS RIG IS, 0..1 — the dial the handheld and the lag hang off.**
+ *
+ * A crane's `blend` is progress through a move and is 1 at rest at BOTH ends, so it cannot say
+ * whether the camera is currently a shoulder or a plan. Eye height can: it is 0 at the chase
+ * rig, 1 at `top`, and it moves continuously through a transition, so one number serves the
+ * held view and the move into it without a second state.
+ *
+ * What it is for: a camera a person is carrying should sway and lag, and a camera bolted nine
+ * metres over a room should do neither — ±2 cm of handheld on a 52° lens that high is a map
+ * that drifts, which reads as a bug rather than as an operator. At `chase` this returns exactly
+ * 0, so every ground shot keeps the shipped feel untouched.
+ */
+export function rigMapness(rig) {
+  const lo = PERSPECTIVE_RIG.chase.height;
+  const hi = PERSPECTIVE_RIG.top.height;
+  const h = Number(rig?.height);
+  if (!Number.isFinite(h) || hi <= lo) return 0;
+  return Math.max(0, Math.min(1, (h - lo) / (hi - lo)));
+}
+
 /**
  * The eye offset for a perspective, in world space, given the frame the player is steering.
  *
  * Pure, and deliberately separate from `chaseOrbitOffset` rather than a special case of it: the
  * overhead rigs do not take a pitch at all, because a top-down view that could be pitched is just
  * a chase camera with extra steps and the player would lose the map.
+ *
+ * `name` may also be a rig OBJECT, which is how `lerpRig`'s in-between rigs are drawn — a
+ * transition is a rig that is not in the table, and it has to be solvable by the same function
+ * or the crane would be a second camera model to keep in sync with the first.
  */
 export function perspectiveEye(name, yaw, pitch = 0) {
-  const rig = PERSPECTIVE_RIG[String(name || '')] || PERSPECTIVE_RIG.chase;
+  const rig = (name && typeof name === 'object')
+    ? name
+    : (PERSPECTIVE_RIG[String(name || '')] || PERSPECTIVE_RIG.chase);
   const f = Number(yaw) || 0;
   const fx = Math.sin(f), fz = Math.cos(f);
   const rx = -Math.cos(f), rz = Math.sin(f);
@@ -345,6 +492,25 @@ export const FOLLOW_CHROME_CSS = `
     /* No production graphic during warm/intros — a dim WARM · WALK lied on air. */
     #fl.pre .slug { opacity:0; }
     #fl .rec, #fl .third { transition: opacity .5s ease; }
+    /* C — last-look popup. THEIR EYES / victim name while live; OFF AIR / DEAD on the cut.
+       Hard-cut only: no fade, no linger. Token border, black matte. Never the full frame. */
+    #fl .lastlook { position:absolute; right:2.8%; bottom:11%; width:22%; aspect-ratio:16/9;
+      display:none; border:3px solid var(--night-bad); box-sizing:border-box;
+      background:rgba(0,0,0,0); overflow:hidden; }
+    #fl .lastlook.on, #fl .lastlook.cut { display:block; }
+    #fl .lastlook.cut { background:rgba(0,0,0,1); }
+    #fl .lastlook .ll-top { position:absolute; top:6px; left:8px; right:8px;
+      display:flex; align-items:center; gap:7px;
+      letter-spacing:.22em; text-transform:uppercase; font-size:10px; font-weight:800;
+      color:var(--night-ink); text-shadow:0 2px 8px rgba(0,0,0,.95); }
+    #fl .lastlook .ll-dot { width:8px; height:8px; border-radius:50%; background:var(--night-bad);
+      box-shadow:0 0 10px var(--night-bad); }
+    #fl .lastlook.cut .ll-dot { background:var(--night-soft); box-shadow:none; }
+    #fl .lastlook .ll-name { margin-left:auto; letter-spacing:.18em; }
+    #fl .lastlook .ll-dead { display:none; position:absolute; inset:0;
+      align-items:center; justify-content:center; font-size:clamp(18px, 2.4vw, 32px);
+      font-weight:800; letter-spacing:.28em; color:var(--night-ink); }
+    #fl .lastlook.cut .ll-dead { display:flex; }
     @keyframes fl-rec { 0%,100% { opacity:.25; } 50% { opacity:1; } }`;
 
 /** What the camera calls itself on air. One camera for now; the unlock ladder is a later slice. */
@@ -492,7 +658,7 @@ export function warmUrl(opts = {}) {
  * `FOLLOW_FORBIDDEN` verbatim, and a violation THROWS at both ends rather than being dropped.
  *
  * The reasoning is `follow.js`'s own, one channel over. The follow view still has no socket; it
- * still cannot read the room. What it can now be TOLD is exactly these six shapes and nothing
+ * still cannot read the room. What it can now be TOLD is exactly these seven shapes and nothing
  * else, and the words that may never appear in any of them are the same words that may never
  * appear in a URL or on the public side-channel.
  *
@@ -500,20 +666,116 @@ export function warmUrl(opts = {}) {
  * wire: `id`, `seat`, `name`, `shell`, `accent` are precisely `FANOUT_KEYS.lobbySeat`'s public
  * fields, already fanned out to every socket in the room by a decision that predates this slice.
  */
-export const CUE_KINDS = ['intros', 'run', 'move', 'shot', 'idle', 'noms', 'pair'];
+export const CUE_KINDS = ['intros', 'run', 'move', 'shot', 'idle', 'noms', 'pair', 'execute', 'pin'];
 
 /** Per-kind closed allow-lists. A key not listed for its kind is a violation, not a pass. */
 export const CUE_KEYS = {
-  intros: ['kind', 'cast', 'talk'],
+  intros: ['kind', 'cast', 'talk', 'wrecked'],
   run: ['kind', 'runner', 'name', 'shell', 'accent', 'episode'],
-  move: ['kind', 'x', 'y', 'lookX', 'lookY', 'run', 'swing', 'act'],
+  /* `hide` joined `act` on 2026-09-01 — both are HOLDS, both come off the same 20 Hz pad tick.
+     See `MOVE_KEYS`, and note that `act` had never actually been forwarded by the host until the
+     same day: `party-host.js` `flushMove` dropped it and the drill could not fill. */
+  move: ['kind', 'x', 'y', 'lookX', 'lookY', 'run', 'swing', 'act', 'hide'],
   shot: ['kind', 'shot'],
   idle: ['kind'],
   noms: ['kind', 'standing'],
   /* 🍮 Who is one name now. PUBLIC — the room watching a pair form is the point. There is no
      text key here and there must never be one: the words go to two sockets and are not a cue. */
   pair: ['kind', 'pairs'],
+  /* 🔨 Who swings, and on whom. PUBLIC ids already on `FANOUT_KEYS.lynchResult`
+     (`executioner`, `executed`). `target` is that executed id; `SHOWRUNNER` is the
+     sentinel when the nominator was taken this episode — there is no ninth body. */
+  execute: ['kind', 'executioner', 'target'],
+  /*
+   * 📍 WHERE THE GUIDE SENT HER. Two numbers, a region id and a two-word kind — `intel-pad.js`
+   * `PIN_KEYS` with `kind` renamed to `pinKind` so it does not collide with the cue's own.
+   *
+   * 🚨 **THIS IS THE ONE CUE THE TELEVISION IS TOLD AND MAY NOT DRAW.** Every other kind here
+   * exists to put something on the shared screen. This one exists to move a body: the mansion is
+   * inside the follow slot, so a door tapped on a handset becomes a destination here or nowhere.
+   * `party-loop.md`'s "Do not" #1 is a rule about the PICTURE, and `harness/runner-intel.mjs` RI9
+   * is the control that keeps the picture clean.
+   */
+  pin: ['kind', 'x', 'z', 'roomId', 'pinKind'],
 };
+
+/**
+ * Idle may rebuild the seated circle from the last intros cast.
+ *
+ * `introCast` starts null on a remount (CAM DARK / a new follow iframe). Verdict
+ * after a run sends `{kind:'idle'}` first because `cuedRunner` is still set.
+ * Reading `.length` on that null whites the TV — Episode 3 VERDICT after Fox,
+ * 30 Aug. Null / empty → do not rebuild; the next intros cue dresses the room.
+ */
+export function idleRebuildCast(intro, introCast) {
+  if (intro) return null;
+  return (Array.isArray(introCast) && introCast.length) ? introCast : null;
+}
+
+/**
+ * A texture three can sample. Null tex / null `.image` / null `.images` /
+ * a cube with a missing face → drop it.
+ *
+ * Episode 3 VERDICT after Fox (30 Aug): the follow path threw
+ * `Cannot read properties of null (reading 'image')` (John also saw
+ * `.images`) as the verdict plate painted RENEWED. Same hole as a
+ * disposed nameplate map or an unfinished cube face after execute /
+ * wreck / last-look. Reading `.image` on null whites the TV.
+ */
+export function liveTexture(tex) {
+  if (tex == null || typeof tex !== 'object') return null;
+  const image = tex.image !== undefined ? tex.image : tex.images;
+  if (image == null) return null;
+  if (Array.isArray(image)) {
+    for (let i = 0; i < image.length; i++) {
+      const face = image[i];
+      if (face == null) return null;
+      if (typeof face === 'object' && face.isDataTexture && face.image == null) return null;
+    }
+  }
+  return tex;
+}
+
+const MAP_KEYS = [
+  'map', 'envMap', 'emissiveMap', 'normalMap', 'roughnessMap', 'metalnessMap',
+  'aoMap', 'alphaMap', 'bumpMap', 'displacementMap', 'lightMap', 'specularMap',
+];
+
+/** Drop maps three would throw on. Leaves the mesh in the scene — a wreck stays a wreck. */
+export function dropDeadMaps(mat) {
+  if (mat == null || typeof mat !== 'object') return 0;
+  let n = 0;
+  for (const key of MAP_KEYS) {
+    const tex = mat[key];
+    if (tex == null) continue;
+    if (liveTexture(tex) == null) {
+      mat[key] = null;
+      if ('needsUpdate' in mat) mat.needsUpdate = true;
+      n++;
+    }
+  }
+  return n;
+}
+
+/**
+ * After party.follow is live, a render throw must not own the TV.
+ * Boot failures still paint. Other views still paint.
+ */
+export function paintViewFail({ viewId, live } = {}) {
+  return !(String(viewId || '') === 'party.follow' && live);
+}
+
+/** Hide `#err` so a caught follow throw cannot leave the red plate up through Reckoning. */
+export function clearViewFail(dom = {}) {
+  const errEl = dom.errEl;
+  if (errEl) {
+    errEl.style.display = 'none';
+    errEl.textContent = '';
+  }
+  if (dom.body?.dataset) delete dom.body.dataset.rrrError;
+  if (typeof dom.clearError === 'function') dom.clearError();
+  return true;
+}
 
 /** What one seat may contribute to an `intros` cue. `FANOUT_KEYS.lobbySeat`'s public subset. */
 export const CUE_CAST_KEYS = ['id', 'seat', 'name', 'shell', 'accent'];
@@ -521,6 +783,8 @@ export const CUE_CAST_KEYS = ['id', 'seat', 'name', 'shell', 'accent'];
 export const CUE_NOM_KEYS = ['nominator', 'target'];
 /** One merged pair: the two seats and what they are called now. Never what they said. */
 export const CUE_PAIR_KEYS = ['a', 'b', 'name'];
+/** Public lynch pair — `executioner` is already on the result; `target` is `executed`. */
+export const CUE_EXECUTE_KEYS = ['executioner', 'target'];
 
 function scanKeys(obj, allowed, path, bad, forbidden = FOLLOW_FORBIDDEN) {
   if (!obj || typeof obj !== 'object') { bad.push(`${path}:<not an object>`); return; }
@@ -541,6 +805,13 @@ export function cueViolations(cue) {
     const cast = cue.cast;
     if (!Array.isArray(cast)) bad.push('cue.intros.cast:<not an array>');
     else cast.forEach((s, i) => scanKeys(s, CUE_CAST_KEYS, `cue.intros.cast[${i}]`, bad));
+    /* Public-dead ids — same facts as `player.executed` / `players[].alive`. Not a role. */
+    if (cue.wrecked != null) {
+      if (!Array.isArray(cue.wrecked)) bad.push('cue.intros.wrecked:<not an array>');
+      else if (cue.wrecked.some((id) => id != null && typeof id !== 'string')) {
+        bad.push('cue.intros.wrecked:<not strings>');
+      }
+    }
   }
   if (kind === 'noms') {
     const standing = cue.standing;
@@ -551,6 +822,12 @@ export function cueViolations(cue) {
     const pairs = cue.pairs;
     if (!Array.isArray(pairs)) bad.push('cue.pair.pairs:<not an array>');
     else pairs.forEach((p, i) => scanKeys(p, CUE_PAIR_KEYS, `cue.pair.pairs[${i}]`, bad));
+  }
+  if (kind === 'execute') {
+    for (const k of CUE_EXECUTE_KEYS) {
+      if (cue[k] == null) continue;
+      if (typeof cue[k] !== 'string') bad.push(`cue.execute.${k}:<not a string>`);
+    }
   }
   if (kind === 'shot' && cue.shot != null && !SHOT_NAMES.includes(cue.shot)) {
     bad.push(`cue.shot.shot=${cue.shot}`);
@@ -588,12 +865,104 @@ export function warmLabel(stage) {
 /**
  * 🕹️ **THE PAD — what a runner's phone may say about its own thumbs, and nothing else.**
  *
- * `party-loop.md` line 21 makes the runner a first-person body in dark corridors; D13 shipped a
- * four-button throttle that the phone did not even send. This is the wire for a real stick, and it
- * is deliberately a STICK and not a POSITION: the phone says where its thumb is, the TV owns where
+ * History: `party-loop.md` line 21 once made the runner a first-person body in dark corridors,
+ * and D13 shipped a four-button throttle the phone did not even send. Both are amended — the body
+ * AUTO-WALKS the guide's pin, the stick is a lateral dodge only, and the TV picture is a produced
+ * follow (`expedition-spec` guards the docs). What survives unchanged is the wire's shape: it is
+ * deliberately a STICK and not a POSITION — the phone says where its thumb is, the TV owns where
  * the body ends up. A phone that could post a position could post any position.
  */
-export const MOVE_KEYS = ['t', 'x', 'y', 'lookX', 'lookY', 'run', 'swing', 'act'];
+/**
+ * 🕹️ **`hide` JOINED THIS LIST ON 2026-09-01, AND `y` QUIETLY STOPPED MEANING ANYTHING.**
+ *
+ * John's lock: *"Runner STICK is a lateral dodge only… HOLD to hide behind furniture."* The wire
+ * did not need to narrow — a stick is still two axes and both are still validated below — because
+ * authority over what the BODY does was never the phone's. `src/game/runner-intel.js`
+ * `dodgeLateral` is where the forward axis is dropped, and its header says why that is the right
+ * end to drop it at: a pad written by somebody else six months from now must not be able to
+ * restore forward drive by sending a `y` again.
+ *
+ * `hide` is a HOLD, so it rides the same 20 Hz change-gated tick as `run` rather than becoming a
+ * verb of its own. It is a REQUEST and never a fact: `runner-intel.js` `coverNear` refuses it in
+ * an open hall, which is the *"no stop-in-open-hall without cover"* half of lock 4.
+ */
+export const MOVE_KEYS = ['t', 'x', 'y', 'lookX', 'lookY', 'run', 'swing', 'act', 'hide'];
+
+/* =================================================================================================
+ * 📍 **THE PIN, ON THE WIRE — Stage 3 of `docs/slices/task-runner-intel.md`, and it is the whole
+ * reason auto-walk can exist.**
+ *
+ * Until tonight the guide's pin was LOCAL to her handset. That was honest while the pin was only a
+ * thing she said out loud — `party-phone.js`'s own comment said so — but John's lock 1 makes the
+ * runner's body walk it, and a body cannot walk a fact that never left the phone that holds it.
+ *
+ * 🚨 **TWO DIFFERENT JOURNEYS, AND CONFLATING THEM WOULD BE THE LEAK.**
+ *   · to the TELEVISION it is a CONTROL INPUT, directed exactly like `t:'move'` — the TV owns the
+ *     body, so the TV is told where the body is being sent. It is never fanned and never rendered:
+ *     D9 is untouched, and `harness/runner-intel.mjs` RI9 is the control that says so.
+ *   · to the RUNNER'S PHONE it is a frame field at audience `crew`, so her bezel can point at the
+ *     door her guide picked. A seated phone must never learn where the target is, so `all` is
+ *     wrong and `net/party/entitle.js` carries four `you.pin.*` rows to say it once, in the table.
+ *
+ * The schema is `intel-pad.js` `PIN_KEYS` plus the envelope, and it is CLOSED: four fields, two
+ * of them numbers, one of them from a two-word list. There is nowhere in it to put a second hop,
+ * which is D4 enforced by construction the same way `neighbourScope` enforces it.
+ * ============================================================================================== */
+export const PIN_WIRE_KEYS = ['t', 'x', 'z', 'roomId', 'kind'];
+/**
+ * 📍 **SIX KINDS, AND THE SCHEMA IS STILL FOUR FIELDS.**
+ *
+ * John, 2026-09-02: *"guides need to also be able to pin objectives like the paintings or the
+ * camera install position."*
+ *
+ * 🚨 **THE OBJECTIVE RIDES IN `kind`, AND THAT IS A DESIGN CHOICE RATHER THAN A SHORTCUT.** The
+ * obvious alternative was a fifth field — `spot: 'left' | 'hall'` — and it is worse in the one way
+ * that matters here: every field on this message needs a row in `net/party/entitle.js`, which is
+ * deny-by-default, so a fifth field is a fifth audience decision and a fifth thing that can be
+ * widened to `all` by somebody who has not read `runner-intel` RI10c. `kind` already has its row,
+ * already has a CLOSED value list, and `pinViolations` already refuses anything not on it. So the
+ * wire did not move: four fields, two of them numbers, one of them from a short list.
+ *
+ * D4's *"there is nowhere to put a second hop"* is therefore untouched — the list grew, the SHAPE
+ * did not, and a route still has nowhere to live.
+ *
+ * ⚠️ **`OBJECTIVE_KINDS` IS IMPORTED, NOT COPIED.** `objectives.js` owns the list because the
+ * chips, the say-line and the body's resolver all read it; a second copy here is the
+ * `episode-order` lesson (two machines, both gated, quietly disagreeing).
+ */
+export const PIN_KINDS = ['room', 'edge', ...OBJECTIVE_KINDS];
+/** Same 24-char cap `mansion.js` region ids live inside. A long id is a payload, not a room. */
+const PIN_ID_CAP = 24;
+
+export function pinViolations(msg) {
+  const bad = [];
+  if (!msg || typeof msg !== 'object') return ['<empty>'];
+  scanKeys(msg, PIN_WIRE_KEYS, 'pin', bad);
+  for (const k of ['x', 'z']) {
+    const v = Number(msg[k]);
+    // No range clamp: the house is generated and its extent is not this file's to know. Finite is
+    // the honest test, and an infinity or a NaN is what actually breaks a pathfinder.
+    if (!Number.isFinite(v)) bad.push(`pin.${k}=${msg[k]}`);
+  }
+  if (msg.kind != null && !PIN_KINDS.includes(msg.kind)) bad.push(`pin.kind=${msg.kind}`);
+  if (msg.roomId != null
+    && (typeof msg.roomId !== 'string' || msg.roomId.length > PIN_ID_CAP)) {
+    bad.push('pin.roomId');
+  }
+  return bad;
+}
+
+/** Exactly the four fields, or `null`. What `room.js` stores and what `entitle.js` has rows for. */
+export function pinWireShape(msg) {
+  if (!msg) return null;
+  if (pinViolations({ t: 'pin', x: msg.x, z: msg.z, roomId: msg.roomId, kind: msg.kind }).length) return null;
+  return {
+    x: Number(msg.x),
+    z: Number(msg.z),
+    roomId: String(msg.roomId ?? ''),
+    kind: PIN_KINDS.includes(msg.kind) ? msg.kind : 'room',
+  };
+}
 
 /**
  * 🧭 **THE STICK'S BEARING, AND THE MINUS SIGN IS THE WHOLE FUNCTION.**
@@ -887,9 +1256,34 @@ export function moveViolations(msg) {
  * house; `role`, `alignment`, `cover`, `claim`, `castSeed`, `you`, `teammates` and `deal` are
  * facts about a person, and not one of them has a key here or can be added by accident.
  */
-export const WORLD_KEYS = ['t', 'runner', 'hunter', 'mission', 'seq'];
+/**
+ * 🎥 `view` — WHICH CAMERA THE SHOW IS ON, so the runner's pad can match it.
+ *
+ * The controls change with the perspective (absolute stick under a plan-locked top-down, a
+ * camera-relative stick plus a look stick on the ground), so the phone has to know which one is
+ * live. It rides the TV's existing world report because the TV is the only process that knows —
+ * `party-loop.md`'s asymmetry, unchanged: the mansion exists in the follow slot and nowhere else.
+ *
+ * It is a perspective NAME and nothing else. It carries no position, no room and no hunter, so
+ * it cannot become a second channel for the map; `entitle.js` still gates who is told.
+ */
+export const WORLD_KEYS = ['t', 'runner', 'hunter', 'mission', 'seq', 'view'];
 export const WORLD_SPOT_KEYS = ['room', 'x', 'z'];
-export const WORLD_MISSION_KEYS = ['phase', 'room'];
+/**
+ * ⏱️ **`holdQuiet` / `holdRed` / `holdLongest` — three DURATIONS, and not one of them is a name.**
+ *
+ * John's lock 3: *"Good runner hides when it is red. Evil runner hides when it is quiet, or holds
+ * too long. Quiet-hide is the tell. Recap does not name whose thumb."* The tell has to reach the
+ * recap somehow, and the only process that knows a body stopped moving is the one rendering it.
+ *
+ * They are seconds, because seconds are what `runner-intel.js` `holdTell` turns into a sentence
+ * and a sentence is all the show is allowed to say. A COUNT would have been the tempting shape and
+ * is worse: "she hid four times" invites the room to ask which four, and the answer is a list of
+ * moments, which is a route through the night in a costume.
+ */
+export const WORLD_MISSION_KEYS = [
+  'phase', 'room', 'job', 'emptyNail', 'heard', 'holdQuiet', 'holdRed', 'holdLongest',
+];
 
 /** The mission's four states. `none` before it is placed; `done` when the runner is home. */
 export const MISSION_PHASES = ['none', 'seek', 'return', 'done'];
@@ -908,5 +1302,8 @@ export function worldViolations(msg) {
       bad.push(`world.mission.phase=${msg.mission.phase}`);
     }
   }
+  // Closed, exactly as `mission.phase` is: an invented camera name is refused at the door rather
+  // than forwarded for the phone to fail to understand.
+  if (msg.view != null && !PERSPECTIVES.includes(msg.view)) bad.push(`world.view=${msg.view}`);
   return bad;
 }

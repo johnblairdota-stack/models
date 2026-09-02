@@ -101,7 +101,36 @@ try {
   for (const name of PERSPECTIVES) {
     // The same cue the live `P` key sends — not a reach into the bed's internals.
     await page.evaluate((n) => window.postMessage({ t: 'cue', cue: { kind: 'shot', shot: n } }, '*'), name);
-    await sleep(2200);
+
+    /*
+     * ⚠️ **WAIT FOR THE CRANE TO SETTLE, DO NOT SLEEP A GUESS.**
+     *
+     * A perspective change used to be a cut, so `sleep(2200)` always photographed the
+     * destination. It is a camera MOVE now, and the bed is paced by `dt` which `engine.js`
+     * clamps at 0.1 to stop a spiral — so on this software rasteriser at ~3 fps sim time runs
+     * at roughly a third of wall time and 2.2 s of stopwatch is well under a 1.35 s crane.
+     * Measured that way the rig reads as WRONG while the camera is merely still arriving, which
+     * is the most expensive kind of false alarm: a real number about the wrong moment.
+     */
+    let settled = null;
+    for (let i = 0; i < 160 && !(settled && settled.shot === name && !settled.craning); i++) {
+      settled = await page.evaluate(() => {
+        const c = window.__rrrFollow?.cam?.();
+        return c ? { shot: c.shot, craning: c.craning, craneS: c.craneS } : null;
+      });
+      if (!(settled && settled.shot === name && !settled.craning)) await sleep(250);
+    }
+    /*
+     * ⚠️ BOTH HALVES ARE LOAD-BEARING. `craning === false` alone is ALSO true in the window
+     * between posting the cue and the bed acting on it — `postMessage` is async and the crane
+     * only starts on the next `afterBody` — so a probe that waited on it alone photographed the
+     * PREVIOUS rig and reported the lens as having failed to change. Wait for the lens to be the
+     * one that was asked for, and only then for it to have stopped moving.
+     */
+    t(`P0 ${name} · the crane arrived and settled before the frame was measured`,
+      !!settled && settled.shot === name && !settled.craning,
+      settled ? `shot ${settled.shot} · craneS ${settled.craneS}` : 'no report');
+    await sleep(400);          // one beat more, so the operator's own lag has arrived too
     const m = await page.evaluate(() => {
       const f = window.__rrrFollow;
       const c = f.cam();

@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>THE NIGHT — one product, four surfaces</title>
+<style>
+  :root {
+    --bg: #0b0d12; --panel: #12151d; --card: #171b25; --line: #262c3a;
+    --ink: #e8ebf2; --dim: #8b93a7; --gold: #f2c14e; --green: #4ecf7a;
+    --red: #e2564e; --blue: #5aa7e8; --mono: "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, "Segoe UI", sans-serif; padding: 22px 26px 40px; }
+  header { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; border-bottom: 2px solid var(--gold); padding-bottom: 12px; }
+  h1 { font-size: 26px; letter-spacing: 3px; }
+  h1 em { color: var(--gold); font-style: normal; }
+  .strap { color: var(--dim); max-width: 62ch; }
+  .tally { margin-left: auto; font-family: var(--mono); font-size: 13px; color: var(--dim); }
+  .tally b.g { color: var(--green); } .tally b.o { color: var(--blue); } .tally b.f { color: var(--red); }
+
+  section { margin-top: 22px; }
+  h2 { font-size: 13px; letter-spacing: 4px; color: var(--gold); text-transform: uppercase; margin-bottom: 10px; }
+  h2 small { color: var(--dim); letter-spacing: 0; text-transform: none; font-weight: 400; margin-left: 10px; }
+
+  .pitch { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--gold); padding: 14px 18px; max-width: 110ch; }
+  .pitch p + p { margin-top: 8px; }
+  .pitch .rule { color: var(--gold); font-weight: 600; }
+
+  .row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .locks { grid-template-columns: repeat(4, 1fr); }
+  .cols { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; align-items: start; }
+  .col h2 { border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+  .col .card + .card { margin-top: 10px; }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; position: relative; }
+  .card h3 { font-size: 14px; margin-bottom: 4px; padding-right: 58px; }
+  .card p { color: var(--dim); font-size: 13px; }
+  .card .gate { margin-top: 8px; font-family: var(--mono); font-size: 12px; color: var(--blue); }
+  .card .gate::before { content: "gate · "; color: var(--dim); }
+  .card::after { position: absolute; top: 9px; right: 10px; font-family: var(--mono); font-size: 11px; letter-spacing: 1px; }
+  .card[data-status="done"]::after { content: "DONE"; color: var(--green); }
+  .card[data-status="open"]::after { content: "OPEN"; color: var(--blue); }
+  .card[data-status="finding"]::after { content: "FINDING"; color: var(--red); }
+  .card[data-status="done"] { border-left: 3px solid var(--green); }
+  .card[data-status="open"] { border-left: 3px solid var(--blue); }
+  .card[data-status="finding"] { border-left: 3px solid var(--red); }
+  .card .note { margin-top: 6px; font-size: 12px; color: var(--gold); }
+
+  .verify { background: var(--panel); border: 1px solid var(--line); padding: 14px 18px; }
+  .verify .card { display: inline-block; vertical-align: top; width: 32%; min-width: 320px; margin: 4px 8px 4px 0; }
+  code { font-family: var(--mono); font-size: 13px; color: var(--gold); background: #0e1118; padding: 1px 6px; border-radius: 4px; }
+  @media (max-width: 1200px) { .cols, .locks { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>THE <em>NIGHT</em></h1>
+  <p class="strap">Eight phones are controllers. One TV is the show. One server decides who may
+  know what. One mansion is the set. They are not four features — they are one product, and it
+  only works when they move as one.</p>
+  <p class="tally" id="tally"></p>
+</header>
+
+<section>
+  <h2>Pitch <small>why the coupling is the product</small></h2>
+  <div class="pitch">
+    <p>The guide taps a door on a private map. The server stores one pin and tells exactly three
+    parties: the TV (as a control cue it may never draw), the runner's bezel, and the guide's own
+    pad reading it back off the wire. The body auto-walks that pin one door at a time — never the
+    true target, because the lie is the game. The thumb is only a dodge. HOLD hides behind
+    furniture, and there is no hiding in an open hall. The camera cranes at the ballroom
+    threshold and never cuts under a thumb. The hunter is a door that is shut.</p>
+    <p class="rule">The rule of this board: every claim names the gate that proves it, and a DONE
+    card must name a gate that runs in <code>gates:party</code>. <code>night-coupling</code> NC10
+    reads this very file and goes red if a DONE card tries to skip verify.</p>
+  </div>
+</section>
+
+<section>
+  <h2>The eight locks <small>decided in playtest — changing one is John's call, not a refactor</small></h2>
+  <div class="row locks">
+    <article class="card" data-lock="1" data-status="done" data-gate="party-follow.mjs" data-checks="F11c2d · D5">
+      <h3>1 · The TV is a produced follow, never a map</h3>
+      <p>No whole-house fit, no hunter mark, no route line. Lids lift only over the runner's own rooms.</p>
+      <p class="gate">party-follow F11c2d · party-follow-drive D5</p>
+    </article>
+    <article class="card" data-lock="2" data-status="done" data-gate="runner-intel.mjs" data-checks="RI21–RI21d">
+      <h3>2 · Guide E — Neighbours Only</h3>
+      <p>Her chip row is the runner's room plus its doors, RIGHT NOW. It was a photograph of the ballroom; it follows him live now.</p>
+      <p class="gate">runner-intel RI21–RI21d</p>
+    </article>
+    <article class="card" data-lock="3" data-status="done" data-gate="runner-intel.mjs" data-checks="RI22–RI22e">
+      <h3>3 · Runner D — Frame Bezel</h3>
+      <p>The bearing is the edge of the phone — pixels, never a world coordinate. Updated by patchLive so the stick under his thumb survives.</p>
+      <p class="gate">runner-intel RI22–RI22e</p>
+    </article>
+    <article class="card" data-lock="4" data-status="done" data-gate="tv-stinger.mjs" data-checks="F11i–F11i5 · W26h3">
+      <h3>4 · TV E — Camera Stinger</h3>
+      <p>Ballroom threshold picks the rig: 1.35 s crane in, 1.10 s back, 2.20 m dead band. A perspective is held, never a cut under the thumb.</p>
+      <p class="gate">tv-stinger · party-follow F11i–F11i5</p>
+    </article>
+    <article class="card" data-lock="5" data-status="done" data-gate="runner-intel.mjs" data-checks="RI20–RI20g">
+      <h3>5 · AUTO-WALK to the guide's pin</h3>
+      <p>One door at a time, never to the true target — that would kill the lie. With no pin nobody moves: the guide has a reason to exist.</p>
+      <p class="gate">runner-intel RI20–RI20g · night-coupling NC3/NC5</p>
+    </article>
+    <article class="card" data-lock="6" data-status="done" data-gate="runner-intel.mjs" data-checks="RI19–RI19q">
+      <h3>6 · The guide pins the JOB, the thumb may not pick</h3>
+      <p>Twin faces, twin brackets — a human taps which. The nudge that let a thumb pick a twin is removed, and the removal is gated.</p>
+      <p class="gate">runner-intel RI19–RI19q</p>
+    </article>
+    <article class="card" data-lock="7" data-status="done" data-gate="runner-intel.mjs" data-checks="RI14e · dodge/cover">
+      <h3>7 · Stick is a dodge · HOLD hides</h3>
+      <p>dodgeLateral drops the forward axis at the game end of the wire. coverNear refuses a hide in an open hall — that one refusal closes the sabotage surface.</p>
+      <p class="gate">runner-intel RI14e + dodge/cover checks</p>
+    </article>
+    <article class="card" data-lock="8" data-status="done" data-gate="dark-run.mjs" data-checks="red-pass · noise">
+      <h3>8 · The hunter is a door, shut</h3>
+      <p>The TV's RED PASS is a seeded clock with no position and no target. It is not the hunter, and no hunter AI or art is built here.</p>
+      <p class="gate">dark-run · runner-intel red-pass checks</p>
+    </article>
+  </div>
+</section>
+
+<section>
+  <h2>Build <small>the four surfaces — live state of this tree, verified 2026-09-02</small></h2>
+  <div class="cols">
+
+    <div class="col">
+      <h2>Phone</h2>
+      <article class="card" data-status="done" data-gate="runner-intel.mjs" data-checks="RI15d/RI15e">
+        <h3>The seek line advances on arrival</h3>
+        <p>FIND THE GALLERY stops being said at somebody standing in the gallery. Third instance of the frozen-screen bug, one afternoon.</p>
+        <p class="gate">runner-intel RI15d/RI15e</p>
+      </article>
+      <article class="card" data-status="done" data-gate="expedition-jobs.mjs" data-checks="J7/J7b">
+        <h3>The six fake voice buttons are gone</h3>
+        <p>A control that reaches nobody teaches the wrong lesson. One SAY line of copy; FOOTSTEPS stays a small line.</p>
+        <p class="gate">expedition-jobs J7/J7b · runner-intel RI14c</p>
+      </article>
+      <article class="card" data-status="done" data-gate="intel-pads.mjs" data-checks="IP11b–IP11d">
+        <h3>The guide's map is private to her phone</h3>
+        <p>Neighbours only — never the whole house, never a second hop. The pin's privacy stands on two guards, and both have to fall.</p>
+        <p class="gate">intel-pads IP11b–IP11d · runner-intel RI10c</p>
+      </article>
+      <article class="card" data-status="open" data-gate="WANTED">
+        <h3>Stale-frame lobby drop</h3>
+        <p>party-phone.js:344,465 still fall back to LOBBY on a late frame, so a phone can drop mid-beat. PRIME-TIME-STATE §4's last live desync risk.</p>
+        <p class="gate">WANTED — no gate holds this yet</p>
+      </article>
+    </div>
+
+    <div class="col">
+      <h2>TV</h2>
+      <article class="card" data-status="done" data-gate="runner-intel.mjs" data-checks="RI9 · RI14e">
+        <h3>Told the pin, may not draw it</h3>
+        <p>To the TV the pin travels as a directed control cue, like t:'move'. The picture rule is about the SCREEN, not the renderer's knowledge.</p>
+        <p class="gate">runner-intel RI9 · night-coupling NC3</p>
+      </article>
+      <article class="card" data-status="done" data-gate="runner-intel.mjs" data-checks="RI14e">
+        <h3>The HOLD reaches the mount — all four hops</h3>
+        <p>flushMove dropped act; the drill had never worked from a phone. Phone → server → TV → bed is walked for act and hide now.</p>
+        <p class="gate">runner-intel RI14e</p>
+      </article>
+      <article class="card" data-status="done" data-gate="host-desync.mjs" data-checks="beat claims">
+        <h3>A self-painted beat is provisional</h3>
+        <p>The TV rolls back to the last server-named beat after 4 s, and the 3·2·1 can always re-arm.</p>
+        <p class="gate">host-desync</p>
+      </article>
+      <article class="card" data-status="done" data-gate="party-audio.mjs" data-checks="finite cue table">
+        <h3>The voice is a finite table</h3>
+        <p>Sound leaks through timing and magnitude. No continuous parameter exists, so there is nothing to ride.</p>
+        <p class="gate">party-audio</p>
+      </article>
+    </div>
+
+    <div class="col">
+      <h2>Session</h2>
+      <article class="card" data-status="done" data-gate="runner-intel.mjs" data-checks="RI10–RI13">
+        <h3>The pin is on the wire at audience crew</h3>
+        <p>you.pin.{x,z,roomId,kind} — crew rows in a deny-by-default table. Six kinds now; the wire shape never grew past four fields.</p>
+        <p class="gate">runner-intel RI10–RI13 · night-coupling NC3b</p>
+      </article>
+      <article class="card" data-status="done" data-gate="party-night.mjs" data-checks="N25b/N25c">
+        <h3>CAM DARK is closed on the live wire</h3>
+        <p>mission.return lights the camera from the world report. The brief called this a live hole — that claim is stale in this tree, and the PR says so.</p>
+        <p class="gate">party-night N25b · night-coupling NC6/NC8b/NC9b</p>
+      </article>
+      <article class="card" data-status="done" data-gate="night-coupling.mjs" data-checks="NC1–NC9b">
+        <h3>The driver walks the pair — this slice</h3>
+        <p>The true hole in the brief. Guide pins → TV told → world walks → camera lights → recap reads CAM LIT, end to end over real sockets, in bare node, with a dark control.</p>
+        <p class="gate">night-coupling NC1–NC9b</p>
+      </article>
+      <article class="card" data-status="done" data-gate="runner-intel.mjs" data-checks="RI19r/RI19r2">
+        <h3>An objective pin dies with its job; a door pin survives</h3>
+        <p>Two independent guards agree — the server clears it, the resolver refuses its ghost. NC7 asserts both in one breath so neither is "tidied" alone.</p>
+        <p class="gate">runner-intel RI19r/RI19r2 · night-coupling NC7</p>
+      </article>
+    </div>
+
+    <div class="col">
+      <h2>Layout</h2>
+      <article class="card" data-status="done" data-gate="target-sight.mjs" data-checks="G1/G3/T7">
+        <h3>Every target can be seen and swung at</h3>
+        <p>256 targets over 64 seeds: 0 pierced, 0 blind, worst face 100% visible, 3 keep-outs per mission room. Was 24/64 seeds burying the painting.</p>
+        <p class="gate">target-sight G1/G3/T7</p>
+      </article>
+      <article class="card" data-status="done" data-gate="runner-intel.mjs" data-checks="coverNear">
+        <h3>Cover is where HOLD is legal</h3>
+        <p>Hiding is furniture, resolved against the scene the TV built. An open hall refuses — the refusal is the design, not a bug.</p>
+        <p class="gate">runner-intel cover checks · RI20b clamp</p>
+      </article>
+      <article class="card" data-status="finding" data-gate="tag-census.mjs" data-checks="T7">
+        <h3>Name tags bury each other — measured, unfixed</h3>
+        <p>Worst case 97% of one name hidden; 4–6 of 8 readable from the ring. Overlap is fine per John; a name entirely gone is not. The fix trades against the float-above-the-head lock — John's call. Deliberately out of the CI chain.</p>
+        <p class="gate">tag-census T7 (out of chain, on purpose)</p>
+      </article>
+      <article class="card" data-status="open" data-gate="WANTED">
+        <h3>The bed itself, driven in node</h3>
+        <p>follow-bed's autoWalkInput needs THREE, so the body's own physics still only runs in a browser. night-coupling walks the server-side story; the bed drive is the next instrument.</p>
+        <p class="gate">WANTED — browser-only today</p>
+      </article>
+    </div>
+
+  </div>
+</section>
+
+<section>
+  <h2>Verify <small>we always verify — a DONE card cannot skip it</small></h2>
+  <div class="verify">
+    <article class="card" data-status="done" data-gate="night-coupling.mjs" data-checks="NC10 board rules">
+      <h3>This board is itself gated</h3>
+      <p>night-coupling NC10 reads night/index.html: every card must name a gate, a DONE card's gate must run in gates:party, and a skip marker anywhere is red.</p>
+      <p class="gate">night-coupling NC10–NC10d</p>
+    </article>
+    <article class="card" data-status="done" data-gate="expedition-spec.mjs" data-checks="ES1–ES4">
+      <h3>The paper matches the wire — both directions</h3>
+      <p>expedition-spec reds on the exact stale sentences, and ES4 also fails when code the fresh paper cites stops existing.</p>
+      <p class="gate">expedition-spec (35)</p>
+    </article>
+    <article class="card" data-status="done" data-gate="night-coupling.mjs" data-checks="chain">
+      <h3>Run it</h3>
+      <p><code>npm run gate:night-coupling</code> for the coupled walk ·
+         <code>npm run gates:party</code> for the whole 45-gate chain ·
+         board: <code>npm run night:board</code> → <code>localhost:5205</code> (never 5199 — The Desk lives there).</p>
+      <p class="gate">gates:party — CI, every push</p>
+    </article>
+  </div>
+</section>
+
+<script>
+  const counts = { done: 0, open: 0, finding: 0 };
+  document.querySelectorAll('.card').forEach((c) => { counts[c.dataset.status] = (counts[c.dataset.status] || 0) + 1; });
+  document.getElementById('tally').innerHTML =
+    '<b class="g">' + counts.done + ' done</b> · <b class="o">' + counts.open + ' open</b> · <b class="f">' + counts.finding + ' finding</b>';
+</script>
+</body>
+</html>

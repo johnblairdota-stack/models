@@ -1,0 +1,104 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; }
+    a { color: #f5a14a; } a:hover { color: #ffbe7d; }
+  </style>
+</helmet>
+
+<!-- ═══════ F1 / F2 / F3 · THE DEBRIEF LOWER BAND ═══════
+     Photographed today (progress/r5/04-tv-debrief.png): a 36px nameplate reading "The circle",
+     a 300px column holding the one sentence "Nobody has reached out yet.", and the beat's ONLY
+     early exit — "0 OF 5 READY · TALK. A MAJORITY TAPS READY TO MOVE ON." — in 12px grey flush
+     against the bottom edge of a 1080p screen.
+
+     Three fixes, one component. The band below the picture stops being a nameplate for a person
+     who does not exist and becomes the thing the room is actually waiting on: the count, at the
+     size the Vote's tally-board already proves works. The side column is drawn only when it has
+     a connection to draw. -->
+
+<div style="width: 1600px; height: 900px; position: relative; background: #0c0a08; color: #f3ece3; overflow: hidden;">
+
+  <div style="position: absolute; left: 28px; top: 18px; display: flex; align-items: center; gap: 10px; font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: #f5a14a; font-weight: 700;">
+    <span style="width: 9px; height: 9px; border-radius: 50%; background: #ff8a7a;"></span> Prime Time · on air
+  </div>
+  <div style="position: absolute; right: 28px; top: 16px; font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: #8a7d70;">Episode 1 · Debrief</div>
+
+  <!-- the rundown rail, open (a talk beat keeps its labels) -->
+  <div style="position: absolute; left: 28px; right: 28px; top: 44px; display: flex; gap: 10px;">
+    <sc-for list="{{rail}}" as="r" hint-placeholder-count="9">
+      <div style="flex-grow: 1;">
+        <div style="font-size: 11px; letter-spacing: .2em; text-transform: uppercase; font-weight: 700; text-align: center; color: {{r.ink}};">{{r.k}}</div>
+        <div style="margin-top: 5px; height: 2px; background: {{r.bar}};"></div>
+      </div>
+    </sc-for>
+  </div>
+
+  <!-- ═══════ F3 · THE PICTURE TAKES THE WIDTH IT IS NOT LENDING ═══════
+       The side column is CONDITIONAL, not reserved. With no connections open the ballroom runs
+       edge to edge; the first `link.request` puts the column back and the picture gives up the
+       300px. Today it is reserved either way and holds one grey sentence for half the beat. -->
+  <div style="position: absolute; left: 16px; right: 16px; top: 84px; bottom: 132px; border-radius: 4px; overflow: hidden; background: linear-gradient(180deg, #241c14 0%, #17110c 60%, #0e0a07 100%);">
+    <div style="position: absolute; left: 50%; top: 66%; transform: translate(-50%,-50%); width: 1180px; height: 300px; border-radius: 50%; background: radial-gradient(ellipse at center, rgba(120,52,40,.55), rgba(20,14,11,0) 68%);"></div>
+    <div style="position: absolute; left: 0; right: 0; bottom: 26px; text-align: center; font-size: 12px; letter-spacing: .22em; text-transform: uppercase; color: rgba(243,236,227,.28);">the seated circle · live</div>
+  </div>
+
+  <!-- ═══════ F1 + F2 · WHAT IS HAPPENING, AND WHAT ENDS IT ═══════
+       Replaces the nameplate. A nameplate names the person on camera; a Debrief has no such
+       person, so today it prints the word "The circle" at 36px and the count at 12px. Inverted.
+
+       The count is the biggest thing in the band because it is the only number in the beat that
+       moves, and the sentence beside it is the rule that number obeys. Same anatomy as the
+       Vote's tally-board, which is the one place in the loop that already gets this right. -->
+  <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 132px; display: flex; align-items: center; gap: 28px; padding: 0 28px; background: linear-gradient(0deg, rgba(0,0,0,.9) 0%, rgba(0,0,0,.55) 62%, rgba(0,0,0,0) 100%);">
+
+    <div style="display: flex; align-items: baseline; gap: 12px;">
+      <span style="font-size: 76px; font-weight: 800; line-height: 1; color: {{tint}}; font-variant-numeric: tabular-nums;">{{ready}}</span>
+      <span style="font-size: 30px; font-weight: 800; color: #8a7d70;">of {{living}} ready</span>
+    </div>
+
+    <div style="flex-grow: 1; max-width: 620px;">
+      <div style="height: 10px; border-radius: 5px; background: #12100c; overflow: hidden;">
+        <div style="height: 100%; width: {{pct}}; background: {{tint}};"></div>
+      </div>
+      <div style="margin-top: 10px; font-size: 20px; color: #a89884;">{{note}}</div>
+    </div>
+
+    <div style="font-size: 12px; letter-spacing: .26em; text-transform: uppercase; font-weight: 700; color: #f5a14a; text-align: right;">Talk</div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"ready":{"editor":"int","default":3,"min":0,"max":8},"living":{"editor":"int","default":5,"min":2,"max":8}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const living = Math.max(1, this.props.living ?? 5);
+    const ready = Math.min(this.props.ready ?? 3, living);
+    const need = Math.floor(living / 2) + 1;
+    const left = Math.max(0, need - ready);
+    const beats = ['lobby', 'casting', 'expedition', 'recap', 'debrief',
+      'reckoning', 'vote', 'execution', 'verdict'];
+    return {
+      ready, living,
+      pct: `${Math.round((ready / living) * 100)}%`,
+      tint: ready >= need ? '#9ff2c8' : '#f5a14a',
+      note: left === 0
+        ? 'The majority is in — the Debrief is closing.'
+        : `${left} more ends the Debrief early.`,
+      rail: beats.map((k) => ({
+        k,
+        ink: k === 'debrief' ? '#f5a14a' : (k === 'verdict' ? '#4a423a' : '#8a7d70'),
+        bar: k === 'debrief' ? '#f5a14a' : 'rgba(245,161,74,.18)',
+      })),
+    };
+  }
+}
+</script>
+</body>
+</html>

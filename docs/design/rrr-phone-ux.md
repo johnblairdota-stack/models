@@ -8,9 +8,11 @@ Spec for the browser phone controller. Companion to [`web-prototype/docs/design/
 
 ## 0. The two decisions that shape everything else
 
-**D-P1 — The runner's phone is a controller, not a viewport. The first-person view lives on the TV.**
+**D-P1 — The runner's phone is a controller, not a viewport. The runner's camera lives on the TV.**
 
 **RATIFIED BY JOHN 2026-08-19 as bible D13.** This was written as a flagged deviation; it is now the decision, and it overrides `party-loop.md`'s build-list line *"Phone first-person + touch."* The five reasons and the overturning measurement are kept below because the measurement still stands.
+
+*(Amended 2026-09-02: what the TV shows is a **produced follow** — chase inside the ballroom, top-down over the runner's own rooms outside it, a crane between — not a first-person picture; that word left the spec. And §3's move scheme is superseded: since 2026-09-01 the runner **auto-walks the guide's pin** and the stick is a **lateral dodge only** with HOLD to hide. See §3's banner and `rrr-social-deception-mode.md` §5.7.1. Gates: `party-follow` F11i, `runner-intel`.)*
 
 1. **Boot cost.** `player.js` documents a **30–60 s shader compile** on desktop. The Expedition is **90 s**. A phone joining by QR with no install and no warm cache cannot pay that, and a mid-range Android in Safari/Chrome pays more.
 2. **Draw budget.** The budget is **≤625 calls** and it is a *single-player desktop* budget; audit risk **A1** already flags eight customised robots against it. Adding an eighth renderer on the weakest hardware in the room is not a tuning problem, it is a different program.
@@ -111,6 +113,14 @@ A tab, not a screen — available over any other screen via a persistent bottom-
 ---
 
 ## 3. The runner control scheme
+
+> ⚠️ **SUPERSEDED 2026-09-01 — kept for its measurements.** The steer-and-go stick below was the
+> pre-lock scheme. The locked controls: the runner **auto-walks the guide's pin** one door at a
+> time; the stick is a **lateral dodge only** (no throttle, no yaw, no speed choice); **HOLD hides
+> behind furniture**, and there is no hiding in an open hall; the six fake voice buttons are gone.
+> `src/game/runner-intel.js` is the one owner. Gates: `runner-intel` RI20, `expedition-jobs` J7.
+> The noise-ring maths and the detent table stay below because their numbers are still the stealth
+> model's numbers, and kept history here has caught real spec errors before.
 
 ### 3.1 The scheme: one thumb, steer-and-go
 **A single floating stick** in the handedness-chosen bottom corner, plus **one contextual action button** and **one look-back tap target**. That is the whole surface.

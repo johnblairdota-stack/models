@@ -80,14 +80,13 @@ const OK = { reaction: 'CLAP', beat: 'expedition', alive: true, lastAt: null, no
     reactCheck({ ...OK, lastAt: at, now: at + REACT_COOLDOWN_MS }).ok === true,
     `${REACT_COOLDOWN_MS}ms`);
   /*
-   * The number is a product decision, not an implementation detail: unlimited turns the strip to
-   * mush and hands the loudest thumb the screen, one-per-beat makes people hoard it and reach
-   * for it never. Pinned so a "tighten it up" cannot drift it into either failure silently.
+   * John, live on DUSK: emotes are SPAMMABLE. The number is a debounce so one physical tap
+   * cannot fire twice, not a budget that ignores the next tap while the first is still on air.
    */
-  t('R6c · the cooldown is a real budget, not a throttle nobody feels · ~24 taps in a 60s run',
-    REACT_COOLDOWN_MS >= 1500 && REACT_COOLDOWN_MS <= 4000
-      && Math.floor(60_000 / REACT_COOLDOWN_MS) >= 15,
-    `${Math.floor(60_000 / REACT_COOLDOWN_MS)} per player per minute`);
+  t('R6c · the cooldown is 180ms so they are spammable · a second tap while the first is still on air is allowed',
+    REACT_COOLDOWN_MS === 180
+    && reactCheck({ ...OK, lastAt: at, now: at + REACT_HOLD_MS / 2 }).ok === true,
+    `${REACT_COOLDOWN_MS}ms debounce · hold ${REACT_HOLD_MS}ms`);
 }
 
 // ---------------------------------------------------------------- R7 · what is on air
@@ -99,23 +98,33 @@ const OK = { reaction: 'CLAP', beat: 'expedition', alive: true, lastAt: null, no
     onAir([ev('p1', 'CLAP', REACT_HOLD_MS - 1)], now).length === 1
       && onAir([ev('p1', 'CLAP', REACT_HOLD_MS)], now).length === 0,
     `${REACT_HOLD_MS}ms`);
+  t('R7b · and it lasts 10000ms · ~4× the old 2.6s pop',
+    REACT_HOLD_MS === 10000,
+    `${(REACT_HOLD_MS / 2600).toFixed(2)}×`);
 
   /*
-   * ⚠️ ONE ROW PER PLAYER. Without the dedupe a player on the cooldown boundary holds two of six
-   * slots, and two fast thumbs at a full table push everyone else off the air entirely.
+   * ⚠️ SPAM IS THE FEATURE. A second tap from the same player while the first is still up
+   * must stay on air as its own event. The old one-row-per-player dedupe was the bug.
    */
   const spammer = [ev('p1', 'CLAP', 2000), ev('p1', 'BOO', 100), ev('p2', 'SUS', 50)];
   const air = onAir(spammer, now);
-  t('R8 · one row per player, and it is their LATEST · a fast thumb cannot hold two slots',
-    air.length === 2 && air[0].from === 'p2' && air[1].from === 'p1' && air[1].r === 'BOO');
+  t('R8 · spam is allowed · two taps from the same player both stay on air',
+    air.length === 3
+    && air.filter((e) => e.from === 'p1').length === 2
+    && air[0].from === 'p2' && air[1].r === 'BOO' && air[2].r === 'CLAP');
 
-  // `events` is newest-LAST, the order the client appends in — so p11 is the most recent here.
-  const crowd = Array.from({ length: 12 }, (_, i) => ev(`p${i}`, 'CLAP', (11 - i) * 10));
-  t('R9 · the strip is capped, newest first · a full table cannot bury the run picture',
-    onAir(crowd, now).length === REACT_MAX_ON_AIR && onAir(crowd, now)[0].from === 'p11',
+  // `events` is newest-LAST, the order the client appends in — so p19 is the most recent here.
+  const crowd = Array.from({ length: 20 }, (_, i) => ev(`p${i}`, 'CLAP', (19 - i) * 10));
+  t('R9 · the strip is capped at 16, newest first · a full table cannot bury the run picture',
+    REACT_MAX_ON_AIR === 16
+    && onAir(crowd, now).length === REACT_MAX_ON_AIR && onAir(crowd, now)[0].from === 'p19',
     `${REACT_MAX_ON_AIR} slots`);
   t('R9b · an empty or stale list is empty, not a crash',
     onAir([], now).length === 0 && onAir([ev('p1', 'CLAP', 90_000)], now).length === 0);
+  const flood = Array.from({ length: 20 }, (_, i) => ev('p1', 'CLAP', (19 - i) * 10));
+  t('R9c · a spammer is capped with everyone else · newest first, not one-per-player',
+    onAir(flood, now).length === REACT_MAX_ON_AIR
+    && onAir(flood, now).every((e) => e.from === 'p1'));
 }
 
 // ---------------------------------------------------------------- R20 · the wire
@@ -177,6 +186,36 @@ const OK = { reaction: 'CLAP', beat: 'expedition', alive: true, lastAt: null, no
   t('R42 · the TV patches the strip in place on the tick, and never repaints the run frame for it',
     /data-react-strip/.test(hostSrc) && /function paintReactStrip/.test(hostSrc)
       && /paintReactStrip\(\);/.test(hostSrc) && /ui\.reactKey/.test(hostSrc));
+  t('R42b · chips are keyed per EVENT (from+at), never reused by player · spam stacks',
+    /e\.from\}:\$\{e\.at/.test(hostSrc)
+    && !/dataset\.rk === e\.from/.test(hostSrc)
+    && /--dx/.test(hostSrc)
+    && /--dy/.test(hostSrc)
+    && /\(\(e\.at % 11\) - 5\) \* 12/.test(hostSrc)
+    && /\(\(e\.at % 7\) - 3\) \* 8/.test(hostSrc)
+    && /b\.at - a\.at/.test(hostSrc));
+  /*
+   * John, live HEAT: chips spawned and vanished before they floated. `setWorld` fans
+   * `t:state` at ~2 Hz; `paint()` rewrote innerHTML; `reactKey` still matched so the
+   * empty mount stayed empty. The strip is hoisted across the rewrite, a react message
+   * patches without painting, and an empty mount with a stale key refills.
+   */
+  t('R42c · a stable expedition does not paint — react and the 2 Hz world tick patch in place',
+    /prevBeat === 'expedition' && ui\.beat === 'expedition'/.test(hostSrc)
+    && /m\.t === 'react'[\s\S]{0,80}paintReactStrip\(\)/.test(hostSrc)
+    && /function patchRunChrome/.test(hostSrc)
+    && /childElementCount === live\.length/.test(hostSrc)
+    && !/savedStrip/.test(hostSrc));
+
+  const skinSrc = await readFile(new URL('../src/party/night-skin.js', import.meta.url), 'utf8');
+  t('R43 · chips rise with react-float (56px up, 10s hang), they do not pop 8px via night-rise',
+    /@keyframes react-float \{/.test(skinSrc)
+    && /animation:\s*react-float 10s ease-out forwards/.test(skinSrc)
+    && /calc\(var\(--dy\) - 56px\)/.test(skinSrc)
+    && /--dx:0px/.test(skinSrc)
+    && /--dy:0px/.test(skinSrc)
+    && !/\.react-chip \{[^}]*animation:\s*night-rise/.test(skinSrc)
+    && /@keyframes night-rise/.test(skinSrc));
 }
 
 // ---------------------------------------------------------------- R50 · the faces

@@ -3,6 +3,16 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { attachIdentity, attachChestWordmark } from './mesh-identity.js';
 import { shellWhite } from '../materials/surfaces/robot.js';
+/*
+ * The seated numbers live in `src/game/chair-seats.js` on purpose: that file is THREE-free so
+ * the gates can assert them with plain `node`, and it is already where the sit attach, the
+ * clip allow-lists and the measured hips anchors are written down. Importing it here costs
+ * nothing at runtime (it imports nothing itself, so there is no cycle) and stops the reaction
+ * allow-list from existing in two places and drifting.
+ */
+import {
+  seatedReactionAllowed, seatedAnchorDelta, seatedClipLoops, ARMATURE_M,
+} from '../game/chair-seats.js';
 
 /**
  * THE GAME AVATAR — the generated, auto-rigged, skinned character driving the PLAYER in-game.
@@ -315,6 +325,22 @@ const SIT_CLIPS = {
  */
 const SIT_UPRIGHT_T = 0;
 const SIT_LEAN_BONES = ['Hips', 'Spine02', 'Spine01', 'Spine'];
+
+/**
+ * 🚦 **THE GATE'S CONTROL — THE ACCUSER-LEAVES-THE-BUILDING BUG, PUT BACK ON DEMAND.**
+ *
+ * `harness/accusation-beat.mjs` AB2d found a nominator whose pelvis was 12.6–28.4 m from its
+ * chair by sim +12 s. `AB2d-ctl` has to be able to turn it red again on demand, because this
+ * repo's rule is that a gate whose control stops failing has gone blind — `party-isolation`
+ * reported 20 passed / 0 failed, controls included, while leaking a role to every phone.
+ *
+ * With `integrate` true, `update()` skips the un-apply below and the anchor correction goes
+ * back to being an ACCUMULATOR, exactly as it shipped. It is the same shape as `room.js`'s
+ * `leak:` switches: the fault lives in the product file, off by default, reachable only from a
+ * harness. Nothing in the night ever sets it — `views/party-follow.js` publishes the setter on
+ * `window.__rrrFollow` for the one gate that needs it, and that view has no socket.
+ */
+export const SEAT_ANCHOR_CONTROL = { integrate: false };
 
 /**
  * Where the hammer sits in the hand — locked to John's 2026-08-24 grip-tool readout, not to
@@ -1144,6 +1170,18 @@ export async function createMeshAvatar(opts = {}) {
     clipNames: [...byName.keys()],
 
     /**
+     * ONE CLIP BY NAME, for a consumer that wants to build its own action.
+     *
+     * `byName` has always held all 38 clips while `actions` only ever held the ~15 the runner
+     * plays, so the 13 seated performances in this file were loaded, parked in a Map and
+     * unreachable. `cloneMeshAvatar` needs them to give a seated twin a reaction, and it must
+     * NOT fetch the 9 MB file a second time to get them — the runner already paid for it
+     * during the lobby bake. Returns null rather than throwing: the Lumi fallback body has
+     * none of the seated clips, and a missing reaction is a no-op, not a crash.
+     */
+    clipNamed(name) { return byName.get(String(name ?? '')) ?? null; },
+
+    /**
      * The fine-detail plumbing, for the shader round that consumes it.
      *
      *   boneLocal.bones[id]   { name, axis, len, from, forked, verts, axial }
@@ -1370,7 +1408,10 @@ export async function createMeshAvatar(opts = {}) {
  * copies the skeleton and the scene graph; the GLB's geometries stay SHARED with the source,
  * which is why `intro-bed.js` must not dispose them (see that file's `dispose`).
  *
- * Intros only need idle + walk. Attack / prop / limb collapse stay on the runner's original.
+ * Intros need idle + walk + sit. Execution reuses the SAME `mountInHand` / `SWINGS` /
+ * `GRIP_MOUNT` the runner already has — completing the clone's avatar API, not a second
+ * hammer. Limb collapse used to be a no-op on the clone; the
+ * lynch hit needs it so a smashed body can keep a socket collapsed after the mixer.
  * Materials are cloned before tinting so a red seat cannot recolour the runner.
  *
  * @param {object} source  a `createMeshAvatar()` result
@@ -1413,12 +1454,34 @@ export function cloneMeshAvatar(source, opts = {}) {
     a.play();
   }
 
-  const hips = (() => {
-    let found = null;
-    rig.traverse((o) => { if (o.isBone && o.name === 'Hips') found = o; });
-    return found;
-  })();
+  const bones = {};
+  rig.traverse((o) => { if (o.isBone) bones[o.name] = o; });
+  const hips = bones.Hips || null;
   const hipsRest = hips ? hips.position.clone() : null;
+  const CLONE_H = 1.7;
+  const collapsed = new Set();
+  const applyCollapsed = () => {
+    for (const name of collapsed) bones[name]?.scale.setScalar(1e-4);
+  };
+
+  /*
+   * 🔨 **THE RUNNER'S SWING, ON THE TWIN — not a second rig.** `SWINGS` and `mountInHand`
+   * are the product hammer. Execution needs a seated clone to pick that hammer up; stubbing
+   * `mountProp` / `playAttack` here is what made the lynch a sit-and-cut.
+   */
+  const swingActions = {};
+  let activeSwing = SWINGS[0];
+  let mounted = null;
+  let mountScaleK = 1;
+  let mountGrip = { ...GRIP_MOUNT };
+  for (const w of SWINGS) {
+    const src = source.actions?.[w.clip];
+    if (!src) continue;
+    const a = mixer.clipAction(src.getClip());
+    a.enabled = true;
+    a.setEffectiveWeight(0);
+    swingActions[w.clip] = a;
+  }
   const leanBones = [];
   rig.traverse((o) => {
     if (o.isBone && SIT_LEAN_BONES.includes(o.name)) leanBones.push(o);
@@ -1430,13 +1493,171 @@ export function cloneMeshAvatar(source, opts = {}) {
   let sitClipName = null;
   let sitIdle = null;
 
+  /*
+   * 🎬 **SEATED PERFORMANCE STATE.** Actions are built ON DEMAND, never at clone time: eight
+   * twins x eleven clips is 88 actions the mixer would walk every frame of every beat for a
+   * performance that plays maybe twice a night. `source.clipNamed` hands over the clip the
+   * runner already downloaded, so the first reaction of the night still costs zero fetches.
+   */
+  const reactions = new Map();
+  let react = null;         // the action performing, or null
+  let reactName = null;
+  let reactHold = false;
+  let reactFade = 0.25;
+  let reactAmt = 0;         // 0..1 crossfade against the seated idle
+  let reactOut = false;     // once-through clip is finished and on its way home
+  let reactAnchor = null;   // constant hips fix-up, RAW TRACK UNITS (centimetres)
+  /**
+   * 🩹 **WHAT OF THAT FIX-UP IS CURRENTLY SITTING IN `hips.position` — and the whole of AB2d.**
+   *
+   * The correction below is written `hips.position.y += anchor.y * reactAmt`, and it is only a
+   * CORRECTION while something else re-authors `hips.position` every frame. The mixer normally
+   * does. **It stops.** `three/src/animation/PropertyMixer.js` `apply()` ends with
+   *
+   *     for (let i = stride, e = stride + stride; i !== e; ++i)
+   *       if (buffer[i] !== buffer[i + stride]) { binding.setValue(buffer, offset); break; }
+   *
+   * — the scene graph is only written when the MIXED VALUE CHANGED since the previous frame. A
+   * `LoopOnce` + `clampWhenFinished` action that has reached its last frame produces the same
+   * hips translation every frame forever, so from the frame after it clamps the mixer writes
+   * nothing at all and the `+=` has nothing undoing it. Measured in bare node against three
+   * 0.180.0: 20 writes, then silence, and the value climbs by the increment every frame after.
+   *
+   * `ACCUSE_CLIPS.stand` is `Sit_to_Stand_Transition_M`, which clamps (83.8° end-to-end, so
+   * `seatedClipLoops` refuses to loop it) at 6.17 s and whose anchor is 35.88 raw units =
+   * **0.3588 m per frame**. At the engine's 0.1 s dt clamp that is 3.59 m per second of show,
+   * which is the 20.80 m AB2d measured at +12 s and the 28.4 m it measured at +14 s.
+   *
+   * ⚠️ `hips.position.x` is PINNED (`= hipsRest.x`) one line above and never drifted, on any
+   * run. The two axes that drift are exactly the two that were incremented — that is what
+   * pointed at this, and it is the shape of the whole bug in one line.
+   *
+   * So the correction is UN-APPLIED before the mixer runs and re-applied after it. Whether the
+   * mixer wrote or not, `hips.position` is the clip's own value by the time the `+=` lands, and
+   * the pelvis carries exactly one correction instead of one per frame since the clip clamped.
+   * The two `+=` lines are unchanged and stay unchanged — `seated-actions` A8f reads them.
+   */
+  const anchorFix = { y: 0, z: 0 };
+
+  /** Opening-frame Hips translation of a clip, raw track units. Null if it has no hips track. */
+  const hipsOpen = (clip) => {
+    const tr = (clip?.tracks ?? []).find((t) => /hips\.position$/i.test(t.name));
+    if (!tr || tr.values.length < 3) return null;
+    return { x: tr.values[0], y: tr.values[1], z: tr.values[2] };
+  };
+
+  /**
+   * First-vs-last keyframe over every rotation track, plus the hips end-to-end travel. Decides
+   * whether `hold: true` may LOOP the clip or has to CLAMP its final frame — see
+   * `seatedClipLoops` in `chair-seats.js` for the measured spread these thresholds sit in.
+   * Measured off the clip rather than listed by name so a re-imported GLB reclassifies itself.
+   */
+  const closesLoop = (clip) => {
+    let deg = 0;
+    for (const tr of clip?.tracks ?? []) {
+      if (!/\.quaternion$/i.test(tr.name) || tr.values.length < 8) continue;
+      const n = tr.values.length;
+      let dot = 0;
+      for (let k = 0; k < 4; k++) dot += tr.values[k] * tr.values[n - 4 + k];
+      deg = Math.max(deg, 2 * Math.acos(Math.min(1, Math.abs(dot))) * 180 / Math.PI);
+    }
+    let drift = 0;
+    const tr = (clip?.tracks ?? []).find((t) => /hips\.position$/i.test(t.name));
+    if (tr && tr.values.length >= 6) {
+      const n = tr.values.length;
+      drift = Math.hypot(
+        tr.values[n - 3] - tr.values[0],
+        tr.values[n - 2] - tr.values[1],
+        tr.values[n - 1] - tr.values[2],
+      ) * ARMATURE_M;
+    }
+    return seatedClipLoops({ endQuatDeg: deg, endDrift: drift });
+  };
+
+  function reactionEntry(name) {
+    if (reactions.has(name)) return reactions.get(name);
+    const clip = source.clipNamed?.(name) ?? null;
+    let entry = null;
+    if (clip) {
+      const action = mixer.clipAction(clip);
+      action.enabled = true;
+      action.setEffectiveWeight(0);
+      entry = { action, loops: closesLoop(clip), open: hipsOpen(clip) };
+    }
+    // Cached either way: a body without the clip must not re-look-it-up every call.
+    reactions.set(name, entry);
+    return entry;
+  }
+
+  /**
+   * Take the anchor correction back out of the pelvis, so what is left is the mixer's own
+   * authored value. Safe to call on a frame where the mixer DID write: `anchorFix` is zeroed
+   * every time it is applied, so this never subtracts a correction twice.
+   */
+  function unfixHips() {
+    if (hips) {
+      if (anchorFix.y) hips.position.y -= anchorFix.y;
+      if (anchorFix.z) hips.position.z -= anchorFix.z;
+    }
+    anchorFix.y = 0; anchorFix.z = 0;
+  }
+
+  /** Drop whatever is performing. A new performance and a new sit both cancel the old one. */
+  function clearReaction() {
+    // Before the reaction's own anchor is forgotten — otherwise its correction is stranded in
+    // the pelvis until some clip happens to overwrite `hips.position` again.
+    unfixHips();
+    for (const entry of reactions.values()) {
+      if (!entry) continue;
+      entry.action.setEffectiveWeight(0);
+      entry.action.stop();
+    }
+    react = null; reactName = null; reactAnchor = null;
+    reactAmt = 0; reactOut = false; reactHold = false;
+    // 📛 The performance is over, and the scene says so. See `publishPose`.
+    publishPose();
+  }
+
+  /**
+   * 📛 **PUBLISH THE POSE WHERE A SCENE WALKER CAN READ IT.**
+   *
+   * `get clip()` and `get seatedAction()` answer this already, but only to whoever holds the
+   * avatar object — and the intro bed does not hand its bodies out. A browser probe walking
+   * `player.intro-<id>` had no way to name what a chair was playing, which is the whole of
+   * `accusation-beat` AB2c/AB3c: "the animation is real and no instrument can see which one it
+   * is". `follow-bed.js` reads this back onto `sitReport()`'s rows.
+   *
+   * Two fields, kept apart for the same reason the two getters are: `clip` is the seat's
+   * RESTING pose and stays `Chair_Sit_Idle_M` through the whole accusation; `seatedAction` is
+   * the performance on top of it, and is null when there is none. Written on transitions only —
+   * never per frame.
+   */
+  function publishPose() {
+    rig.userData.clip = pose === 'dead'
+      ? 'dead'
+      : pose === 'sit'
+        ? (sitClipName || sitIdle?.getClip?.().name || 'sit')
+        : null;
+    rig.userData.seatedAction = pose === 'dead' ? null : reactName;
+  }
+
   function captureLean() {
     for (const row of leanRest) row.q.copy(row.bone.quaternion);
     leanFrozen = true;
   }
-  function applyLean() {
-    if (!leanFrozen) return;
-    for (const row of leanRest) row.bone.quaternion.copy(row.q);
+  /**
+   * `strength` is 1 for a plain seated idle and 0 while a reaction is at full weight: the
+   * upright freeze exists to stop Idle_M periodically folding the spine forward, and applying
+   * it during a performance would delete the performance — `Sit_Hands_on_Head_Lean_Back` is
+   * ENTIRELY spine. Slerping by the crossfade amount hands the torso back to the freeze over
+   * the same fade the weights use, so there is no pop when the reaction lets go.
+   */
+  function applyLean(strength = 1) {
+    if (!leanFrozen || strength <= 0) return;
+    for (const row of leanRest) {
+      if (strength >= 0.999) row.bone.quaternion.copy(row.q);
+      else row.bone.quaternion.slerp(row.q, strength);
+    }
   }
 
   return {
@@ -1444,16 +1665,148 @@ export function cloneMeshAvatar(source, opts = {}) {
     sourceFile: source.sourceFile,
     cloned: true,
     get clip() {
+      if (pose === 'dead') return 'dead';
       if (pose === 'sit') return sitClipName || (sitIdle?.getClip?.().name ?? 'sit');
+      if (activeSwing && swingActions[activeSwing.clip]?.getEffectiveWeight() > 0.5) {
+        return activeSwing.clip;
+      }
       return walk.getEffectiveWeight() > 0.5 ? 'walk' : 'idle';
     },
     get seated() { return pose === 'sit'; },
-    get swing() { return null; },
-    get propMounted() { return false; },
-    mountProp() { return false; },
-    unmountProp() {},
-    playAttack() {},
-    setLimbVisible() {},
+    get dead() { return pose === 'dead'; },
+    /**
+     * The performance on top of the seat, or null. Deliberately NOT folded into `clip`:
+     * `assertSeatedPose` reads that to ask whether the seat's resting pose is a sanctioned sit
+     * clip, and a capture taken mid-reaction would fail that check for the right pose for the
+     * wrong reason. The two questions stay separate.
+     */
+    get seatedAction() { return reactName; },
+    get swing() { return activeSwing; },
+    get propMounted() { return !!mounted; },
+    /**
+     * Same primitive as the runner. Completing the clone API — not a second hammer,
+     * and not a restale of `GRIP_SHIPPED`.
+     */
+    mountProp(obj, { hand = 'RightHand' } = {}) {
+      const b = bones[hand];
+      if (!b || !obj) return false;
+      const g = gripFromUrl();
+      const placed = mountInHand(obj, { bone: b, height: CLONE_H, ...g });
+      if (!placed) return false;
+      mountScaleK = placed.k;
+      mountGrip = {
+        roll: placed.roll, tilt: placed.tilt, yaw: placed.yaw,
+        palm: placed.palm, reach: placed.reach, depth: placed.depth,
+        alongHaft: placed.alongHaft,
+      };
+      mounted = obj;
+      return true;
+    },
+    unmountProp() {
+      if (mounted) { mounted.removeFromParent(); mounted = null; }
+    },
+    setGrip(roll, alongHaft, extra = {}) {
+      if (!mounted) return false;
+      const g = {
+        ...GRIP_MOUNT,
+        ...mountGrip,
+        roll: roll ?? urlNum('grip', activeSwing.grip),
+        alongHaft: alongHaft ?? mountGrip.alongHaft ?? GRIP_MOUNT.alongHaft,
+        ...extra,
+      };
+      applyGripLocal(mounted, { k: mountScaleK, height: CLONE_H, ...g });
+      mounted.updateWorldMatrix(true, true);
+      mountGrip = g;
+      return true;
+    },
+    /**
+     * Start the swing. Clones pin `SWINGS[0]` (`Attack`) unless a pick is passed —
+     * `Heavy_Hammer_Swing` is a floor chop that ends bent double, which is the wrong
+     * picture for a seated lynch. The runner's original still rolls the set.
+     */
+    playAttack(dur, pickIndex) {
+      const names = SWINGS.filter((w) => swingActions[w.clip]);
+      if (!names.length) return;
+      const forced = urlNum('swingpick', -1);
+      const pick = Number.isFinite(pickIndex) ? pickIndex
+        : (forced >= 0 ? forced : 0);
+      activeSwing = names[Math.max(0, Math.min(names.length - 1, pick | 0))] || names[0];
+      this.setGrip(urlNum('grip', activeSwing.grip));
+      const a = swingActions[activeSwing.clip];
+      if (!a) return;
+      a.reset();
+      a.setLoop(THREE.LoopOnce, 1);
+      a.clampWhenFinished = true;
+      a.enabled = true;
+      const clipDur = a.getClip().duration;
+      a.setEffectiveTimeScale(dur > 0 ? clipDur / dur : 1);
+      a.setEffectiveWeight(1);
+      idle.setEffectiveWeight(0);
+      walk.setEffectiveWeight(0);
+      a.play();
+    },
+    setLimbVisible(socket, visible) {
+      for (const name of SOCKET_BONES[socket] ?? []) {
+        if (!bones[name]) continue;
+        if (visible) collapsed.delete(name); else collapsed.add(name);
+      }
+      applyCollapsed();
+    },
+    /**
+     * Leave the chair clip and become a walking body. Execution calls this AFTER the
+     * stand transition and AFTER `body.pos` has been copied to the stand-mark, so
+     * unlocking `sitLock` cannot reintroduce the crouch-in-front-of-seat bug.
+     */
+    /**
+     * ☠️ HEAT · A CORPSE DOES NOT LOOP IDLE. Stop every action, reset to bind,
+     * and never mixer.update(dt) again. Sit idle / loco idle / Idle_M on a
+     * floor body is the elbow-up prone John watched. Gate: execute-hit H14.
+     */
+    holdDead() {
+      unfixHips();
+      clearReaction();
+      pose = 'dead';
+      sitClipName = null;
+      sitIdle = null;
+      mixer.stopAllAction();
+      idle.enabled = false;
+      walk.enabled = false;
+      idle.setEffectiveWeight(0);
+      walk.setEffectiveWeight(0);
+      for (const a of [sitIdleM, sitIdleF, sitDown]) {
+        if (!a) continue;
+        a.enabled = false;
+        a.setEffectiveWeight(0);
+      }
+      for (const a of Object.values(swingActions)) {
+        a.enabled = false;
+        a.setEffectiveWeight(0);
+      }
+      rig.traverse((o) => {
+        if (o.isSkinnedMesh && o.skeleton) o.skeleton.pose();
+      });
+      if (hips && hipsRest) hips.position.copy(hipsRest);
+      applyCollapsed();
+      publishPose();
+      return true;
+    },
+    playLoco() {
+      if (pose === 'dead') return false;
+      unfixHips();
+      clearReaction();
+      pose = 'loco';
+      sitClipName = null;
+      sitIdle = null;
+      for (const a of [sitIdleM, sitIdleF, sitDown]) {
+        if (!a) continue;
+        a.setEffectiveWeight(0);
+      }
+      idle.setEffectiveWeight(1);
+      walk.setEffectiveWeight(0);
+      if (hips && hipsRest) hips.position.copy(hipsRest);
+      publishPose();
+      return true;
+    },
     /**
      * Loop a seated idle. Every seat uses Chair_Sit_Idle_M (F tucks 0.56 m and
      * reads as sunk/through-back). Hips X is pinned to bind after the mixer so
@@ -1463,6 +1816,7 @@ export function cloneMeshAvatar(source, opts = {}) {
      * transition is not played at the sit attach.
      */
     playSit({ seatIndex = 0, skipDown: _skipDown = false, phase = 0 } = {}) {
+      if (pose === 'dead') return false;
       sitIdle = sitIdleM || sitIdleF;
       if (!sitIdle) return false;
       pose = 'sit';
@@ -1479,14 +1833,82 @@ export function cloneMeshAvatar(source, opts = {}) {
        * Walk-in already showed them on their feet; occupying the seat is Idle_M.
        */
       if (sitDown) sitDown.setEffectiveWeight(0);
+      /*
+       * A sit CANCELS whatever was performing — the contract is that a held reaction runs
+       * until the next `playSeated` or `playSit`. It has to happen before the lean capture
+       * below, or the frozen upright quaternions get sampled off a reaction pose and every
+       * later idle wears a shrug.
+       */
+      clearReaction();
       sitIdle.setEffectiveWeight(1);
       sitIdle.time = SIT_UPRIGHT_T;
       mixer.update(0);
       captureLean();
       sitIdle.time = ((phase % dur) + dur) % dur;
+      publishPose();
+      return true;
+    },
+
+    /**
+     * 🎬 **PLAY ONE OF THE SEATED PERFORMANCES THE BODY ALREADY CARRIES.**
+     *
+     * The Reckoning puts a red `!` over a head and the circle reads as "something is up"
+     * without saying WHAT. `friendly_all38.glb` shipped 13 seated clips and exactly one of
+     * them was ever given a `clipAction`; this is that call, not an asset problem.
+     *
+     *   playSeated(name, { hold = false, fade = 0.25, fit = 0 }) -> boolean
+     *
+     *   hold: false  play once, then crossfade home to the seated idle over `fade` seconds
+     *   hold: true   stay in it — looping if the clip closes its own loop, otherwise clamped
+     *                on its last frame — until the next playSeated / playSit
+     *
+     * Returns FALSE and changes nothing for a name that is not on `SEATED_REACTION_CLIPS`, for
+     * a body that does not carry the clip (the Lumi fallback), and for an avatar that is not
+     * seated. It never throws: a reaction arrives from the show wire, and an unlisted name must
+     * not be able to put an untested pose on air mid-episode.
+     *
+     * ⚠️ TEN OF THE ELEVEN CLIPS ARE AUTHORED ON A DIFFERENT CHAIR — up to 0.34 m forward of
+     * Idle_M's hips and 8 cm lower, which played raw slides the robot off the front of the
+     * cushion. `reactAnchor` is the one-off correction (evidence and the full table are in
+     * `chair-seats.js` `seatedAnchorDelta`); `update` applies it scaled by the crossfade.
+     */
+    playSeated(clipName, { hold = false, fade = 0.25, fit = 0 } = {}) {
+      if (pose !== 'sit' || !sitIdle) return false;
+      const name = String(clipName ?? '');
+      if (!seatedReactionAllowed(name)) return false;
+      const entry = reactionEntry(name);
+      if (!entry) return false;
+      clearReaction();
+      react = entry.action;
+      reactName = name;
+      reactHold = !!hold;
+      reactFade = Math.max(0.01, Number.isFinite(+fade) ? +fade : 0.25);
+      const idleOpen = hipsOpen(sitIdle.getClip());
+      reactAnchor = (idleOpen && entry.open) ? seatedAnchorDelta(idleOpen, entry.open) : null;
+      react.reset();
+      // clampWhenFinished is what makes a held non-looping clip HOLD instead of snapping back
+      // to frame 0; it is ignored under LoopRepeat, so it is safe to set either way.
+      react.clampWhenFinished = true;
+      const looping = reactHold && entry.loops;
+      react.setLoop(looping ? THREE.LoopRepeat : THREE.LoopOnce, looping ? Infinity : 1);
+      const authored = Math.max(0.05, react.getClip().duration);
+      react.setEffectiveTimeScale(fit > 0 ? authored / fit : 1);
+      react.setEffectiveWeight(0);
+      react.play();
+      publishPose();
       return true;
     },
     update(dt, state = {}) {
+      /*
+       * 🩹 **THE PELVIS GOES BACK TO WHERE THE CLIP PUT IT BEFORE ANYTHING ELSE HAPPENS.** See
+       * `anchorFix`. This is outside the pose branch on purpose: a body that stands up and walks
+       * away between frames must not carry a seated chair's correction into the run.
+       */
+      unfixHips();
+      if (pose === 'dead') {
+        applyCollapsed();
+        return;
+      }
       if (pose === 'sit') {
         if (sitDown && sitIdle && sitDown.getEffectiveWeight() > 0.05) {
           const done = sitDown.time >= sitDown.getClip().duration - 0.08;
@@ -1498,15 +1920,62 @@ export function cloneMeshAvatar(source, opts = {}) {
             if (next <= 0.02) sitClipName = sitIdle.getClip().name;
           }
         }
+        if (react) {
+          const dur = Math.max(0.05, react.getClip().duration);
+          // A once-through clip is done when the mixer clamps it (paused, at the last frame).
+          // `hold` never ends on its own: it is released by the next playSeated / playSit.
+          if (!reactHold && (react.paused || react.time >= dur - 0.02)) reactOut = true;
+          const step = dt / reactFade;
+          reactAmt = reactOut ? Math.max(0, reactAmt - step) : Math.min(1, reactAmt + step);
+          react.setEffectiveWeight(reactAmt);
+          sitIdle.setEffectiveWeight(1 - reactAmt);
+          if (reactOut && reactAmt <= 0) {
+            clearReaction();
+            sitIdle.setEffectiveWeight(1);
+          }
+        }
         mixer.update(dt);
         // Clip writes a ~0.18 m sideways hips.x. Pin X to bind so both twins sit
         // on the cushion centre; leave Y/Z to Idle_M (the sit drop and hip-back).
-        if (hips && hipsRest) hips.position.x = hipsRest.x;
-        applyLean();
+        if (hips && hipsRest) {
+          hips.position.x = hipsRest.x;
+          /*
+           * The reaction's own hips anchor, corrected onto Idle_M's, scaled by the crossfade.
+           * The mixer writes a weighted blend of the two clips' hips, so a correction weighted
+           * the same way lands the pelvis exactly where the sit attach expects it at BOTH ends
+           * of the fade. A constant, not a per-frame pin: pinning would flatten the lean-back
+           * and the stand-up into a robot vibrating in its chair.
+           */
+          if (reactAnchor && reactAmt > 0) {
+            hips.position.y += reactAnchor.y * reactAmt;
+            hips.position.z += reactAnchor.z * reactAmt;
+            /*
+             * …and what was applied is REMEMBERED, so the next frame can take it out again.
+             * Under the gate's control this is skipped, `unfixHips` becomes a no-op and the
+             * `+=` above goes back to integrating — which is the bug, and AB2d-ctl's job.
+             */
+            if (!SEAT_ANCHOR_CONTROL.integrate) {
+              anchorFix.y = reactAnchor.y * reactAmt;
+              anchorFix.z = reactAnchor.z * reactAmt;
+            }
+          }
+        }
+        applyLean(1 - reactAmt);
+        applyCollapsed();
         return;
       }
       const speed = state.speed ?? 0;
       const runAt = state.runAt ?? 2.6;
+      const swinging = !!state.swinging;
+      const swingClip = activeSwing?.clip;
+      const swingAct = swinging && swingClip ? swingActions[swingClip] : null;
+      if (swingAct && swingAct.getEffectiveWeight() > 0.05) {
+        mixer.update(dt);
+        if (hips && hipsRest) { hips.position.x = hipsRest.x; hips.position.z = hipsRest.z; }
+        applyCollapsed();
+        return;
+      }
+      for (const a of Object.values(swingActions)) a.setEffectiveWeight(0);
       const still = speed < runAt * 0.10;
       const target = still ? 0 : 1;
       const w = walk.getEffectiveWeight();
@@ -1517,6 +1986,7 @@ export function cloneMeshAvatar(source, opts = {}) {
       walk.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / (ref || 1), 0.55, 1.65));
       mixer.update(dt);
       if (hips && hipsRest) { hips.position.x = hipsRest.x; hips.position.z = hipsRest.z; }
+      applyCollapsed();
     },
     dispose() {
       mixer.stopAllAction();

@@ -178,6 +178,9 @@ const renderLocked = () => _offlineCtx !== null && !_inTrigger;
 export function seedAudioVariation(seed) {
   _audioSeed = seed >>> 0;
   _meleeHit = 0; _gunHit = 0; _wallHit = 0;
+  // 📺 the show cues take the same pinning — a captured Reckoning has to reproduce the SAME
+  // three taps next time, or an audio ref of the night loop is a fresh dice roll per run.
+  _showHit = 0; _evictHit = 0;
 }
 
 // ------------------------------------------------------------------ small curve helpers
@@ -1780,6 +1783,380 @@ export function playFurnBreak(material = 'wood', opts = null) {
   }
 }
 
+/* ===========================================================================================
+ * 📺 PRIME TIME — THE SHOW CUES, and the leak rule that governs them.
+ *
+ * The night loop shipped SILENT. Nothing in `src/party/` or `src/views/party-*.js` had ever
+ * called this module: every voice above is dig/combat semantics (a gun, a wall stage, a chained
+ * door, a hunter closing) and none of them means anything on a television. Renaming
+ * `playDoorBang` to "eviction" would have been the cheap version and the wrong one — the
+ * escalation curve, the chain rattle and the hinge groan are all saying *the hunter is coming
+ * through a door*, which is a fact the TV must not assert.
+ *
+ * So: two new voices, both PRIME TIME by construction.
+ *
+ *   `playNameLanded(cue)`  the Reckoning. A name lands on the board. A dry gavel-ish block tap:
+ *                          a short bandpassed slap, a pitched wooden body dropping about a
+ *                          fifth, and a thin card-tick on top. ~150 ms, no tail.
+ *   `playEviction(cue)`    the Execution. The sting under the verdict plate: a low drop, a
+ *                          soft-attack "curtain" of lowpassed noise, and two detuned sines
+ *                          holding underneath so the last half-second beats instead of sitting
+ *                          on a flat tone (the same trick `buildHunterVoice` uses, for the same
+ *                          reason). ~520 ms.
+ *
+ * ⚠️ **DRY AND SMALL ON PURPOSE.** This plays on a television in a room of eight people
+ * talking over it. Both voices sit well under `playMeleeImpact`'s headline level and neither has
+ * a reverb tail — a sting that rings for two seconds is a sting the room talks through once and
+ * then resents. Recap is ~10 s (CLAUDE.md); nothing here may outlast a beat.
+ *
+ * ⚠️ **PER-CALL NODES, NOT POOLED CHAINS — and that is a departure from this file's header.**
+ * Every pooled voice above shares ONE filter+gain chain whose parameters are automated per
+ * trigger, which is only safe while two triggers cannot overlap; `MELEE_FIELD_SLOTS` exists as
+ * two slots precisely because the barrier contact and rebound DO overlap. Two phones can tap
+ * NOMINATE in the same animation frame, so two `playNameLanded` calls can overlap by well
+ * inside the 150 ms envelope, and a shared gain would have the second call's `setValueAtTime`
+ * stamp on top of the first call's decay. `playFurnBreak` is the precedent for the cheap
+ * correct answer: build per call, share only the noise BUFFER. These fire a handful of times a
+ * night, not ninety times a run.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════════════════
+ * 🚨🚨 **THE AUDIO LEAK RULE.** This is a hidden-role game and sound is a broadcast channel
+ * with no privacy model at all: the Glitched hears the television exactly as well as everyone
+ * else, and nothing on a screenshot review can catch a leak that lives in a filter frequency.
+ *
+ * The two ways audio leaks are NOT content — they are TIMING and MAGNITUDE:
+ *
+ *   TIMING    a cue that fires before the fact it describes is on the screen pre-reveals it.
+ *             A sting that landed the instant the server resolved the ballot, one paint before
+ *             the verdict plate, tells the room the result early — and looks perfect in a
+ *             screenshot, because by the time the shutter opens the plate is up too.
+ *   MAGNITUDE a cue parameter that is a CONTINUOUS function of a game value is a data channel.
+ *             A bed whose intensity tracked true vote alignment, or a sting whose pitch rode
+ *             the real margin, would broadcast an internal to the whole room with nothing
+ *             wrong on screen. This is the same defect class as `src/party/log.js:69` blocking
+ *             `player.claim_set` from the TV: the host tab is not a nameplate, and neither is
+ *             the host tab's loudspeaker.
+ *
+ * THE RULE, in three clauses, each of them mechanically checkable by `harness/party-audio.mjs`:
+ *
+ *   R1 CLOSED PAYLOAD.  A cue is a validated object whose keys are a closed allowlist of facts
+ *                       already painted on that beat's HTML. `showCueViolations` is to audio
+ *                       what `cueViolations` (`src/party/follow.js:534`) is to the follow
+ *                       iframe, and `SHOW_CUE_FORBIDDEN` below is asserted by the gate to be a
+ *                       SUPERSET of `FOLLOW_FORBIDDEN` — a secret that may not reach a
+ *                       renderer must not reach a loudspeaker instead.
+ *   R2 BEAT-BOUND.      A cue carries the beat it belongs to and is refused on any other. That
+ *                       is the TIMING clause: `name` is legal only on `reckoning`, where the
+ *                       nomination rows are painted, and `evict` only on `execution`, where the
+ *                       verdict plate is.
+ *   R3 FINITE VOICE.    `showCueVoice` maps a validated cue onto one of a FINITE, ENUMERABLE
+ *                       set of parameter blocks — three for `name`, two for `evict`. That is
+ *                       the MAGNITUDE clause, and it is deliberately stronger than "do not leak
+ *                       the margin": there is no continuous parameter to ride at all. No pitch
+ *                       to slide, no gain to swell, nothing for a room to read a number off.
+ *                       The gate enumerates the whole legal cue space and asserts the voice
+ *                       space stays at five; wire any game scalar into a parameter and that
+ *                       count moves.
+ *
+ * The per-call jitter below is SALTED ON THE CALL COUNTER ALONE, never on a cue field, and the
+ * gate reads this file's source to check it. Seeded "randomness" that took a cue value as its
+ * salt would be a covert channel wearing R3's clothes: finite tables, secret dither.
+ * ═══════════════════════════════════════════════════════════════════════════════════════════ */
+
+/** The two Prime Time cue kinds. Anything else is refused, not ignored. */
+export const SHOW_CUE_KINDS = ['name', 'evict'];
+
+/**
+ * R2 · the ONLY beat each cue may fire on — the beat whose HTML paints the fact it describes.
+ * `src/views/party-host.js` paints the standing nominations on `reckoning` and the verdict
+ * plate on `execution`; a cue naming any other beat is a pre-reveal even when every field on
+ * it is legal.
+ */
+export const SHOW_CUE_BEAT = { name: 'reckoning', evict: 'execution' };
+
+/**
+ * R1 · the closed allowlist, per kind. Every entry is a fact the television is ALREADY showing
+ * at that moment:
+ *   `standing`  how many nomination rows the Reckoning board is printing (`talkStage`'s
+ *               `standing:`). A count, never an identity — the same shape `readyState()` uses
+ *               and the same reason (`party-warm` W37a: the band carries a number, not a name).
+ *   `executed`  whether the Execution painted a nameplate or the word NOBODY. A BOOLEAN, not
+ *               the id: who it was is on the screen in letters a foot high and does not need to
+ *               reach the synthesiser to get there.
+ */
+export const SHOW_CUE_KEYS = {
+  name: ['kind', 'beat', 'standing'],
+  evict: ['kind', 'beat', 'executed'],
+};
+
+/**
+ * 🚨 A DELIBERATE COPY OF `FOLLOW_FORBIDDEN` PLUS THE THINGS ONLY A SOUND COULD CARRY, AND THE
+ * COPY IS THE POINT TWICE OVER.
+ *
+ * Once for structure: this module has ZERO imports and has to keep them — it is the survival
+ * game's audio as well as the show's, and importing `src/party/follow.js` here would drag the
+ * night loop into `game.play`'s bundle to borrow one array. Same argument as `seedRand`'s own
+ * note at the top of this file. `harness/party-audio.mjs` imports BOTH and asserts this list is
+ * a superset, exactly as `party-follow` F5 asserts `FOLLOW_FORBIDDEN ⊇ FANOUT_FORBIDDEN`.
+ *
+ * Once for coverage: the tail entries are audio-specific and have no meaning on the follow URL.
+ * `margin`, `tally`, `votes`, `threat`, `suspicion` and `alignment01` are the SCALARS — the
+ * shapes a magnitude leak actually arrives in. A reviewer adding "just a little intensity" to
+ * the sting reaches for one of these names, and the gate's control arm is built out of them.
+ */
+export const SHOW_CUE_FORBIDDEN = [
+  // --- verbatim from FOLLOW_FORBIDDEN (asserted by harness/party-audio.mjs A1) ---
+  'role', 'alignment', 'cover', 'claim', 'castSeed', 'you', 'teammates',
+  'flyover', 'hunter', 'deal',
+  'marks', 'lid', 'plan',
+  // --- the scalars. A magnitude leak has to ride one of these, or a name like them. ---
+  'margin', 'tally', 'votes', 'lynchVotes', 'threat', 'suspicion', 'alignment01', 'seed',
+];
+
+/**
+ * R3 · the finite voice tables. Three name-landings and two evictions, and there is no fourth
+ * or third — `showCueVoice` indexes these, it never interpolates between them.
+ *
+ * The three name steps climb as the board fills: each successive name lands a little higher and
+ * a little tighter, which is the Reckoning getting busier said in sound. `standing` is CLAMPED
+ * to the table length, so a nine-nominee board sounds like a three-nominee one — a count that
+ * kept climbing would be a continuous parameter with extra steps, which is exactly what R3 is
+ * for.
+ */
+const NAME_VOICES = [
+  { slapF: 2000, slapQ: 2.0, slapG: 0.30, bodyF0: 196, bodyF1: 118, bodyG: 0.26, tickF: 4600, tickG: 0.10, dur: 0.075 },
+  { slapF: 2260, slapQ: 2.4, slapG: 0.32, bodyF0: 233, bodyF1: 140, bodyG: 0.25, tickF: 5200, tickG: 0.11, dur: 0.068 },
+  { slapF: 2520, slapQ: 2.8, slapG: 0.34, bodyF0: 277, bodyF1: 166, bodyG: 0.24, tickF: 5800, tickG: 0.12, dur: 0.062 },
+];
+
+/**
+ * The two evictions. `[1]` is somebody going out: a real low drop under the plate. `[0]` is
+ * NOBODY, and it is NOT a quieter version of the same sting — it has no drop at all, a softer
+ * and longer curtain, and a lower hold, so it reads as *nothing happened* rather than as a
+ * smaller eviction. A "no eviction" that sounded like a weak eviction would be the audio
+ * version of the defect `executionSwing` was written to kill: one fact, said wrong.
+ */
+const EVICT_VOICES = [
+  { dropF0: 0, dropF1: 0, dropG: 0.00, dropDur: 0.00, curtainF: 760, curtainG: 0.14, curtainDur: 0.26, holdF: 262, holdDetune: 4.5, holdG: 0.055, holdDur: 0.62 },
+  { dropF0: 92, dropF1: 42, dropG: 0.34, dropDur: 0.22, curtainF: 900, curtainG: 0.24, curtainDur: 0.18, holdF: 330, holdDetune: 6.5, holdG: 0.085, holdDur: 0.52 },
+];
+
+/** How many distinct name-landings exist. Exported so the gate asserts the voice space, not a
+ *  magic number it copied. */
+export const NAME_STEPS = NAME_VOICES.length;
+/** Same, for the eviction. Two: out, and nobody. */
+export const EVICT_STEPS = EVICT_VOICES.length;
+
+/**
+ * R1+R2 · empty means the cue holds. Same contract and same shape as
+ * `src/party/follow.js`'s `cueViolations`: used as an assertion by `harness/party-audio.mjs`
+ * and as a refusal by both `playNameLanded` and `playEviction`.
+ *
+ * Missing fields fail through the type checks rather than needing their own clause — a `name`
+ * cue with no `standing` is "not a count", which is the message a caller needs anyway.
+ */
+export function showCueViolations(cue) {
+  if (!cue || typeof cue !== 'object') return ['<empty>'];
+  const kind = cue.kind;
+  if (!SHOW_CUE_KINDS.includes(kind)) return [`cue.kind=${String(kind)}`];
+  const bad = [];
+  const allowed = SHOW_CUE_KEYS[kind];
+  for (const k of Object.keys(cue)) {
+    if (SHOW_CUE_FORBIDDEN.includes(k)) bad.push(`cue.${kind}.${k}:forbidden`);
+    else if (!allowed.includes(k)) bad.push(`cue.${kind}.${k}:unknown`);
+  }
+  // R2 — the beat clause. Legal fields on the wrong beat is still a pre-reveal.
+  if (cue.beat !== SHOW_CUE_BEAT[kind]) bad.push(`cue.${kind}.beat=${String(cue.beat)}`);
+  if (kind === 'name' && !(Number.isInteger(cue.standing) && cue.standing >= 0)) {
+    bad.push('cue.name.standing:<not a count>');
+  }
+  if (kind === 'evict' && typeof cue.executed !== 'boolean') {
+    bad.push('cue.evict.executed:<not a boolean>');
+  }
+  return bad;
+}
+
+/**
+ * R3 · a validated cue -> exactly one of the five parameter blocks, or null if it is not a
+ * legal cue. PURE: no `ctx`, no clock, no module state beyond the two frozen tables, so the
+ * gate can enumerate the entire legal cue space in node and count the distinct outputs.
+ *
+ * `step` rides along so the gate can see WHICH block was chosen without matching floats.
+ */
+export function showCueVoice(cue) {
+  if (showCueViolations(cue).length) return null;
+  if (cue.kind === 'name') {
+    const step = Math.min(NAME_VOICES.length - 1, cue.standing);
+    return { kind: 'name', step, ...NAME_VOICES[step] };
+  }
+  const step = cue.executed ? 1 : 0;
+  return { kind: 'evict', step, ...EVICT_VOICES[step] };
+}
+
+/**
+ * A refused cue is SILENT, and silence is the correct outcome — the leak is the bug, not the
+ * missing sound. It still says so once in the console, because a developer who mis-wired a cue
+ * otherwise gets no sound and no clue.
+ *
+ * ⚠️ **KEY NAMES ONLY, NEVER VALUES.** `showCueViolations` builds its strings out of key names
+ * and a beat, and nothing here adds an operand. Printing the offending VALUE into the host
+ * tab's console would recreate `log.js:69`'s bug — DevTools on the TV reading a secret — while
+ * looking like diagnostics.
+ */
+function refuseShowCue(kind, bad) {
+  if (typeof console !== 'undefined' && console.warn) {
+    console.warn(`[audio] show cue refused (${kind}): ${bad.join(', ')}`);
+  }
+  return false;
+}
+
+let _showHit = 0;    // increments per playNameLanded — the ONLY jitter salt this voice has
+let _evictHit = 0;   // ditto, playEviction
+
+/**
+ * 🎬 THE RECKONING — a name lands on the board.
+ *
+ * Dry gavel-ish block tap, under ~170 ms end to end: bandpassed noise slap (the card hitting
+ * the board), a triangle body falling about a fifth (the board itself), a bright tick on top
+ * (the edge of the card). Nothing rings.
+ *
+ * `cue` must be `{ kind:'name', beat:'reckoning', standing:<int> }`. Returns true if it played.
+ */
+export function playNameLanded(cue) {
+  if (cue?.kind !== 'name') return refuseShowCue('name', [`cue.kind=${String(cue?.kind)}`]);
+  const bad = showCueViolations(cue);
+  if (bad.length) return refuseShowCue('name', bad);
+  if (!ctx || !master || renderLocked() || !noiseBuffer) return false;
+  const v = showCueVoice(cue);
+
+  _showHit++;
+  // 🚨 SALTED ON THE CALL COUNTER ONLY — never on a cue field. See the leak rule, clause R3's
+  // closing note; `harness/party-audio.mjs` A6 reads this file's source to keep it that way.
+  const salt = _showHit;
+  const jf = 1 + (seedRand(_audioSeed, `nlf|${salt}`) - 0.5) * 0.10;
+  const jg = 1 + (seedRand(_audioSeed, `nlg|${salt}`) - 0.5) * 0.16;
+  const t0 = ctx.currentTime + seedRand(_audioSeed, `nlt|${salt}`) * 0.006;
+
+  // 1 · the slap — bandpassed noise, the card meeting the board
+  {
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer;
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.frequency.value = v.slapF * jf;
+    f.Q.value = v.slapQ;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.001, v.slapG * jg), t0 + 0.0007);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + v.dur);
+    src.connect(f); f.connect(g); g.connect(master);
+    src.start(t0); src.stop(t0 + v.dur + 0.03);
+  }
+  // 2 · the body — a wooden block, falling about a fifth. This is the pitch the room hears.
+  {
+    const o = ctx.createOscillator();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(v.bodyF0 * jf, t0);
+    o.frequency.exponentialRampToValueAtTime(Math.max(40, v.bodyF1 * jf), t0 + v.dur * 1.8);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.001, v.bodyG * jg), t0 + 0.0012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + v.dur * 2.2);
+    o.connect(g); g.connect(master);
+    o.start(t0); o.stop(t0 + v.dur * 2.4);
+  }
+  // 3 · the tick — the top edge. Quiet; it is what makes the tap read as an OBJECT landing
+  // rather than as a drum, at the distance a television actually is from the sofa.
+  {
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer;
+    const f = ctx.createBiquadFilter();
+    f.type = 'highpass';
+    f.frequency.value = v.tickF;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0 + 0.004);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.001, v.tickG * jg), t0 + 0.0046);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.018);
+    src.connect(f); f.connect(g); g.connect(master);
+    src.start(t0 + 0.004); src.stop(t0 + 0.04);
+  }
+  return true;
+}
+
+/**
+ * 🎬 THE EXECUTION — the sting under the verdict plate.
+ *
+ * Three layers, ~520 ms and no tail past that: a low sine DROP (only when somebody is actually
+ * out), a soft-attack CURTAIN of lowpassed noise, and a HOLD of two sines a few Hz apart so the
+ * last half-second beats slowly instead of sitting on a flat tone — `buildHunterVoice`'s
+ * detuned-partner trick, borrowed for the same reason it exists there: a held tone with no
+ * movement in it reads as a fault in the television.
+ *
+ * `cue` must be `{ kind:'evict', beat:'execution', executed:<bool> }`. Returns true if it
+ * played. The BOOLEAN is the whole payload — see `SHOW_CUE_KEYS`.
+ */
+export function playEviction(cue) {
+  if (cue?.kind !== 'evict') return refuseShowCue('evict', [`cue.kind=${String(cue?.kind)}`]);
+  const bad = showCueViolations(cue);
+  if (bad.length) return refuseShowCue('evict', bad);
+  if (!ctx || !master || renderLocked() || !noiseBuffer) return false;
+  const v = showCueVoice(cue);
+
+  _evictHit++;
+  // 🚨 CALL COUNTER ONLY, exactly as in `playNameLanded`. Gate A6.
+  const salt = _evictHit;
+  const jf = 1 + (seedRand(_audioSeed, `evf|${salt}`) - 0.5) * 0.05;
+  const jg = 1 + (seedRand(_audioSeed, `evg|${salt}`) - 0.5) * 0.10;
+  const t0 = ctx.currentTime + seedRand(_audioSeed, `evt|${salt}`) * 0.008;
+
+  // 1 · the drop — the floor going out from under the name. Absent entirely on NOBODY.
+  if (v.dropG > 0) {
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(v.dropF0 * jf, t0);
+    o.frequency.exponentialRampToValueAtTime(Math.max(20, v.dropF1 * jf), t0 + v.dropDur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.001, v.dropG * jg), t0 + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + v.dropDur + 0.06);
+    o.connect(g); g.connect(master);
+    o.start(t0); o.stop(t0 + v.dropDur + 0.1);
+  }
+  // 2 · the curtain — lowpassed noise with an 18 ms attack. Soft on purpose: a hard transient
+  // here would be a gunshot, and this file already has one of those with a different meaning.
+  {
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer;
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = v.curtainF;
+    f.Q.value = 0.7;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.001, v.curtainG * jg), t0 + 0.018);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + v.curtainDur);
+    src.connect(f); f.connect(g); g.connect(master);
+    src.start(t0); src.stop(t0 + v.curtainDur + 0.05);
+  }
+  // 3 · the hold — two sines `holdDetune` Hz apart. The beat frequency is the difference, so
+  // ~5-7 Hz: slow enough to hear as movement, fast enough to be gone before the beat is.
+  {
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.001, v.holdG * jg), t0 + 0.04);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + v.holdDur);
+    g.connect(master);
+    for (const df of [0, v.holdDetune]) {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = v.holdF * jf + df;
+      o.connect(g);
+      o.start(t0); o.stop(t0 + v.holdDur + 0.05);
+    }
+  }
+  return true;
+}
+
 if (typeof window !== 'undefined') {
   window.__rrrAudio = {
     _renderOffline,
@@ -1791,6 +2168,12 @@ if (typeof window !== 'undefined') {
     playMeleeImpact,
     playDoorBang,
     playFurnBreak,
+    /* 📺 Prime Time. `showCueViolations` is exposed for the same reason `follow.js` exports
+     * `cueViolations`: a leak rule nobody can query from the page is a promise, not a gate. */
+    playNameLanded,
+    playEviction,
+    showCueViolations,
+    showCueVoice,
     seedAudioVariation,
     /** render-harness only — see `setBarrierVoice`. The game never calls this. */
     setBarrierVoice,

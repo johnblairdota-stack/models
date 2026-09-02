@@ -11,17 +11,27 @@
  * `SECONDS`, not a second table. The Recap *button* is gone; the beat is not.
  */
 
-import { PHASE, SECONDS, reckoningSeconds, EPISODE_ORDER } from './phases.js';
+import { PHASE, SECONDS, reckoningSeconds, EPISODE_ORDER, orderFor } from './phases.js';
 
 export const SHOW_BEATS = [
   'lobby', 'casting', 'expedition', 'recap', 'debrief',
-  'reckoning', 'vote', 'execution',
+  'reckoning', 'vote', 'execution', 'verdict',
+  /*
+   * 🎬 Session-end, not an episode beat. It is in SHOW_BEATS because `setShow` refuses anything
+   * that is not — but deliberately NOT in `RUNDOWN_BEATS`, which is derived from `EPISODE_ORDER`
+   * and describes one episode's shape. A rail that advertised the Reunion would be promising it
+   * every episode, when it happens once and only if the fold says the season is over.
+   */
+  'reunion',
 ];
 
 /**
- * The TV rundown — Lobby plus `phases.js` `EPISODE_ORDER`. Live SHOW beats light up;
- * Verdict sits on the rail as the designed closer even though the wire has not grown it yet.
- * Reunion is session-end, not an episode beat; leave it off until that product exists.
+ * The TV rundown — Lobby plus `phases.js` `EPISODE_ORDER`. Live SHOW beats light up.
+ *
+ * ✅ Verdict has grown its wire beat, so the rail's last chip is no longer a `stub`: nothing
+ * here changed to light it. `rundownRailHtml` reads `SHOW_BEATS.includes(id)`, so adding the
+ * beat above is what promoted the chip, which is exactly why the rail was built that way.
+ * Reunion is session-end, not an episode beat; it stays off this list and gets its own.
  */
 export const RUNDOWN_BEATS = ['lobby', ...EPISODE_ORDER.map((p) => String(p).toLowerCase())];
 
@@ -46,6 +56,16 @@ export const DEBRIEF_HOLD_MS = SECONDS[PHASE.DEBRIEF] * 1000;
 export const RECKONING_HOLD_MS = SECONDS[PHASE.RECKONING] * 1000;
 export const VOTE_HOLD_MS = SECONDS[PHASE.VOTE] * 1000;
 export const EXECUTION_HOLD_MS = SECONDS[PHASE.EXECUTION] * 1000;
+/**
+ * ⚠️ **THE BEAT DOES NOT WORK WITHOUT THIS CONSTANT, AND IT FAILS LOOKING FINE.**
+ *
+ * `holdMsFor` returns `null` for a beat it does not know. A verdict with no hold gets a
+ * non-finite wait, so `scheduleShowProgress` returns before arming its timer and the show stops
+ * there forever; `railDrainPct` also returns `null` on a non-finite `holdMs`, which renders a
+ * segment that is permanently full. The night would show a lit Verdict chip with a full bar and
+ * simply never advance — a stall that reads as a design choice.
+ */
+export const VERDICT_HOLD_MS = SECONDS[PHASE.VERDICT] * 1000;
 
 /**
  * Last slice of Debrief — phones wake and may name someone before Reckoning proper.
@@ -105,14 +125,76 @@ export function readyMet(readyCount, living) {
 export const READY_COUNTDOWN_MS = 3000;
 
 /**
- * Empty Reckoning may re-arm this many times. Then the clock walks (nobody nominated)
- * so a broken table cannot softlock forever.
+ * ⚠️ INVERTED HEAT6. Empty Reckoning used to re-arm this many times (3), which is
+ * the loop John watched: the 3rd countdown reset, then two names locked. One clock.
+ * Zero standing skips the vote. This is 0 so a future "give them another 45s" has
+ * to change the constant AND `progressShow` AND the gates (`party-night` N19).
  */
-export const EMPTY_RECKONING_EXTEND_CAP = 3;
+export const EMPTY_RECKONING_EXTEND_CAP = 0;
 
-/** Debrief and the lynching beats — ballroom is the picture, chase is off. Recap is not this. */
-export const TALK_BEATS = ['debrief', 'reckoning', 'vote', 'execution'];
+/**
+ * 🪑 **THE BEATS THE ROOM SPENDS IN ITS CHAIRS — ballroom is the picture, chase is off.**
+ * Recap is deliberately not one: it is the expedition's own board, and it keeps `recapFacts`.
+ *
+ * ⚠️ **THE NAME IS OLDER THAN THE LIST AND IT IS THE LIST THAT IS RIGHT.** This says nothing
+ * about whether the room may nominate, vote or tap READY — every one of those is gated by its own
+ * predicate (`isReadyBeat`, `applyNominate`, the ballot). `verdict` and `reunion` joined on
+ * 2026-08-28 because all three call sites are asking the same question and the answer is the same
+ * for both: is the seated circle the picture on the television (`onStage` in `party-host.js`), do
+ * the merged pair names still belong on the plates (`cuePairs`), and does the phone draw a
+ * seated sheet rather than a pad (`party-phone.js`). Nobody presses anything on either beat.
+ */
+export const TALK_BEATS = ['debrief', 'reckoning', 'vote', 'execution', 'verdict', 'reunion'];
 export const isTalkBeat = (beat) => TALK_BEATS.includes(String(beat || ''));
+
+/* =================================================================================================
+ * 🎬 **THE REUNION'S FOUR BEATS, AND WHY THEY ARE A TABLE RATHER THAN FOUR NUMBERS IN A VIEW.**
+ *
+ * `rrr-social-round.md` §7 gives the special four beats and `phases.js` has budgeted
+ * `SECONDS[PHASE.REUNION]` at 240s since the schedule was written — a number nothing has ever
+ * spent. This is how it is spent, and `harness/round-loop.mjs` can check the arithmetic because
+ * this file is bare node.
+ *
+ * ⚠️ **THE REUNION HAS NO SERVER CLOCK, ON PURPOSE.** Every other beat is server-owned because a
+ * beat change decides what a phone may do; nothing happens after this one, nobody presses
+ * anything, and the room leaves when it leaves. So the television paces itself off `reunionBeatAt`
+ * and the server never has to be asked. If a future beat here becomes interactive, that decision
+ * flips and this comment is the argument to revisit.
+ *
+ * 75s for the roll call is the design's own staging note — *"Slow. Let the room shout."* Eight
+ * seats at nine seconds each, and the pause after each flip is the product.
+ * ================================================================================================= */
+export const REUNION_PLAN = [
+  { beat: 'rollCall', ms: 75_000 },
+  { beat: 'cut', ms: 45_000 },
+  { beat: 'awards', ms: 60_000 },
+  { beat: 'chat', ms: 60_000 },
+];
+
+/** Which of the four the Reunion is on, `ms` after it started, and how far into it. */
+export function reunionBeatAt(elapsedMs) {
+  let at = 0;
+  const t = Number.isFinite(elapsedMs) ? Math.max(0, elapsedMs) : 0;
+  for (const step of REUNION_PLAN) {
+    if (t < at + step.ms) return { beat: step.beat, into: t - at, of: step.ms };
+    at += step.ms;
+  }
+  const last = REUNION_PLAN[REUNION_PLAN.length - 1];
+  return { beat: last.beat, into: last.ms, of: last.ms };
+}
+
+/**
+ * How many plates the roll call has turned over `ms` in. Ticks one at a time across the roll
+ * call's whole window and then stays complete — the later beats do not un-reveal the cast.
+ */
+export function rollCallRevealed(elapsedMs, seats) {
+  const n = Math.max(0, seats | 0);
+  if (!n) return 0;
+  const roll = REUNION_PLAN[0].ms;
+  const t = Number.isFinite(elapsedMs) ? Math.max(0, elapsedMs) : 0;
+  if (t >= roll) return n;
+  return Math.min(n, Math.floor(t / (roll / n)) + 1);
+}
 
 /**
  * Server-owned. Expedition is immediate so the TV is never waiting on a click.
@@ -184,14 +266,29 @@ export const STUB_SHOW_PLAN = [
  * This chain was the shipped behaviour all along; `phases.js` `orderFor` was the half that
  * disagreed, and it was changed to match this one rather than the other way round.
  */
-export const AFTER_RUN_BEATS = ['recap', 'debrief', 'reckoning', 'vote', 'execution', 'casting'];
+export const AFTER_RUN_BEATS = ['recap', 'debrief', 'reckoning', 'vote', 'execution', 'verdict', 'casting'];
 
+/**
+ * 🗞️ **RECAP AIRS.** `AFTER_RUN_BEATS` is still the post-run HOLD chain (unchanged literal —
+ * `party-night` N1c4 / `party-warm` W27 pin it). Expedition used to be a hole in `nextShowBeat`
+ * so `progressShow` on the run was a no-op, and a driver walking the clock skipped Recap
+ * (CRITIC-blind 8/18). The run's real end is still mission-done / the 8-minute backstop;
+ * this edge is what makes an explicit advance, and the shooting-schedule walk, land on Recap
+ * rather than jump it.
+ */
 const AFTER_RUN_NEXT = {
+  expedition: 'recap',
   recap: 'debrief',
   debrief: 'reckoning',
   reckoning: 'vote',
   vote: 'execution',
-  execution: 'casting',
+  execution: 'verdict',
+  /*
+   * Verdict walks to Casting, which is what `episode-order`'s E2 walk already expects (it stops
+   * on `casting`). It is only the DEFAULT: `progressShow` overrides it when the fold says the
+   * season is over, and that override is the first conditional edge in the whole wire.
+   */
+  verdict: 'casting',
 };
 
 export function isShowBeat(beat) {
@@ -209,12 +306,85 @@ export function holdMsFor(beat, noms = 0) {
   if (beat === 'reckoning') return reckoningSeconds(noms) * 1000;
   if (beat === 'vote') return VOTE_HOLD_MS;
   if (beat === 'execution') return EXECUTION_HOLD_MS;
+  if (beat === 'verdict') return VERDICT_HOLD_MS;
   return null;
 }
 
-/** What the clock walks to next after a finished run. Expedition is not in this chain. */
+/** What the clock walks to next after a finished run. Expedition now walks to Recap. */
 export function nextShowBeat(beat) {
   return AFTER_RUN_NEXT[beat] ?? null;
+}
+
+/**
+ * Talk beats a `t:'show'` jump must not walk BACKWARDS through. DUSK6 ep1 strobed
+ * reckoning↔vote ~35 times because a jump was a repaint, not a door — and a door that
+ * re-enters Reckoning CLEARS standing noms. Forward is the product clock; backward is
+ * a strobe. Recap→expedition (Watch the run) and verdict→casting are not on this list.
+ */
+export const TALK_WALK = ['recap', 'debrief', 'reckoning', 'vote', 'execution', 'verdict'];
+
+export function isBackwardTalkJump(from, to) {
+  const a = TALK_WALK.indexOf(String(from || ''));
+  const b = TALK_WALK.indexOf(String(to || ''));
+  return a >= 0 && b >= 0 && b < a;
+}
+
+/** Consecutive re-fanouts of the same beat are one airing, not a strobe. */
+export function collapseWalk(beats) {
+  const out = [];
+  for (const raw of beats || []) {
+    const b = String(raw || '').toLowerCase();
+    if (!b) continue;
+    if (out[out.length - 1] === b) continue;
+    out.push(b);
+  }
+  return out;
+}
+
+/**
+ * Couch Plan Rung 2 — one episode's aired walk against `orderFor`.
+ *
+ * Recap is never a designed skip. Vote + Execution may be absent when nobody stood (HEAT6).
+ * A talk beat that is left and then re-entered is the DUSK6 strobe.
+ *
+ * @returns {string[]} issue strings; empty means the walk is same-page.
+ */
+export function episodeWalkIssues(beats, { order, noms = null } = {}) {
+  let walk = collapseWalk(beats);
+  // A trailing Casting / Reunion is the NEXT episode (or the night ending), not this one's
+  // opening beat. Counting it as CASTING makes a walk that started on expedition look
+  // out-of-order. Recap is judged on what this episode actually aired.
+  while (walk.length && (walk[walk.length - 1] === 'casting' || walk[walk.length - 1] === 'reunion')) {
+    walk = walk.slice(0, -1);
+  }
+  const designed = (order || orderFor()).map((p) => String(p).toLowerCase());
+  const issues = [];
+
+  if (designed.includes('recap') && !walk.includes('recap')) {
+    issues.push('recap missing');
+  }
+
+  const left = new Set();
+  let prev = null;
+  for (const b of walk) {
+    if (TALK_WALK.includes(b) && left.has(b)) issues.push(`strobe re-enter ${b}`);
+    if (prev && TALK_WALK.includes(prev) && b !== prev) left.add(prev);
+    prev = b;
+  }
+
+  const appeared = designed.filter((d) => walk.includes(d));
+  for (let i = 1; i < appeared.length; i++) {
+    if (walk.indexOf(appeared[i]) < walk.indexOf(appeared[i - 1])) {
+      issues.push(`out of order ${appeared[i]} before ${appeared[i - 1]}`);
+    }
+  }
+
+  if (noms != null && noms > 0) {
+    if (designed.includes('vote') && !walk.includes('vote')) issues.push('vote missing with noms');
+    if (designed.includes('execution') && !walk.includes('execution')) issues.push('execution missing with noms');
+  }
+
+  return issues;
 }
 
 /** Server-authoritative remaining time. Clients tick from `until` (epoch ms). */

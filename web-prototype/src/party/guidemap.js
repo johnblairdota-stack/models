@@ -42,6 +42,20 @@ function esc(s) {
 const n2 = (v) => (Math.round(Number(v) * 100) / 100);
 
 /**
+ * The wall-normal axis of the door a gate stands in.
+ *
+ * ⚠️ **LOOKED UP IN `plan.doors`, NEVER GUESSED FROM THE DIRECTION WORD.** A gate's `dir` is which
+ * way the guide walks through it; the door's `axis` is which way its wall runs, and the two come
+ * apart the moment a room is not a plain rectangle — a door on a north wall reached by walking
+ * east is an ordinary shape in a generated house. Guessing would draw a 1.8 m opening across the
+ * wall it lives in.
+ */
+function doorAxisAt(doors, at) {
+  const hit = (doors ?? []).find((d) => Math.abs(d.x - at.x) < 1e-6 && Math.abs(d.z - at.z) < 1e-6);
+  return hit ? hit.axis : 'x';
+}
+
+/**
  * The map, as one `<svg>` string.
  *
  * @param {object} o
@@ -50,23 +64,72 @@ const n2 = (v) => (Math.round(Number(v) * 100) / 100);
  * @param {object} [o.flyover]       `frame.flyover` as delivered: `{ hunter, marks:[{x,z,kind}] }`
  * @param {string} [o.goal]          a room TYPE to ring as the objective, e.g. `'gallery'`
  * @param {boolean} [o.jam]          draw the interference layer — `frame.flyover.jam`
+ * @param {object} [o.scope]         GUIDE E. `{ hereId, lit:[ids], gates:[{x,z,dir}], pin }` from
+ *                                   `intel-pad.js` `guidePad`. **Omit and this function behaves
+ *                                   exactly as it always has** — see the block below.
  */
-export function guideMapSvg({ seed, runner, flyover, goal, jam = false } = {}) {
+export function guideMapSvg({ seed, runner, flyover, goal, jam = false, scope = null } = {}) {
   const plan = planRegions(seed);
   const env = plan.env ?? { x0: 0, x1: 1, z0: 0, z1: 1 };
   const x0 = env.x0 - PAD, z0 = env.z0 - PAD;
   const w = (env.x1 - env.x0) + PAD * 2;
   const d = (env.z1 - env.z0) + PAD * 2;
 
+  /*
+   * 🌫️ **GUIDE E · "NEIGHBOURS ONLY" — ONE RULE: FOG HIDES.**
+   *
+   * John locked the board on 2026-09-01. The guide is shown the runner's own room and only the
+   * rooms her portals reach right now; everything else is fog. The board's argument is that a pin
+   * can then only ever be one doorway ahead, so **the pad cannot hold a route even in principle —
+   * there is no second step on it to draw.** `intel-pad.js` `neighbourScope` is where that is
+   * enforced by construction; this is only the drawing.
+   *
+   * ⚠️ **ADDITIVE, AND DELIBERATELY SO.** `scope` defaults to `null` and every branch below is
+   * `scoped ? … : <what this file already did>`, so a call without it is byte-identical to the
+   * shipped map. That matters because `party-warm` W8–W8i and `party-isolation` I10b are the
+   * regression net for this renderer and they call it unscoped — keeping them meaningful was
+   * worth more than a tidier rewrite.
+   *
+   * 🚫 **FOG HIDES MARKS TOO, AND THAT IS THE HUNTER ANSWER.** One rule, no special case: if a
+   * position is not inside a lit region it is not drawn. So under Guide E the hunter has no
+   * position on the pad at all outside her own rooms, which is *"hunter as warmth not a map"*
+   * satisfied by removal rather than by a new field. Rung 5 is a door and it is shut; the warmth
+   * strip is its shape, not this slice's.
+   *
+   * ⚠️ **NO `at`, NO SCOPE — AND THE FALLBACK IS THE PLAN, NOT A BLANK SCREEN.** With no `you`
+   * mark there is no "her room" to be a neighbour of. `party-warm` W8c already settled what a
+   * blind guide gets: *a floor plan, not an invented mark.* The caller passes `scope: null` and
+   * she gets exactly that. Fog is about attention, not secrecy — the plan is built from
+   * `worldSeed`, which is audience `all`.
+   */
+  const scoped = !!scope && Array.isArray(scope.lit) && scope.lit.length > 0;
+  const litIds = scoped ? new Set(scope.lit) : null;
+  const isLit = (id) => !scoped || litIds.has(id);
+  const floor = [...plan.rooms, ...plan.corridors];
+  /** Is this world point inside a region the guide can currently see? */
+  const litAt = (p) => {
+    if (!scoped) return true;
+    if (!p || !Number.isFinite(Number(p.x)) || !Number.isFinite(Number(p.z))) return false;
+    return floor.some((r) => litIds.has(r.id)
+      && p.x >= r.x0 && p.x <= r.x1 && p.z >= r.z0 && p.z <= r.z1);
+  };
+
   const body = [];
 
   for (const r of plan.corridors) {
-    body.push(`<rect class="gm-hall" x="${n2(r.x0)}" y="${n2(r.z0)}" `
+    body.push(`<rect class="${isLit(r.id) ? 'gm-hall' : 'gm-fog'}${scoped && r.id === scope.hereId ? ' gm-here' : ''}" `
+      + `x="${n2(r.x0)}" y="${n2(r.z0)}" `
       + `width="${n2(r.x1 - r.x0)}" height="${n2(r.z1 - r.z0)}"/>`);
   }
   for (const r of plan.rooms) {
     const isGoal = goal && r.type === goal;
-    body.push(`<rect class="gm-room${isGoal ? ' gm-goal' : ''}" x="${n2(r.x0)}" y="${n2(r.z0)}" `
+    // Under scope the goal ring is held back with everything else. The guide is told the KIND is
+    // somewhere past the fog — `missionLine` already says it in words — and ringing a room she
+    // cannot see would hand back the whole-house picture the board deliberately takes away.
+    const cls = isLit(r.id)
+      ? `gm-room${isGoal ? ' gm-goal' : ''}${scoped && r.id === scope.hereId ? ' gm-here' : ''}`
+      : 'gm-fog';
+    body.push(`<rect class="${cls}" x="${n2(r.x0)}" y="${n2(r.z0)}" `
       + `width="${n2(r.x1 - r.x0)}" height="${n2(r.z1 - r.z0)}"/>`);
   }
   /*
@@ -81,6 +144,7 @@ export function guideMapSvg({ seed, runner, flyover, goal, jam = false } = {}) {
   // spilling out of a 3.4 m service passage reads as a bug in the map rather than a tight room.
   for (const r of plan.rooms) {
     if (r.x1 - r.x0 < 5.0) continue;
+    if (!isLit(r.id)) continue;                      // fog hides the name with the room
     const cx = n2((r.x0 + r.x1) / 2);
     const cz = (r.z0 + r.z1) / 2;
     /*
@@ -97,12 +161,29 @@ export function guideMapSvg({ seed, runner, flyover, goal, jam = false } = {}) {
         + `${esc(line)}</tspan>`).join('')
       + '</text>');
   }
-  for (const dr of plan.doors) {
+  /*
+   * 🚪 Under scope the doors drawn are exactly her EXITS — the board draws them "as gates, not as
+   * a path", and `scope.gates` is already one-door-deep by construction, so there is no filtering
+   * decision to get wrong here. Unscoped, every door in the house, as before.
+   */
+  const drawnDoors = scoped
+    ? (scope.gates ?? []).map((g) => ({ x: g.x, z: g.z, axis: doorAxisAt(plan.doors, g) }))
+    : plan.doors;
+  for (const dr of drawnDoors) {
     const half = 0.9;
     const [ax, az, bx, bz] = dr.axis === 'x'
       ? [dr.x, dr.z - half, dr.x, dr.z + half]
       : [dr.x - half, dr.z, dr.x + half, dr.z];
-    body.push(`<line class="gm-door" x1="${n2(ax)}" y1="${n2(az)}" x2="${n2(bx)}" y2="${n2(bz)}"/>`);
+    body.push(`<line class="gm-door${scoped ? ' gm-gate' : ''}" `
+      + `x1="${n2(ax)}" y1="${n2(az)}" x2="${n2(bx)}" y2="${n2(bz)}"/>`);
+  }
+
+  /*
+   * 📍 THE PIN. One, ever — D2. It is drawn as a ring ON THE DOOR rather than as an arrow into the
+   * far room, because the thing the guide pinned IS the door: *"Take the north door."*
+   */
+  if (scoped && scope.pin && Number.isFinite(Number(scope.pin.x))) {
+    body.push(`<circle class="gm-pin" cx="${n2(scope.pin.x)}" cy="${n2(scope.pin.z)}" r="1.5"/>`);
   }
 
   /*
@@ -113,12 +194,13 @@ export function guideMapSvg({ seed, runner, flyover, goal, jam = false } = {}) {
    * that admits it is blind, and this one says so in `gm-blind` below.
    */
   for (const m of flyover?.marks ?? []) {
+    if (!litAt(m)) continue;
     body.push(`<circle class="gm-mark" cx="${n2(m.x)}" cy="${n2(m.z)}" r="0.9"/>`);
   }
-  if (runner && Number.isFinite(Number(runner.x))) {
+  if (runner && Number.isFinite(Number(runner.x)) && litAt(runner)) {
     body.push(`<circle class="gm-runner" cx="${n2(runner.x)}" cy="${n2(runner.z)}" r="1.15"/>`);
   }
-  if (flyover?.hunter && Number.isFinite(Number(flyover.hunter.x))) {
+  if (flyover?.hunter && Number.isFinite(Number(flyover.hunter.x)) && litAt(flyover.hunter)) {
     body.push(`<circle class="gm-hunter" cx="${n2(flyover.hunter.x)}" cy="${n2(flyover.hunter.z)}" r="1.3"/>`);
   }
 
@@ -206,6 +288,15 @@ export const GUIDE_MAP_CSS = `
     .guide-map .gm-runner { fill:var(--night-live); }
     .guide-map .gm-hunter { fill:var(--night-bad); }
     .gm-blind { color:var(--night-dim); }
+
+    /* 🌫️ GUIDE E · neighbours only. Fog is drawn rather than left empty, so the guide can see
+       that there IS a house out there she cannot see — an empty margin reads as the edge of the
+       plan, which is a different and wrong sentence. */
+    .guide-map .gm-fog { fill:var(--night-deep); stroke:var(--night-well); stroke-width:.1;
+      stroke-dasharray:.5 .7; opacity:.5; }
+    .guide-map .gm-here { stroke:var(--night-live); stroke-width:.3; }
+    .guide-map .gm-gate { stroke-width:.5; }
+    .guide-map .gm-pin { fill:none; stroke:var(--night-accent); stroke-width:.42; }
 
     /* 📡 The interference. Off unless the root carries .jam, so the layer costs a display
        property rather than a rebuild — see jamLayer's header. */

@@ -1,8 +1,9 @@
 import { estate } from './_studio.js';
 import { buildFollowBed } from '../game/follow-bed.js';
+import { SEAT_ANCHOR_CONTROL } from '../characters/mesh-avatar.js';
 import {
   CAM_LABEL, FOLLOW_CHROME_CSS, cleanCampose, cleanThrottle, cueViolations, followViolations,
-  warmViolations,
+  warmViolations, liveTexture, dropDeadMaps,
 } from '../party/follow.js';
 import { DEFAULT_LOOK, cleanLook, robotFaceSvg } from '../party/look.js';
 import { pickPlanSeed } from '../party/mansion.js';
@@ -159,40 +160,143 @@ export default async function partyFollow({ params }) {
       console.error(`[follow] refused a cue: ${violations.join(', ')}`);
       return;
     }
-    bed.cue(cue.cue);
+    try {
+      bed.cue(cue.cue);
+      guardSceneTextures(engine.scene);
+    } catch (err) {
+      /*
+       * A cue throw used to paint VIEW "party.follow" FAILED over a live Verdict.
+       * Episode 3 after Fox, 30 Aug: idle read `.length` on a null last-cast.
+       * The show stays up; the next intros cue still dresses the ballroom.
+       */
+      console.error('[follow] cue failed', err);
+      window.__rrrClearViewFail?.();
+    }
   });
 
   let first = true;
   let told = 0;
   engine.onUpdate((dt, t) => {
-    // `Engine._liveLoop` already clamps dt to 0.1. Do not clamp harder: on a slow TV (or a
-    // software rasteriser) a tighter clamp does not protect anything, it just makes the runner
-    // crawl — the simulation falls behind the wall clock in proportion to the clamp.
-    bed.step(dt, t);
-    chrome.tick(bed.readout(), t, bed);
-    if (first) {
-      first = false;
-      report('ready');
-      // The host cross-fades its slate off this, and `harness/party-follow-drive.mjs` waits on it.
-      document.body.dataset.rrrFollow = 'live';
-      try { parent.postMessage({ t: 'follow', ready: true, shot: bed.readout().shot }, '*'); } catch { /* standalone */ }
-    }
-    /*
-     * 🌍 TWICE A SECOND, AND ONLY DURING THE RUN. `src/party/room.js` `setWorld` broadcasts on
-     * every report, so this rate is the intel's refresh rate as well as its cost; 2 Hz is fast
-     * enough for a guide to call a room and far too slow to be a position feed anyone could aim
-     * with. Nothing is reported during `warm` or `intros` — there is no expedition to report on,
-     * and a hunter mark on a lobby screen would be a leak with no game behind it.
-     */
-    if (bed.mode === 'run' && t - told >= 0.5) {
-      told = t;
-      try { parent.postMessage({ t: 'follow', world: bed.world() }, '*'); } catch { /* standalone */ }
-    }
-    if (bed.mode === 'intros' && bed.introsDone()) {
-      try { parent.postMessage({ t: 'follow', intros: 'done' }, '*'); } catch { /* standalone */ }
+    try {
+      // `Engine._liveLoop` already clamps dt to 0.1. Do not clamp harder: on a slow TV (or a
+      // software rasteriser) a tighter clamp does not protect anything, it just makes the runner
+      // crawl — the simulation falls behind the wall clock in proportion to the clamp.
+      bed.step(dt, t);
+      chrome.tick(bed.readout(), t, bed);
+      if (first) {
+        first = false;
+        report('ready');
+        // The host cross-fades its slate off this, and `harness/party-follow-drive.mjs` waits on it.
+        goLive();
+        try { parent.postMessage({ t: 'follow', ready: true, shot: bed.readout().shot }, '*'); } catch { /* standalone */ }
+      }
+      /*
+       * 🌍 TWICE A SECOND, AND ONLY DURING THE RUN. `src/party/room.js` `setWorld` broadcasts on
+       * every report, so this rate is the intel's refresh rate as well as its cost; 2 Hz is fast
+       * enough for a guide to call a room and far too slow to be a position feed anyone could aim
+       * with. Nothing is reported during `warm` or `intros` — there is no expedition to report on,
+       * and a hunter mark on a lobby screen would be a leak with no game behind it.
+       */
+      if (bed.mode === 'run' && t - told >= 0.5) {
+        told = t;
+        try { parent.postMessage({ t: 'follow', world: bed.world() }, '*'); } catch { /* standalone */ }
+      }
+      if (bed.mode === 'intros' && bed.introsDone()) {
+        try { parent.postMessage({ t: 'follow', intros: 'done' }, '*'); } catch { /* standalone */ }
+      }
+    } catch (err) {
+      console.error('[follow] tick failed', err);
+      window.__rrrClearViewFail?.();
     }
   });
 
+  /*
+   * C — last-look popup AFTER the graded B picture. Scissor a small bottom-right
+   * feed from the accused's chair eyeline. One black frame on the cut, then gone.
+   * Never the full frame. DOM labels live in `#fl .lastlook`.
+   */
+  const camC = engine.camera.clone();
+  const rawRender = engine.pipeline.render.bind(engine.pipeline);
+  const restoreCanvas = (r) => {
+    const canvas = r.domElement;
+    r.setScissorTest(false);
+    r.setViewport(0, 0, canvas.width, canvas.height);
+    r.setRenderTarget(null);
+  };
+  engine.pipeline.render = (ms) => {
+    try {
+      rawRender(ms);
+    } catch (err) {
+      /*
+       * A missing map `.image` after execute/wreck used to paint VIEW FAILED
+       * and leave it up. Drop the dead texture, keep the ballroom.
+       */
+      console.error('[follow] picture failed', err);
+      window.__rrrClearViewFail?.();
+      guardSceneTextures(engine.scene);
+      try {
+        rawRender(ms);
+      } catch {
+        try {
+          const r = engine.renderer;
+          restoreCanvas(r);
+          r.render(engine.scene, engine.camera);
+        } catch (fallbackErr) {
+          console.error('[follow] fallback picture failed', fallbackErr);
+        }
+      }
+      return;
+    }
+    try {
+      const ll = bed.lastLook?.();
+      if (!ll || (ll.state !== 'live' && ll.state !== 'cut')) return;
+      const r = engine.renderer;
+      r.setRenderTarget(null);
+      const canvas = r.domElement;
+      const w = canvas.width;
+      const h = canvas.height;
+      const bw = Math.max(96, Math.round(w * 0.22));
+      const bh = Math.max(54, Math.round(bw * 9 / 16));
+      const x = w - bw - Math.round(w * 0.028);
+      const y = Math.round(h * 0.11);
+      const prevAuto = r.autoClear;
+      r.autoClear = false;
+      r.setScissorTest(true);
+      r.setViewport(x, y, bw, bh);
+      r.setScissor(x, y, bw, bh);
+      r.setClearColor(0x000000, 1);
+      r.clear(true, true, true);
+      if (ll.state === 'live' && ll.eye && ll.at) {
+        camC.fov = ll.fov || 46;
+        camC.aspect = bw / Math.max(1, bh);
+        camC.near = 0.08;
+        camC.far = 40;
+        camC.position.set(ll.eye.x, ll.eye.y, ll.eye.z);
+        camC.up.set(0, 1, 0);
+        camC.lookAt(ll.at.x, ll.at.y, ll.at.z);
+        camC.updateProjectionMatrix();
+        r.render(engine.scene, camC);
+      } else if (ll.state === 'cut') {
+        bed.consumeLastLookCut?.();
+      }
+      r.setScissorTest(false);
+      r.setViewport(0, 0, w, h);
+      r.autoClear = prevAuto;
+      void ms;
+    } catch (err) {
+      console.error('[follow] last-look failed', err);
+      try { restoreCanvas(engine.renderer); } catch { /* keep last frame */ }
+    }
+  };
+
+  /*
+   * Live before the first rAF so a verdict-frame throw cannot paint `#err`.
+   * Last-look C is still the corner PIP; this only stops a null `.image`
+   * from owning the show. goLive also HIDES a plate that already painted —
+   * CAST6 4:09pm left VIEW FAILED up through Reckoning after the verdict throw.
+   */
+  goLive();
+  guardSceneTextures(engine.scene);
   engine.markReady();
   engine.start();
 
@@ -222,6 +326,34 @@ export default async function partyFollow({ params }) {
      * is affected"* is made of. Nothing here is a secret: it is the shot the room is watching.
      */
     cam: () => bed.camReport?.() ?? null,
+    /*
+     * 🎭 The Reckoning's staging, for `harness/accusation-beat.mjs`. `accusation()` is what the
+     * stage believes (live keys, un-fired beats, who is performing, which plates wear the
+     * accusation ink); `sit()` is the seated circle a row at a time, each row carrying the
+     * PERFORMANCE (`seatedAction`) as well as the seat's resting `clip`. Without these two a
+     * bone probe can watch a robot stand up and cannot say what it is playing — AB2c's "the
+     * animation is real and no instrument can see which one it is".
+     *
+     * Both are public facts about a picture the whole room is watching: who was nominated is
+     * already on the plate, on the `!` and on the TV board. Neither reaches a phone, and this
+     * view still has no socket.
+     */
+    accusation: () => bed.accusationReport?.() ?? null,
+    sit: () => bed.sitReport?.() ?? [],
+    execution: () => bed.executionReport?.() ?? null,
+    lastLook: () => bed.lastLook?.() ?? null,
+    /*
+     * 🚦 **THE GATE'S CONTROL, AND IT IS THE ONE SWITCH HERE THAT CHANGES THE PICTURE.**
+     * `accusation-beat` AB2d-ctl flips this on to restore the unbounded hips accumulation the
+     * gate was written against, proves AB2d still goes red, and leaves it off. It is a pelvis
+     * offset and nothing else — it cannot reach a role, a frame or a socket — and it is the
+     * same shape as `room.js`'s `leak:` switches: the fault lives in the product file, off by
+     * default, reachable only from a harness. Nothing in the night calls it.
+     */
+    anchorControl: (on) => {
+      SEAT_ANCHOR_CONTROL.integrate = !!on;
+      return SEAT_ANCHOR_CONTROL.integrate;
+    },
     hunter: () => bed.hunterTelemetry(),
     storeyOfCamera: () => bed.room.spaceAt(engine.camera.position)?.storey ?? null,
   };
@@ -267,7 +399,11 @@ function buildChrome({ name, look, warm }) {
         <div class="sub">live · expedition</div>
       </div>
     </div>
-    <div class="slug"><b data-shot>chase</b> · <span data-thr>walk</span></div>`;
+    <div class="slug"><b data-shot>chase</b> · <span data-thr>walk</span></div>
+    <div class="lastlook" hidden>
+      <div class="ll-top"><span class="ll-dot"></span><span class="ll-tag">THEIR EYES</span><span class="ll-name"></span></div>
+      <div class="ll-dead">DEAD</div>
+    </div>`;
   document.body.appendChild(el);
 
   /*
@@ -283,7 +419,11 @@ function buildChrome({ name, look, warm }) {
   const thrEl = el.querySelector('[data-thr]');
   const whoEl = el.querySelector('.who');
   const subEl = el.querySelector('.sub');
+  const lookEl = el.querySelector('.lastlook');
+  const lookName = el.querySelector('.lastlook .ll-name');
+  const lookTag = el.querySelector('.lastlook .ll-tag');
   let last = '';
+  let lastLookKey = '';
   return {
     tick(read, t, bed) {
       const mode = bed?.mode ?? 'run';
@@ -296,12 +436,26 @@ function buildChrome({ name, look, warm }) {
        */
       const who = mode === 'intros' ? 'the cast' : (bed?.runnerName ?? name);
       const key = `${mode}|${read.shot}|${read.throttle}|${who}`;
-      if (key === last) return;                 // a DOM write a frame is a DOM write too many
-      last = key;
-      shotEl.textContent = read.shot;
-      thrEl.textContent = String(read.throttle).toLowerCase();
-      whoEl.textContent = who;
-      subEl.textContent = mode === 'run' ? 'live · expedition' : `live · ${mode}`;
+      if (key !== last) {
+        last = key;
+        shotEl.textContent = read.shot;
+        thrEl.textContent = String(read.throttle).toLowerCase();
+        whoEl.textContent = who;
+        subEl.textContent = mode === 'run' ? 'live · expedition' : `live · ${mode}`;
+      }
+      /*
+       * C is its own clock. A shared early-return used to leave THEIR EYES up after
+       * death because the lower-third key had not changed. Hard-cut, no fade.
+       */
+      const ll = bed?.lastLook?.() ?? { state: 'off' };
+      const lk = `${ll.state}|${ll.name || ''}`;
+      if (lk === lastLookKey) return;
+      lastLookKey = lk;
+      lookEl.hidden = ll.state !== 'live' && ll.state !== 'cut';
+      lookEl.classList.toggle('on', ll.state === 'live');
+      lookEl.classList.toggle('cut', ll.state === 'cut');
+      lookTag.textContent = ll.state === 'cut' ? 'OFF AIR' : 'THEIR EYES';
+      lookName.textContent = ll.name || '';
     },
   };
 }
@@ -310,4 +464,25 @@ function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[c]));
+}
+
+/**
+ * Drop maps / env / cube faces whose `.image` is null so three cannot throw
+ * on the live TV. Meshes stay — a wreck stays on the floor.
+ */
+function goLive() {
+  document.body.dataset.rrrFollow = 'live';
+  window.__rrrClearViewFail?.();
+}
+
+function guardSceneTextures(scene) {
+  if (!scene) return;
+  if (scene.environment && liveTexture(scene.environment) == null) scene.environment = null;
+  if (scene.background && scene.background.isTexture && liveTexture(scene.background) == null) {
+    scene.background = null;
+  }
+  scene.traverse?.((o) => {
+    const mats = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
+    for (const m of mats) dropDeadMaps(m);
+  });
 }

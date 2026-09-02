@@ -15,6 +15,7 @@ import { ROLE_CARD_CSS } from './rolecard.js';
 import { GUIDE_MAP_CSS } from './guidemap.js';
 import { INTRO_FRAME_PCT, TV_FRAME_PCT } from './follow.js';
 import { SHOW_CHROME_CSS } from './look.js';
+import { STING_CSS } from './stinger.js';
 
 export function playerName(players, id) {
   const p = (players || []).find((x) => x.id === id);
@@ -135,9 +136,13 @@ export function injectNightSkin() {
     .pair-actions { display:flex; gap:8px; margin-top:8px; }
     .pair-actions .btn { flex:1; padding:12px 10px; }
     .picks { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
-    .picks button { flex:1 1 40%; padding:12px 10px; border-radius:6px; font:inherit;
+    /* Flex + gap so the seat chip sits beside the name rather than running into it — the same
+       anatomy '.pick-list button' already uses for the nominate and vote lists. */
+    .picks button { flex:1 1 40%; display:flex; align-items:center; justify-content:center;
+      gap:9px; min-height:52px; padding:12px 10px; border-radius:6px; font:inherit;
       font-weight:700; letter-spacing:.06em; text-transform:uppercase; cursor:pointer;
       background:transparent; color:#e8dcc8; border:1px solid rgba(232,220,200,.28); }
+    .picks button .seat-chip { text-transform:none; letter-spacing:0; }
     .picks button:disabled { opacity:.35; cursor:not-allowed; }
     /* Fixed height and its own scroll: the log must never push the text field off a phone. */
     .whispers { max-height:34vh; min-height:64px; overflow-y:auto; margin:8px 0;
@@ -163,6 +168,16 @@ export function injectNightSkin() {
       color:#fff; letter-spacing:.04em; font-variant-numeric:tabular-nums;
       text-shadow:0 12px 48px rgba(0,0,0,.9); }
     .actions { display:flex; gap:12px; flex-wrap:wrap; margin-top:22px; }
+    /* 🛑 SKIP TO REUNION sits in the bottom corner of the television, quiet until it is armed.
+       It ends everybody's night, so it must be findable by the host and invisible to the room:
+       out of the picture's way, low contrast at rest, and unmistakable once the first tap has
+       landed. Absolute, because the talk beats fill the well and a flow row would push it. */
+    .skip-actions { position:absolute; right:22px; bottom:16px; margin:0; z-index:6; }
+    .skip-actions .btn { padding:8px 14px; font-size:11px; letter-spacing:.16em;
+      opacity:.42; transition:opacity .18s ease; }
+    .skip-actions .btn:hover, .skip-actions .btn:focus-visible { opacity:1; }
+    .skip-actions .btn.armed { opacity:1; border-color:#ff8a7a; color:#ff8a7a;
+      background:rgba(255,138,122,.10); }
     .err { color:#ff8a7a; white-space:pre-wrap; font-family:ui-monospace,Menlo,monospace; font-size:13px; }
     .ballot { display:flex; flex-direction:column; gap:14px; }
     .ballot .row { display:grid; grid-template-columns: 1fr auto 1fr; gap:20px; align-items:center;
@@ -206,17 +221,25 @@ export function injectNightSkin() {
     .run-stage .pair-hero br { display:none; }
     .run-stage .run-facts { text-align:center; color:var(--night-dim); font-size:12px;
       letter-spacing:.16em; text-transform:uppercase; margin-top:2px; }
-    /* 👏 THE REACTION STRIP — the six people who are not in the mansion, along the bottom.
-       ⚠️ It sits UNDER the run frame and never over it. D13 and the chase-only rule make the
-       run picture the product; a strip floated across it would be chrome covering the one thing
-       the room is watching. The min-height holds the space whether or not anyone has reacted, so
-       the frame above does not jump every time a face arrives or ages out. */
-    .react-strip { display:flex; justify-content:center; align-items:flex-start; gap:18px;
-      min-height:78px; padding:6px 12px 0; }
+    /* 👏 THE REACTION STRIP — the people who are not in the mansion, along the bottom.
+       John, live HEAT: they last ~4x the old 2.6s pop (REACT_HOLD_MS 10s), they FLOAT UP
+       from the portrait (react-float, 56px then hang) rather than the 8px night-rise pop
+       or a rise-from-below that overflow:hidden clipped. A second tap is a new chip with
+       --dx/--dy so stacked taps do not sit on one pixel. night-rise is UNTOUCHED — seats
+       still use it. Duration stays locked to REACT_HOLD_MS. */
+    .react-strip { display:flex; justify-content:center; align-items:flex-end; gap:18px;
+      min-height:78px; padding:64px 12px 0; overflow:visible; position:relative; z-index:2; }
     .react-chip { display:flex; flex-direction:column; align-items:center; gap:3px;
-      animation: night-rise .22s ease; }
+      --dx:0px; --dy:0px; transform: translate(var(--dx), var(--dy));
+      animation: react-float 10s ease-out forwards; }
     .react-chip .react-who { font-size:11px; letter-spacing:.08em; color:var(--night-soft);
       max-width:96px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    @keyframes react-float {
+      0% { opacity:0; transform: translate(var(--dx), var(--dy)); }
+      8% { opacity:1; transform: translate(var(--dx), calc(var(--dy) - 56px)); }
+      78% { opacity:1; transform: translate(var(--dx), calc(var(--dy) - 64px)); }
+      100% { opacity:0; transform: translate(var(--dx), calc(var(--dy) - 80px)); }
+    }
     /* 🏷️ THE BADGE MOVES; THE FACE NEVER DOES.
        John's partner asked for "slightly animated", and slightly is the whole spec — about one
        pixel at the 56 px the strip uses. At sofa distance the motion is invisible anyway and the
@@ -342,6 +365,72 @@ export function injectNightSkin() {
       width:100%; height:100%; min-height:0; flex:1; pointer-events:none; }
     .night.on-talk .intro-frame.talk-frame { height:100%; width:100%; max-width:100%;
       max-height:100%; aspect-ratio:auto; margin:0; }
+    /* 🎴 THE ROLE-CARD WINDOW USES THE WHOLE TELEVISION.
+       It was the top 45% with ~500px of black under it. Nothing is added to fill that — the same
+       five elements are laid out to the height the room is sitting in front of: the board
+       centres in the space it was crowded out of, the lamps grow, and the bake bar goes full
+       width because during this window it is the only thing on the screen that MOVES and the
+       only honest answer to what everyone is waiting for. No backticks in this comment. */
+    .night.on-cards .night-main { display:flex; flex-direction:column; justify-content:center;
+      padding:0 40px 24px; overflow:hidden; }
+    .night.on-cards .cast-board { margin:0; }
+    .night.on-cards .cast-k { font-size:13px; letter-spacing:.3em; }
+    .night.on-cards .cast-lead { font-size:clamp(34px, 4.2vw, 68px); margin-top:12px; }
+    .night.on-cards .cast-lamps { margin-top:clamp(18px, 3vh, 40px); gap:16px;
+      grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); }
+    .night.on-cards .cast-lamp { padding:clamp(16px, 2.4vh, 30px) 12px clamp(14px, 2vh, 24px); gap:14px; }
+    .night.on-cards .cast-lamp .who { font-size:clamp(17px, 1.5vw, 24px); }
+    .night.on-cards .cast-lamp .seat-chip { min-width:44px; height:44px; font-size:21px; }
+    .night.on-cards .cast-warm { margin-top:clamp(20px, 4vh, 52px); }
+    .night.on-cards .warm { max-width:none; margin-top:0; }
+    .night.on-cards .warm-text { font-size:14px; letter-spacing:.26em; }
+    .night.on-cards .warm-track { height:14px; border-radius:7px; }
+    .night.on-cards .ballot { margin-top:18px; }
+    .night.on-cards .hint.cards-foot { margin-top:clamp(14px, 2.4vh, 28px); font-size:18px; }
+    .night.on-cards .actions { margin-top:18px; }
+    /* 🎬 CASTING IS THE PICTURE, AND THE BALLOTS RIDE ON TOP OF IT RATHER THAN BESIDE IT.
+       John: bigger feed, take the right column, drop the counter / the lower third / the
+       'ballots land here' line, and run the results as an overlay. The frame taking all four
+       edges is the easy half. The hard half is the stack: the follow camera is a body-level
+       plate at z-index 5 and night is z-index 1, so anything drawn over the frame rect from
+       inside night is UNDER the chairs — which is exactly why the talk beats keep their chrome
+       in reserved bands, and why harness/talk-frames.mjs measures those five beats for it.
+       Casting buys the overlay by raising night above the plate and going transparent, so the
+       mansion shows through the chrome instead of sitting next to it. html and body carry the
+       same '#0c0a08', so nothing behind the picture changes colour.
+       ⚠️ ON-CAST MUST STAY BELOW THE ON-TALK BLOCK ABOVE — the two padding rules have equal
+       specificity, so the override is source order and only source order.
+       No backticks in this comment. */
+    .night.on-cast { z-index:6; background:transparent; }
+    body.rrr-warming .night.on-cast { background:transparent; }
+    .night.on-cast .night-main { position:relative; padding:0; overflow:hidden; }
+    .night.on-cast .talk-well { gap:0; }
+    /* 'background:transparent' is load-bearing rather than tidy: off cast the frame sits BEHIND
+       the camera plate, so its own night-deep fill is the slate you see while the mansion bakes.
+       On cast the night is in FRONT of the plate, and that same fill would paint a black
+       rectangle over the picture — here the frame is a hole, not a backdrop. */
+    .night.on-cast .intro-frame.talk-frame { height:100%; width:100%; max-width:100%;
+      max-height:100%; aspect-ratio:auto; margin:0; border:0; border-radius:0;
+      background:transparent; }
+    /* The plate is a <body> child, so squaring it off for a full-bleed frame is said here.
+       party-host.js toggles 'rrr-cast' next to the root class. */
+    body.rrr-cast .run-cam-layer.intros { border-radius:0; box-shadow:none; }
+    /* The 3-2-1 and the one recovery button float over the picture instead of taking a band off
+       the bottom of it. castStage stands the lamp strip down whenever either is on screen, so
+       these two never share the corner. */
+    .night.on-cast .actions { position:absolute; left:24px; bottom:16px; margin:0; z-index:3; }
+    /* The talk slate — the same contract as '.run-frame.live .run-slate', which has covered the
+       run beat since PR #5: it IS the picture until the camera reports a rendered frame, then it
+       fades out under one. Without it the Recap is a black rectangle over three quarters of the
+       television, because Recap is reached while the follow is still warming. */
+    .talk-slate { position:absolute; inset:0; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; gap:12px; pointer-events:none;
+      transition: opacity .8s ease; }
+    .intro-frame.live .talk-slate { opacity:0; }
+    .talk-slate-mark { font-size:clamp(22px, 3vw, 44px); font-weight:800; letter-spacing:.22em;
+      text-transform:uppercase; color:rgba(var(--night-accent-rgb), .5); }
+    .talk-slate-sub { font-size:clamp(11px, 1.1vw, 14px); letter-spacing:.26em;
+      text-transform:uppercase; font-weight:700; color:var(--night-dim); }
     .recap-mini { align-self:flex-start; display:flex; flex-wrap:wrap; gap:6px 12px;
       padding:6px 10px; border-radius:6px; background:rgba(12,10,8,.72);
       border:1px solid rgba(var(--night-accent-rgb), .28); font-size:12px;
@@ -354,15 +443,69 @@ export function injectNightSkin() {
     ${SHOW_CHROME_CSS}
     .phone .talk-clock, .phone-clock { font-size:clamp(36px, 14vw, 64px); align-self:flex-start;
       text-shadow:none; margin:8px 0 12px; }
-    .talk-kicker { margin:4px 0 0; text-align:left; color:var(--night-dim); font-size:12px;
-      letter-spacing:.12em; text-transform:uppercase; }
+    /* 🔠 THE KICKER IS THE RULE OF THE BEAT, SO IT IS SET TO BE READ FROM A SOFA.
+       It was 12px uppercase letterspaced grey at the bottom edge of a 1080p screen — and on four
+       of the eight beats it carries the only sentence that says what ENDS the beat, which made
+       it the smallest ink on the television. Sentence case, in the secondary ink rather than the
+       dim one: still subordinate to the count beside it, still one line, now legible at three
+       metres. No backticks in this comment. */
+    .talk-kicker { margin:6px 0 0; text-align:left; color:var(--night-soft);
+      font-size:clamp(15px, 1.35vw, 20px); letter-spacing:.01em; line-height:1.25; }
+    /* The band under the picture: the count where the plate would be, the plate beside it when
+       there is somebody to name. On most beats exactly one of the two is present. */
+    .talk-band { display:flex; align-items:flex-end; gap:22px; }
+    .beat-state { display:flex; align-items:baseline; gap:10px; padding:2px 18px 2px 8px; }
+    .beat-n { font-size:clamp(38px, 4.6vw, 68px); font-weight:800; line-height:.92;
+      color:var(--night-accent); font-variant-numeric:tabular-nums;
+      text-shadow:0 3px 18px rgba(0,0,0,.95); }
+    .beat-state.done .beat-n { color:var(--night-live); }
+    .beat-of { font-size:clamp(14px, 1.5vw, 22px); font-weight:800; color:var(--night-dim);
+      text-shadow:0 2px 12px rgba(0,0,0,.9); }
     .nom-board { margin-top:0; display:flex; flex-direction:column; gap:6px; max-width:none; }
     .nom-row { display:grid; grid-template-columns:auto 1fr auto; gap:10px; align-items:center;
       padding:8px 10px; border-radius:6px; background:rgba(18,14,10,.82);
       border:1px solid rgba(var(--night-accent-rgb), .2); }
     .nom-n { color:var(--night-accent); font-weight:800; letter-spacing:.16em; font-size:12px; }
     .nom-who { font-size:clamp(16px, 2vw, 24px); font-weight:800; line-height:1.05; }
+    .nom-row.nominated .nom-who { letter-spacing:.01em; }
     .nom-by { color:var(--night-dim); font-size:11px; letter-spacing:.1em; text-transform:uppercase; }
+    .nom-lock { text-transform:none; letter-spacing:.02em; font-weight:700; }
+    .lynch-board .nom-row { grid-template-columns:1fr auto; }
+    /* 🎭 THE REUNION. The cast list fills in one plate at a time and the centre carries whichever
+       of the four beats is running. A seat the roll call has not reached shows its NAME and its
+       fate and nothing else — a dimmed role is still a role. Alignment is spelled out in
+       '.roll-side' as well as tinted, because colour is never the only carrier. */
+    .roll-board { gap:5px; }
+    .roll-row { display:grid; grid-template-columns:1fr auto; gap:10px; align-items:center;
+      padding:7px 10px; border-radius:6px; background:rgba(18,14,10,.82);
+      border:1px solid rgba(var(--night-accent-rgb), .12); opacity:.55;
+      transition: opacity .5s ease, border-color .5s ease; }
+    .roll-row.turned { opacity:1; border-color:rgba(var(--night-accent-rgb), .32); }
+    .roll-row.turned.evil { border-left:5px solid var(--night-bad); }
+    .roll-side { color:var(--night-dim); font-size:11px; letter-spacing:.14em;
+      text-transform:uppercase; font-weight:800; }
+    .roll-row.turned.evil .roll-side { color:var(--night-bad); }
+    .roll-overlay { position:absolute; inset:0; display:flex; align-items:center;
+      justify-content:center; pointer-events:none; padding:24px; }
+    .roll-plate { max-width:min(720px, 90%); padding:22px 26px; border-radius:14px;
+      background:rgba(0,0,0,.72); border-left:5px solid var(--night-accent);
+      box-shadow:0 24px 60px rgba(0,0,0,.6); }
+    .roll-plate.evil { border-left-color:var(--night-bad); }
+    .roll-k { color:var(--night-dim); font-size:11px; letter-spacing:.26em;
+      text-transform:uppercase; font-weight:700; }
+    .roll-claim { margin:6px 0 16px; color:var(--night-soft); font-size:clamp(18px, 2vw, 26px);
+      line-height:1.2; }
+    .roll-v { margin-top:6px; font-size:clamp(28px, 4vw, 48px); font-weight:800; line-height:1.05; }
+    .roll-s { margin-top:8px; color:var(--night-soft); font-size:clamp(14px, 1.4vw, 18px); }
+    .roll-plate.awards { display:flex; flex-direction:column; gap:12px; }
+    .award-k { color:var(--night-accent); font-size:11px; letter-spacing:.24em;
+      text-transform:uppercase; font-weight:800; }
+    .award-v { font-size:clamp(20px, 2.4vw, 30px); font-weight:800; line-height:1.05; }
+    .award-s { margin-top:3px; color:var(--night-soft); font-size:13px; }
+    .chat-row { padding:6px 0; }
+    .chat-t { font-size:clamp(15px, 1.6vw, 20px); }
+    .chat-a { margin-top:2px; color:var(--night-dim); font-size:11px; letter-spacing:.14em;
+      text-transform:uppercase; }
     /* '.night' is opaque by design — it is the show's own black. While the mansion is warming
        behind it, it becomes a scrim instead, and 'party-host.js' sets 'rrr-warming' on <body> only
        once the layer is live so the lobby never fades toward a frame that has not rendered. */
@@ -402,6 +545,12 @@ export function injectNightSkin() {
     .role-card .role { font-size:34px; font-weight:800; }
     .role-card .side { margin-top:10px; letter-spacing:.2em; font-size:18px; }
     .role-card .rule { margin-top:16px; color:#d8cbb8; font-size:20px; line-height:1.35; }
+    /* 🎭 The Reunion's copy of the card: the label goes ABOVE the role rather than below it,
+       because this one is an announcement and not a reminder. Nothing else changes — it must
+       read as the same object the player has been guarding all night. */
+    .role-card.reunion-card { display:flex; flex-direction:column; min-height:0; }
+    .role-card.reunion-card .rule { order:-1; margin:0 0 10px; font-size:12px; letter-spacing:.22em;
+      text-transform:uppercase; color:#f5a14a; font-weight:800; }
     .pad { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:16px; }
     .pad button { min-height:100px; font-size:18px; letter-spacing:.1em; text-transform:uppercase;
       font-weight:700; border:0; border-radius:10px; background:#1c1712; color:#f3ece3; }
@@ -484,6 +633,14 @@ export function injectNightSkin() {
     .stick.on .nub { background:var(--night-ink); }
     .stick-cap { font-size:11px; letter-spacing:.2em; text-transform:uppercase;
       color:var(--night-dim); font-weight:700; }
+    /* 🎥 THE TOP-DOWN PAD. The look stick is gone — a plan-locked map has nothing to swing — so
+       the two columns share the width and RUN / SWING grow into the half it leaves behind. The
+       stick stays in its own corner rather than centring: moving it would undo the thumb's
+       learned position at the exact moment the player is being asked to relearn the mapping. */
+    .stick-wrap.top { grid-template-columns: minmax(120px,1.15fr) 1fr; }
+    .stick-wrap.top .stick { max-width:200px; }
+    .stick-wrap.top .stick-side { justify-content:flex-end; }
+    .stick-wrap.top .stick-btn { min-height:96px; font-size:17px; }
     .stick-side { display:flex; flex-direction:column; gap:10px; }
     .stick-btn { appearance:none; border:0; font:inherit; font-weight:700; letter-spacing:.12em;
       text-transform:uppercase; border-radius:12px; padding:0 12px; min-height:62px; min-width:76px;
@@ -491,6 +648,112 @@ export function injectNightSkin() {
       border:1px solid rgba(var(--night-accent-rgb), .28); }
     .stick-btn.on { background:var(--night-accent); color:var(--night-deep); }
     .stick-btn.swing.on { background:var(--night-bad); }
+    .stick-btn.drill { border-color: rgba(232, 92, 58, .55); color:#f3b39a; }
+    .stick-btn.drill span, .stick-btn.hide span { display:block; font-size:9px; letter-spacing:.16em; margin-top:4px; }
+    .stick-btn.drill.on { background:#c4472a; color:#fff7f2; }
+    /* 🫥 HIDE. Deliberately NOT lit by whether cover is in reach — see startPad. The pad is not a
+       cover detector; the television is where she finds out whether the body ducked. */
+    .stick-btn.hide { border-color: rgba(110, 200, 212, .45); color:#9be0e8; }
+    .stick-btn.hide.on { background:#2b5f68; color:#e8fbff; }
+
+    /* ==========================================================================================
+     * 🧭 GUIDE E · "Pin a door", and 📱 RUNNER D · the frame bezel.
+     * John's picks, 2026-09-01 — docs/design/refs-runner-intel/canvas/. The model behind both
+     * is src/party/intel-pad.js; this is only how they look.
+     * ⚠️ NO BACKTICKS ANYWHERE IN THIS BLOCK. It is inside a template literal, and one backtick
+     * here takes the whole build down for every agent — CLAUDE.md's standing warning.
+     * ======================================================================================== */
+    .pin-pad { margin:10px 0 4px; }
+    .pin-row { display:grid; grid-template-columns:repeat(4, 1fr); gap:7px; }
+    .pin-chip { appearance:none; font:inherit; border-radius:10px; min-height:72px; padding:6px 4px;
+      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px;
+      background:var(--night-panel); color:var(--night-soft); touch-action:manipulation;
+      border:1px solid rgba(var(--night-accent-rgb), .22); }
+    .pin-chip .pin-dir { font-size:11px; font-weight:900; letter-spacing:.16em; text-transform:uppercase; }
+    .pin-chip .pin-to { font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--night-dim); }
+    .pin-chip.on { border-color:var(--night-accent); color:var(--night-accent);
+      background:rgba(var(--night-accent-rgb), .13); }
+    /* A direction with no door is DIM, never missing — see guidePinPad's header. */
+    .pin-chip.none { opacity:.4; }
+    /* 🎯 The job's own targets, when the runner is standing in the mission room. TWO chips, so the
+       row is two columns and they sit under the four doors rather than beside them — a six-wide
+       row at 390px gives every chip 58px, which is under a thumb. No colour of its own: the
+       accent is the same one an armed door chip uses, because a pin is a pin. */
+    .pin-row.pin-goals { grid-template-columns:repeat(2, 1fr); margin-top:7px; }
+    .pin-chip.goal { min-height:60px; border-style:dashed; }
+    .pin-chip.goal.on { border-style:solid; }
+    .pin-say { margin:12px 0 0; font-size:26px; font-weight:900; line-height:1.06;
+      color:var(--night-accent); }
+
+    /* The bezel is the EDGE OF THE PHONE, so it is fixed to the viewport and never in the flow —
+       and it is pointer-events:none throughout, because it lies over RUN and SWING. */
+    .bezel { position:fixed; inset:0; pointer-events:none; z-index:40; }
+    .bezel i { position:absolute; display:block; background:var(--night-well); }
+    .bezel .bz-top, .bezel .bz-bottom { left:0; right:0; height:9px; }
+    .bezel .bz-top { top:0; } .bezel .bz-bottom { bottom:0; }
+    .bezel .bz-left, .bezel .bz-right { top:0; bottom:0; width:9px; }
+    .bezel .bz-left { left:0; } .bezel .bz-right { right:0; }
+    .bezel .bz-lit { background:var(--night-accent);
+      box-shadow:0 0 22px rgba(var(--night-accent-rgb), .9), 0 0 44px rgba(var(--night-accent-rgb), .4); }
+    .bezel .bz-lit.bz-top { top:0; right:auto; } .bezel .bz-lit.bz-bottom { bottom:0; right:auto; }
+    .bezel .bz-lit.bz-left { left:0; bottom:auto; } .bezel .bz-lit.bz-right { right:0; bottom:auto; }
+    /* Smash-ready takes the WHOLE bezel. A state of the hammer, never a hint about where to walk. */
+    /* ⚠️ No rgba(var(--night-live-rgb), ...) — palette.js publishes an -rgb companion for the
+       accent and the bad colour only, and inventing a third here is how a reskin ends up with one
+       stale surface (party-follow F8's reason). A solid glow, on the named colour. */
+    .bezel.armed i { background:var(--night-live); box-shadow:0 0 22px var(--night-live); }
+    .bz-read { display:flex; align-items:center; justify-content:space-between; gap:12px;
+      margin:2px 0 8px; padding:12px 16px; border-radius:10px; background:var(--night-panel); }
+    .bz-read .bz-cap { font-size:10px; font-weight:800; letter-spacing:.22em; text-transform:uppercase;
+      color:var(--night-dim); }
+    .bz-read .bz-word { font-size:17px; font-weight:900; letter-spacing:.08em; text-transform:uppercase;
+      color:var(--night-accent); }
+    .bz-read.armed .bz-word { color:var(--night-live); }
+
+    .twin-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:10px 0 4px; }
+    .twin-row .twin-note, .twin-row .voice-know { grid-column:1 / -1; margin:0; }
+    .twin-face { position:relative; min-height:88px; border:2px solid #6b4a22; border-radius:4px;
+      background: linear-gradient(180deg, #7a4e28 0%, #3a2414 100%); display:flex; align-items:flex-end;
+      justify-content:center; padding:8px; }
+    .twin-face.real { box-shadow: 0 0 0 2px #6ec8d4; }
+    .twin-canvas { position:absolute; inset:10px 12px 22px; background: linear-gradient(160deg, #8a5a30, #3d2616); }
+    .twin-lab { position:relative; font-size:11px; letter-spacing:.22em; font-weight:800; color:#f3ece3; }
+    .twin-face.real .twin-lab { color:#6ec8d4; }
+    .twin-stamp { position:absolute; top:28px; left:50%; transform:translateX(-50%) rotate(-12deg);
+      font-size:18px; font-weight:900; letter-spacing:.18em; color:#6ec8d4;
+      border:2px solid #6ec8d4; padding:2px 8px; background:rgba(10,18,20,.45); }
+    .voice-pad { margin:10px 0 4px; }
+    .voice-row { display:flex; gap:8px; }
+    .voice-btn { flex:1; appearance:none; border:1px solid rgba(232,220,200,.28); background:var(--night-panel);
+      color:var(--night-ink); font:inherit; font-weight:800; letter-spacing:.16em; text-transform:uppercase;
+      min-height:52px; border-radius:10px; }
+    .voice-btn.on { background:var(--night-accent); color:var(--night-deep); }
+    .voice-btn.hold { border-color: rgba(232, 92, 58, .55); color:#f3b39a; }
+    .voice-btn.hold.on { background:#c4472a; color:#fff7f2; }
+    .voice-btn.go { border-color: rgba(110, 200, 212, .55); color:#6ec8d4; }
+    .voice-btn.go.on { background:#6ec8d4; color:#102226; }
+    .voice-cue { margin-top:8px; padding:8px 10px; border:1px solid rgba(232,220,200,.18);
+      min-height:36px; font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:#c9b8a4; }
+    .voice-know { margin:8px 0 0; padding:8px 10px; border:1px solid #6ec8d4; color:#9be0e8; font-size:13px; }
+    /* 🗣️ ONE LINE OF TEXT WHERE A ROW OF FAKE BUTTONS USED TO BE. John, 2026-09-01. It is copy,
+       not a control, so it must not look tappable — no border, no panel, no min-height. */
+    .say-line { margin:8px 0 0; font-size:15px; line-height:1.3; color:var(--night-soft); }
+    .say-line strong { color:var(--night-accent); letter-spacing:.06em; }
+
+    /* ==========================================================================================
+     * 🗺️ GUIDE E'S SHEET · the map is the PRIMARY surface at 390x844.
+     * John: "readable at ~390x844. Pin chips in thumb country under the map. Real Aim stays a
+     * private one-liner and must not shrink the map." So the map gets the height back that the
+     * heading and two hint paragraphs used to take, and everything under it is one line tall.
+     * ⚠️ SCOPED. The unscoped map (guidemap's own 46vh) is untouched — a reskin that moves one
+     * surface and misses the other is party-follow F8's reason for keeping colours in one place.
+     * ======================================================================================== */
+    .guide-sheet .gs-title { margin:0 0 6px; font-size:22px; line-height:1.1; }
+    .guide-sheet .guide-map { max-height:58vh; margin:0 0 8px; }
+    .guide-sheet .pin-pad { margin:0 0 6px; }
+    .guide-sheet .pin-say { margin:8px 0 0; font-size:22px; }
+    .guide-sheet .gs-note { margin:6px 0 0; font-size:12px; }
+    .guide-sheet .voice-pad { margin:8px 0 0; }
     /* 🔨 THE PAD'S OWN ANSWER TO A SWING. The button's .on flash is under the thumb that is
        covering it, so it confirms nothing to the person who tapped it — this line sits clear of
        both the stick and the buttons.
@@ -517,6 +780,26 @@ export function injectNightSkin() {
        same grey as WORD FROM THE HOUSE — only the border was red. The words carry it now, and
        'rolecard.js' takes the same token, so the two Production surfaces are one colour. */
     .intel.exact .k { color:var(--night-bad); }
+    .prod-still { margin-top:8px; padding:8px 10px; background:rgba(0,0,0,.55);
+      border:1px solid rgba(var(--night-accent-rgb), .22); border-radius:8px; max-width:420px; }
+    .prod-k { font-size:10px; letter-spacing:.22em; text-transform:uppercase; color:var(--night-dim); }
+    .prod-wall { display:flex; gap:18px; justify-content:center; padding:10px 8px 6px; }
+    .prod-hang { width:72px; height:54px; position:relative; }
+    .prod-hang b { display:block; width:100%; height:100%;
+      background:linear-gradient(160deg, #8a5a30, #3d2616); border:3px solid #6b4a22; }
+    .prod-hang.empty i { display:block; width:8px; height:8px; border-radius:50%; background:#f3ece3;
+      margin:8px auto 0; box-shadow:0 0 0 1px #111; }
+    .prod-hang.empty::after { content:''; position:absolute; inset:6px;
+      border:1px dashed rgba(243,236,227,.35); }
+    .prod-s { font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--night-dim); }
+    .prod-arch { height:48px; margin:6px 0; border:2px solid #6ec8d4; border-bottom:0;
+      border-radius:28px 28px 0 0; position:relative; overflow:hidden; }
+    .prod-still.floor .prod-arch { border-color:#e07a3a; }
+    .prod-arch .depth { position:absolute; inset:10px 18px 0; background:linear-gradient(#1a2228,#0c0a08); }
+    .prod-arch .boards { position:absolute; inset:0;
+      background:repeating-linear-gradient(90deg,#3a2a1c 0 8px,#2a1c12 8px 12px); }
+    .run-follow-line { margin:6px 0 0; font-size:18px; font-weight:800; letter-spacing:.04em;
+      color:var(--night-ink); }
     .goal { margin-top:10px; color:var(--night-live); font-size:16px; font-weight:700; }
     .here { margin: 8px 0 2px; color: var(--night-ink); font-size: 18px; font-weight: 700; letter-spacing: .02em; }
     .here strong[data-here] { color: var(--night-live); }
@@ -530,6 +813,7 @@ export function injectNightSkin() {
       .ballot .pick { text-align:left; }
     }
     ${ROLE_CARD_CSS}
+    ${STING_CSS}
   `;
   document.head.appendChild(s);
 }
