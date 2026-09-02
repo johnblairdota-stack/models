@@ -68,11 +68,98 @@ decision, not a refactor.
 
 - **D13 · The phone is a controller, never a viewport.** No 3D on the phone. The runner's camera
   lives on the **TV**. A phone chase embed was built (#29) and **removed** (#30) because it loaded
-  slowly and did not work. The pad has **two shapes**, and which one is live follows the camera:
-  on the ground it is two sticks (left = move, camera-relative; right = look/orbit); under the
-  plan-locked top-down the look stick is **not rendered** and the move stick is **absolute** —
-  screen direction is world direction — with RUN/SWING grown into the freed half. The phone is
-  told which via `you.view` (runner-audience). Gates: `party-warm` W26i–W26i4.
+  slowly and did not work. The pad still has **two shapes** following the camera — under the
+  plan-locked top-down the look stick is **not rendered**, on the ground it is — and the phone is
+  told which via `you.view` (runner-audience). ⚠️ **The move stick stopped being "move" on
+  2026-09-01** — see the auto-walk lock below. Gates: `party-warm` W26i–W26i4, W26g.
+- **The runner AUTO-WALKS the guide's PIN; the stick is a lateral dodge only.** John, 2026-09-01.
+  The body pathfinds one door at a time to the door the guide tapped — **never to the true
+  target, which would kill the lie** — and the thumb's whole authority is a step left or right
+  into cover, clamped so it cannot steer into another room. **HOLD hides behind furniture, and
+  there is no hiding in an open hall**: that single refusal is what keeps the evil runner's
+  sabotage surface closed to four ordinary controls used at the wrong moment (`runner-intel.js`
+  `SABOTAGE` — wrong face, drill through HOLD, drop the drill, clock-talk). **No sabotage button,
+  and no verb for one.** With no pin nobody moves, which is the guide having a reason to exist.
+  Hiding is deniable because the TV runs a **staged RED PASS** — a seeded clock with no position
+  and no target, drawn as a mesh so the four-light rig did not grow; it is **not the hunter, and
+  the hunter is still a door that is shut**. The clock keeps running while hidden. Every decision
+  lives in `src/game/runner-intel.js`, which is pure and **imports nothing**, so a node gate
+  executes the shipped functions. Gate: `runner-intel` (104 checks), `party-warm` W26g/W26g2/W26g3.
+- **The pin is on the wire at audience `crew`, and the TV is told it and may not draw it.**
+  Stage 3 of `docs/slices/task-runner-intel.md`, landed 2026-09-01. `you.pin.{x,z,roomId,kind}`
+  are `crew` rows — `all` would put the target's bearing on eight screens and delete the guide's
+  job of SAYING it; `guide` alone is what shipped before and left the runner's bezel pointing at
+  nothing. `t:'pin'` is refused from anybody who is not `pair.guide` (checked in `room.setPin`
+  against `state.pair`, because `playEpisode` clears every `seatRole` before the run is over), a
+  second pin REPLACES, and a new Casting drops it. To the television it travels as a directed
+  CONTROL INPUT exactly like `t:'move'` — `party-loop.md`'s "Do not" #1 is a rule about the
+  PICTURE, and the renderer already knows where every body is because it is the one moving them.
+  `you.at.{x,z}` joined at `runner` audience so the bezel has both ends of its bearing; `bezelOf`
+  returns pixels on a phone edge and no world coordinate, which is why a bearing is safe in a
+  runner's hand and a map is not. Gates: `runner-intel` RI10–RI13, `intel-pads` IP11b–IP11d.
+- **The guide may pin the JOB, and the THUMB may not pick it.** John, 2026-09-02 (~8:07am
+  Brisbane): *"guides need to also be able to pin objectives like the paintings or the camera
+  install position."* Inside the mission room the guide's chip row gains the job's own targets —
+  the two identical faces on a smash night, the two identical brackets on a drill night — and the
+  runner auto-walks to whichever one a human tapped. **The removal is the half that matters:**
+  overnight, `jobGoal` read `perf.stick.x` and a nudge picked a twin, which made the guide's
+  sentence decoration. The thumb is a lateral dodge and nothing else now; with no objective pin the
+  body stands and the guide has to speak. A good guide pins the real face or the bracket that sees
+  the hall; **an evil guide pins the decoy face or the bracket that ends up looking at boards**,
+  and neither gets special handling anywhere. `src/party/objectives.js` owns the four kinds and
+  **cannot import `realFaceFor` or `drillShotFor`**. Gates: `runner-intel` RI19–RI19q (chips,
+  privacy, the removal), RI20–RI20g (the walk, driven at 60 Hz in node).
+- **An objective pin dies with the job it named; a DOOR pin does not.** Found by walking the loop
+  end to end, 2026-09-02. The guide pins LEFT FACE, the runner smashes it, `armMission` moves
+  `mission.room` to the ballroom, and `objectiveGoal` correctly refuses the pin — so the body
+  stands, which is the design. What was WRONG is that the pin was still on her BEZEL, pointing at a
+  canvas she had already broken: the one screen the runner is told to trust, aimed at a destination
+  that no longer exists. *"The guide has to speak"* is the design; **a stale bearing is not silence,
+  it is a wrong answer.** `setWorld` drops an objective pin when the mission leaves `seek`, and ONLY
+  an objective pin — a door pin is how the guide walks her home and must survive untouched. An
+  over-broad clear reddens RI19r2. Gate: `runner-intel` RI19r/RI19r2, live on nine sockets.
+- **An objective pin names a THING, not a place.** The phone computes its chip coordinates from
+  `planRegions`, whose rooms are a **union of rectangles**, while `follow-bed.js` picks ONE rect
+  out of `room.tables.spaces` — they agree for a plain rectangular gallery and are free to disagree
+  for anything else. So the coordinates ride as a **bearing hint for the bezel** and the BODY
+  re-resolves the NAME against the scene it built (`objectives.js` `objectiveGoal`, pure for
+  `runner-intel.js`'s reason). A pin lying about the target by 40 m still walks her to the real
+  painting. Two refusals, both `null` and neither a fallback: **an objective pin from outside the
+  mission room** (else `pathPortals` returns a four-door route, which is the memorised route D4
+  forbids) and **a face somebody already smashed**. Gates: `runner-intel` RI19d/RI19e/RI19e2/RI20e.
+- **`PIN_KINDS` grew to six; the wire SHAPE did not.** The objective rides in `kind`, which already
+  has an `entitle.js` row and a closed value list. A fifth field was the obvious alternative and is
+  worse: every field on this message needs a row in a deny-by-default table, so a fifth field is a
+  fifth audience decision and a fifth thing somebody can widen to `all` without reading RI10c.
+  D4's *"there is nowhere to put a second hop"* is untouched — the list grew, the shape did not.
+  `objectives.js` owns the four kinds; `follow.js` and `intel-pad.js` both DERIVE from it.
+- **The drill night has TWO identical brackets, and which one is worth mounting is the guide's
+  private card.** `jobs.js` `camHang(space, floorY, shot)`; `'hall'` returns what the old
+  single-bracket function returned field for field, so nothing measured has moved. The camera is
+  one camera: `mount` and `lit` live on the PAIR, and walking off one bracket onto the other
+  **restarts the fill**. Which wall it ended on is recorded as `mission.shot` and is deliberately
+  **not on the wire** — the locked rule is *"blind still counts as `camera_lit`"* and the guide's
+  own pad says *"Recap will say seated either way"*, so a `shot` on the world report would let a
+  screenshot answer a question the Verdict is built not to. `target-sight` grew with the target
+  list rather than measuring half the job: **256 targets over 64 seeds, 0 pierced, 0 blind, worst
+  100% visible, 3 keep-outs per mission room**. Gates: `runner-intel` RI19i/RI19q/RI20f/RI20g,
+  `target-sight` G1/G3/T7.
+- **The runner's pad shows a BEARING and never the pin's kind, which is why `mount-floor` may be
+  called `mount-floor` on the wire.** `bezelOf` returns `{whole, runs, word, range, pinned}` and
+  `RUNNER_PAD_KEYS` has no row for a kind, so a HALL pin and a FLOOR pin at the same point render
+  the identical screen. If the pad printed the kind, an evil guide pinning the junk bracket would
+  be announcing it. Gate: `runner-intel` RI19f.
+- **Two guards stand on the pin's privacy and BOTH have to fall — re-measured for objective pins.**
+  Widening the four `you.pin.*` rows to `all` reddens `runner-intel` RI10c and leaves the live
+  nine-socket sweep GREEN, because `room.js` also gates the field on the socket's seat role. Table
+  AND frame builder together reddens RI10c, RI18e, RI19n and RI19p. Recorded so the day somebody
+  simplifies one of the two, this is the note saying the other was never redundant.
+- **The six fake voice buttons are gone.** CLOSE / LATE / GOING and GO / HOLD printed *"buttons
+  send nothing"* over a row of buttons, which is what was wrong with them: a control that reaches
+  nobody teaches the one seat that is supposed to be watching a television that the game is in
+  their hand. They are one SAY line of copy now, FOOTSTEPS stays as a small line, and
+  `voiceSendsNothing()` is unchanged — it used to be a promise about six buttons and is now a
+  statement about a pad with nothing to press. Gates: `expedition-jobs` J7/J7b, `runner-intel` RI14c.
 - **The DIRECTOR may not cut during the run** — no shoulder / lead / doorway under the player's
   thumb, because those invert a camera-relative stick. ⚠️ This bullet used to read *"chase-only
   during the run"* and that became literally false when the four perspectives shipped; a
@@ -181,6 +268,89 @@ decision, not a refactor.
   a 22px ribbon during the Expedition.
 
 ## Gates are the memory
+
+**The guide's chip row was a PHOTOGRAPH, and no node gate could see it** (2026-09-02, found by
+walking the loop). `party-phone.js`'s structural stamp is *"everything that changes the SHAPE of the
+screen"*, and the guide's half read `expedition:guide:{missionPhase}:{job}:{card}` — **not one term
+of which changes when the runner walks through a door.** `patchLive` writes the here-label, the
+intel strip, the two map marks and the sentence under them, and has never touched the pin pad. So
+`guidePinPad(scope)` rendered ONCE, on the first expedition frame with the runner still in the
+ballroom, and **every chip stayed the ballroom's for the whole run** — Guide E's premise (*"her rect
+plus the rects a door joins to it, RIGHT NOW"*) inverted. Under auto-walk that is not cosmetic: she
+taps NORTH, pins a doorway out of a room the runner left two rooms ago, and the body walks to it.
+Tapping was equally stuck, because `bindPinPad` calls `paint()`, which matched the same stamp and
+patched — so the `on` highlight and the say-line never moved either. Fixed with a `guideStamp` term
+carrying `hereId` and the pin; the guide's sheet has **no stick**, so the argument that put the
+stamp there (a rebuild destroys `setPointerCapture` under a thumb) does not apply to her seat, and a
+rebuild per doorway is the bargain `camStamp` already takes for the runner's camera crossings.
+**The gate is a DISJUNCTION on purpose** — the chips may follow the runner by the stamp OR by
+`patchLive`, because this repo has already chosen each of those for a different element, and a gate
+that demanded the stamp would redden the day somebody does the other one correctly. Gate:
+`runner-intel` RI21–RI21d, whose control runs the SHIPPED stamp through the same predicate.
+
+**And the runner's BEARING was frozen the same way, with the opposite fix** (2026-09-02). Found by
+asking whether RI21's bug had a twin: it did. `bezelHtml` was rendered once per sheet rebuild and
+the runner's stamp carries no term that changes when she moves, so `runnerPad` was called on every
+paint and its answer **thrown away** — Runner D's whole reason to exist (*"the bearing is the EDGE
+OF THE PHONE"*) frozen at whatever it read on the first expedition frame, which before any pin
+exists is *"no map here"*, for the entire run. ⚠️ **It could not take the guide's fix.** Her sheet
+has no stick; **his is the one sheet the structural stamp exists to protect**, because rebuilding it
+destroys `#stick` and its `setPointerCapture` under a moving thumb, so a bearing that updated by
+rebuild at 2 Hz would drop every drag in the game. `patchLive` rewrites `[data-bezel]` instead —
+legal because it is `pointer-events:none` and holds no interactive element. **Two pads, one bug,
+opposite fixes, and the reason is that only one of them is holding a control.** Gate: `runner-intel`
+RI22–RI22e, same disjunction shape as RI21 so each pad may answer its own way.
+
+**And the SEEK LINE never advanced on the runner's pad, which is the lock itself** (2026-09-02,
+third instance of one bug in one afternoon). John's rule is *"once the runner is in the mission room,
+advance the seek line (stop saying Find the gallery)"*. `mission.js` `seekLine` does exactly that and
+`runner-intel` RI15 executes it — **both were correct.** But the line advances on `here`, `here`
+changes when a body walks through a doorway, and that changes **no term of the runner's structural
+stamp** and was written by **no branch of `patchLive`**. So the pad kept saying FIND THE GALLERY at
+somebody standing in the gallery, for the whole run, on the one seat whose whole job is to be
+looking away at a television. The PHASE half worked — `missionPhase` IS in the stamp — which is
+exactly why it read as working. `missionLine` now stamps its element with **where its room comes
+from** (`data-goal="you"` for the runner's own `you.here`, `"scope"` for the guide's
+`neighbourScope().hereId`) so one patch serves both sheets without guessing which it is looking at.
+Gate: `runner-intel` RI15d, with RI15e running the shipped `patchLive` through the same predicate.
+
+> 🚨 **The standing lesson from all three: A GATE ON THE FUNCTION IS NOT A GATE ON THE SCREEN.**
+> `seekLine`, `neighbourScope` and `bezelOf` were all correct, all executed by node gates, all
+> green — and all three were rendered once and never again. `party-phone.js`'s structural stamp is a
+> real and necessary optimisation (it exists because rebuilding the runner's sheet destroys `#stick`
+> and its `setPointerCapture` under a moving thumb), and its cost is that **every frame-dependent
+> element on an expedition sheet is frozen unless something explicitly keeps it alive.** So the
+> question to ask of any new element there is not *"is the right value computed?"* but **"when the
+> runner walks through a door, can this change?"** — and there are exactly two legal answers, a
+> stamp term or a `patchLive` branch, which is why RI15d, RI21 and RI22 are all written as that
+> disjunction rather than pinning one implementation.
+
+**A `const` arrow beside a helper that runs off a socket frame is a temporal dead zone, and this
+file billed it TWICE in one hour** (2026-09-02). `let scopeMemo` threw *"Cannot access 'ne' before
+initialization"*; the fix for the bezel then shipped `const bezelCap` / `const bezelWord` and threw
+*"'ze'"*. Both were minified, both came out of the guide's or runner's own sheet, and **only
+`phone-accusation` PA8 could see either — no node gate executes `paint()`.** Hoisted `function`
+declarations have no dead zone; per-phone state belongs on the `state` literal, which is fully built
+before anything runs. `runner-intel` **RI22d** now asks the question mechanically — *is everything
+`patchLive` calls a hoisted declaration?* — with `patchLive`'s own locals cut out of the haystack
+(`put` is a `const` arrow declared four lines above its use inside the function and is not a hazard).
+Standing lesson: **"the node gates are green" is not the same sentence as "the page loads."**
+
+**A gate must survive the fault it exists to catch, and a ban must be asked of CODE** (2026-09-02).
+Three of this pass's checks were written wrong first and each is a reusable shape. (1) RI3c banned
+`realFaceFor` from `objectives.js` and **caught that module's own header** saying *"nothing in this
+file imports `realFaceFor`"* — the sentence a reader most needs; RI12b's count of `state.pin = `
+caught `bindPinPad`'s comment explaining the slot. `codeOf` already existed in `runner-intel.mjs`
+for exactly this (RI8e caught `hideTick`'s header saying it does not pause the clock) and now both
+use it — same lesson as `party-warm` W47c: **a whole-file ban is right for *"this does not exist"*
+and wrong for *"this must not be REACHED"*.** (2) RI20's detail line read `toLeft.d.toFixed(2)`,
+and `d` is undefined on a walk that never arrived — so injecting a broken `AUTOWALK.square` threw a
+TypeError partway through the file and killed the run with **no red line and no summary**, which
+reads as a crash rather than as the failure of that check. (3) RI20b's first draft handed
+`clampToRoom` a room oracle that answered `'r0.gallery'` for every point in the universe, so the
+clamp could never fire and a held thumb walked the body out through the wall — **a false red on the
+harness, about the product.** A stand-in for a live query has to be able to say no.
+
 
 Every bug above that has a gate name beside it is locked in. `.github/workflows/gates.yml:44` runs
 the full `gates:party` chain on every push and PR. **A playtest finding is not finished until it is
@@ -391,6 +561,28 @@ season on a real server (`:5186`, one TV + eight handsets) and photographs all n
 `friday-couch` FC4d–FC4f — FC4d is the arm that the doubling really happened, FC4f re-states the
 old rule so the failure is executed rather than described, and both measure against the LOG's
 ground truth rather than against the reader under test.
+
+**A HOLD was validated, relayed and read, and ONE HOP DROPPED IT — the drill has never worked from
+a phone** (2026-09-01). `party-phone.js` sends `act`, `MOVE_KEYS` has always carried it,
+`local.mjs` relays it and `follow-bed.js` reads `c.act` into `perf.act`, which `missionTick` tests
+as `perf.act > 0.5` to fill the wall-cam mount. `party-host.js` `flushMove` — the one hop between
+the socket and the iframe — built its cue by hand and left `act` out. So on **every DRILL night**
+`holding` was false for the whole expedition, the mount could never fill, and the run could only
+end on the backstop clock, dark. Nothing was red: no gate walked a value from a thumb to a mount,
+which is the shape of every bug on this list. A second, independent gate on the same button:
+the DRILL hold refused to start until one of the decorative CLOSE / LATE / GOING buttons had been
+tapped, so a widget that reached nobody was a prerequisite for a real action. Both are fixed and
+`runner-intel` RI14e now walks all four hops — phone → server → TV → bed — for `act` and `hide`.
+
+**The seek line advances once she is standing in it** (2026-09-01). A pad that keeps saying FIND
+THE GALLERY at somebody standing in the gallery reads as a screen that has stopped listening, and
+under auto-walk it is worse because the body arrived without the player steering it. `seekLine`
+compares two room ids and nothing else — `you.here` for the runner, `scope.hereId` for the guide,
+`mission.room` off the PUBLIC `mission.*` event — so it leaks nothing and adds no fourth phase.
+Guide E's map also became the PRIMARY surface at 390×844: map first at `58vh`, pin chips directly
+under it in thumb country, everything explanatory one line tall below them. The whole-house
+flyover was **not** restored and the hunter coverage mark is untouched. Gates: `runner-intel`
+RI15–RI16b.
 
 Known **undecided**, and it is John's call rather than a refactor: `COMPOSITION[n].cameras` and
 `WIN_TARGETS[n].cameraTarget` disagree — **3 against 4 at eight players** — and both files

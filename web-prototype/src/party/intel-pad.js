@@ -76,6 +76,9 @@
 
 import { PLAN_YAW } from './follow.js';
 import { planRegions, roomLabel, roomLabelsFor } from './mansion.js';
+import {
+  OBJECTIVE_KINDS, isObjectivePin, objectiveSay, objectiveSpots, pinObjective, unionRect,
+} from './objectives.js';
 
 /* =================================================================================================
  * THE COMPASS — one derivation, shared by the guide's map and the runner's bezel.
@@ -265,7 +268,8 @@ function labelFor(labels, rects, id) {
  * replaces the pin; it does not append to it. There is no pin list, no ordering, no undo stack."*
  */
 export const PIN_KEYS = Object.freeze(['x', 'z', 'roomId', 'kind']);
-export const PIN_KINDS = Object.freeze(['room', 'edge']);
+/** Derived, not copied — `objectives.js` owns the four job kinds and `follow.js` derives the same. */
+export const PIN_KINDS = Object.freeze(['room', 'edge', ...OBJECTIVE_KINDS]);
 
 /**
  * Pin the door in this direction. Returns a NEW pin or `null`; it never mutates and never takes a
@@ -284,9 +288,24 @@ export function pinShape(pin) {
   return { x: Number(pin.x), z: Number(pin.z), roomId: String(pin.roomId ?? ''), kind: String(pin.kind ?? 'room') };
 }
 
-/** The board's big line. One sentence, because it exists to be SAID rather than read. */
+/**
+ * The board's big line. One sentence, because it exists to be SAID rather than read.
+ *
+ * ⚠️ **AN OBJECTIVE PIN GETS THE JOB'S SENTENCE, NOT A DOOR'S.** Before the objective chips landed
+ * every pin was a doorway, so *"Take that door"* was the honest fallback for a pin whose room was
+ * no longer a neighbour. It stopped being honest the moment the guide could pin a painting: she
+ * would tap LEFT FACE and the board would tell her to say *"take that door"* about a wall.
+ * `objectiveSay` owns those four sentences and this defers to it — it never guesses.
+ */
 export function sayThis(scope, pin) {
-  if (!pin) return 'Pin a door. Then say it out loud.';
+  // In the mission room with nothing pinned, the sentence she needs is about the JOB, not a door.
+  // With auto-walk this is the whole screen: nobody is moving until she picks one.
+  if (!pin) {
+    return (scope?.spots ?? []).length
+      ? 'Pin her target. Then say it out loud.'
+      : 'Pin a door. Then say it out loud.';
+  }
+  if (isObjectivePin(pin.kind)) return objectiveSay(pin.kind);
   const g = (scope?.gates ?? []).find((k) => k.toId === pin.roomId);
   return g ? `Take the ${g.dir} door.` : 'Take that door.';
 }
@@ -429,9 +448,17 @@ export const PAD_FORBIDDEN = Object.freeze([
 export const RUNNER_PAD_KEYS = Object.freeze([
   'whole', 'runs', 'word', 'range', 'pinned', 'edge', 'from', 'to', 'words',
 ]);
-/** The guide's shape, closed. She has the map; that is her job. She still gets one pin. */
+/**
+ * The guide's shape, closed. She has the map; that is her job. She still gets one pin.
+ *
+ * `spots` and `label` are the objective chips (2026-09-02). They are two coordinates in the room
+ * the runner is standing in, which is a room she can already see the whole of on her map, so they
+ * add no reach — and `PAD_FORBIDDEN` still refuses `path` / `next` / `plan`, so two targets in one
+ * room cannot be dressed up as a route through the house.
+ */
 export const GUIDE_PAD_KEYS = Object.freeze([
   'hereId', 'lit', 'fog', 'gates', 'toId', 'toLabel', 'x', 'z', 'dir', 'pin', 'roomId', 'kind', 'say',
+  'spots', 'label',
 ]);
 
 function walkKeys(v, out = [], depth = 0) {
@@ -468,10 +495,38 @@ export function padLeaks(kind, shape) {
  * the phone can see.
  */
 
-/** Guide E, from the frame. `at` is the `you` mark; without one there is no "her room". */
-export function guidePad(seed, at, pin) {
-  const scope = neighbourScope(planRegions(seed), at);
-  return { ...scope, pin: pinShape(pin), say: sayThis(scope, pin) };
+/**
+ * Guide E, from the frame. `at` is the `you` mark; without one there is no "her room".
+ *
+ * 🎯 **THE OBJECTIVE CHIPS APPEAR WHEN THE RUNNER IS STANDING IN THE MISSION ROOM, AND THAT GUARD
+ * IS THE WHOLE OF LOCK 5.** John, 2026-09-02: *"Guide E neighbours-only still for doors in the
+ * halls. Objective chips appear when the runner is in the mission room."* So the test is
+ * `scope.hereId === missionRoom` and nothing else — the same one-room-id-against-one-room-id
+ * comparison `mission.js` `seekLine` already makes, for the same reason: it is the cheapest thing
+ * that cannot leak, because both ids are already on this phone.
+ *
+ * ⚠️ **NO WHOLE-HOUSE FLYOVER CAME BACK WITH THEM.** The chips are targets INSIDE her current room.
+ * `neighbourScope` is untouched, `lit` is still one door deep, and the day the runner leaves the
+ * gallery the chips vanish on their own because `hereId` changed — there is no timer, no memory
+ * and nothing to clear.
+ *
+ * @param {{missionRoom?:string|null, job?:string|null}} job the public mission event's two facts
+ */
+export function guidePad(seed, at, pin, { missionRoom = null, job = null } = {}) {
+  const plan = planRegions(seed);
+  const scope = neighbourScope(plan, at);
+  const inMission = !!missionRoom && !!scope.hereId && String(scope.hereId) === String(missionRoom);
+  const space = inMission ? unionRect([...(plan?.rooms ?? []), ...(plan?.corridors ?? [])], scope.hereId) : null;
+  const spots = space ? objectiveSpots(job, space) : [];
+  return { ...scope, spots, pin: pinShape(pin), say: sayThis(scope, pin) };
+}
+
+/**
+ * Tap an objective chip. Same slot, same assignment, same D2 — `party-phone.js` writes
+ * `state.pin = pinSpot(scope, kind)` exactly as it writes `pinDoor(scope, dir)`.
+ */
+export function pinSpot(scope, kind) {
+  return pinObjective(scope?.spots ?? [], kind, scope?.hereId ?? '');
 }
 
 /** Runner D, from the frame. */

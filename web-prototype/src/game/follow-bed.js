@@ -10,12 +10,22 @@ import {
   CUT_SHOTS, DROP_SECONDS, PERSPECTIVES, PERSPECTIVE_RIG, PLAN_YAW, RISE_SECONDS, SHOT_NAMES,
   BALLROOM_PERSPECTIVE, chaseOrbitOffset, isOverhead, isPlanLocked, lerpRig, liveRunShot, lookYaw,
   perspectiveEye, rigMapness, runPerspective, smootherstep, stepBallroomView, stepLookOrbit,
-  stickCamMove, stickMag, idleRebuildCast,
+  stickMag, idleRebuildCast,
 } from '../party/follow.js';
 import { bleedCoolPos, bleedKeyAngle, facingPortal } from '../lighting/door-bleed.js';
 import { HOME_ROOM, MISSION_ROOM, PLAN_OPTS } from '../party/mansion.js';
 import { missionFor } from '../party/mission.js';
 import { camHang, DRILL, JOB, TWIN, twinHang, WALL_CAM } from '../party/jobs.js';
+/*
+ * 🚶 The brain. Pure — no THREE, no DOM — so `harness/runner-intel.mjs` executes these exact
+ * functions rather than a copy of them. This file keeps only what genuinely needs the scene:
+ * `room.pathPortals`, the collider, the sledge ray. See `runner-intel.js`'s header.
+ */
+import {
+  AUTOWALK, clampToRoom, consumeLegs, coverNear, dodgeLateral, headingTo, hideTick,
+  lagHeading, legsFor, pinKey, redPassAt, replanReason,
+} from './runner-intel.js';
+import { isObjectivePin, mountFor, objectiveGoal } from '../party/objectives.js';
 import { NoiseBus, NOISE_KIND } from './noise.js';
 import { PARTY_NOISE, emitTallyShort } from '../party/noiseplan.js';
 import { createMeshAvatar } from '../characters/mesh-avatar.js';
@@ -824,11 +834,20 @@ function buildTwinPaintings(space, floorY) {
   return { left, right, faces: { left, right } };
 }
 
-function buildWallCam(space, floorY) {
-  const hang = camHang(space, floorY);
+/**
+ * 📷 **ONE BRACKET. There are two of them and the guide picks which one gets the camera.**
+ *
+ * John, 2026-09-02: *"guides need to also be able to pin objectives like… the camera install
+ * position."* A single mount is not a choice, so `jobs.js` `camHang` answers for two and this
+ * builds both — the SAME mesh, the same size, no mark on either, exactly as the twin paintings
+ * are the same mesh twice. Which one is worth mounting is `drillShotFor`'s answer and it lives on
+ * the GUIDE's private pad; from in here they are indistinguishable, which is the point.
+ */
+function buildOneMount(space, shot, floorY) {
+  const hang = camHang(space, floorY, shot);
   if (!hang) return null;
   const group = new THREE.Group();
-  group.name = 'mission-wall-cam';
+  group.name = `mission-wall-cam-${shot}`;
   const body = new THREE.Mesh(
     new THREE.BoxGeometry(WALL_CAM.w, WALL_CAM.h, WALL_CAM.d),
     new THREE.MeshStandardMaterial({ color: 0x1c2228, roughness: 0.55, metalness: 0.35 }));
@@ -841,7 +860,24 @@ function buildWallCam(space, floorY) {
   group.add(body, lens);
   group.position.set(hang.x, hang.y, hang.z);
   group.rotation.y = hang.rotY;
-  return { group, pos: new THREE.Vector3(hang.x, hang.y, hang.z), mount: 0, lit: false };
+  return { group, pos: new THREE.Vector3(hang.x, hang.y, hang.z), shot };
+}
+
+/**
+ * Both brackets, plus the drill's own state.
+ *
+ * ⚠️ **`mount` AND `lit` MOVED OFF THE BRACKET AND ONTO THE PAIR, AND THAT IS NOT TIDYING.** There
+ * is ONE camera and it goes on ONE wall; two brackets each carrying their own progress bar would
+ * let a runner half-drill one, walk across the room and half-drill the other, and the show would
+ * have no way to say which mount the night ended on. `at` is the bracket the drill is filling and
+ * `shot` is what the recap needs — a blind mount still counts as `camera_lit`, per the locked rule,
+ * so this is the only place the difference is ever recorded.
+ */
+function buildWallCam(space, floorY) {
+  const hall = buildOneMount(space, 'hall', floorY);
+  const floor = buildOneMount(space, 'floor', floorY);
+  if (!hall || !floor) return null;
+  return { spots: { hall, floor }, groups: [hall.group, floor.group], mount: 0, lit: false, at: 'hall' };
 }
 
 function spaceOfType(spaces, type) {
@@ -1193,8 +1229,7 @@ export async function buildFollowBed(engine, opts = {}) {
   }
   const wallCam = buildWallCam(gallery, room.floorY ?? 0);
   if (wallCam) {
-    wallCam.group.visible = false;
-    scene.add(wallCam.group);
+    for (const g of wallCam.groups) { g.visible = false; scene.add(g); }
   }
   const noise = new NoiseBus();
 
@@ -1257,6 +1292,40 @@ export async function buildFollowBed(engine, opts = {}) {
    */
   const camLight = new THREE.PointLight(opts.accent ?? 0xf5a14a, 1.4, 3.5, 2);
   scene.add(camLight);
+
+  /**
+   * 🔴 **THE RED PASS — a staged reason to duck, so ducking is deniable.**
+   *
+   * John, 2026-09-01: *"Hide is deniable only if the TV sometimes shows a reason: a staged RED
+   * PASS down the hall (local sense, not a map, not hunter AI)."*
+   *
+   * ⚠️ **IT IS NOT THE HUNTER AND IT KNOWS NOTHING.** The hunter is a door and the door is shut.
+   * `runner-intel.js` `redPassAt` is a CLOCK — a seeded period with no position, no target and no
+   * awareness of any body — and this light is that clock made visible. It is stage lighting in
+   * the show's own language, it is on the TELEVISION where all eight players see it, and that is
+   * the entire mechanism: a runner who goes to ground during a red pass did it in front of
+   * witnesses, and one who goes to ground in the quiet did not.
+   *
+   * 🚨 **IT IS A MESH AND NOT A LIGHT, AND THE REASON IS A GATE THAT WAS RIGHT.**
+   * `party-warm` W23g counts the PointLights in this file and holds them at four — *"the rig
+   * repositions the existing cool, it does not construct a sixth light"* — because a light added
+   * to this scene is a shader recompile and a rig that grows once grows again. A staged pass has
+   * no business being a fifth lamp: it is a LIGHTING CUE, which in a television gallery is a bar
+   * of colour sweeping a wall, and an additive unlit quad is literally that. Nothing casts from
+   * it, nothing shadows it, and the light count did not move.
+   *
+   * Built here, before `finalizeScene()`, for `camLight`'s other reason: the material compiles
+   * with everything else instead of hitching the frame it is first shown on.
+   */
+  const redPass = new THREE.Mesh(
+    new THREE.PlaneGeometry(5.2, 3.0),
+    new THREE.MeshBasicMaterial({
+      color: 0xff2d2d, transparent: true, opacity: 0, depthWrite: false,
+      blending: THREE.AdditiveBlending, side: THREE.DoubleSide, toneMapped: false,
+    }));
+  redPass.name = 'staged-red-pass';
+  redPass.visible = false;
+  scene.add(redPass);
 
   const rig = followRig({ key, warmA, warmB, cool, fill });
   rig.snapTo(room.spaceAt(engine.camera.position) ?? room.spaces[0]);
@@ -1326,6 +1395,25 @@ export async function buildFollowBed(engine, opts = {}) {
     stick: { x: 0, y: 0 },
     look: { x: 0, y: 0 },
     run: false,
+    /**
+     * 📍 **THE GUIDE'S PIN, AS THE BODY'S DESTINATION — `{x, z, roomId, kind}` or null.**
+     *
+     * Arrives as a `pin` cue from `party-host.js`, which got it off the wire from the guide's
+     * handset. It is not the mission target and the brain never learns which twin is real: John's
+     * reason is that auto-walking to the true camera *"kills the lie"*. Null means nobody has
+     * pinned, and null means the body stands still — the guide having a reason to exist.
+     */
+    pin: null,
+    /** The legs of the CURRENT plan. Thrown away and rebuilt on every replan — never cached. */
+    legs: [],
+    /** Replan bookkeeping. `since`/`gained` are D3's stall trigger; `lastAt` is where we measured. */
+    nav: { pinKey: '', plannedKey: null, phase: '', since: 0, gained: 0, lastAt: null, why: '' },
+    /** The smoothed lateral dodge, in stick units. The thumb's whole authority. */
+    lateral: 0,
+    /** HOLD to hide. A REQUEST — `coverNear` refuses it in an open hall. */
+    hide: false,
+    /** Durations only, never a verdict. See `runner-intel.js` `hideTick` and `holdTell`. */
+    hold: { hiding: false, heldS: 0, quietS: 0, redS: 0, longestS: 0 },
     /** Set when a swing lands; read once by `missionTick`. `sledge.swingHit` is consumed by Player. */
     contactAt: -1,
     act: 0,
@@ -1575,7 +1663,8 @@ export async function buildFollowBed(engine, opts = {}) {
       if (wallCam) {
         wallCam.mount = 0;
         wallCam.lit = false;
-        wallCam.group.visible = false;
+        wallCam.at = 'hall';
+        for (const g of wallCam.groups) g.visible = false;
       }
       mission.phase = twins ? 'seek' : 'none';
       mission.room = gallery?.id ?? spec.room;
@@ -1589,16 +1678,34 @@ export async function buildFollowBed(engine, opts = {}) {
     if (wallCam) {
       wallCam.mount = 0;
       wallCam.lit = false;
-      wallCam.group.visible = true;
+      wallCam.at = 'hall';
+      for (const g of wallCam.groups) g.visible = true;
     }
     mission.phase = wallCam ? 'seek' : 'none';
     mission.room = gallery?.id ?? spec.room;
   }
 
+  /**
+   * 🎯 **THE BRACKET THE GUIDE PINNED — or, with no objective pin, whichever one she is beside.**
+   *
+   * The fallback is not a second way to choose. It exists because a runner who walked in on a door
+   * pin and started drilling before her guide said anything should drill the thing she is standing
+   * at rather than nothing; the guide's pin overrides it the instant it arrives, and the pin is
+   * what the auto-walk took her to in the first place.
+   */
+  function activeMount() {
+    if (!wallCam) return null;
+    const spot = mountFor(perf.pin?.kind, runner.pos, {
+      hall: wallCam.spots.hall?.pos, floor: wallCam.spots.floor?.pos,
+    });
+    return spot ? wallCam.spots[spot] : null;
+  }
+
   function nearWallCam() {
-    if (!wallCam) return false;
-    const dx = runner.pos.x - wallCam.pos.x;
-    const dz = runner.pos.z - wallCam.pos.z;
+    const m = activeMount();
+    if (!m) return false;
+    const dx = runner.pos.x - m.pos.x;
+    const dz = runner.pos.z - m.pos.z;
     return Math.hypot(dx, dz) < 1.85;
   }
 
@@ -1618,22 +1725,28 @@ export async function buildFollowBed(engine, opts = {}) {
     const spec = mission.spec ?? missionFor(1);
     if (mission.phase === 'seek' && spec.job === JOB.DRILL && wallCam) {
       const holding = perf.act > 0.5 && nearWallCam() && !mission.heard;
-      if (holding) {
+      const at = holding ? activeMount() : null;
+      if (holding && at) {
+        // Walking off one bracket and onto the other starts the mount again — one camera, one wall.
+        if (wallCam.at !== at.shot) { wallCam.mount = 0; wallCam.at = at.shot; }
         wallCam.mount = Math.min(1, wallCam.mount + DRILL.rate * dt);
         mission.mount = wallCam.mount;
         if (Math.floor(t * 4) !== Math.floor((t - dt) * 4)) {
-          noise.emit(wallCam.pos, DRILL.loudness, NOISE_KIND.dig);
+          noise.emit(at.pos, DRILL.loudness, NOISE_KIND.dig);
         }
         const hunterHere = (roomIdAt(hunter.pos) ?? hunter.roomId()) === (gallery?.id ?? mission.room);
         if (hunterHere) perf.heardFor += dt;
         else perf.heardFor = Math.max(0, perf.heardFor - dt * 0.5);
         if (perf.heardFor >= DRILL.heardSeconds) {
           mission.heard = true;
-          emitTallyShort(noise, wallCam.pos);
+          emitTallyShort(noise, at.pos);
         }
       }
       if (wallCam.mount >= 1 && !wallCam.lit) {
         wallCam.lit = true;
+        // A blind mount still counts as `camera_lit` — the locked rule. Which wall it went on is
+        // recorded here and nowhere else, because it is the only difference the night ever had.
+        mission.shot = wallCam.at;
         mission.phase = 'return';
         mission.room = ballroom?.id ?? null;
         return;
@@ -1653,6 +1766,245 @@ export async function buildFollowBed(engine, opts = {}) {
         && runner.pos.z > ballroom.z0 && runner.pos.z < ballroom.z1;
       if (inside) mission.phase = 'done';
     }
+  }
+
+  /* ===============================================================================================
+   * 🚶 **AUTO-WALK — the body walks the guide's pin. The thumb only steps sideways.**
+   *
+   * John, sofa 2026-09-01. The four locks this block is: walk the PIN one door at a time, never
+   * the true target; the stick is a LATERAL DODGE and cannot steer into another room; HOLD hides
+   * behind furniture and there is no hiding in an open hall; the clock keeps running.
+   *
+   * Every decision is in `src/game/runner-intel.js` so a node gate can execute it. What is left
+   * here is the three things that genuinely need the scene: `room.pathPortals` (D3 — a LIVE query
+   * against the portal graph, re-asked on every replan, which is what makes it legal), the
+   * collider (`Player.update` gives us sliding and the doorway squeeze for free), and
+   * `room.furnProps` for what counts as cover.
+   * ============================================================================================ */
+
+  /** Cover, as flat world points. Rebuilt when the prop list changes — a dress pass adds to it. */
+  let _coverPts = null;
+  let _coverN = -1;
+  function coverPoints() {
+    const props = room.furnProps ?? [];
+    if (_coverPts && _coverN === props.length) return _coverPts;
+    _coverN = props.length;
+    _coverPts = [];
+    for (const fp of props) {
+      const b = fp?.box;
+      if (!b?.min || !b?.max) continue;
+      _coverPts.push({
+        x: (b.min.x + b.max.x) / 2,
+        z: (b.min.z + b.max.z) / 2,
+        h: b.max.y - b.min.y,
+      });
+    }
+    return _coverPts;
+  }
+
+  const _probe = { x: 0, z: 0 };
+  const _goal = new THREE.Vector3();
+
+  /* ---------------------------------------------------------------------------------------------
+   * 🖼️ **THE LAST FOUR METRES, AND WHY THEY ARE NOW A PIN LIKE EVERY OTHER METRE.**
+   *
+   * The overnight lock reads *"AUTO-WALK the guide's pin, one door at a time. NOT auto-walk to the
+   * true camera (that kills the lie)"*, and at the time the guide could only pin a DOOR —
+   * `intel-pad.js` `pinDoor` builds its pin out of `scope.gates`, and gates are doors. So the legs
+   * ran out in the mission room's doorway with the job across the floor, and something had to
+   * cross that floor. Overnight it was the thumb. John, 2026-09-02: *"guides need to also be able
+   * to pin objectives like the paintings or the camera install position."*
+   *
+   * ⚠️ **AND THE LIE IS NOT WEAKENED BY IT, WHICH IS THE TEST THAT LOCK IS REALLY ASKING.** The
+   * body still never learns which target is real. `objectives.js` cannot even import the two
+   * functions that know (`realFaceFor`, `drillShotFor`) and `runner-intel` RI3c is the check.
+   * What it walks to is a name a PERSON chose, and the whole point is that she may have chosen
+   * the wrong one on purpose:
+   *   · SMASH: two IDENTICAL faces, same distance either side of the wall's centre, same loudness,
+   *     no mark on either (`jobs.js` `TWIN`).
+   *   · DRILL: two IDENTICAL brackets on two walls. What a mounted camera would end up SEEING is
+   *     on the far side of a wall the runner is standing behind, and `drillShotFor`'s answer is
+   *     printed on the GUIDE's pad only.
+   * ------------------------------------------------------------------------------------------ */
+  /**
+   * 🎯 **AN OBJECTIVE PIN, RESOLVED AGAINST THE SCENE THIS FILE BUILT.**
+   *
+   * `objectives.js`'s header has the argument in full; the short form is that the phone and the
+   * body do not compute the same house from the same numbers — `planRegions` hands the phone a
+   * UNION of rectangles and `spaceOfType` hands this file ONE of them — so the coordinates on an
+   * objective pin are a bearing hint for the runner's bezel and the NAME is the instruction. A
+   * phone that sent `face-left` with coordinates in the ballroom still walks her to the real left
+   * painting, because nothing below reads `pin.x` at all.
+   *
+   * 🚨 **AND IT REFUSES AN OBJECTIVE PIN FROM OUTSIDE THE MISSION ROOM, WHICH IS WHAT KEEPS D4
+   * INTACT.** `room.pathPortals` will happily return a four-door route to a painting three rooms
+   * away, and that is the memorised route the whole design forbids. The chips only exist while the
+   * runner is standing in the mission room (`intel-pad.js` `guidePad`), so this is the same rule
+   * enforced a second time at the end that has to be right — one guide sentence is still one leg.
+   */
+  function sceneTargets() {
+    const out = {};
+    for (const face of ['left', 'right']) {
+      const f = twins?.faces?.[face];
+      if (f?.pos) out[face] = { x: f.pos.x, z: f.pos.z, live: !!f.intact };
+    }
+    for (const shot of ['hall', 'floor']) {
+      const m = wallCam?.spots?.[shot];
+      if (m?.pos) out[shot] = { x: m.pos.x, z: m.pos.z, live: true };
+    }
+    return out;
+  }
+
+  function resolveObjective(pin) {
+    return objectiveGoal(pin, {
+      here: roomIdAt(runner.pos), missionRoom: mission.room, targets: sceneTargets(),
+    });
+  }
+
+  /** Where this pin actually sends the body. A door is its own coordinate; a job is a name. */
+  function pinGoal() {
+    const pin = perf.pin;
+    if (!pin) return null;
+    if (isObjectivePin(pin.kind)) return resolveObjective(pin);
+    return Number.isFinite(pin.x) && Number.isFinite(pin.z) ? { x: pin.x, z: pin.z } : null;
+  }
+
+  /**
+   * 🚨 **THE GUIDE'S PIN PICKS THE TARGET. THE THUMB DOES NOT, AND THAT IS JOHN'S 2026-09-02 CALL.**
+   *
+   * ⚠️ **THIS REPLACES A RULE THAT SHIPPED LESS THAN A DAY AGO, AND THE OLD ONE IS WORTH KNOWING
+   * BECAUSE IT LOOKED RIGHT.** Overnight, `jobGoal` leaned on `perf.stick.x`: a nudge left walked
+   * at the left twin, a nudge right at the right one, and neutral walked at the MIDPOINT so that
+   * hitting either was a decision somebody made. It is a tidy piece of design and it is wrong for
+   * one reason — *"Thumb dodge/hide stays lateral only. It is NOT how you pick which painting."*
+   * With the thumb choosing the face, a guide who says *"left wall"* is decoration: the runner can
+   * ignore her, lean whichever way she likes, and the twin smash stops being a thing two people do
+   * together. The pin is the instruction, and an evil guide pinning the decoy is the entire lie.
+   *
+   * 🚨 **SO WITH NO OBJECTIVE PIN THIS RETURNS `null` AND THE BODY STANDS, ON PURPOSE.** It is the
+   * same answer `autoWalkInput` already gives an unpinned runner in a hallway — *"standing still is
+   * a real answer and is not a stall"* — and it costs the same thing, which is that the guide has to
+   * speak. `mission.js` `seekLine` advances to *"You are in it. Two faces. Hit one."* the moment she
+   * arrives, so the screen says why nothing is happening rather than looking broken.
+   */
+  function jobGoal() {
+    if (mission.phase !== 'seek') return null;
+    return resolveObjective(perf.pin);
+  }
+
+  /**
+   * Ask the house again, from here, for the pin we hold. D3's only legal query.
+   *
+   * ⚠️ **THE ANSWER IS NOT KEPT ANYWHERE BUT `perf.legs`, AND `perf.legs` IS DESTROYED BY THE
+   * NEXT REPLAN.** That is the difference between this and the authored route D4 forbids: you
+   * cannot print the runner's future at spawn, because at spawn there is no pin, and the legs
+   * that exist now are one guide sentence long.
+   */
+  function replanToPin() {
+    perf.legs = [];
+    const goal = pinGoal();
+    if (!goal) return;
+    _goal.set(goal.x, room.floorY ?? 0, goal.z);
+    const portals = room.pathPortals?.(runner.pos, _goal, ROUTE_MIN_W, ROUTE_MIN_H) ?? [];
+    perf.legs = legsFor(portals, goal);
+  }
+
+  /**
+   * One tick of the walk. Returns the `Player.update` input, or `null` to stand still.
+   *
+   * 🚨 **STANDING STILL IS A REAL ANSWER AND IS NOT A STALL.** With no pin there is nowhere the
+   * body has been told to go, and inventing a destination is exactly the sightseeing brain this
+   * replaced. The guide has to speak. That is the co-op.
+   */
+  function autoWalkInput(dt, t) {
+    // 🫥 HIDE FIRST, because a hide outranks the walk and must not be overridden by a leg. It is
+    // a REQUEST: no furniture within reach and the body keeps walking, which is John's
+    // "no stop-in-open-hall without cover" enforced where it cannot be argued with.
+    const red = redPassAt(t, opts.seed ?? 0);
+    const cover = perf.hide ? coverNear(coverPoints(), runner.pos) : null;
+    perf.hold = hideTick(perf.hold, { want: perf.hide, cover, red: red.on, dt });
+    if (perf.hold.hiding) {
+      perf.lateral = dodgeLateral(0, perf.lateral, dt);
+      return { move: { x: 0, y: 0 }, run: false, aimYaw: perf.heading };
+    }
+
+    // ---- replan, on D3's four triggers and no others
+    const gained = perf.nav.lastAt
+      ? Math.hypot(perf.nav.lastAt.x - runner.pos.x, perf.nav.lastAt.z - runner.pos.z)
+      : 0;
+    const since = perf.nav.since + dt;
+    const key = pinKey(perf.pin);
+    let why = replanReason(perf.nav, {
+      pinKey: key, phase: mission.phase, legs: perf.legs.length, since, gained,
+    });
+    /*
+     * ⚠️ **`legs` FIRES ONCE PER PIN, AND WITHOUT THIS LINE IT FIRES SIXTY TIMES A SECOND.**
+     * An EMPTY plan for a pin we have already asked about means ARRIVED, not unplanned — and
+     * `room.pathPortals` is a BFS over the live portal graph, so re-asking it every frame is a
+     * graph walk per frame for an answer that cannot have changed. The other three triggers still
+     * fire normally, and `stall` is the one that re-asks if the house moved under her.
+     */
+    if (why === 'legs' && perf.nav.plannedKey === key) why = null;
+    if (why) {
+      replanToPin();
+      perf.nav = {
+        pinKey: key, plannedKey: key, phase: mission.phase, since: 0, gained: 0,
+        lastAt: { x: runner.pos.x, z: runner.pos.z }, why,
+      };
+    } else {
+      perf.nav = { ...perf.nav, phase: mission.phase, since, gained };
+      if (since >= AUTOWALK.stallSec) {
+        perf.nav.since = 0;
+        perf.nav.lastAt = { x: runner.pos.x, z: runner.pos.z };
+      }
+    }
+
+    consumeLegs(perf.legs, runner.pos);
+    const leg = perf.legs[0] ?? jobGoal();
+    if (!leg) {
+      // Arrived, or never sent. Face the last heading and wait to be told again.
+      perf.lateral = dodgeLateral(0, perf.lateral, dt);
+      return { move: { x: 0, y: 0 }, run: false, aimYaw: perf.heading };
+    }
+
+    // ---- the walk. Heading LAGS, because a body that snaps to a bearing reads as a cursor and
+    // the slice's §6 is explicit that the performance terms survive the brain.
+    perf.heading = lagHeading(perf.heading, headingTo(runner.pos, leg), dt);
+
+    // ---- the thumb. `x` only: `dodgeLateral` throws `y` away, and `clampToRoom` refuses a
+    // sideways step that would leave the room she is in. *"Cannot steer into another room."*
+    const want = dodgeLateral(perf.stick.x, perf.lateral, dt);
+    _probe.x = runner.pos.x; _probe.z = runner.pos.z;
+    perf.lateral = clampToRoom(want, _probe, perf.heading, (p) => roomIdAt(p));
+
+    // Stop square at the smash window rather than walking into the wall — §6's own number. The
+    // hammer is a RAY from the eye (D7), so being close is not the same as being square.
+    const d = Math.hypot(leg.x - runner.pos.x, leg.z - runner.pos.z);
+    const drive = d < AUTOWALK.square ? 0 : 1;
+    return {
+      move: { x: perf.lateral, y: drive },
+      run: perf.run && drive > 0,
+      aimYaw: perf.heading,
+    };
+  }
+
+  /** The red pass, on screen. Nothing reads this back; it exists to be SEEN. */
+  function stepRedPass(t) {
+    const red = redPassAt(t, opts.seed ?? 0);
+    redPass.visible = red.on;
+    if (!red.on) { redPass.material.opacity = 0; return; }
+    /*
+     * Down the hall, not on the body. The pass is something happening in the HOUSE; pinned to the
+     * runner it would read as a status effect she is wearing, which is the one thing it must not
+     * be — the whole point is that the room sees a reason to duck that is nothing to do with her.
+     */
+    const ahead = 4.6;
+    redPass.position.set(
+      runner.pos.x + Math.sin(perf.heading) * ahead,
+      (room.floorY ?? 0) + 1.55,
+      runner.pos.z + Math.cos(perf.heading) * ahead);
+    redPass.rotation.y = perf.heading;
+    redPass.material.opacity = 0.42 * red.k;
   }
 
   function step(dt, t) {
@@ -1710,14 +2062,35 @@ export async function buildFollowBed(engine, opts = {}) {
      * deadzoned stick as real strafe+forward; `aimYaw` is that lens' horizontal yaw; `_stepGround`
      * already walks aim-relative. Push up = into the shot.
      */
+    /*
+     * 🚶 **AND NOW THE PHONE IS NOT THE BODY — IT IS A DODGE AND A HAMMER.**
+     *
+     * John, 2026-09-01, replacing the free stick this branch used to be: the runner AUTO-WALKS
+     * the guide's pin one door at a time, and *"the STICK is a lateral dodge only."* Three
+     * arguments, in the order they were made:
+     *
+     *   · **The lie needs the guide.** Auto-walking to the true target *"kills the lie"* — a body
+     *     that finds the gallery by itself makes the guide decorative and makes the twin-painting
+     *     call meaningless. So the destination is a door a HUMAN tapped, and the brain never
+     *     learns which face is real.
+     *   · **A maze is not the game.** Six people are watching a television. Driving a first-person
+     *     body through a generated house on a phone is a different, worse, slower game than
+     *     listening to somebody shout at you, and the couch found that out.
+     *   · **It closes the sabotage surface.** A free stick lets an evil runner burn the whole
+     *     clock standing in a corridor, invisibly and with nothing to argue about. Under auto-walk
+     *     the only way to stop is to HIDE, hiding needs a piece of furniture, and hiding is on the
+     *     television. `runner-intel.js` `SABOTAGE` is the closed list of what is left.
+     *
+     * ⚠️ **`aimYaw` IS THE WALK'S HEADING, NOT `operator.basisYaw()`.** The camera-relative basis
+     * was right when the thumb was steering; with the walk steering, feeding the camera's yaw back
+     * in makes the body turn because the operator drifted. The look stick still owns the AIM —
+     * that is D7's sledge ray and the runner's only way to pick a twin, which is sabotage entry
+     * one — and `afterBody` applies it exactly as before.
+     */
     if (perf.driven) {
-      const s = perf.stick;
-      const move = stickCamMove(s.x, s.y);
-      runner.update(dt, t, {
-        move,
-        run: perf.run,
-        aimYaw: operator.basisYaw(),
-      });
+      const input = autoWalkInput(dt, t);
+      runner.update(dt, t, input);
+      stepRedPass(t);
       missionTick(t, dt);
       afterBody(dt, t);
       return;
@@ -2238,7 +2611,36 @@ export async function buildFollowBed(engine, opts = {}) {
         // and any pin from a previous episode's inspection is dropped with it.
         perf.loopView = BALLROOM_PERSPECTIVE;
         perf.pinned = false;
+        /*
+         * 📍 A pin belongs to the pair that made it, so a new expedition starts unpinned — the
+         * same rule `room.js` `beginCasting` applies on the server. The hold ledger resets with
+         * it: those durations are one run's, and carrying them would put last episode's quiet
+         * into this episode's recap.
+         */
+        perf.pin = null;
+        perf.legs = [];
+        perf.nav = { pinKey: '', plannedKey: null, phase: '', since: 0, gained: 0, lastAt: null, why: '' };
+        perf.hide = false;
+        perf.lateral = 0;
+        perf.hold = { hiding: false, heldS: 0, quietS: 0, redS: 0, longestS: 0 };
         armMission(c.episode ?? 1);
+        return;
+      }
+      /*
+       * 📍 **THE PIN. The guide tapped a door; this is where it becomes a destination.**
+       *
+       * ⚠️ **IT DOES NOT SET `perf.driven`.** A stick does, because a stick is a person picking
+       * the body up. A pin is the OTHER person, and a guide who pins before her runner has
+       * touched the pad must not retire the scripted schedule out from under a body nobody is
+       * driving yet — `party-follow-drive` D3 (*consecutive grabs differ*) is watching exactly
+       * that, and a room that went still because the guide was faster would be the failure.
+       *
+       * D2: a second tap REPLACES. That is an assignment and there is no list to append to.
+       */
+      if (c.kind === 'pin') {
+        perf.pin = Number.isFinite(+c.x) && Number.isFinite(+c.z)
+          ? { x: +c.x, z: +c.z, roomId: String(c.roomId || ''), kind: String(c.pinKind || 'room') }
+          : null;
         return;
       }
       if (c.kind === 'shot' && SHOTS.includes(c.shot)) {
@@ -2269,6 +2671,8 @@ export async function buildFollowBed(engine, opts = {}) {
         perf.look.y = Math.max(-1, Math.min(1, +c.lookY || 0));
         perf.run = !!c.run;
         perf.act = +c.act || 0;
+        // 🫥 A REQUEST. `autoWalkInput` refuses it with no furniture in reach — hide is armour.
+        perf.hide = !!c.hide;
         if (c.swing) {
           const res = runner.attack(engine.elapsed ?? 0);
           /*
@@ -2301,6 +2705,21 @@ export async function buildFollowBed(engine, opts = {}) {
         job: mission.job,
         ...(mission.phase === 'done' && mission.emptyNail ? { emptyNail: mission.emptyNail } : {}),
         ...(mission.heard ? { heard: true } : {}),
+        /*
+         * ⏱️ **HOW LONG THE BODY WAS BEHIND SOMETHING, SPLIT BY WHETHER THE HALL WAS RED.**
+         *
+         * Three durations, and not one of them is a name. John's lock: *"Good runner hides when
+         * it is red. Evil runner hides when it is quiet, or holds too long. Quiet-hide is the
+         * tell. Recap does not name whose thumb."* `runner-intel.js` `holdTell` is the only thing
+         * that turns these into words and it is built so it cannot name anybody.
+         *
+         * Always present, including as zero. `party-isolation` I7's rule — no survivor's frame
+         * may CHANGE SHAPE across a beat — and a field that only appears on a night somebody hid
+         * would announce the hiding by its own existence.
+         */
+        holdQuiet: +perf.hold.quietS.toFixed(1),
+        holdRed: +perf.hold.redS.toFixed(1),
+        holdLongest: +perf.hold.longestS.toFixed(1),
       },
       // The camera the show is actually on, so the pad can match it. `appliedRig` and not the
       // live blend: a crane is 1.35 s and this channel is 2 Hz, so reporting the destination

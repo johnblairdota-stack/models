@@ -649,8 +649,12 @@ export function injectNightSkin() {
     .stick-btn.on { background:var(--night-accent); color:var(--night-deep); }
     .stick-btn.swing.on { background:var(--night-bad); }
     .stick-btn.drill { border-color: rgba(232, 92, 58, .55); color:#f3b39a; }
-    .stick-btn.drill span { display:block; font-size:9px; letter-spacing:.16em; margin-top:4px; }
+    .stick-btn.drill span, .stick-btn.hide span { display:block; font-size:9px; letter-spacing:.16em; margin-top:4px; }
     .stick-btn.drill.on { background:#c4472a; color:#fff7f2; }
+    /* 🫥 HIDE. Deliberately NOT lit by whether cover is in reach — see startPad. The pad is not a
+       cover detector; the television is where she finds out whether the body ducked. */
+    .stick-btn.hide { border-color: rgba(110, 200, 212, .45); color:#9be0e8; }
+    .stick-btn.hide.on { background:#2b5f68; color:#e8fbff; }
 
     /* ==========================================================================================
      * 🧭 GUIDE E · "Pin a door", and 📱 RUNNER D · the frame bezel.
@@ -671,6 +675,13 @@ export function injectNightSkin() {
       background:rgba(var(--night-accent-rgb), .13); }
     /* A direction with no door is DIM, never missing — see guidePinPad's header. */
     .pin-chip.none { opacity:.4; }
+    /* 🎯 The job's own targets, when the runner is standing in the mission room. TWO chips, so the
+       row is two columns and they sit under the four doors rather than beside them — a six-wide
+       row at 390px gives every chip 58px, which is under a thumb. No colour of its own: the
+       accent is the same one an armed door chip uses, because a pin is a pin. */
+    .pin-row.pin-goals { grid-template-columns:repeat(2, 1fr); margin-top:7px; }
+    .pin-chip.goal { min-height:60px; border-style:dashed; }
+    .pin-chip.goal.on { border-style:solid; }
     .pin-say { margin:12px 0 0; font-size:26px; font-weight:900; line-height:1.06;
       color:var(--night-accent); }
 
@@ -724,6 +735,25 @@ export function injectNightSkin() {
     .voice-cue { margin-top:8px; padding:8px 10px; border:1px solid rgba(232,220,200,.18);
       min-height:36px; font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:#c9b8a4; }
     .voice-know { margin:8px 0 0; padding:8px 10px; border:1px solid #6ec8d4; color:#9be0e8; font-size:13px; }
+    /* 🗣️ ONE LINE OF TEXT WHERE A ROW OF FAKE BUTTONS USED TO BE. John, 2026-09-01. It is copy,
+       not a control, so it must not look tappable — no border, no panel, no min-height. */
+    .say-line { margin:8px 0 0; font-size:15px; line-height:1.3; color:var(--night-soft); }
+    .say-line strong { color:var(--night-accent); letter-spacing:.06em; }
+
+    /* ==========================================================================================
+     * 🗺️ GUIDE E'S SHEET · the map is the PRIMARY surface at 390x844.
+     * John: "readable at ~390x844. Pin chips in thumb country under the map. Real Aim stays a
+     * private one-liner and must not shrink the map." So the map gets the height back that the
+     * heading and two hint paragraphs used to take, and everything under it is one line tall.
+     * ⚠️ SCOPED. The unscoped map (guidemap's own 46vh) is untouched — a reskin that moves one
+     * surface and misses the other is party-follow F8's reason for keeping colours in one place.
+     * ======================================================================================== */
+    .guide-sheet .gs-title { margin:0 0 6px; font-size:22px; line-height:1.1; }
+    .guide-sheet .guide-map { max-height:58vh; margin:0 0 8px; }
+    .guide-sheet .pin-pad { margin:0 0 6px; }
+    .guide-sheet .pin-say { margin:8px 0 0; font-size:22px; }
+    .guide-sheet .gs-note { margin:6px 0 0; font-size:12px; }
+    .guide-sheet .voice-pad { margin:8px 0 0; }
     /* 🔨 THE PAD'S OWN ANSWER TO A SWING. The button's .on flash is under the thumb that is
        covering it, so it confirms nothing to the person who tapped it — this line sits clear of
        both the stick and the buttons.

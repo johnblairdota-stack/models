@@ -109,15 +109,37 @@ t('J6 · hang helpers place twins on one wall and the cam on the other — not a
 
 {
   const phone = src('../src/views/party-phone.js');
-  t('J7 · phone voice buttons are local — they never send the call',
-    /data-voice/.test(phone)
-      && /Local only\. Do not send/.test(phone)
-      && /buttons send nothing/i.test(phone)
+  /*
+   * 🗣️ **THE BUTTONS ARE GONE, WHICH IS THE STRONGEST FORM OF THE RULE THIS CHECK GUARDS.**
+   *
+   * It used to assert that six tappable words — CLOSE / LATE / GOING and GO / HOLD — were LOCAL:
+   * `data-voice` present, *"buttons send nothing"* printed beside them, no `t:'voice'` verb. John
+   * removed them on 2026-09-01: *"Drop fake tappable CLOSE/LATE/GOING and GO/HOLD cue BUTTONS.
+   * Voice stays in the room. One SAY line of text is fine. FOOTSTEPS can stay as a small line,
+   * not a 3-button row."*
+   *
+   * A control that reaches nobody teaches the one seat that is supposed to be watching a
+   * television that the game is in their hand — and one of these had grown teeth, gating the real
+   * DRILL button until a decorative one had been tapped. So the assertion inverts: `data-voice` is
+   * now a RED LINE, the words survive as copy in a `say-line`, and the verbs are still absent.
+   * `voiceSendsNothing()` is unchanged and is now a statement about a pad with nothing to press.
+   */
+  t('J7 · the fake voice buttons are gone, and the words are copy — nothing to press, nothing to send',
+    !/data-voice/.test(phone)
+      && !/voice-btn/.test(phone)
+      && /say-line/.test(phone)
+      && /Say <strong>CLOSE<\/strong>/.test(phone)
+      && /Say <strong>GO<\/strong>/.test(phone)
       && !/t: 'voice'/.test(phone)
       && !/t: 'call'/.test(phone)
+      && voiceSendsNothing()
       && /id="drill-btn"/.test(phone)
       && /twin-face/.test(phone)
       && /FOOTSTEPS/.test(phone));
+  t('J7b control · the DRILL hold is no longer gated on a decorative tap',
+    !/if \(!state\.voice\.runner\)/.test(phone)
+      && !/Say it first/.test(phone)
+      && /state\.pad\.act = 1;/.test(phone));
 }
 
 {

@@ -348,14 +348,18 @@ function paintingTarget(space, face = 'left', floorY = 0) {
   };
 }
 
-/** Opposite-wall camera the later nights hold-drill. */
-function camTarget(space, floorY = 0) {
-  const hang = space ? camHang(space, floorY) : null;
+/**
+ * A camera bracket the later nights hold-drill. There are TWO of them — `jobs.js` `camHang` grew
+ * a `shot` on 2026-09-02 so the guide has something to choose between — and both are swept here,
+ * because a bracket nobody measured is a bracket a vitrine may stand in front of.
+ */
+function camTarget(space, floorY = 0, shot = 'hall') {
+  const hang = space ? camHang(space, floorY, shot) : null;
   if (!hang) return null;
   const hw = hang.alongX ? WALL_CAM.w / 2 : WALL_CAM.d / 2;
   const hd = hang.alongX ? WALL_CAM.d / 2 : WALL_CAM.w / 2;
   return {
-    kind: 'cam', episode: 2, spec: MISSION_DRILL, space,
+    kind: hang.shot === 'floor' ? 'cam-floor' : 'cam', episode: 2, spec: MISSION_DRILL, space,
     x: hang.x, z: hang.z,
     normal: hang.alongX ? [0, -1] : [-1, 0],
     lateral: WALL_CAM.w / 2,
@@ -668,7 +672,8 @@ for (let ws = 0; ws < SEEDS; ws++) {
   for (const built of [
     night.gallery ? paintingTarget(night.gallery, 'left') : null,
     night.gallery ? paintingTarget(night.gallery, 'right') : null,
-    night.gallery ? camTarget(night.gallery) : null,
+    night.gallery ? camTarget(night.gallery, 0, 'hall') : null,
+    night.gallery ? camTarget(night.gallery, 0, 'floor') : null,
   ]) {
     if (!built) { rows.push({ ws, missing: true }); continue; }
     const space = built.space ?? night.gallery;
@@ -693,7 +698,7 @@ for (let ws = 0; ws < SEEDS; ws++) {
 const elapsed = ((Date.now() - t0) / 1000).toFixed(2);
 
 const paintings = rows.filter((r) => r.kind === 'painting');
-const camsR = rows.filter((r) => r.kind === 'cam');
+const camsR = rows.filter((r) => r.kind === 'cam' || r.kind === 'cam-floor');
 
 /* =============================================================================================
  * G · GROUND TRUTH FIRST. "Every target is visible" is trivially TRUE of zero targets.
@@ -706,8 +711,8 @@ const camsR = rows.filter((r) => r.kind === 'cam');
 
 console.log(`\n  ground truth · ${SEEDS} world seeds in ${elapsed}s`);
 
-t('G1 · every world seed builds a gallery carrying BOTH twins and the wall cam',
-  rows.filter((r) => r.missing).length === 0 && rows.length === SEEDS * 3,
+t('G1 · every world seed builds a gallery carrying BOTH twins and BOTH camera brackets',
+  rows.filter((r) => r.missing).length === 0 && rows.length === SEEDS * 4,
   `${rows.length} targets over ${SEEDS} seeds, ${rows.filter((r) => r.missing).length} missing`);
 
 t('G2 · every mission room is DRESSED — a placer that stopped placing would make T vacuous',
@@ -717,7 +722,7 @@ t('G2 · every mission room is DRESSED — a placer that stopped placing would m
   + `, ${paintings.reduce((a, r) => a + r.propN, 0)} total`);
 
 t('G3 · both jobs have a target, in the room their own mission copy names',
-  paintings.length === SEEDS * 2 && camsR.length === SEEDS
+  paintings.length === SEEDS * 2 && camsR.length === SEEDS * 2
   && rows.every((r) => r.inNamedRoom)
   && missionFor(1) === MISSION_PAINTING && missionFor(2) === MISSION_DRILL,
   `${paintings.length} twin faces in ${MISSION_PAINTING.room}, ${camsR.length} cams in ${MISSION_DRILL.room}`);
@@ -731,7 +736,16 @@ t('G4 · this file\'s hang matches `jobs.js` / follow-bed twins — it re-derive
 t('G5 · ...and the swing: eye, body, the fixed pitch, both reaches, and the 1.25 m collider',
   /this\.radius = this\.height \* 0\.20/.test(src('src/game/player.js'))
   && /this\.aimPitch = -0\.06;/.test(src('src/game/player.js'))
-  && /aimYaw: operator\.basisYaw\(\),/.test(src('src/game/follow-bed.js'))
+  /*
+   * ⚠️ **CLAUSE 3 CHANGED SOURCE ON 2026-09-01; THE FACT IT ASSERTS DID NOT.** It used to read
+   * `aimYaw: operator.basisYaw(),` — the driven branch handing the body the CAMERA's yaw. Under
+   * John's auto-walk lock the yaw the body is given is the WALK's heading, because the walk is
+   * what steers now and feeding the camera back in would turn the robot every time the operator
+   * drifted. The thing this file cares about is unchanged and is why clause 4 sits right under it:
+   * the runner is handed a YAW and never a PITCH, so the swing is one shallow fan pinned at
+   * −0.06 rad and not a sweepable cone. That is the whole basis of this gate's geometry.
+   */
+  && /aimYaw: perf\.heading,/.test(src('src/game/follow-bed.js'))
   && !/aimPitch:/.test(src('src/game/follow-bed.js'))                       // clause 4, still true
   && /const PAINTING_REACH = WEAPON_RANGE\.sledge \+ 0\.35;/.test(src('src/game/follow-bed.js'))
   && /_paintRay\.far = PAINTING_REACH;/.test(src('src/game/follow-bed.js'))
@@ -873,11 +887,12 @@ t('T6 · and at least half of the TARGET is visible from inside swinging distanc
     rooms++;
     rects += keeps.length;
     const forRoom = keeps.filter((k) => k.id.startsWith(`${gal.id}.`));
-    for (const want of ['painting', 'wallcam']) {
+    for (const want of ['painting', 'wallcam', 'wallcam-floor']) {
       if (!forRoom.some((k) => k.id === `${gal.id}.${want}`)) missing.push(`ws${ws}/${want}`);
     }
-    // Every rect must contain the thing it exists to protect, both twin faces included.
-    for (const hang of [twinHang(gal, 'left'), twinHang(gal, 'right'), camHang(gal)]) {
+    // Every rect must contain the thing it exists to protect — both twin faces and BOTH brackets.
+    for (const hang of [twinHang(gal, 'left'), twinHang(gal, 'right'),
+      camHang(gal, 0, 'hall'), camHang(gal, 0, 'floor')]) {
       if (!hang) continue;
       const k = forRoom.find((r) => hang.x >= r.x0 && hang.x <= r.x1 && hang.z >= r.z0 && hang.z <= r.z1);
       if (!k) holdsHang = false;
@@ -894,8 +909,8 @@ t('T6 · and at least half of the TARGET is visible from inside swinging distanc
       }
     }
   }
-  t('T7 · the placer holds BOTH mission targets clear — a rect each, over the real hang, and honoured',
-    rooms === SEEDS && rects === SEEDS * 2 && missing.length === 0
+  t('T7 · the placer holds EVERY mission target clear — a rect each, over the real hang, and honoured',
+    rooms === SEEDS && rects === SEEDS * 3 && missing.length === 0
     && holdsHang && entered.length === 0,
     `${rects} rects over ${rooms} mission rooms`
     + `${missing.length ? ` · MISSING ${missing.slice(0, 6).join(',')}` : ''}`
@@ -1035,7 +1050,7 @@ t('C6 control · the wall camera boxed in by four cases is DRILLED from nowhere,
 
 const sum = (f) => rows.reduce((a, r) => a + f(r), 0);
 console.log(`\n  reading · ${rows.length} targets over ${SEEDS} world seeds`
-  + ` (${paintings.length} twin faces, ${camsR.length} wall cams)`);
+  + ` (${paintings.length} twin faces, ${camsR.length} camera brackets)`);
 console.log(`  reading · ${sum((r) => r.propN)} dressed props modelled as occluders`
   + `, ${sum((r) => r.standN)} standable floor cells at ${GRID} m`);
 console.log(`  reading · sighted cells per target: `

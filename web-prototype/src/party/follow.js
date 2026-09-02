@@ -15,6 +15,7 @@
  */
 
 import { cleanLook } from './look.js';
+import { OBJECTIVE_KINDS } from './objectives.js';
 
 /** The only beat that mounts a camera. Casting, recap and lobby get no follow. */
 export const FOLLOW_BEATS = ['expedition'];
@@ -665,13 +666,16 @@ export function warmUrl(opts = {}) {
  * wire: `id`, `seat`, `name`, `shell`, `accent` are precisely `FANOUT_KEYS.lobbySeat`'s public
  * fields, already fanned out to every socket in the room by a decision that predates this slice.
  */
-export const CUE_KINDS = ['intros', 'run', 'move', 'shot', 'idle', 'noms', 'pair', 'execute'];
+export const CUE_KINDS = ['intros', 'run', 'move', 'shot', 'idle', 'noms', 'pair', 'execute', 'pin'];
 
 /** Per-kind closed allow-lists. A key not listed for its kind is a violation, not a pass. */
 export const CUE_KEYS = {
   intros: ['kind', 'cast', 'talk', 'wrecked'],
   run: ['kind', 'runner', 'name', 'shell', 'accent', 'episode'],
-  move: ['kind', 'x', 'y', 'lookX', 'lookY', 'run', 'swing', 'act'],
+  /* `hide` joined `act` on 2026-09-01 — both are HOLDS, both come off the same 20 Hz pad tick.
+     See `MOVE_KEYS`, and note that `act` had never actually been forwarded by the host until the
+     same day: `party-host.js` `flushMove` dropped it and the drill could not fill. */
+  move: ['kind', 'x', 'y', 'lookX', 'lookY', 'run', 'swing', 'act', 'hide'],
   shot: ['kind', 'shot'],
   idle: ['kind'],
   noms: ['kind', 'standing'],
@@ -682,6 +686,17 @@ export const CUE_KEYS = {
      (`executioner`, `executed`). `target` is that executed id; `SHOWRUNNER` is the
      sentinel when the nominator was taken this episode — there is no ninth body. */
   execute: ['kind', 'executioner', 'target'],
+  /*
+   * 📍 WHERE THE GUIDE SENT HER. Two numbers, a region id and a two-word kind — `intel-pad.js`
+   * `PIN_KEYS` with `kind` renamed to `pinKind` so it does not collide with the cue's own.
+   *
+   * 🚨 **THIS IS THE ONE CUE THE TELEVISION IS TOLD AND MAY NOT DRAW.** Every other kind here
+   * exists to put something on the shared screen. This one exists to move a body: the mansion is
+   * inside the follow slot, so a door tapped on a handset becomes a destination here or nowhere.
+   * `party-loop.md`'s "Do not" #1 is a rule about the PICTURE, and `harness/runner-intel.mjs` RI9
+   * is the control that keeps the picture clean.
+   */
+  pin: ['kind', 'x', 'z', 'roomId', 'pinKind'],
 };
 
 /**
@@ -855,7 +870,97 @@ export function warmLabel(stage) {
  * is deliberately a STICK and not a POSITION: the phone says where its thumb is, the TV owns where
  * the body ends up. A phone that could post a position could post any position.
  */
-export const MOVE_KEYS = ['t', 'x', 'y', 'lookX', 'lookY', 'run', 'swing', 'act'];
+/**
+ * 🕹️ **`hide` JOINED THIS LIST ON 2026-09-01, AND `y` QUIETLY STOPPED MEANING ANYTHING.**
+ *
+ * John's lock: *"Runner STICK is a lateral dodge only… HOLD to hide behind furniture."* The wire
+ * did not need to narrow — a stick is still two axes and both are still validated below — because
+ * authority over what the BODY does was never the phone's. `src/game/runner-intel.js`
+ * `dodgeLateral` is where the forward axis is dropped, and its header says why that is the right
+ * end to drop it at: a pad written by somebody else six months from now must not be able to
+ * restore forward drive by sending a `y` again.
+ *
+ * `hide` is a HOLD, so it rides the same 20 Hz change-gated tick as `run` rather than becoming a
+ * verb of its own. It is a REQUEST and never a fact: `runner-intel.js` `coverNear` refuses it in
+ * an open hall, which is the *"no stop-in-open-hall without cover"* half of lock 4.
+ */
+export const MOVE_KEYS = ['t', 'x', 'y', 'lookX', 'lookY', 'run', 'swing', 'act', 'hide'];
+
+/* =================================================================================================
+ * 📍 **THE PIN, ON THE WIRE — Stage 3 of `docs/slices/task-runner-intel.md`, and it is the whole
+ * reason auto-walk can exist.**
+ *
+ * Until tonight the guide's pin was LOCAL to her handset. That was honest while the pin was only a
+ * thing she said out loud — `party-phone.js`'s own comment said so — but John's lock 1 makes the
+ * runner's body walk it, and a body cannot walk a fact that never left the phone that holds it.
+ *
+ * 🚨 **TWO DIFFERENT JOURNEYS, AND CONFLATING THEM WOULD BE THE LEAK.**
+ *   · to the TELEVISION it is a CONTROL INPUT, directed exactly like `t:'move'` — the TV owns the
+ *     body, so the TV is told where the body is being sent. It is never fanned and never rendered:
+ *     D9 is untouched, and `harness/runner-intel.mjs` RI9 is the control that says so.
+ *   · to the RUNNER'S PHONE it is a frame field at audience `crew`, so her bezel can point at the
+ *     door her guide picked. A seated phone must never learn where the target is, so `all` is
+ *     wrong and `net/party/entitle.js` carries four `you.pin.*` rows to say it once, in the table.
+ *
+ * The schema is `intel-pad.js` `PIN_KEYS` plus the envelope, and it is CLOSED: four fields, two
+ * of them numbers, one of them from a two-word list. There is nowhere in it to put a second hop,
+ * which is D4 enforced by construction the same way `neighbourScope` enforces it.
+ * ============================================================================================== */
+export const PIN_WIRE_KEYS = ['t', 'x', 'z', 'roomId', 'kind'];
+/**
+ * 📍 **SIX KINDS, AND THE SCHEMA IS STILL FOUR FIELDS.**
+ *
+ * John, 2026-09-02: *"guides need to also be able to pin objectives like the paintings or the
+ * camera install position."*
+ *
+ * 🚨 **THE OBJECTIVE RIDES IN `kind`, AND THAT IS A DESIGN CHOICE RATHER THAN A SHORTCUT.** The
+ * obvious alternative was a fifth field — `spot: 'left' | 'hall'` — and it is worse in the one way
+ * that matters here: every field on this message needs a row in `net/party/entitle.js`, which is
+ * deny-by-default, so a fifth field is a fifth audience decision and a fifth thing that can be
+ * widened to `all` by somebody who has not read `runner-intel` RI10c. `kind` already has its row,
+ * already has a CLOSED value list, and `pinViolations` already refuses anything not on it. So the
+ * wire did not move: four fields, two of them numbers, one of them from a short list.
+ *
+ * D4's *"there is nowhere to put a second hop"* is therefore untouched — the list grew, the SHAPE
+ * did not, and a route still has nowhere to live.
+ *
+ * ⚠️ **`OBJECTIVE_KINDS` IS IMPORTED, NOT COPIED.** `objectives.js` owns the list because the
+ * chips, the say-line and the body's resolver all read it; a second copy here is the
+ * `episode-order` lesson (two machines, both gated, quietly disagreeing).
+ */
+export const PIN_KINDS = ['room', 'edge', ...OBJECTIVE_KINDS];
+/** Same 24-char cap `mansion.js` region ids live inside. A long id is a payload, not a room. */
+const PIN_ID_CAP = 24;
+
+export function pinViolations(msg) {
+  const bad = [];
+  if (!msg || typeof msg !== 'object') return ['<empty>'];
+  scanKeys(msg, PIN_WIRE_KEYS, 'pin', bad);
+  for (const k of ['x', 'z']) {
+    const v = Number(msg[k]);
+    // No range clamp: the house is generated and its extent is not this file's to know. Finite is
+    // the honest test, and an infinity or a NaN is what actually breaks a pathfinder.
+    if (!Number.isFinite(v)) bad.push(`pin.${k}=${msg[k]}`);
+  }
+  if (msg.kind != null && !PIN_KINDS.includes(msg.kind)) bad.push(`pin.kind=${msg.kind}`);
+  if (msg.roomId != null
+    && (typeof msg.roomId !== 'string' || msg.roomId.length > PIN_ID_CAP)) {
+    bad.push('pin.roomId');
+  }
+  return bad;
+}
+
+/** Exactly the four fields, or `null`. What `room.js` stores and what `entitle.js` has rows for. */
+export function pinWireShape(msg) {
+  if (!msg) return null;
+  if (pinViolations({ t: 'pin', x: msg.x, z: msg.z, roomId: msg.roomId, kind: msg.kind }).length) return null;
+  return {
+    x: Number(msg.x),
+    z: Number(msg.z),
+    roomId: String(msg.roomId ?? ''),
+    kind: PIN_KINDS.includes(msg.kind) ? msg.kind : 'room',
+  };
+}
 
 /**
  * 🧭 **THE STICK'S BEARING, AND THE MINUS SIGN IS THE WHOLE FUNCTION.**
@@ -1162,7 +1267,21 @@ export function moveViolations(msg) {
  */
 export const WORLD_KEYS = ['t', 'runner', 'hunter', 'mission', 'seq', 'view'];
 export const WORLD_SPOT_KEYS = ['room', 'x', 'z'];
-export const WORLD_MISSION_KEYS = ['phase', 'room', 'job', 'emptyNail', 'heard'];
+/**
+ * ⏱️ **`holdQuiet` / `holdRed` / `holdLongest` — three DURATIONS, and not one of them is a name.**
+ *
+ * John's lock 3: *"Good runner hides when it is red. Evil runner hides when it is quiet, or holds
+ * too long. Quiet-hide is the tell. Recap does not name whose thumb."* The tell has to reach the
+ * recap somehow, and the only process that knows a body stopped moving is the one rendering it.
+ *
+ * They are seconds, because seconds are what `runner-intel.js` `holdTell` turns into a sentence
+ * and a sentence is all the show is allowed to say. A COUNT would have been the tempting shape and
+ * is worse: "she hid four times" invites the room to ask which four, and the answer is a list of
+ * moments, which is a route through the night in a costume.
+ */
+export const WORLD_MISSION_KEYS = [
+  'phase', 'room', 'job', 'emptyNail', 'heard', 'holdQuiet', 'holdRed', 'holdLongest',
+];
 
 /** The mission's four states. `none` before it is placed; `done` when the runner is home. */
 export const MISSION_PHASES = ['none', 'seek', 'return', 'done'];
