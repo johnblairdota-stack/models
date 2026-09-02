@@ -1701,7 +1701,7 @@ export default async function partyHost({ params }) {
          * said anything at all. `executionLine`'s old `!result` fallback ("The vote is in.") was
          * covering that window, and deleting the duplicate deleted the cover with it.
          */
-        kicker: held?.held ? executionNextLine(episode) : 'Counting the ballot.', beat: 'execution',
+        kicker: client.lynchResult ? executionNextLine(episode) : 'Counting the ballot.', beat: 'execution',
         who: executed ? joinedName(names, executed, 'A player') : 'Nobody',
         whoSub: !held?.held ? 'counting' : (executed ? 'out' : 'no eviction'),
         whoId: executed,
@@ -1802,11 +1802,8 @@ export default async function partyHost({ params }) {
          * sent one"; this board is the answer to "what did they send", and it has nothing to say
          * until they have.
          */
-        body += castStage({
-          votes, names,
-          tiebreaks: castTiebreaks(votes, episode),
-          board: castBoard(client.lobby, votes, castWarm(), seatedLivingIds()),
-        });
+        body += castBoard(client.lobby, votes, castWarm(), seatedLivingIds());
+        body += castOverlay();
       }
       body += `<div class="actions">`;
       if (sendLeft != null) {
