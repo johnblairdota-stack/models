@@ -1,0 +1,69 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap');
+    body { margin: 0; background: #0d0d10; font-family: 'Space Grotesk', 'Segoe UI', system-ui, sans-serif; color: #e8e4dc; }
+    a { color: #f2c66d; } a:hover { color: #ffdb96; }
+    .mono { font-family: 'IBM Plex Mono', Consolas, monospace; }
+    .row { display: flex; gap: 14px; align-items: baseline; padding: 10px 0; border-bottom: 1px solid #1e1e24; }
+    .pass { color: #4fca6a; font-family: 'IBM Plex Mono', Consolas, monospace; font-size: 12px; flex: none; width: 44px; }
+  </style>
+</helmet>
+<div style="width: 1280px; min-height: 760px; background: #0d0d10; padding: 52px 64px; box-sizing: border-box; display: flex; flex-direction: column; gap: 26px;">
+
+  <div style="display: flex; align-items: baseline; gap: 18px;">
+    <div class="mono" style="font-size: 12px; letter-spacing: 0.18em; color: #f2c66d;">VERIFY · A DONE CARD CANNOT SKIP THIS</div>
+    <div style="flex: 1; height: 1px; background: #2a2a30;"></div>
+  </div>
+
+  <div style="display: flex; gap: 40px;">
+    <div style="flex: 1.2;">
+      <div style="font-size: 22px; font-weight: 700; margin-bottom: 14px;">The gate: <span class="mono" style="font-size: 19px; color: #f2c66d;">harness/hunter-door.mjs</span></div>
+      <div class="row"><div class="pass">D1</div><div style="font-size: 14.5px; line-height: 1.5; color: #d8d3c9;">Every role clip binds — a track naming a bone the skeleton lacks is RED, with both name lists printed.</div></div>
+      <div class="row"><div class="pass">D2</div><div style="font-size: 14.5px; line-height: 1.5; color: #d8d3c9;">Contact is measured — no <span class="mono" style="font-size:12.5px;">measured:</span> note, a 0.60-style placeholder, or &gt;0.03 s drift from a fresh forward-kinematics pass over the GLB is RED. The number cannot rot.</div></div>
+      <div class="row"><div class="pass">D3</div><div style="font-size: 14.5px; line-height: 1.5; color: #d8d3c9;">The pack path loads — the files <span class="mono" style="font-size:12.5px;">HUNTER_PACK</span> names exist, <span class="mono" style="font-size:12.5px;">?hunterm=1</span> is wired in game.js, the viewer is registered, PLAYHUNTER.bat passes the flag.</div></div>
+      <div class="row" style="border-bottom: none;"><div class="pass">D4</div><div style="font-size: 14.5px; line-height: 1.5; color: #d8d3c9;">The control must fail — the comparator is fed a deliberately wrong contact; if it accepts it, the whole run is RED. A gate that cannot fail is not verifying.</div></div>
+      <div style="margin-top: 18px; background: #16161b; border: 1px solid #26262d; border-radius: 3px; padding: 14px 18px;">
+        <div class="mono" style="font-size: 12.5px; color: #b9b4aa; line-height: 1.8;">
+          npm run gate:hunter-door<span style="color:#4fca6a;">&nbsp;&nbsp;# 14/14 green, 2026-09-02</span><br>
+          node harness/hunter-door.mjs --measure<span style="color:#8a857b;">&nbsp;&nbsp;# reprint fresh FK numbers</span><br>
+          npm run gates:party<span style="color:#8a857b;">&nbsp;&nbsp;# hunter-door now runs in the CI chain</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex: 1;">
+      <div style="font-size: 22px; font-weight: 700; margin-bottom: 14px;">The look verdict</div>
+      <div style="background: #16161b; border: 1px solid #26262d; border-left: 3px solid #ff2418; border-radius: 3px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px;">
+        <div class="mono" style="font-size: 11px; letter-spacing: 0.16em; color: #ff5d4d;">RRR-CRITIQUE · SILHOUETTE-IN-THE-DOOR</div>
+        <div style="font-size: 15px; line-height: 1.55; color: #d8d3c9;">
+          Judged against the locked spec (hero <span class="mono" style="font-size:12.5px;">1785288883855</span>,
+          turnaround <span class="mono" style="font-size:12.5px;">1785300149293</span>): the stand-in biped
+          <b style="color:#e8e4dc;">does not read as the stage-3 hunter and cannot</b> — two arms, one head,
+          no rider, no cracked mint caps. Motion and strike timing are the honest wins; the body is the gap.
+          Full verdict with captures: <span class="mono" style="font-size:12.5px;">hunter-door/VERDICT.md</span>.
+        </div>
+        <div class="mono" style="font-size: 11.5px; color: #8a857b;">Unblocks: a fresh Meshy generation + auto-rig of the stage-3 body. Until then ?hunterm=1 stays opt-in.</div>
+      </div>
+      <div style="margin-top: 18px; background: #16161b; border: 1px solid #26262d; border-radius: 3px; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px;">
+        <div class="mono" style="font-size: 11px; letter-spacing: 0.16em; color: #8a857b;">WHAT DID NOT CHANGE — BY DESIGN</div>
+        <div style="font-size: 14px; line-height: 1.6; color: #b9b4aa;">
+          No new camera. No new verb. Hunter stays a door. The AI's states, senses and clocks are untouched —
+          the only AI edit is a two-line <span class="mono" style="font-size:12px;">cueStrike</span> hook on the
+          existing strike clock. <span class="mono" style="font-size:12px;">PLAY.bat</span> stays procedural;
+          everything here is behind <span class="mono" style="font-size:12px;">?hunterm=1</span>.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
