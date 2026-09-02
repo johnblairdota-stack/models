@@ -25,6 +25,8 @@
     "gate:night-coupling": "node harness/night-coupling.mjs",
     "party:local": "node net/party/local.mjs",
     "night:board": "node harness/serve.mjs --dir night --port 5205",
+    "loop:board": "node harness/serve.mjs --dir loop-board --port 5209",
+    "loop:check": "node loop-board/check.mjs",
     "gate:vote-table": "node harness/vote-table.mjs",
     "gate:cast-ballot": "node harness/cast-ballot.mjs",
     "gate:win-machine": "node harness/win-machine.mjs",
