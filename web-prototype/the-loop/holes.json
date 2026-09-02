@@ -1,0 +1,83 @@
+{
+  "about": "THE LOOP's backend. One JSON file, no server. A LOOP is one drive of a live night plus one hostile-critic pass over its photographs. A HOLE is one thing the critic saw that the design did not promise. Every hole carries the same eight fields — id, episode, beat, tag, saw, expected, so, next — and harness/the-loop.mjs goes red if one is missing. A loop may only claim done when it QUOTES CHROME (verbatim text photographed off a screen) and both live ports were left parked: 5178 (vite dev) and 5181 (John's live room) are never bound, never bounced.",
+  "protected": ["dusk6", "barn5", "heat7", "barn6"],
+  "loops": [
+    {
+      "id": "dusk6",
+      "night": "overnight vote loop, closed out 2026-09-01",
+      "status": "done",
+      "chrome": [
+        "RENEWED",
+        "The season continues",
+        "Gus 4 | Fox 4"
+      ],
+      "parked": [5178, 5181],
+      "note": "Backfilled from the record (CLAUDE.md H277/H278, Couch Plan Rung 1-2). The exemplar loop: every finding below with a dusk6- id came out of it, each one anchored to chrome the run actually printed, and each is closed by a named gate. This record is protected - do not wipe it."
+    },
+    {
+      "id": "loop-1",
+      "night": "first drive under THE LOOP - not yet run",
+      "status": "open",
+      "chrome": [],
+      "parked": [5178, 5181],
+      "note": "The next live night. It drives its own room on its own port, photographs all nine screens, and hands them to the critic. It may not claim done until this record quotes what the chrome said."
+    }
+  ],
+  "holes": [
+    {
+      "id": "dusk6-h278",
+      "episode": 5,
+      "beat": "verdict",
+      "tag": "fold",
+      "saw": "At the cap, on a cameras/feed miss, the chrome printed RENEWED and 'The season continues' while the driver wrote CANCELLED.",
+      "expected": "A cap miss folds W5 / CANCELLED on both machines - the fold itself is never RENEWED at the cap on a miss.",
+      "so": "foldWin only fired when phase.CASTING carried an episode number, and live setPhase wrote {}.",
+      "next": "CLOSED - foldWin takes aired and reads cast.ballot. Gates: win-machine W11-W11d, party-night N17q.",
+      "closed": true
+    },
+    {
+      "id": "dusk6-tally",
+      "episode": 2,
+      "beat": "vote",
+      "tag": "scorekeeper",
+      "saw": "chromeTally read 'Gus 4 | Fox 4' while the receipt record read Cy voting Gus - the board and the ballots disagreed.",
+      "expected": "The board shows only receipted ballots. votesSent at send time is not a tally.",
+      "so": "_loop8 wrote votesSent when the tap left the phone, before any receipt came back.",
+      "next": "CLOSED - logger records receipts and t:'lynch' only. Gates: vote-table V10-V12.",
+      "closed": true
+    },
+    {
+      "id": "dusk6-strobe",
+      "episode": 1,
+      "beat": "reckoning",
+      "tag": "show-jump",
+      "saw": "The show walked reckoning to vote and back roughly 35 times in one episode.",
+      "expected": "A t:'show' jump that walks backwards along the talk chain stays on the later beat - it does not re-enter.",
+      "so": "The jump re-entered earlier beats instead of holding the later one.",
+      "next": "CLOSED - Couch Plan Rung 2. Gates: episode-order E7-E8.",
+      "closed": true
+    },
+    {
+      "id": "lobby-drop",
+      "episode": "any",
+      "beat": "any",
+      "tag": "desync",
+      "saw": "party-phone.js:344,465 still fall back to LOBBY on a late frame, so a seated phone can drop mid-beat.",
+      "expected": "A seated phone never falls back to LOBBY while the night is running.",
+      "so": "PRIME-TIME-STATE section 4's last live desync risk, and the night board's one OPEN phone card.",
+      "next": "WANTED - no gate holds this yet. A LOOP drive that photographs the drop is the instrument to build first.",
+      "closed": false
+    },
+    {
+      "id": "cam-target-split",
+      "episode": "any",
+      "beat": "verdict",
+      "tag": "undecided",
+      "saw": "COMPOSITION[8].cameras is 3 and WIN_TARGETS[8].cameraTarget is 4 - the running state counts against the first, foldWin decides against the second, and both files call theirs the win bar.",
+      "expected": "One number owns the win. The Verdict plate already reports the fold's number so it cannot drift.",
+      "so": "Known undecided in CLAUDE.md - it is John's call, not a refactor, and no loop may 'fix' it.",
+      "next": "Ask John which number is the season's bar. Until then this hole stays open on purpose.",
+      "closed": false
+    }
+  ]
+}

@@ -143,7 +143,7 @@ import { dirname, join } from 'node:path';
 
 const VOTE_SRC = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'src/party/vote.js'), 'utf8');
 
-const PORT = 5211;                      // 5209 belongs to `_audio1-mechcheck.mjs`
+const PORT = 5213;                      // 5209 belongs to `_audio1-mechcheck.mjs`, 5211 is THE LOOP board's (`npm run the-loop`)
 const PHONES = 7;
 /** The receipt's own type, in one place. The muffle keys off it; NR9c reddens if it moves. */
 const RECEIPT = 'nomOk';
