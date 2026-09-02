@@ -589,8 +589,37 @@ console.log('\n  the copy, and the two screens');
     'seek -> return -> done, unchanged');
   t('RI15c · the pad passes its own room in, and the two seats read different sources',
     /missionLine\(frame, frame\?\.you\?\.here \?\? null\)/.test(phoneSrc)
-    && /missionLine\(frame, scope\?\.hereId \?\? null\)/.test(phoneSrc),
+    && /missionLine\(frame, scope\?\.hereId \?\? null, 'scope'\)/.test(phoneSrc),
     'you.here for the runner, scope.hereId for the guide');
+
+  /*
+   * 🚨 **RI15d · AND RI15 ABOVE HAS BEEN GREEN ON A SCREEN THAT NEVER MOVED.** The lock is
+   * *"advance the seek line once she is in the mission room"*; `seekLine` does it, RI15 executes
+   * `seekLine`, and both were correct. But the line advances on `here`, `here` changes when a body
+   * walks through a doorway, and **that changes no term of the runner's structural stamp and was
+   * written by no branch of `patchLive`** — so the pad kept saying FIND THE GALLERY at somebody
+   * standing in the gallery for the whole run. The PHASE half worked (`missionPhase` IS in the
+   * stamp), which is exactly why it read as working.
+   *
+   * Third instance of one bug in one afternoon — the guide's chips (RI21), the runner's bearing
+   * (RI22), and this. **A gate on the FUNCTION is not a gate on the SCREEN**, and the three of them
+   * together are why RI21/RI22/RI15d all ask *"can this element change when the runner moves?"*
+   * rather than *"is the right value computed?"*.
+   */
+  const patchBody15 = codeOf(phoneSrc).slice(
+    codeOf(phoneSrc).indexOf('function patchLive'), codeOf(phoneSrc).indexOf('function mapNote'));
+  t('RI15d · ...and the SCREEN advances too — the line is re-read on the frames that move her',
+    /data-goal="\$\{from\}"/.test(phoneSrc)
+    && /\[data-goal\]/.test(patchBody15)
+    && /goalText\(frame, here\)/.test(patchBody15)
+    && /dataset\.goal === 'scope'/.test(patchBody15),
+    'one patch, two seats, each re-reading the room from the source its own element names');
+  t('RI15e control · the shipped `patchLive` never wrote it — the bug, run through the predicate',
+    !/\[data-goal\]/.test(`function patchLive(frame) {
+      const hereEl = root.querySelector('[data-here]');
+      if (hereEl) hereEl.textContent = hereLabel(frame?.you?.here);
+      return true; }`),
+    'FIND THE GALLERY, at somebody standing in the gallery, all run');
 }
 
 {

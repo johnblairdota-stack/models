@@ -930,7 +930,7 @@ export default async function partyPhone({ params }) {
             })}
           ${guidePinPad(scope)}
           <p class="hint gs-note ${hunterMark ? '' : 'gm-blind'}" data-gm-note>${esc(mapNote(jam, hunterMark))}</p>
-          ${missionLine(frame, scope?.hereId ?? null)}
+          ${missionLine(frame, scope?.hereId ?? null, 'scope')}
           ${guideJobPad(job, c.worldSeed, frame?.airingEpisode ?? 1)}
           <p class="hint gs-note">The TV does not get this map. Call the rooms out loud. Cameras live ${frame?.cameras?.unlocked ?? '—'}.</p>
           ${intelBlock(frame, { productionOnly: true })}
@@ -1560,14 +1560,38 @@ export default async function partyPhone({ params }) {
    * and the guide has `scope.hereId` off her own map. A seated watcher passes neither and gets
    * the unchanged line, which is correct — they are not in any room.
    */
-  function missionLine(frame, here = null) {
+  /**
+   * 🧭 **THE SEEK LINE'S WORDS. Split out because the line has to keep MOVING.**
+   *
+   * ⚠️ **`seekLine` HAS BEEN CORRECT AND THE SCREEN HAS BEEN WRONG SINCE IT SHIPPED.** John's lock
+   * is *"once the runner is in the mission room, advance the seek line (stop saying Find the
+   * gallery)"*, and `mission.js` `seekLine` does exactly that — `runner-intel` RI15 executes it and
+   * is green. But it advances on `here`, and `here` changes when a body walks through a doorway,
+   * which changes NO term of the runner's structural stamp and was written by no branch of
+   * `patchLive`. So the pad that told her to find the gallery kept telling her that while she stood
+   * in it, all run, on the one seat whose whole job is to be looking away at a television. The
+   * PHASE half worked, because `missionPhase` is in the stamp — which is exactly why nobody noticed.
+   *
+   * Third instance of one bug in one afternoon: the guide's chips (RI21), the runner's bearing
+   * (RI22), and this. A gate on the FUNCTION is not a gate on the SCREEN.
+   */
+  function goalText(frame, here = null) {
     const evs = state.client?.events ?? [];
     const last = [...evs].reverse().find((e) => String(e.type ?? '').startsWith('mission.'));
     const phase = last ? String(last.type).slice('mission.'.length) : 'seek';
-    const spec = missionFor(frame?.airingEpisode ?? 1);
-    return `<p class="goal">${esc(seekLine(spec, {
+    return seekLine(missionFor(frame?.airingEpisode ?? 1), {
       here, missionRoom: last?.data?.room ?? null, phase,
-    }))}</p>`;
+    });
+  }
+
+  /**
+   * `from` says where `patchLive` should re-read `here`: `you` is the runner's own room off the
+   * frame, `scope` is the guide's `neighbourScope().hereId`, which is the RUNNER's room seen from
+   * her map. Two seats, two sources, one line — and naming the source on the element is what lets
+   * one patch serve both without guessing which sheet it is looking at.
+   */
+  function missionLine(frame, here = null, from = 'you') {
+    return `<p class="goal" data-goal="${from}">${esc(goalText(frame, here))}</p>`;
   }
 
   /**
@@ -1688,6 +1712,20 @@ export default async function partyPhone({ params }) {
         if (cap) cap.textContent = bezelCap(bez);
         if (word) word.textContent = bezelWord(bez);
       }
+    }
+
+    /*
+     * 🧭 **THE SEEK LINE, RE-READ FROM WHEREVER THE ELEMENT SAYS ITS ROOM COMES FROM.** See
+     * `goalText`'s header: `seekLine` has always advanced correctly and the SCREEN never did,
+     * because `here` changes when a body walks through a doorway and no term of the runner's stamp
+     * does. `data-goal` names the source so one patch serves both sheets without guessing.
+     */
+    const goalEl = root.querySelector('[data-goal]');
+    if (goalEl) {
+      const here = goalEl.dataset.goal === 'scope'
+        ? (guideScopeFor(frame)?.hereId ?? null)
+        : (frame?.you?.here ?? null);
+      goalEl.textContent = goalText(frame, here);
     }
 
     const foot = root.querySelector('[data-foot-cue]');

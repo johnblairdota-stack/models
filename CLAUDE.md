@@ -84,7 +84,7 @@ decision, not a refactor.
   and no target, drawn as a mesh so the four-light rig did not grow; it is **not the hunter, and
   the hunter is still a door that is shut**. The clock keeps running while hidden. Every decision
   lives in `src/game/runner-intel.js`, which is pure and **imports nothing**, so a node gate
-  executes the shipped functions. Gate: `runner-intel` (102 checks), `party-warm` W26g/W26g2/W26g3.
+  executes the shipped functions. Gate: `runner-intel` (104 checks), `party-warm` W26g/W26g2/W26g3.
 - **The pin is on the wire at audience `crew`, and the TV is told it and may not draw it.**
   Stage 3 of `docs/slices/task-runner-intel.md`, landed 2026-09-01. `you.pin.{x,z,roomId,kind}`
   are `crew` rows — `all` would put the target's bearing on eight screens and delete the guide's
@@ -300,6 +300,30 @@ rebuild at 2 Hz would drop every drag in the game. `patchLive` rewrites `[data-b
 legal because it is `pointer-events:none` and holds no interactive element. **Two pads, one bug,
 opposite fixes, and the reason is that only one of them is holding a control.** Gate: `runner-intel`
 RI22–RI22e, same disjunction shape as RI21 so each pad may answer its own way.
+
+**And the SEEK LINE never advanced on the runner's pad, which is the lock itself** (2026-09-02,
+third instance of one bug in one afternoon). John's rule is *"once the runner is in the mission room,
+advance the seek line (stop saying Find the gallery)"*. `mission.js` `seekLine` does exactly that and
+`runner-intel` RI15 executes it — **both were correct.** But the line advances on `here`, `here`
+changes when a body walks through a doorway, and that changes **no term of the runner's structural
+stamp** and was written by **no branch of `patchLive`**. So the pad kept saying FIND THE GALLERY at
+somebody standing in the gallery, for the whole run, on the one seat whose whole job is to be
+looking away at a television. The PHASE half worked — `missionPhase` IS in the stamp — which is
+exactly why it read as working. `missionLine` now stamps its element with **where its room comes
+from** (`data-goal="you"` for the runner's own `you.here`, `"scope"` for the guide's
+`neighbourScope().hereId`) so one patch serves both sheets without guessing which it is looking at.
+Gate: `runner-intel` RI15d, with RI15e running the shipped `patchLive` through the same predicate.
+
+> 🚨 **The standing lesson from all three: A GATE ON THE FUNCTION IS NOT A GATE ON THE SCREEN.**
+> `seekLine`, `neighbourScope` and `bezelOf` were all correct, all executed by node gates, all
+> green — and all three were rendered once and never again. `party-phone.js`'s structural stamp is a
+> real and necessary optimisation (it exists because rebuilding the runner's sheet destroys `#stick`
+> and its `setPointerCapture` under a moving thumb), and its cost is that **every frame-dependent
+> element on an expedition sheet is frozen unless something explicitly keeps it alive.** So the
+> question to ask of any new element there is not *"is the right value computed?"* but **"when the
+> runner walks through a door, can this change?"** — and there are exactly two legal answers, a
+> stamp term or a `patchLive` branch, which is why RI15d, RI21 and RI22 are all written as that
+> disjunction rather than pinning one implementation.
 
 **A `const` arrow beside a helper that runs off a socket frame is a temporal dead zone, and this
 file billed it TWICE in one hour** (2026-09-02). `let scopeMemo` threw *"Cannot access 'ne' before
