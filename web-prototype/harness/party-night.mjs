@@ -26,6 +26,7 @@ import { ACCENTS, SHELLS, cleanLook } from '../src/party/look.js';
 import { applyCastLock, applyCastTap, ballotFromCast, CAST_BLOCK_WHY, castPrompt, castRowBlock, castRowMark, freshCast, mergePublicNames, nominationPlayers, publicName } from '../src/party/cast-ui.js';
 import { createRoom } from '../src/party/room.js';
 import { NO_ONE } from '../src/party/vote.js';
+import { accusationSpan } from '../src/game/accusation-stage.js';
 import { OUTCOME, outcomeLine } from '../src/party/win.js';
 
 /*
@@ -710,6 +711,7 @@ t('N13c · a refresh resumes the server show beat, not casting',
   t('N17e2 · second tap from the same nominator is ignored',
     night.game.state.nominations.length === 1);
 
+  await sleep(Math.ceil(accusationSpan() * 1000) + 40);
   b.send({ t: 'nominate', target: nomA });
   await sleep(40);
   t('N17f · two living players spending both noms closes Reckoning early → Vote',
