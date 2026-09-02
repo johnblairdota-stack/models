@@ -1,0 +1,68 @@
+[
+  {
+    "id": "spec-camera-lag",
+    "title": "Camera spec lag — party-loop.md still sells phone first-person",
+    "confidence": "verified",
+    "lane": "verify",
+    "route": "spec",
+    "owner": "Project Lead",
+    "check": "spec-camera-lag",
+    "pitch": "Locked rule D13: the phone is a controller, never a viewport — the runner's view lives on the TV. But party-loop.md, the file that says \"this file wins for the party game\", still lists \"Phone first-person + touch\" in its Build-new list. Anyone who obeys the spec's own supremacy clause rebuilds the phone viewport that was built in #29 and removed in #30. This is a spec edit, not code — Project Lead only.",
+    "evidence": [
+      "docs/design/party-loop.md:41 — \"Phone first-person + touch. Private guide flyover.\"",
+      "docs/design/party-loop.md:5 — \"this file wins for the party game\"",
+      "docs/design/rrr-social-deception-mode.md:24 — D13 explicitly overrides that line",
+      "CLAUDE.md locked rules — D13, ratified by John 2026-08-19"
+    ],
+    "doneMeans": "Backend greps party-loop.md: the phone-first-person line is gone AND the doc cites D13. Deleting the line without citing D13 still fails."
+  },
+  {
+    "id": "verdict-rail-lie",
+    "title": "Verdict is on the TV rail but never airs",
+    "confidence": "verified",
+    "lane": "route",
+    "route": "spec",
+    "owner": "Project Lead",
+    "check": "verdict-on-wire",
+    "pitch": "RUNDOWN_BEATS shows Verdict on the rail every night; SHOW_BEATS has no verdict beat, and Execution walks straight back to Casting. Staged, not broken — episode-order's WIRE_MISSING names it — but it is a product decision, not a refactor: grow the wire to Verdict, or take it off the rail. Project Lead decides; Game wires whichever way.",
+    "evidence": [
+      "src/party/show.js:16 — SHOW_BEATS ends at execution",
+      "src/party/show.js:23 — \"the wire has not grown it yet\"",
+      "harness/episode-order.mjs:33 — WIRE_MISSING = [PHASE.VERDICT]",
+      "docs/design/PRIME-TIME-STATE.md §7 item 5 — \"Decide Verdict\""
+    ],
+    "doneMeans": "Backend live-imports src/party/show.js: verdict is in SHOW_BEATS, or verdict is off RUNDOWN_BEATS. Either decision closes it; the mismatch cannot."
+  },
+  {
+    "id": "smash-target-unguarded",
+    "title": "Smash-target visibility has no gate",
+    "confidence": "verified",
+    "lane": "route",
+    "route": "critic",
+    "owner": "Play Critic",
+    "check": "smash-target-gate",
+    "pitch": "\"The painting was behind the furniture\" was found live and fixed by hand. Nothing asserts a mission target is visible or reachable, so it can silently come back — CLAUDE.md names it the last live-found bug class with no regression net. House rule: a playtest finding is not finished until it is a gate. Play Critic writes it; it joins the gates:party chain.",
+    "evidence": [
+      "CLAUDE.md — \"Known unguarded: smash-target visibility\"",
+      "docs/design/PRIME-TIME-STATE.md:102 — 🚨 unguarded",
+      "package.json gates:party — 26 gates in the chain, none match smash/target"
+    ],
+    "doneMeans": "Backend requires a harness/*smash*|*target*.mjs gate that is (1) named in the gates:party chain, (2) on disk, and (3) exits 0 when actually spawned."
+  },
+  {
+    "id": "host-beat-desync",
+    "title": "HUNCH — optimistic host beat can strand the TV",
+    "confidence": "hunch",
+    "lane": "pitch",
+    "route": null,
+    "owner": "",
+    "check": null,
+    "pitch": "party-host.js:534/:549 set ui.beat locally before the server fans out; if t:'episode' early-returns (local.mjs:813), the TV sits locked on Expedition while every phone stays on Casting, with no recovery path. Documented from code reading in PRIME-TIME-STATE §4 — never reproduced at a table, so it stays a hunch. No backend check is registered, so this card cannot reach Done. That is the point of the board.",
+    "evidence": [
+      "src/views/party-host.js:534, :549 — optimistic ui.beat",
+      "net/party/local.mjs:813 — the early return",
+      "docs/design/PRIME-TIME-STATE.md §4 — \"most likely to bite in a real session\""
+    ],
+    "doneMeans": "Not defined yet. First: reproduce it (Play Critic) or refute it. Then a gate, then a check, then Done."
+  }
+]
