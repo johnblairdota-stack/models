@@ -28,7 +28,14 @@ import { createRoom } from '../src/party/room.js';
 import { NO_ONE } from '../src/party/vote.js';
 import { OUTCOME, outcomeLine } from '../src/party/win.js';
 
-const PORT = 5198;
+/*
+ * ⚠️ PORT CLUSTER 5222–5225 (PORT, +1, +2, +3). Was 5198–5201: PORT+1 hit 5199, where The Desk
+ * (`desk/server.mjs`, its own worktree) lives on John's machine. A gate that binds a live
+ * product's port fails EADDRINUSE locally while CI stays green — found 2026-09-02 when the
+ * whole chain died at N6d. The night board (`npm run night:board`) holds 5205 for the same
+ * reason: nothing else may sit inside a live product's cluster.
+ */
+const PORT = 5222;
 let pass = 0, fail = 0;
 const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' · ' + d : ''}`); } else { fail++; console.log(`  FAIL ${n}${d ? ' · ' + d : ''}`); } return c; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

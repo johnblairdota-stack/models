@@ -32,12 +32,13 @@
 import { MOVE, HUNTER_SENSE, HUNTER_SPEED } from '../game/rules.js';
 
 /**
- * 🎚️ THE THROTTLE DETENTS — the runner's dual-use verb under D13.
+ * 🎚️ THE SPEED DETENTS — the noise model's fixed points, no longer a verb.
  *
- * With the first-person view on the TV the runner has no private information, so the throttle is
- * their only lever: choosing RUN while the Hunter is close is loud, on camera, and completely
- * deniable as panic. `rrr-phone-ux.md` draws the noise ring around the stick so picking a speed
- * teaches `HUNTER_SENSE` without a word of tutorial.
+ * The stick stopped being move on 2026-09-01: the body AUTO-WALKS the guide's pin one door at a
+ * time and the thumb is a lateral dodge only (`src/game/runner-intel.js` `dodgeLateral`), so no
+ * thumb selects a detent any more — and the TV picture is a produced follow, never first-person.
+ * The table stays because `harness/dark-run.mjs` imports `DETENT` and gates the noise maths:
+ * these speeds are what the hunter-sense curves and the silent-band proof are measured against.
  */
 export const DETENT = [
   { name: 'STILL',  speed: 0 },
@@ -67,10 +68,11 @@ export const SILENT_SPEED = HUNTER_SENSE.hearFloor * MOVE.run;
  * and change. Silence would then be a winning strategy and Task Contract **T4** would be
  * violated: *"success should require some noise, so silence is not a strategy."*
  *
- * The detented stick has no notch in that band. STILL is silent and goes nowhere; CREEP is the
+ * The detented table has no notch in that band. STILL is silent and goes nowhere; CREEP is the
  * slowest thing that moves and is already audible at 2.42 m. **The exploit is unreachable, not
- * patched.** `dark-run` D4 asserts both halves — that the band exists on a continuous stick, and
- * that no detent lands in it.
+ * patched** — and since 2026-09-01 it is doubly so: no thumb picks a speed at all, because the
+ * body auto-walks the guide's pin and the stick is a lateral dodge. `dark-run` D4 asserts both
+ * halves — that the band exists on a continuous control, and that no detent lands in it.
  */
 export const silentCrossing = (seconds) => SILENT_SPEED * seconds;
 

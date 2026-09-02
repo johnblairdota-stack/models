@@ -865,9 +865,11 @@ export function warmLabel(stage) {
 /**
  * 🕹️ **THE PAD — what a runner's phone may say about its own thumbs, and nothing else.**
  *
- * `party-loop.md` line 21 makes the runner a first-person body in dark corridors; D13 shipped a
- * four-button throttle that the phone did not even send. This is the wire for a real stick, and it
- * is deliberately a STICK and not a POSITION: the phone says where its thumb is, the TV owns where
+ * History: `party-loop.md` line 21 once made the runner a first-person body in dark corridors,
+ * and D13 shipped a four-button throttle the phone did not even send. Both are amended — the body
+ * AUTO-WALKS the guide's pin, the stick is a lateral dodge only, and the TV picture is a produced
+ * follow (`expedition-spec` guards the docs). What survives unchanged is the wire's shape: it is
+ * deliberately a STICK and not a POSITION — the phone says where its thumb is, the TV owns where
  * the body ends up. A phone that could post a position could post any position.
  */
 /**
