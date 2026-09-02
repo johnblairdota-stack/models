@@ -1,12 +1,11 @@
 # The Hunter in the Door — design board + art path
 
 **Open the board:** `npm run hunter-door` opens a server; go to **http://localhost:5207**.
-(Port 5207 on purpose — 5199 is The Desk, 5205 is The Night.) The board is one screen:
-Pitch → Build (silhouette / bind / contact) → Verify. Every claim on it names its gate.
+(Port 5207 on purpose — 5199 is The Desk, 5205 is The Night.) `/` is the tabbed viewer
+(`view.html`: Pitch / Build / Verify, hash routed, no Fable). `/canvas` is the old
+Fable file and needs `support.js` / React that are not in git — do not make it `/`.
 
-The board file is `the-hunter-in-the-door.html` (a design canvas — pan/zoom, per-artboard
-PNG/PDF export). The three `*.dc.html` files beside it are the artboard sources; edit those
-and re-seed rather than editing the big file.
+The three `*.dc.html` files are the artboard sources the tabbed viewer reuses.
 
 ## Run the verify
 

@@ -5,6 +5,10 @@
  *
  * Port 5207 ON PURPOSE: 5199 is The Desk, 5205 is The Night — this board must never
  * collide with either. Serves only this folder; no game code, no party server.
+ *
+ * `/` is the self-contained tabbed viewer (`view.html`) — Pitch / Build / Verify,
+ * no Fable, no support.js, no React. The Fable canvas lives at `/canvas` and needs
+ * files that are not in git; do not make it the default again.
  */
 import http from 'node:http';
 import fs from 'node:fs';
@@ -13,11 +17,19 @@ import { fileURLToPath } from 'node:url';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const PORT = 5207;
-const TYPES = { '.html': 'text/html', '.md': 'text/plain; charset=utf-8', '.json': 'application/json', '.png': 'image/png' };
+const TYPES = {
+  '.html': 'text/html',
+  '.md': 'text/plain; charset=utf-8',
+  '.json': 'application/json',
+  '.png': 'image/png',
+  '.js': 'text/javascript; charset=utf-8',
+};
 
 http.createServer((req, res) => {
   const rel = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  const file = rel === '/' ? 'the-hunter-in-the-door.html' : rel.slice(1);
+  const file = rel === '/' ? 'view.html'
+    : rel === '/canvas' ? 'the-hunter-in-the-door.html'
+    : rel.slice(1);
   const full = path.join(DIR, file);
   if (!full.startsWith(DIR) || !fs.existsSync(full) || fs.statSync(full).isDirectory()) {
     res.writeHead(404); res.end('not here — the board is at /'); return;

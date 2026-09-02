@@ -257,6 +257,25 @@ if (/Copy the Meshy hunter pack/.test(src('public/models/anim/hunter/README.md')
   ok('D3', 'pack README names walking.glb and says gitignored');
 } else bad('D3', 'public/models/anim/hunter/README.md does not tell you to copy the Documents pack');
 
+const serveSrc = src('hunter-door/serve.mjs');
+if (/rel === '\/' \? 'view\.html'/.test(serveSrc)) ok('D3', 'serve.mjs / is view.html (tabbed board)');
+else bad('D3', 'serve.mjs must serve view.html at / — the Fable canvas 404s support.js');
+if (/rel === '\/canvas' \? 'the-hunter-in-the-door\.html'/.test(serveSrc)) ok('D3', 'serve.mjs /canvas keeps the Fable file');
+else bad('D3', 'serve.mjs must keep the Fable canvas at /canvas');
+if (/['"]\.js['"]\s*:/.test(serveSrc)) ok('D3', 'serve.mjs MIME map includes .js');
+else bad('D3', 'serve.mjs TYPES must include .js');
+const viewHtml = src('hunter-door/view.html');
+const viewCode = codeOf(viewHtml);
+if (/support\.js/.test(viewCode) || /react\.js/.test(viewCode) || /<x-dc>/.test(viewHtml)) {
+  bad('D3', 'view.html must not load support.js / React or wrap in <x-dc>');
+} else if (!/#pitch/.test(viewHtml) || !/#build/.test(viewHtml) || !/#verify/.test(viewHtml)) {
+  bad('D3', 'view.html must hash-route #pitch #build #verify');
+} else if (!/1\.100/.test(viewHtml) || !/0\.679/.test(viewHtml) || !/walking\.glb/.test(viewHtml)) {
+  bad('D3', 'view.html must carry measured contact 1.100 / 0.679 and walking.glb');
+} else if (!/extra-arm/.test(viewHtml)) {
+  bad('D3', 'view.html must name the extra-arm FINDING');
+} else ok('D3', 'view.html is the self-contained Pitch/Build/Verify board');
+
 // Lumi contact ban is a SOURCE check — independent of pack presence
 for (const s of swings) {
   if (LUMI_CONTACTS.some((n) => Math.abs(s.contact - n) < 1e-9)) {
