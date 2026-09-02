@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>THE LOOP — playtest · critic · hole · gate</title>
+<style>
+  :root {
+    --bg: #0b0d12; --panel: #12151d; --card: #171b25; --line: #262c3a;
+    --ink: #e8ebf2; --dim: #8b93a7; --gold: #f2c14e; --green: #4ecf7a;
+    --red: #e2564e; --blue: #5aa7e8; --mono: "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, "Segoe UI", sans-serif; padding: 22px 26px 40px; }
+  header { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; border-bottom: 2px solid var(--gold); padding-bottom: 12px; }
+  h1 { font-size: 26px; letter-spacing: 3px; }
+  h1 em { color: var(--gold); font-style: normal; }
+  .strap { color: var(--dim); max-width: 66ch; }
+  .tally { margin-left: auto; font-family: var(--mono); font-size: 13px; color: var(--dim); }
+  .tally b.g { color: var(--green); } .tally b.o { color: var(--blue); } .tally b.f { color: var(--red); }
+
+  section { margin-top: 22px; }
+  h2 { font-size: 13px; letter-spacing: 4px; color: var(--gold); text-transform: uppercase; margin-bottom: 10px; }
+  h2 small { color: var(--dim); letter-spacing: 0; text-transform: none; font-weight: 400; margin-left: 10px; }
+
+  .pitch { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--gold); padding: 14px 18px; max-width: 110ch; }
+  .pitch p + p { margin-top: 8px; }
+  .pitch .rule { color: var(--gold); font-weight: 600; }
+
+  .row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; position: relative; }
+  .card h3 { font-size: 14px; margin-bottom: 4px; padding-right: 64px; font-family: var(--mono); }
+  .card p { color: var(--dim); font-size: 13px; }
+  .card .gate { margin-top: 8px; font-family: var(--mono); font-size: 12px; color: var(--blue); }
+  .card .gate::before { content: "next · "; color: var(--dim); }
+  .card::after { position: absolute; top: 9px; right: 10px; font-family: var(--mono); font-size: 11px; letter-spacing: 1px; }
+  .card[data-status="done"]::after { content: "DONE"; color: var(--green); }
+  .card[data-status="closed"]::after { content: "CLOSED"; color: var(--green); }
+  .card[data-status="open"]::after { content: "OPEN"; color: var(--blue); }
+  .card[data-status="undecided"]::after { content: "JOHN"; color: var(--red); }
+  .card[data-status="done"], .card[data-status="closed"] { border-left: 3px solid var(--green); }
+  .card[data-status="open"] { border-left: 3px solid var(--blue); }
+  .card[data-status="undecided"] { border-left: 3px solid var(--red); }
+  .card .meta { font-family: var(--mono); font-size: 11px; color: var(--gold); margin-bottom: 6px; }
+  .card .field { margin-top: 5px; font-size: 13px; }
+  .card .field b { color: var(--ink); font-weight: 600; font-size: 11px; letter-spacing: 1px; font-family: var(--mono); }
+  .chrome { margin-top: 8px; font-family: var(--mono); font-size: 12px; color: var(--gold); }
+  .chrome q { quotes: "\201C" "\201D"; }
+  .verify { background: var(--panel); border: 1px solid var(--line); padding: 14px 18px; }
+  code { font-family: var(--mono); font-size: 13px; color: var(--gold); background: #0e1118; padding: 1px 6px; border-radius: 4px; }
+  .guards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  @media (max-width: 1200px) { .row, .guards { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>THE <em>LOOP</em></h1>
+  <p class="strap">Drive a live night. Photograph every screen. Hand the photographs to a hostile
+  critic. The critic files HOLES — never fixes, never praise. A hole becomes a fix, a fix becomes
+  a gate, and the loop runs again. The backend is one file: <code>holes.json</code>, eight fields
+  per hole, checked by a gate that reads this very board.</p>
+  <p class="tally" id="tally">loading holes.json…</p>
+</header>
+
+<section>
+  <h2>Pitch <small>why a loop, not another playtest transcript</small></h2>
+  <div class="pitch">
+    <p>Five agents' findings were lost in August because they lived in transcripts. The repo's
+    standing rule — <em>a playtest finding is not finished until it is a gate</em> — has a missing
+    first half: a finding is not FILED until it is a hole with a shape a machine can check. THE
+    LOOP is that shape. One drive, one critic pass, one <code>holes.json</code> entry per finding:
+    <b>id · episode · beat · tag · saw · expected · so · next</b>. The critic is hostile on
+    purpose — it quotes what the screen SAID, not what the code meant.</p>
+    <p class="rule">DONE has one definition: the loop record quotes chrome — verbatim text
+    photographed off a screen, like <q>Gus 4 | Fox 4</q> — and both live ports were left parked:
+    5178 (vite dev) and 5181 (John's live room) are never bound and never bounced.
+    <code>harness/the-loop.mjs</code> goes red on a hole missing a field and on a loop that
+    claims done without quoting chrome.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Guardrails <small>standing rules of every loop — the gate holds the mechanical half</small></h2>
+  <div class="guards">
+    <article class="card" data-status="done">
+      <h3>Park 5178 · never bounce 5181</h3>
+      <p>A loop drives its own room on its own port. The dev server and John's live room are not
+      test rigs. A done loop's record says both stayed parked.</p>
+      <p class="gate">the-loop.mjs LP3b</p>
+    </article>
+    <article class="card" data-status="done">
+      <h3>Do not wipe the record</h3>
+      <p>dusk6 · barn5 · heat7 · barn6 are protected playtest records. A loop appends; it never
+      rewrites history to make itself green.</p>
+      <p class="gate">the-loop.mjs LP4</p>
+    </article>
+    <article class="card" data-status="done">
+      <h3>Do not restage Shot A/B/C</h3>
+      <p>The pair-lock sendoff shots are settled (PR #71). The critic reviews the night as it
+      runs, not re-poses of arguments already won.</p>
+      <p class="gate">stated here · PR #71 is the record</p>
+    </article>
+    <article class="card" data-status="done">
+      <h3>Holes, not fixes</h3>
+      <p>The critic's output is a hole with eight fields. What to do about it is <b>next</b> — one
+      line, often "ask John". An undecided hole stays open on purpose.</p>
+      <p class="gate">the-loop.mjs LP2</p>
+    </article>
+  </div>
+</section>
+
+<section>
+  <h2>Loops <small>rendered live from holes.json — this list IS the backend</small></h2>
+  <div class="row" id="loops"></div>
+</section>
+
+<section>
+  <h2>Holes <small>eight fields each, or the gate is red</small></h2>
+  <div class="row" id="holes"></div>
+</section>
+
+<section>
+  <h2>Verify <small>we always verify — a done loop cannot skip it</small></h2>
+  <div class="verify">
+    <p><code>npm run gate:the-loop</code> — schema, done-quotes-chrome, parked ports, this board ·
+       <code>npm run gates:party</code> — the full chain, the-loop included ·
+       board: <code>npm run the-loop</code> → <code>localhost:5211</code>
+       (never 5199 The Desk · 5205 night board · 5207 · 5209).</p>
+  </div>
+</section>
+
+<script>
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  fetch('holes.json').then((r) => r.json()).then((data) => {
+    const loops = document.getElementById('loops');
+    loops.innerHTML = data.loops.map((l) => `
+      <article class="card" data-status="${esc(l.status)}">
+        <h3>${esc(l.id)}</h3>
+        <p class="meta">${esc(l.night)} · parked ${l.parked.join(' + ')}</p>
+        <p>${esc(l.note)}</p>
+        <p class="chrome">${l.chrome.length ? 'chrome said: ' + l.chrome.map((c) => '<q>' + esc(c) + '</q>').join(' · ') : 'no chrome quoted yet — may not claim done'}</p>
+      </article>`).join('');
+    const holes = document.getElementById('holes');
+    holes.innerHTML = data.holes.map((h) => `
+      <article class="card" data-status="${h.closed ? 'closed' : (h.tag === 'undecided' ? 'undecided' : 'open')}">
+        <h3>${esc(h.id)}</h3>
+        <p class="meta">ep ${esc(h.episode)} · ${esc(h.beat)} · ${esc(h.tag)}</p>
+        <p class="field"><b>SAW</b> ${esc(h.saw)}</p>
+        <p class="field"><b>EXPECTED</b> ${esc(h.expected)}</p>
+        <p class="field"><b>SO</b> ${esc(h.so)}</p>
+        <p class="gate">${esc(h.next)}</p>
+      </article>`).join('');
+    const open = data.holes.filter((h) => !h.closed).length;
+    const closed = data.holes.length - open;
+    const done = data.loops.filter((l) => l.status === 'done').length;
+    document.getElementById('tally').innerHTML =
+      `<b class="g">${done} loop${done === 1 ? '' : 's'} done</b> · <b class="g">${closed} holes closed</b> · <b class="o">${open} open</b>`;
+  }).catch(() => {
+    document.getElementById('tally').textContent = 'holes.json failed to load — serve this board, do not file:// it';
+  });
+</script>
+</body>
+</html>
