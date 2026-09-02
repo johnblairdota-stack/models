@@ -29,6 +29,7 @@ import {
   stepLastLook, lastLookLive, lastLookOnAir,
   wreckPose, chairTopple, chairEyeline, seatedAim,
   wreckLook, wreckCam, talkCycleShots, talkShotAt, WRECK_SHOT, WRECK_LOOK_Y, WRECK_EYE_Y,
+  execLingerCam, lingerBeat, LINGER_TOTAL_S, LINGER_CRIME_S, LINGER_ORBIT_S, LINGER_GROUP_S,
   isFaceScreenName,
 } from '../src/game/execute-hit.js';
 import { liveTexture, dropDeadMaps, paintViewFail } from '../src/party/follow.js';
@@ -479,6 +480,78 @@ t('H10 · seatedAim is a visor-height torso when Head is missing',
     && !/roughness \+ 0\.38/.test(smashFn)
     && !/setLimbVisible/.test(smashFn)
     && /dropDeadMaps/.test(smashFn));
+}
+
+{
+  /*
+   * CAST 8-bot: after contact the TV sat ~10s on the nominator's rear (fillExecuteEye)
+   * and executed bodies vanished. Spec linger is 5.00 — crime 1.50, orbit 1.50, group
+   * 2.00 — wreckCam's class, not a CUE_KIND. Striker parkSits during GROUP. Wreckage
+   * outranks heldRunner hide. Victim stays wreckPose u=1. WRECK_SHOT.dur stays 0.
+   */
+  const kinds = followSrc.match(/export const CUE_KINDS = \[([^\]]+)\]/)?.[1] || '';
+  t('H17 · linger totals 5.00 after contact — crime 1.50, orbit 1.50, group 2.00',
+    LINGER_TOTAL_S === 5.00
+    && LINGER_CRIME_S === 1.50 && LINGER_ORBIT_S === 1.50 && LINGER_GROUP_S === 2.00
+    && Math.abs(LINGER_CRIME_S + LINGER_ORBIT_S + LINGER_GROUP_S - LINGER_TOTAL_S) < 1e-9
+    && lingerBeat(0) === 'crime'
+    && lingerBeat(1.49) === 'crime'
+    && lingerBeat(1.50) === 'orbit'
+    && lingerBeat(3.00) === 'group'
+    && lingerBeat(5.00) === 'group'
+    && WRECK_HOLD_S === 0.50
+    && WRECK_SHOT.dur === 0
+    && WRECK_SHOT.dur < 10,
+    `${LINGER_CRIME_S}+${LINGER_ORBIT_S}+${LINGER_GROUP_S}=${LINGER_TOTAL_S}`);
+
+  const sitAt = { x: 3, y: 0, z: 0 };
+  const body = wreckPose({ sitAt, face: 0, u: 1, cx: 0, cz: 0, floorY: 0 });
+  const chair = chairTopple({ seat: { x: 3, y: 0, z: 0, rotY: 0 }, u: 1, cx: 0, cz: 0 });
+  const crime = execLingerCam({ body, chair, cx: 0, cz: 0, floorY: 0, elapsed: 0 });
+  const crimeEnd = execLingerCam({ body, chair, cx: 0, cz: 0, floorY: 0, elapsed: 1.49 });
+  const orbit = execLingerCam({ body, chair, cx: 0, cz: 0, floorY: 0, elapsed: 2.0 });
+  const group = execLingerCam({
+    body, chair, cx: 0, cz: 0, floorY: 0, elapsed: 4.0,
+    living: [{ x: -2, z: 0 }, { x: 0, z: -2 }],
+  });
+  t('H17b · crime looks at the floor wreck; orbit moves; group leaves the nominator rear',
+    crime.beat === 'crime' && crime.look.y > WRECK_LOOK_Y
+    && Math.abs(crimeEnd.look.y - WRECK_LOOK_Y) < 0.02
+    && body.y === 0
+    && orbit.beat === 'orbit'
+    && Math.hypot(orbit.eye.x - crimeEnd.eye.x, orbit.eye.z - crimeEnd.eye.z) > 0.2
+    && group.beat === 'group'
+    && group.look.y > WRECK_LOOK_Y,
+    `crime look.y=${crime.look.y} → ${crimeEnd.look.y} · group look.y=${group.look.y}`);
+
+  t('H17c · after contact the bed drives execLingerCam, not fillExecuteEye',
+    /function fillLingerEye/.test(introSrc)
+    && /execLingerCam\(/.test(introSrc)
+    && /if \(exec\.hit\)/.test(introSrc)
+    && /fillLingerEye\(\)/.test(introSrc)
+    && /lingerBeat\(elapsed\) === 'group'/.test(introSrc)
+    && /strikerSat/.test(introSrc)
+    && /unmountProp/.test(introSrc)
+    && /parkSit\(exec\.swinger\)/.test(introSrc));
+
+  const driveFn = introSrc.slice(
+    introSrc.indexOf('function driveOne'),
+    introSrc.indexOf('function driveOne') + 1200,
+  );
+  t('H17d · wreckage is never hidden — wrecked outranks heldRunner',
+    driveFn.indexOf('if (r.wrecked)') >= 0
+    && driveFn.indexOf('if (r.wrecked)') < driveFn.indexOf('heldRunner != null')
+    && /body\.root\.visible = true/.test(driveFn.slice(
+      driveFn.indexOf('if (r.wrecked)'),
+      driveFn.indexOf('if (r.wrecked)') + 160,
+    )));
+
+  t('H17e · no new CUE_KIND; WRECK_SHOT.dur is not a 10s plate',
+    kinds.replace(/\s+/g, '') === "'intros','run','move','shot','idle','noms','pair','execute','pin'"
+    && WRECK_SHOT.dur === 0
+    && WRECK_SHOT.dur < 10
+    && !/linger/.test(kinds)
+    && !/execLinger/.test(kinds));
 }
 
 if (fail) {

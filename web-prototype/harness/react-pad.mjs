@@ -216,6 +216,41 @@ const OK = { reaction: 'CLAP', beat: 'expedition', alive: true, lastAt: null, no
     && /--dy:0px/.test(skinSrc)
     && !/\.react-chip \{[^}]*animation:\s*night-rise/.test(skinSrc)
     && /@keyframes night-rise/.test(skinSrc));
+
+  const lookSrc = await readFile(new URL('../src/party/look.js', import.meta.url), 'utf8');
+  const { mergePublicNames, publicName } = await import('../src/party/cast-ui.js');
+  const { playerName } = await import('../src/party/night-skin.js');
+  const named = mergePublicNames(
+    [{ id: 'p1', name: 'Ada' }],
+    { seats: [{ playerId: 'p1', name: 'Ada', isTV: false }] },
+  );
+  const who = publicName(playerName(named, 'p1'), 'p1', 'Someone');
+  const leaky = mergePublicNames(
+    { seats: [{ playerId: 'p1', name: 'Ada' }] },
+    { pairs: [] },
+  );
+  t('R70 · a seated name is never Someone — mergePublicNames(frame.players, lobby)',
+    who === 'Ada'
+    && /mergePublicNames\(client\.frame\?\.players, client\.lobby\)/.test(hostSrc)
+    && !/mergePublicNames\(client\.lobby, client\.links/.test(hostSrc)
+    && publicName(playerName(leaky, 'p1'), 'p1', 'Someone') === 'Someone',
+    `who="${who}" · leaky control is Someone`);
+
+  t('R70b · react-who uses the seat accent, not night-soft alone',
+    /react-who" style="color:\$\{esc\(look\.accent\)\}/.test(hostSrc)
+    && /--react-accent/.test(hostSrc)
+    && /color:var\(--react-accent, var\(--night-soft\)\)/.test(skinSrc)
+    && !/\.react-chip \.react-who \{[^}]*color:var\(--night-soft\);/.test(skinSrc));
+
+  t('R70c · the 26% full-height cast-overlay column is gone; votes fade like emotes',
+    !/\.cast-overlay \{[^}]*width:clamp\(230px, 26%/.test(lookSrc)
+    && !/inset:0 0 0 auto; width:clamp\(230px, 26%/.test(lookSrc)
+    && /data-cast-votes/.test(hostSrc)
+    && /function paintVotePopups/.test(hostSrc)
+    && /cast-vote-chip/.test(hostSrc)
+    && /m\.t === 'ballots'/.test(hostSrc)
+    && /paintVotePopups\(\)/.test(hostSrc)
+    && !/class="cast-overlay"/.test(hostSrc));
 }
 
 // ---------------------------------------------------------------- R50 · the faces

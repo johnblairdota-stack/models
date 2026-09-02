@@ -33,7 +33,6 @@ import { deadIdsFromPublic, describeCastTiebreaks, livingFromPublic, previewCast
 import { MAX_PAIRS, pairShape } from '../party/link.js';
 import { missionFor } from '../party/mission.js';
 import { FAIL_CHROME, JOB, SMASH_CHROME, toolLabel } from '../party/jobs.js';
-import { EPISODE_CAP } from '../party/phases.js';
 import { isStinging, stepSting, stingHtml } from '../party/stinger.js';
 
 /** TV chrome 3·2·1 after every living ballot (or the 20s backstop), then `{ t: 'episode' }`. */
@@ -244,6 +243,9 @@ export default async function partyHost({ params }) {
     reunionKey: '',
     /** Live reaction chips, keyed per EVENT so a 2 Hz world tick cannot remount the rise. */
     reactKey: '',
+    /** Casting vote popups, same hold/fade as emotes. Patched, never a 26% column. */
+    voteKey: '',
+    votePops: [],
     nomsKey: '',
     execKey: '',
     /** Refusals still on air. Transient — an event, not a fact. See REFUSAL_HOLD_MS. */
@@ -394,6 +396,19 @@ export default async function partyHost({ params }) {
        * Both patch in place. Gate: `react-pad` R42c.
        */
       if (m.t === 'react') { paintReactStrip(); return; }
+      if (m.t === 'ballots') {
+        /*
+         * Casting votes fade like emotes. paint() rewrites root.innerHTML and would
+         * restart react-float / remount the follow plate. Patch the popups (and lamps)
+         * in place. Gate: react-pad R70 / cast-ballot B15.
+         */
+        if (ui.beat === 'casting') {
+          paintVotePopups();
+          paintCastLamps();
+          maybeArmFromBackstop();
+          return;
+        }
+      }
       if (prevBeat === 'expedition' && ui.beat === 'expedition') {
         if (m.t === 'state' || m.t === 'event') patchRunChrome();
         return;
@@ -1143,7 +1158,7 @@ export default async function partyHost({ params }) {
     const key = live.map((e) => `${eventKey(e)}:${e.r}`).join(',');
     if (key === ui.reactKey && mount.childElementCount === live.length) return;
     ui.reactKey = key;
-    const names = mergePublicNames(client.lobby, client.links?.pairs);
+    const names = mergePublicNames(client.frame?.players, client.lobby);
     const seatOf = (id) => (client.lobby?.seats || []).find((s) => s.playerId === id)?.seat ?? 99;
     /* Newest first; seat is the tie-break so equal timestamps still have a stable order. */
     const rows = [...live].sort((a, b) => (b.at - a.at) || (seatOf(a.from) - seatOf(b.from)));
@@ -1159,16 +1174,86 @@ export default async function partyHost({ params }) {
       if (!el) {
         const look = seatLook(client.lobby, e.from) || DEFAULT_LOOK;
         const mood = REACT_MOOD[e.r] || 'idle';
+        const who = joinedName(names, e.from, 'Someone');
         el = document.createElement('div');
         el.className = 'react-chip';
         el.dataset.rk = rk;
         el.style.setProperty('--dx', `${((e.at % 11) - 5) * 12}px`);
         el.style.setProperty('--dy', `${((e.at % 7) - 3) * 8}px`);
+        el.style.setProperty('--react-accent', look.accent);
         el.innerHTML = `${robotFaceSvg(look.shell, look.accent, { size: 56, mood })}
-          <span class="react-who">${esc(joinedName(names, e.from, 'Someone'))}</span>`;
+          <span class="react-who" style="color:${esc(look.accent)}">${esc(who)}</span>`;
         if (prev) prev.after(el); else mount.prepend(el);
       }
       prev = el;
+    }
+  }
+
+  /**
+   * Casting votes fade like emotes. Same onAir cap/hold, patched in place so paint()
+   * cannot restart react-float. Never Someone when the voter is seated.
+   */
+  function paintVotePopups() {
+    const mount = root.querySelector('[data-cast-votes]');
+    if (!mount) return;
+    const now = Date.now();
+    const votes = client.ballots || [];
+    const have = new Set((ui.votePops || []).map((e) => `${e.voter}|${e.runner}|${e.guide}`));
+    for (const v of votes) {
+      const k = `${v.voter}|${v.runner}|${v.guide}`;
+      if (have.has(k)) continue;
+      ui.votePops.push({
+        voter: v.voter, runner: v.runner, guide: v.guide, at: now, from: v.voter,
+      });
+      have.add(k);
+    }
+    const live = onAir(ui.votePops, now);
+    const eventKey = (e) => `${e.voter}:${e.runner}:${e.guide}:${e.at}`;
+    const key = live.map((e) => eventKey(e)).join(',');
+    if (key === ui.voteKey && mount.childElementCount === live.length) return;
+    ui.voteKey = key;
+    const names = mergePublicNames(client.frame?.players, client.lobby);
+    const want = new Set(live.map((e) => eventKey(e)));
+    for (const el of [...mount.children]) {
+      if (!want.has(el.dataset.rk)) el.remove();
+    }
+    let prev = null;
+    for (const e of live) {
+      const rk = eventKey(e);
+      let el = [...mount.children].find((c) => c.dataset.rk === rk);
+      if (!el) {
+        const look = seatLook(client.lobby, e.voter) || DEFAULT_LOOK;
+        const who = joinedName(names, e.voter, 'Someone');
+        el = document.createElement('div');
+        el.className = 'react-chip cast-vote-chip';
+        el.dataset.rk = rk;
+        el.style.setProperty('--dx', `${((e.at % 11) - 5) * 12}px`);
+        el.style.setProperty('--dy', `${((e.at % 7) - 3) * 8}px`);
+        el.style.setProperty('--react-accent', look.accent);
+        el.innerHTML = `<span class="react-who" style="color:${esc(look.accent)}">${esc(who)}</span>
+          <span class="cast-vote-picks"><em>run</em> ${esc(joinedName(names, e.runner, 'The runner'))}
+          <em>guide</em> ${esc(joinedName(names, e.guide, 'The guide'))}</span>`;
+        if (prev) prev.after(el); else mount.prepend(el);
+      }
+      prev = el;
+    }
+  }
+
+  function paintCastLamps() {
+    const sent = new Set((client.ballots || []).map((v) => v.voter));
+    for (const el of root.querySelectorAll('.cast-lamp[data-voter]')) {
+      const id = el.dataset.voter;
+      const out = el.classList.contains('out');
+      const on = !out && sent.has(id);
+      el.classList.toggle('on', on);
+      const meta = el.querySelector('.meta');
+      if (meta && !out) meta.textContent = on ? 'ballot in' : 'reading';
+    }
+    const lead = root.querySelector('.cast-lead');
+    if (lead) {
+      const lamps = [...root.querySelectorAll('.cast-lamp[data-voter]:not(.out)')];
+      const all = lamps.length > 0 && lamps.every((el) => el.classList.contains('on'));
+      lead.textContent = all ? 'Every ballot is in.' : 'Nobody says a word yet.';
     }
   }
 
@@ -1179,6 +1264,7 @@ export default async function partyHost({ params }) {
       if (settleBeatClaim()) { paint(); return; }
       maybeArmFromBackstop();
       paintReactStrip();
+      paintVotePopups();
       /*
        * 📺 The sting arms on a server EVENT but fires on a world report and expires on a WALL
        * CLOCK, and neither of those two is a `t:'state'` — the world report is a postMessage from
@@ -1832,7 +1918,9 @@ export default async function partyHost({ params }) {
       <div class="night-main">${body}</div>`;
 
     ui.reactKey = '';
+    ui.voteKey = '';
     paintReactStrip();
+    paintVotePopups();
 
     /*
      * A read-only handle for `harness/party-follow-drive.mjs`, and DELIBERATELY A PROJECTION
@@ -2136,6 +2224,9 @@ function standingLead(standing, names) {
  * the night above the body-level camera plate; nothing else on the TV may assume that stacking.
  * ============================================================================================= */
 function castStage({ votes, names, tiebreaks, board }) {
+  const why = describeCastTiebreaks(tiebreaks).join(' · ');
+  void votes;
+  void names;
   return `
     <div class="talk-stage cast-stage">
       <div class="talk-well">
@@ -2143,31 +2234,17 @@ function castStage({ votes, names, tiebreaks, board }) {
           <div class="intro-frame talk-frame" aria-label="Ballroom circle">${talkSlateHtml('casting')}</div>
         </div>
       </div>
-      ${castOverlay(votes, names, tiebreaks)}
-      ${board ? `<div class="cast-strip">${board}</div>` : ''}
+      ${castOverlay()}
+      ${board ? `<div class="cast-strip">${board}${why ? `<p class="cast-why">${esc(why)}</p>` : ''}</div>` : ''}
     </div>`;
 }
 
 /**
- * One slip per ballot: who sent it, then the two names on it. Two lines, not a three-column grid
- * at 84px — the picture behind it is the thing being watched, and a slip that has to be read
- * across a 300px column is a slip nobody reads at all.
+ * Empty mount. Vote chips are patched in place like emotes (paintVotePopups) so a
+ * ballot cannot rewrite the follow plate. Not a 26% full-height column of slips.
  */
-function castOverlay(votes, names, tiebreaks) {
-  const slips = (votes || []).map((v) => `
-    <div class="cast-slip">
-      <div class="cast-voter">${esc(joinedName(names, v.voter, 'Someone'))}</div>
-      <div class="cast-picks">
-        <span><em>run</em>${esc(joinedName(names, v.runner, 'The runner'))}</span>
-        <span><em>guide</em>${esc(joinedName(names, v.guide, 'The guide'))}</span>
-      </div>
-    </div>`).join('');
-  const why = describeCastTiebreaks(tiebreaks).join(' · ');
-  return `<aside class="cast-overlay" aria-label="Ballots">
-    <div class="cast-overlay-k">ballots</div>
-    <div class="cast-slips">${slips || '<p class="cast-empty">phones are picking</p>'}</div>
-    ${why ? `<p class="cast-why">${esc(why)}</p>` : ''}
-  </aside>`;
+function castOverlay() {
+  return `<aside class="cast-votes" data-cast-votes aria-label="Ballots"></aside>`;
 }
 
 /**
@@ -2501,9 +2578,14 @@ function executionLine(result, names) {
  * their seat and their face, so a table with two Sams can tell which), and this line names the
  * hand. `executionLine` is untouched — the phone and the log still want the whole sentence.
  */
-/** At the cap the season ends — chrome must not offer another Casting (H277 / DUSK6). */
+/**
+ * Cap is not a Production door. Execution cannot see the upcoming fold, so this
+ * kicker always names Casting. 'The Reunion is next' is Verdict chrome
+ * (`outcomeLine`) once the fold is not RENEWED.
+ */
 function executionNextLine(episode) {
-  return Number(episode) >= EPISODE_CAP ? 'The Reunion is next.' : 'Casting is next.';
+  void episode;
+  return 'Casting is next.';
 }
 
 /**
@@ -2840,7 +2922,7 @@ function castBoard(lobby, votes, warm, livingIds) {
     const look = cleanLook(s) || DEFAULT_LOOK;
     const out = !!(living && s.playerId && !living.has(String(s.playerId)));
     const on = !out && sent.has(s.playerId);
-    return `<div class="cast-lamp${on ? ' on' : ''}${out ? ' out' : ''}">
+    return `<div class="cast-lamp${on ? ' on' : ''}${out ? ' out' : ''}" data-voter="${esc(s.playerId || '')}">
       <span class="seat-chip" style="background:${esc(look.accent)}">${esc(String((s.seat ?? 0) + 1))}</span>
       <div class="who">${esc(s.name)}</div>
       <div class="meta">${out ? 'out' : on ? 'ballot in' : 'reading'}</div>

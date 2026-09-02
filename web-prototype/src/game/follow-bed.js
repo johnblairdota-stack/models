@@ -23,7 +23,7 @@ import { camHang, DRILL, JOB, TWIN, twinHang, WALL_CAM } from '../party/jobs.js'
  */
 import {
   AUTOWALK, clampToRoom, consumeLegs, coverNear, dodgeLateral, headingTo, hideTick,
-  lagHeading, legsFor, pinKey, redPassAt, replanReason,
+  lagHeading, legsFor, pinKey, redPassAt, replanReason, unstickLegs,
 } from './runner-intel.js';
 import { isObjectivePin, mountFor, objectiveGoal } from '../party/objectives.js';
 import { NoiseBus, NOISE_KIND } from './noise.js';
@@ -1900,13 +1900,21 @@ export async function buildFollowBed(engine, opts = {}) {
    * cannot print the runner's future at spawn, because at spawn there is no pin, and the legs
    * that exist now are one guide sentence long.
    */
-  function replanToPin() {
+  function replanToPin(blocked) {
     perf.legs = [];
     const goal = pinGoal();
     if (!goal) return;
     _goal.set(goal.x, room.floorY ?? 0, goal.z);
     const portals = room.pathPortals?.(runner.pos, _goal, ROUTE_MIN_W, ROUTE_MIN_H) ?? [];
-    perf.legs = legsFor(portals, goal);
+    const here = { x: runner.pos.x, z: runner.pos.z, roomId: roomIdAt(runner.pos) };
+    /*
+     * Stall: live query from HERE, then drop the blocked first-leg identity. Asking
+     * `pathPortals` again from the same room returns the same doorway; walking it is
+     * the CAST 8-bot sit. Furniture / doorframe snags replan. HOLD-to-hide is above.
+     */
+    perf.legs = blocked
+      ? unstickLegs(portals, goal, blocked, here)
+      : legsFor(portals, goal);
   }
 
   /**
@@ -1946,7 +1954,13 @@ export async function buildFollowBed(engine, opts = {}) {
      */
     if (why === 'legs' && perf.nav.plannedKey === key) why = null;
     if (why) {
-      replanToPin();
+      const blocked = why === 'stall' && perf.legs[0]
+        ? {
+          x: perf.legs[0].x, z: perf.legs[0].z,
+          roomId: perf.legs[0].roomId ?? roomIdAt(runner.pos),
+        }
+        : null;
+      replanToPin(blocked);
       perf.nav = {
         pinKey: key, plannedKey: key, phase: mission.phase, since: 0, gained: 0,
         lastAt: { x: runner.pos.x, z: runner.pos.z }, why,

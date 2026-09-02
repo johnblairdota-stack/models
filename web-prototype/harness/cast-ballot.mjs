@@ -16,6 +16,9 @@
  */
 
 import { tallyCasting, refuse, seededPick, describeCastTiebreaks, historyFromCastEvents, previewCastTiebreaks, shouldArmCastSend, CAST_BACKSTOP_MS, castLockoutId, deadIdsFromPublic, livingFromPublic } from '../src/party/ballot.js';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 
 let pass = 0, fail = 0;
 const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' · ' + d : ''}`); } else { fail++; console.log(`  FAIL ${n}${d ? ' · ' + d : ''}`); } return c; };
@@ -252,6 +255,22 @@ const NO_LOCK = { runner: null, guide: null };
     shouldArmCastSend({ livingIds: living, votes: seven, firstBallotAt: 1000, now: 1000 }) === true);
   t('B14e · counting the corpse as living is what stalls "PHONES ARE PICKING"',
     shouldArmCastSend({ livingIds: seated, votes: seven, firstBallotAt: 1000, now: 1000 }) === false);
+}
+
+{
+  const ROOT = dirname(fileURLToPath(import.meta.url));
+  const hostSrc = readFileSync(join(ROOT, '..', 'src/views/party-host.js'), 'utf8').replace(/\r\n/g, '\n');
+  const lookSrc = readFileSync(join(ROOT, '..', 'src/party/look.js'), 'utf8').replace(/\r\n/g, '\n');
+  t('B15 · a ballot during casting patches vote popups — it does not paint() the run frame',
+    /m\.t === 'ballots'/.test(hostSrc)
+    && /function paintVotePopups/.test(hostSrc)
+    && /ui\.beat === 'casting'/.test(hostSrc)
+    && /paintVotePopups\(\)/.test(hostSrc)
+    && /paintCastLamps\(\)/.test(hostSrc)
+    && !/class="cast-overlay"/.test(hostSrc)
+    && !/\.cast-overlay \{[^}]*26%/.test(lookSrc)
+    && /data-cast-votes/.test(hostSrc),
+    'fade like emotes · no 26% column');
 }
 
 console.log(`\ncast-ballot: ${pass} passed, ${fail} failed`);

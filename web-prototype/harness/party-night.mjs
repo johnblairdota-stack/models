@@ -866,14 +866,14 @@ t('N13c · a refresh resumes the server show beat, not casting',
 
   /*
    * ⚠️ **ORDER, NOT PRESENCE.** `foldWin` resolves by LOG ORDER and breaks on the first rule that
-   * fires, so recording `phase.VERDICT` before `host.skip` would let W5 beat the host's own call
-   * by one sequence number and file an abandoned night as a win for Production. The events are
-   * both there either way; only their order says which rule ran.
+   * fires, so recording `phase.VERDICT` before `host.skip` would let a later cameras-short
+   * Production rewrite (if anyone restored one) beat the host's own call by one sequence number.
+   * The events are both there either way; only their order says which rule ran.
    */
   const logx = roomx.game.log.all();
   const skipSeq = logx.find((e) => e.type === 'host.skip')?.seq;
   const verdictSeq = logx.filter((e) => e.type === 'phase.VERDICT').at(-1)?.seq;
-  t('N17k3 · the skip is written BEFORE the phase it triggers, so W6 outruns W5',
+  t('N17k3 · the skip is written BEFORE the phase it triggers, so W6 is the rule that fires',
     Number.isFinite(skipSeq) && Number.isFinite(verdictSeq) && skipSeq < verdictSeq
       && logx.find((e) => e.type === 'win.checked' && e.data.rule === 'W6') != null,
     JSON.stringify({ skipSeq, verdictSeq }));
@@ -948,16 +948,18 @@ t('N13c · a refresh resumes the server show beat, not casting',
 }
 
 /* ===============================================================================================
- * 🏁 **N17n · A REAL ROOM RUNS OUT OF EPISODES AND STOPS.**
+ * 🏁 **N17n · A REAL ROOM RUNS PAST THE CAP AND STAYS RENEWED.**
  *
- * `win-machine` W10 drives the same property offline; this is the live wire, because the two are
- * different machines and `episode-order` exists because they once disagreed. Nobody nominates and
- * nobody dies, so no rule fires all night — the season ends the only other way it can, on
- * `EPISODE_CAP`, which `foldVerdict` enforces and nothing else does.
+ * `win-machine` W10c drives the same property offline; this is the live wire, because the two
+ * are different machines and `episode-order` exists because they once disagreed. Nobody
+ * nominates and nobody dies, so no rule fires all night — and the cap is not a Production
+ * door. After `EPISODE_CAP` aired the fold is still RENEWED, chrome still says the season
+ * continues, and `t:'casting'` still opens another Casting.
  *
  * ⚠️ **THE LOOP IS BOUNDED AND THE BOUND IS PART OF THE ASSERTION.** A gate for "it terminates"
  * that loops until it terminates is a gate that hangs CI instead of failing it. It gets
- * `EPISODE_CAP + 3` episodes and then reports where it actually got to.
+ * `EPISODE_CAP` quiet episodes (with `EPISODE_CAP + 3` as the hang ceiling) and then reports
+ * where it actually got to.
  * =============================================================================================== */
 {
   const PORTC = PORT + 3;
@@ -1006,42 +1008,40 @@ t('N13c · a refresh resumes the server show beat, not casting',
       progressShow(roomc);
       await sleep(20);
     }
+    if (episodes >= EPISODE_CAP) break;
   }
 
-  t('N17n · a live night that decides nothing still ends — at the cap, as CANCELLED',
-    roomc.show === 'reunion' && roomc.game.outcome() === OUTCOME.CANCELLED
-      && last(tvc, 'season')?.status === OUTCOME.CANCELLED
-      // ⚠️ EXACTLY the cap, not "at most". `episodes <= CAP + 1` was the first draft and it
-      // passed while a live season was ending after FOUR of five — see foldVerdict's header.
+  t('N17n · a live night that decides nothing stays RENEWED at the cap — the cap is not a Production door',
+    roomc.show === 'casting' && roomc.game.outcome() === OUTCOME.RENEWED
       && episodes === EPISODE_CAP,
     JSON.stringify({ show: roomc.show, outcome: roomc.game.outcome(), episodes,
       cap: EPISODE_CAP, episode: roomc.game.state.episode }));
 
-  t('N17n2 · and nobody died on the way there — W5 (the cap) is what ended it',
+  t('N17n2 · and nobody died on the way there — no rule fired; cameras short is not a fold',
     roomc.game.state.players.every((p) => p.alive !== false)
-      && roomc.game.log.all().filter((e) => e.type === 'win.checked').at(-1)?.data?.rule === 'W5',
+      && roomc.game.log.all().filter((e) => e.type === 'win.checked').at(-1)?.data?.rule == null,
     JSON.stringify({
       dead: roomc.game.state.players.filter((p) => p.alive === false).map((p) => p.id),
       rule: roomc.game.log.all().filter((e) => e.type === 'win.checked').at(-1)?.data?.rule,
     }));
 
   /*
-   * H277 / DUSK6. Overnight chrome printed CANCELLED then offered another Casting
-   * because `t:'casting'` and the `]` walk opened `enterNextCasting` without
-   * asking the fold. The door now refuses. Gate: this send.
+   * H277 / DUSK6 used to refuse `t:'casting'` after the cap because a miss was
+   * Production. Cap is not a Production door. The season is not over; the door
+   * still opens Casting.
    */
   tvc.send({ t: 'casting' });
   await sleep(40);
-  t('N17p · a casting verb after the cap does not open another Casting',
-    roomc.show === 'reunion' && roomc.game.outcome() === OUTCOME.CANCELLED,
+  t('N17p · a casting verb at the cap still opens Casting — the season is not over',
+    roomc.show === 'casting' && roomc.game.outcome() === OUTCOME.RENEWED,
     JSON.stringify({ show: roomc.show, outcome: roomc.game.outcome() }));
 
   const lastVerdict = last(tvc, 'verdict');
-  t('N17q · H278 the aired verdict at the cap is CANCELLED — chrome never says the season continues',
-    lastVerdict?.status === OUTCOME.CANCELLED
-      && roomc.game.log.all().filter((e) => e.type === 'verdict.aired').at(-1)?.data?.status === OUTCOME.CANCELLED
-      && outcomeLine(lastVerdict?.status).includes('Production wins')
-      && !outcomeLine(lastVerdict?.status).includes('continues'),
+  t('N17q · the aired verdict at the cap is RENEWED — chrome says the season continues',
+    lastVerdict?.status === OUTCOME.RENEWED
+      && roomc.game.log.all().filter((e) => e.type === 'verdict.aired').at(-1)?.data?.status === OUTCOME.RENEWED
+      && outcomeLine(lastVerdict?.status).includes('The season continues')
+      && !outcomeLine(lastVerdict?.status).includes('Production wins'),
     JSON.stringify({ verdict: lastVerdict, line: outcomeLine(lastVerdict?.status) }));
 
   for (const c of [tvc, ...phonesc]) c.close();

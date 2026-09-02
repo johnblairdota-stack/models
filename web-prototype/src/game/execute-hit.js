@@ -45,6 +45,114 @@ export const WRECK_EYE_Y = 0.78;
 /** Named wreck look. Dur 0 — do not linger a 10s talk-cycle wreck plate. */
 export const WRECK_SHOT = Object.freeze({ name: 'wreck', dur: 0, span: 0.70 });
 
+/**
+ * Spec pan after contact. Same class as wreckCam / sendoffCam: numbers here, bed
+ * drives, no CUE_KIND. Total 5.00 — not WRECK_SHOT.dur, not the 20s EXECUTION beat.
+ */
+export const LINGER_CRIME_S = 1.50;
+export const LINGER_ORBIT_S = 1.50;
+export const LINGER_GROUP_S = 2.00;
+export const LINGER_TOTAL_S = 5.00;
+
+export function lingerBeat(elapsed) {
+  const t = Math.max(0, Number(elapsed) || 0);
+  if (t < LINGER_CRIME_S) return 'crime';
+  if (t < LINGER_CRIME_S + LINGER_ORBIT_S) return 'orbit';
+  return 'group';
+}
+
+function lingerSmooth(k) {
+  const t = Math.min(1, Math.max(0, Number(k) || 0));
+  return t * t * (3 - 2 * t);
+}
+
+function lingerOrbitPose(wreck, u) {
+  const ang = lingerSmooth(u) * Math.PI * 0.55;
+  const lx = wreck.look.x, lz = wreck.look.z;
+  const dx = wreck.eye.x - lx, dz = wreck.eye.z - lz;
+  const dist = Math.hypot(dx, dz) || 2.5;
+  const a0 = Math.atan2(dx, dz);
+  const a = a0 + ang;
+  return {
+    look: { x: wreck.look.x, y: wreck.look.y, z: wreck.look.z },
+    eye: {
+      x: lx + Math.sin(a) * dist,
+      y: wreck.eye.y,
+      z: lz + Math.cos(a) * dist,
+    },
+  };
+}
+
+/**
+ * Spec linger after the sledge connects. Crime 1.50 onto the wreck, orbit 1.50
+ * around wreck + toppled chair, group 2.00 onto the seated living. THREE-free;
+ * the bed applies the eye/look. Not fillExecuteEye (the nominator's rear).
+ */
+export function execLingerCam({
+  body, chair, cx = 0, cz = 0, floorY = 0, living = [], elapsed = 0,
+} = {}) {
+  const wreck = wreckCam({ body, chair, cx, cz, floorY });
+  const t = Math.max(0, Number(elapsed) || 0);
+  const beat = lingerBeat(t);
+  if (beat === 'crime') {
+    const u = lingerSmooth(t / LINGER_CRIME_S);
+    const startLook = { x: wreck.look.x, y: floorY + 1.05, z: wreck.look.z };
+    const ox = wreck.eye.x - cx, oz = wreck.eye.z - cz;
+    const startEye = {
+      x: wreck.eye.x + ox * 0.28,
+      y: floorY + WRECK_EYE_Y + 1.15,
+      z: wreck.eye.z + oz * 0.28,
+    };
+    return {
+      beat,
+      look: {
+        x: startLook.x + (wreck.look.x - startLook.x) * u,
+        y: startLook.y + (wreck.look.y - startLook.y) * u,
+        z: startLook.z + (wreck.look.z - startLook.z) * u,
+      },
+      eye: {
+        x: startEye.x + (wreck.eye.x - startEye.x) * u,
+        y: startEye.y + (wreck.eye.y - startEye.y) * u,
+        z: startEye.z + (wreck.eye.z - startEye.z) * u,
+      },
+    };
+  }
+  if (beat === 'orbit') {
+    const u = (t - LINGER_CRIME_S) / LINGER_ORBIT_S;
+    return { beat, ...lingerOrbitPose(wreck, u) };
+  }
+  const u = lingerSmooth((t - LINGER_CRIME_S - LINGER_ORBIT_S) / LINGER_GROUP_S);
+  const orbit = lingerOrbitPose(wreck, 1);
+  let gx = 0, gz = 0, n = 0;
+  for (const p of living) {
+    if (!p || !Number.isFinite(Number(p.x)) || !Number.isFinite(Number(p.z))) continue;
+    gx += Number(p.x); gz += Number(p.z); n++;
+  }
+  const look = n
+    ? { x: gx / n, y: floorY + 1.16, z: gz / n }
+    : { x: cx, y: floorY + 1.16, z: cz };
+  const mx = look.x - cx, mz = look.z - cz;
+  const mlen = Math.hypot(mx, mz) || 1;
+  const groupEye = {
+    x: cx - (mx / mlen) * 6.2,
+    y: floorY + 1.42,
+    z: cz - (mz / mlen) * 6.2,
+  };
+  return {
+    beat,
+    look: {
+      x: orbit.look.x + (look.x - orbit.look.x) * u,
+      y: orbit.look.y + (look.y - orbit.look.y) * u,
+      z: orbit.look.z + (look.z - orbit.look.z) * u,
+    },
+    eye: {
+      x: orbit.eye.x + (groupEye.x - orbit.eye.x) * u,
+      y: orbit.eye.y + (groupEye.y - orbit.eye.y) * u,
+      z: orbit.eye.z + (groupEye.z - orbit.eye.z) * u,
+    },
+  };
+}
+
 export const LAST_LOOK = Object.freeze({
   OFF: 'off',
   LIVE: 'live',

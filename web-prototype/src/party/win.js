@@ -8,16 +8,19 @@
  * takes. The alternative — a precedence table — is a document that drifts from the code and an
  * argument nobody can settle. Folding over an append-only log settles it with a sequence number.
  *
- * For events appended in the SAME tick the reducer order is W1, W3, W2, W4, W5, which is the one
+ * For events appended in the SAME tick the reducer order is W1, W3, W2, W4, which is the one
  * place a table is unavoidable and so is stated in exactly one place: `TICK_ORDER` below.
  *
  * ⚠️ W1 AND W3 CANNOT COLLIDE. Only the runner is exposed, so a single take is either a good
  * player or an evil one, never both.
  *
+ * ⚠️ **H278 IS OVERRULED.** A camera miss at the cap is not a Production fold. Do not restore
+ * a cameras-short Production win — not at the Verdict, not as a tail after the walk. Lighting
+ * cameras still wins for the cast (W2). Missing them does not win for Production. The night
+ * ends on W1 / W2 / W3 / W4 / W6.
+ *
  * No THREE, no DOM.
  */
-
-import { EPISODE_CAP } from './phases.js';
 
 /** §6. `cameraTarget` is the objective; `feedTarget` is how many goods evil must feed the Hunter. */
 export const WIN_TARGETS = {
@@ -56,7 +59,7 @@ export function outcomeLine(status) {
 }
 
 /** The only place same-tick precedence is written down. */
-export const TICK_ORDER = ['W1', 'W3', 'W2', 'W4', 'W5'];
+export const TICK_ORDER = ['W1', 'W3', 'W2', 'W4'];
 
 /**
  * Fold the log into a verdict.
@@ -81,14 +84,13 @@ export function foldWin(log, { count, alignmentOf, aired } = {}) {
 
   let hit = null;
   const fire = (rule, outcome, seq) => { if (!hit) hit = { rule, outcome, atSeq: seq }; };
-  const missedTargets = () => camerasLit < targets.cameraTarget || fed < targets.feedTarget;
 
   for (const e of log) {
     if (hit) break;
     /*
-     * ⚠️ `setPhase` used to write `phase.CASTING` with `{}`. W5 then saw episode=1
-     * all night and foldWin returned RENEWED at the cap. `cast.ballot` has always
-     * carried the number; read it. `aired` is what the live Verdict is folding.
+     * ⚠️ `setPhase` used to write `phase.CASTING` with `{}`. The fold then saw
+     * episode=1 all night. `cast.ballot` has always carried the number; read it.
+     * `aired` is what the live Verdict is folding.
      */
     if (e.type === 'phase.CASTING' || e.type === 'cast.ballot' || e.type === 'phase.VERDICT') {
       if (e.data?.episode != null) episode = e.data.episode;
@@ -99,7 +101,7 @@ export function foldWin(log, { count, alignmentOf, aired } = {}) {
     if (e.type === 'player.taken' || e.type === 'player.executed') dead.add(e.data.id);
     if (e.type === 'player.taken' && alignmentOf(e.data.id) === 'good') fed++;
 
-    // Same-tick order: W1, W3, W2, W4, W5.
+    // Same-tick order: W1, W3, W2, W4.
     if (e.type === 'player.taken' || e.type === 'player.executed') {
       if (alive('evil') === 0) { fire('W1', OUTCOME.FINALE, e.seq); break; }
       if (fed >= targets.feedTarget) { fire('W3', OUTCOME.CANCELLED, e.seq); break; }
@@ -108,20 +110,6 @@ export function foldWin(log, { count, alignmentOf, aired } = {}) {
     if (e.type === 'run.camera_lit' && camerasLit >= targets.cameraTarget) {
       fire('W2', OUTCOME.FINALE, e.seq); break;
     }
-    if (e.type === 'phase.VERDICT' && episode >= EPISODE_CAP && missedTargets()) {
-      fire('W5', OUTCOME.CANCELLED, e.seq); break;
-    }
-  }
-
-  /*
-   * H278 · DUSK6. Chrome printed RENEWED / "The season continues" while the
-   * driver wrote CANCELLED: W5 only fired on a CASTING row that carried
-   * `episode`, and live `setPhase` did not. At EPISODE_CAP a miss on cameras
-   * or feed is Production — never RENEWED. `aired` is the episode on the air.
-   */
-  if (!hit) {
-    const atCap = Math.max(episode, aired ?? 0) >= EPISODE_CAP;
-    if (atCap && missedTargets()) fire('W5', OUTCOME.CANCELLED, null);
   }
 
   return {
