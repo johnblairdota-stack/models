@@ -179,6 +179,9 @@ t('H6c · Showrunner still fires a contact so C can die — no ninth robot',
   t('H7 · a finished wreck is on its back on the floor, away from the sit-root',
     limp.y === 0 && limp.pitch > 1 && limp.roll < 0.5
     && Math.hypot(limp.x - sitAt.x, limp.z - sitAt.z) > 0.4);
+  t('H7f · wreckPose({u:1}).y is floorY, and the clip at u=1 is not a Sit_* hold',
+    limp.y === 0 && !/^Sit_/i.test(String(limp.clip || ''))
+      && WRECK_HOLD_S <= 0.60 && WRECK_HOLD_S === 0.50);
   t('H7b · the chair topples as a separate object, offset from the torso',
     chair.rotX > 1 && chair.x !== limp.x
     && Math.hypot(chair.x - limp.x, chair.z - limp.z) > 0.9
@@ -213,7 +216,7 @@ t('H8 · GRIP_MOUNT is John\'s measured lock — not a restale of 2.37',
   && !/alongHaft: 2\.37/.test(meshSrc));
 t('H8b · the hit file does not mention a second hammer or a new Meshy body',
   !/meshy\.com|new Meshy|fetch a new/i.test(hitSrc)
-  && WRECK_HOLD_S > 1);
+  && WRECK_HOLD_S <= 0.60);
 
 /* ── H9 · report + plate language stay ──────────────────────────────────────────────────── */
 t('H9 · executionReport names hit / limp / chair / lastLook / cam',
@@ -382,10 +385,11 @@ t('H10 · seatedAim is a visor-height torso when Head is missing',
   const withWreck = talkCycleShots(base, true);
   const names = [];
   for (let t = 0; t < 80; t += 0.5) names.push(talkShotAt(t, withWreck).name);
-  t('H12c · a talk cycle with wreckage visits the wreck plate; without, it does not invent one',
-    names.includes(WRECK_SHOT.name)
-    && talkCycleShots(base, false).every((s) => s.name !== WRECK_SHOT.name)
-    && talkShotAt(base.reduce((s, x) => s + x.dur, 0) + 0.2, withWreck).name === WRECK_SHOT.name);
+  t('H12c · a talk cycle does not contain a 10s wreck shot — get off the wreck',
+    !withWreck.some((s) => s?.name === WRECK_SHOT.name && (Number(s.dur) || 0) >= 10)
+      && !names.includes(WRECK_SHOT.name)
+      && WRECK_SHOT.dur < 10
+      && talkCycleShots(base, false).every((s) => s.name !== WRECK_SHOT.name));
   t('H12d · talkFrame holds that plate after exec.phase is off; applyWreck survives dispose',
     /shot\.name === WRECK_SHOT\.name/.test(introSrc)
     && /wreckLook\(/.test(introSrc)

@@ -643,6 +643,27 @@ function scheduleShowProgress(room, waitOpt = null) {
  */
 export function expireShowHold(room) {
   if (!room) return null;
+  /*
+   * 90s TIME wall mid-performance: finish that accusation, then close.
+   * Only delay when the wall has actually hit (`showUntil` in the past).
+   * A test that calls expire as a beat-advance with no wall still walks.
+   */
+  if (room.show === 'reckoning' && room.game?.accusationPlaying?.()) {
+    const until = room.showUntil;
+    const wall = Number.isFinite(until) && until <= Date.now();
+    if (wall) {
+      const left = room.game.accusationLeftMs?.() ?? 0;
+      if (left > 0) {
+        clearShowClock(room);
+        room.showClock = setTimeout(() => {
+          room.showClock = null;
+          expireShowHold(room);
+        }, left);
+        room.showClock.unref?.();
+        return room.show;
+      }
+    }
+  }
   return progressShow(room);
 }
 
@@ -717,6 +738,18 @@ function extendReckoning(room) {
   const until = started + reckoningSeconds(n) * 1000;
   const left = until - Date.now();
   if (left <= 0) {
+    if (room.game?.accusationPlaying?.()) {
+      const wait = room.game.accusationLeftMs?.() ?? 0;
+      if (wait > 0) {
+        clearShowClock(room);
+        room.showClock = setTimeout(() => {
+          room.showClock = null;
+          expireShowHold(room);
+        }, wait);
+        room.showClock.unref?.();
+        return;
+      }
+    }
     progressShow(room);
     return;
   }

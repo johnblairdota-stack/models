@@ -19,7 +19,11 @@
  * a proof.
  */
 
-import { tallyVote, nominate, canNominate, canBeNominated, canLynchVote, assumedLynchVotes, nominatorLockedChoice, acceptLynchVotes, executioner, reckoningClosed, STANDING_CAP, NO_ONE, SHOWRUNNER } from '../src/party/vote.js';
+import { tallyVote, nominate, canNominate, canBeNominated, canLynchVote, assumedLynchVotes, nominatorLockedChoice, acceptLynchVotes, executioner, reckoningClosed, ACCUSATION_PLAYING, NO_ONE, SHOWRUNNER } from '../src/party/vote.js';
+import { accusationSpan } from '../src/game/accusation-stage.js';
+
+/** Exhaustive tally bound — not a standing-count cap. Seven unique names are legal. */
+const EXHAUSTIVE_NOMS = 3;
 import { createRoom } from '../src/party/room.js';
 import {
   clearsLine, lynchBoardRows, printLynchBoard, seasonEpisodeRecord, seasonEpisodeAgrees,
@@ -61,7 +65,7 @@ function* distributions(living, choices) {
   let checked = 0, badThreshold = null, badMultiple = null, badAbstain = null;
   for (let L = 4; L <= 8; L++) {
     const living = ids(L);
-    for (let noms = 1; noms <= STANDING_CAP; noms++) {
+    for (let noms = 1; noms <= EXHAUSTIVE_NOMS; noms++) {
       const targets = living.slice(0, noms);
       const state = { living, nominations: targets.map((tg, i) => ({ nominator: living[(i + noms) % L], target: tg })) };
       const choices = [...targets, NO_ONE];
@@ -104,8 +108,11 @@ function* distributions(living, choices) {
     !canNominate({ living: ['p1'], nominations: [] }, 'p9').ok
     && !canBeNominated({ living: ['p1'], nominations: [] }, 'p1', 'p9').ok);
   state.nominations.push({ nominator: 'p3', target: 'p4' }, { nominator: 'p5', target: 'p6' });
-  t('V2e · the standing cap is three', !nominate(state, 'p2', 'p1').ok && state.nominations.length === STANDING_CAP,
-    nominate(state, 'p2', 'p1').why);
+  const fourth = nominate(state, 'p2', 'p1');
+  t('V2e · no standing-count cap — a fourth unique nom is legal',
+    fourth.ok && fourth.nomination?.target === 'p1'
+      && nominate(state, 'p2', 'p1', { playing: true }).why === ACCUSATION_PLAYING,
+    JSON.stringify(fourth));
   t('V2f · a nominee may counter-nominate their accuser',
     canBeNominated({ living: ids(6), nominations: [{ nominator: 'p1', target: 'p2' }] }, 'p2', 'p1').ok);
 }
@@ -249,8 +256,10 @@ function* distributions(living, choices) {
   const names = { p1: 'Cy', p2: 'Fox', p3: 'Ada', p4: 'Gus', p5: 'Ben', p6: 'Dee', p7: 'Eli', p8: 'Sam' };
   for (const p of r.state.players) if (names[p.id]) p.name = names[p.id];
   r.enterReckoning(living);
+  const t0 = 2_000_000;
   t('V11a · two names stand',
-    r.nominatePlayer('p1', 'p2', living).ok && r.nominatePlayer('p3', 'p4', living).ok
+    r.nominatePlayer('p1', 'p2', living, t0).ok
+    && r.nominatePlayer('p3', 'p4', living, t0 + accusationSpan() * 1000).ok
     && r.state.nominations.length === 2);
   r.enterVote(living);
   const receipts = [];

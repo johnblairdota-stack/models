@@ -106,12 +106,15 @@ const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' �
 
   t('R2b · a typical night at the episode cap fits the window', typical(EPISODE_CAP, 0) <= 40,
     `${typical(EPISODE_CAP, 0).toFixed(1)} min at ${EPISODE_CAP} episodes, Debrief ended at ${TYPICAL_DEBRIEF_S}s`);
-  t('R2c · THE TYPICAL WORST CASE fits it too — three nominations every episode',
-    typical(EPISODE_CAP, 3) < 40,
-    `${typical(EPISODE_CAP, 3).toFixed(1)} min · the night a real table plays, with READY ending `
-    + `every Debrief at ${TYPICAL_DEBRIEF_S}s. R2e guards the table that never taps.`);
+  t('R2c · THE TYPICAL WORST CASE fits it too — 90s Reckoning wall, not a standing-count cap',
+    typical(EPISODE_CAP, 7) < 40
+      && Math.abs(typical(EPISODE_CAP, 7) - typical(EPISODE_CAP, 3)) < 1e-9
+      && reckoningSeconds(7) === RECKONING_CAP
+      && reckoningSeconds(3) === RECKONING_CAP,
+    `${typical(EPISODE_CAP, 7).toFixed(1)} min · seven unique names play inside the 90s TIME wall. `
+    + `READY ends every Debrief at ${TYPICAL_DEBRIEF_S}s. R2e guards the table that never taps.`);
 
-  const worst = sessionSeconds(EPISODE_CAP, 3) / 60;
+  const worst = sessionSeconds(EPISODE_CAP, 7) / 60;
   t('R2e · and the room that NEVER taps READY still stops inside an hour', worst < 60,
     `${worst.toFixed(1)} min · every Debrief run to its full ${SECONDS[PHASE.DEBRIEF]}s ceiling. `
     + `This is the assertion that replaced the old flat 40-minute guarantee.`);

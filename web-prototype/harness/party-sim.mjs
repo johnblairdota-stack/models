@@ -35,6 +35,8 @@ import { tallyCasting } from '../src/party/ballot.js';
 import { COMPOSITION } from '../src/party/cast.js';
 import { OUTCOME } from '../src/party/win.js';
 import { EPISODE_CAP } from '../src/party/phases.js';
+import { ACCUSATION_PLAYING } from '../src/party/vote.js';
+import { accusationSpan } from '../src/game/accusation-stage.js';
 import { ROOMS, coveredRooms } from '../src/party/coverage.js';
 import { blindStrip } from '../src/party/darkrun.js';
 import { castBallot, nominate, vote, willLie, spikesThisEpisode, chance, POLICY } from '../src/party/policy.js';
@@ -131,7 +133,6 @@ function playMatch({ count, seed, goodPolicy, evilPolicy }) {
 
     const noms = [];
     for (const id of living) {
-      if (noms.length >= 3) break;
       const n = nominate({ policy: policyOf(id), self: id, living, suspicion, seed, ep });
       if (n && !noms.some((x) => x.nominator === n.nominator || x.target === n.target) && n.target !== n.nominator) noms.push(n);
     }
@@ -282,6 +283,33 @@ const rate = (list) => list.filter(goodWon).length / list.length;
   });
   t('S7 · every match was dealt from the shipped composition table', !bad,
     bad ? `${bad}p drifted` : `${runs.length.toLocaleString()} matches across ${COUNTS.length} counts, ${POLICY.length} policies`);
+}
+
+// ---------------------------------------------------------------- S8 · ready-up skip stays; nomination wait does NOT skip
+{
+  const r = createRoom({ count: 8, castSeed: 3, worldSeed: 3, send: () => {}, emit: () => {} });
+  r.start();
+  const t0 = Date.now();
+  r.playEpisode({ hunterRoom: 'cellar' });
+  const skipped = Date.now() - t0;
+  t('S8 · ready-up skip STAYS — playEpisode still walks Debrief without waiting for READY',
+    skipped < 200 && r.state.episode === 2,
+    `${skipped}ms · episode ${r.state.episode}`);
+
+  const s = createRoom({ count: 8, castSeed: 4, worldSeed: 4, send: () => {}, emit: () => {} });
+  s.start();
+  const living = s.state.players.filter((p) => p.alive).map((p) => p.id);
+  s.enterReckoning(living);
+  const clock = 5_000_000;
+  const a = s.nominatePlayer(living[0], living[1], living, clock);
+  const b = s.nominatePlayer(living[2], living[3], living, clock);
+  t('S8b · nomination wait does NOT skip — a same-tick dump is one landing + accusation playing',
+    a.ok && !b.ok && b.why === ACCUSATION_PLAYING && s.state.nominations.length === 1,
+    JSON.stringify(b));
+  const later = s.nominatePlayer(living[2], living[3], living, clock + accusationSpan() * 1000);
+  t('S8c · the second unique nom lands after the performance finishes',
+    later.ok && s.state.nominations.length === 2,
+    JSON.stringify(later));
 }
 
 console.log(`\nparty-sim: ${pass} passed, ${fail} failed`);
