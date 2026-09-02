@@ -70,7 +70,7 @@ import { fileURLToPath } from 'node:url';
 import {
   AUTOWALK, COVER, DODGE, RED, REPLAN_TRIGGERS, SABOTAGE, TELL, TELL_FORBIDDEN,
   clampToRoom, consumeLegs, coverNear, dodgeLateral, headingTo, hideTick, holdTell,
-  lagHeading, legsFor, pinKey, redPassAt, replanReason,
+  lagHeading, legKey, legsFor, pinKey, redPassAt, replanReason, unstickLegs,
 } from '../src/game/runner-intel.js';
 import { CUE_KEYS, CUE_KINDS, MOVE_KEYS, PIN_KINDS, PIN_WIRE_KEYS, WORLD_MISSION_KEYS, cueViolations, moveViolations, pinViolations, pinWireShape } from '../src/party/follow.js';
 import {
@@ -202,7 +202,7 @@ console.log('\n  auto-walk');
   t('RI3 · the bed asks the house live, from where she is standing, on every replan',
     /room\.pathPortals\?\.\(runner\.pos, _goal, ROUTE_MIN_W, ROUTE_MIN_H\)/.test(bedSrc)
     && /perf\.legs = \[\];\n\s*const goal = pinGoal\(\);\n\s*if \(!goal\) return;/.test(bedSrc)
-    && /perf\.legs = legsFor\(portals/.test(bedSrc),
+    && /legsFor\(portals, goal\)/.test(bedSrc),
     'replanToPin clears, then re-asks');
   t('RI3b control · no authored waypoint list re-appeared (D4)',
     !/PATROL_ROUTE|WAYPOINTS|const ROUTE = \[/.test(bedSrc)
@@ -224,6 +224,109 @@ console.log('\n  auto-walk');
     && /identical/i.test(bedSrc.slice(Math.max(0, bedSrc.indexOf('function resolveObjective') - 2600),
       bedSrc.indexOf('function resolveObjective'))),
     'no import of the real face in runner-intel.js or objectives.js');
+}
+
+/* =================================================================================================
+ * RI23 · UNSTICK — a stall replan must not re-issue the blocked first leg
+ *
+ * CAST 8-bot: the runner wedges on a doorframe, stall fires, pathPortals from the same room
+ * returns the same doorway, she walks into it again. RI1 is green (stall is a trigger). The
+ * body still sits. Furniture / doorframe snags are a replan from HERE; the new first leg is
+ * not the (x, z, roomId) that just failed. HOLD-to-hide is untouched. No new CUE_KIND.
+ * ============================================================================================== */
+
+console.log('\n  unstick');
+
+{
+  const blocked = { x: 2, z: 2, roomId: 'r0.hall>r0.gallery' };
+  const portals = [
+    { centre: { x: 2, z: 2 }, a: 'r0.hall', b: 'r0.gallery' },
+    { centre: { x: 8, z: 2 }, a: 'r0.gallery', b: 'r0.chapel' },
+  ];
+  const goal = { x: 11, z: 2, roomId: 'r0.chapel' };
+  const from = { x: 1.15, z: 2, roomId: 'r0.hall' };
+  const raw = legsFor(portals, goal);
+  const next = unstickLegs(portals, goal, blocked, from);
+  t('RI23 · stall replan drops the blocked first leg — it does not walk the same portal',
+    raw.length === 3 && legKey(raw[0]) === legKey(blocked)
+    && next.length > 0 && legKey(next[0]) !== legKey(blocked)
+    && next[0].x === 8 && next[next.length - 1].x === 11,
+    `raw ${raw.map((l) => `${l.x}`).join('>')} · unstuck ${next.map((l) => `${l.x}`).join('>')}`);
+
+  const sameRoom = unstickLegs([], { x: 4.6, z: 0.22, roomId: 'r0.gallery' },
+    { x: 4.6, z: 0.22, roomId: 'r0.gallery' }, { x: 4.0, z: 2.4, roomId: 'r0.gallery' });
+  t('RI23b · a snag on the pin itself sidesteps — the new first leg is not the painting',
+    sameRoom.length >= 1
+    && legKey(sameRoom[0]) !== legKey({ x: 4.6, z: 0.22, roomId: 'r0.gallery' })
+    && sameRoom.some((l) => l.x === 4.6 && l.z === 0.22),
+    `first ${sameRoom[0]?.x?.toFixed?.(2)},${sameRoom[0]?.z?.toFixed?.(2)} · ${sameRoom.length} legs`);
+
+  t('RI23c · the bed asks from where she stands, then unsticks only on stall',
+    /room\.pathPortals\?\.\(runner\.pos, _goal, ROUTE_MIN_W, ROUTE_MIN_H\)/.test(bedSrc)
+    && /unstickLegs\(portals, goal, blocked/.test(bedSrc)
+    && /why === 'stall'/.test(bedSrc)
+    && /perf\.legs = blocked/.test(bedSrc),
+    'replan from HERE · skip only the failed identity');
+
+  t('RI23d · no new CUE_KIND — unstick is a walk, not a camera',
+    CUE_KINDS.join(',') === 'intros,run,move,shot,idle,noms,pair,execute,pin'
+    && !/CUE_KINDS/.test(intelSrc),
+    CUE_KINDS.join(','));
+}
+
+{
+  /*
+   * Driven: she sits on a blocked doorway for stallSec (gained 0), stall fires, the new
+   * first leg is not that doorway, and over stallSec*3 she gains stallGain toward the pin.
+   * No collider — the "wall" is refusing to step toward the blocked identity until stall.
+   */
+  const DT = 1 / 60;
+  const SPEED = 2.6;
+  const PIN = { x: 11, z: 2, roomId: 'r0.chapel', kind: 'room' };
+  const BLOCKED = { x: 2, z: 2, roomId: 'r0.hall>r0.gallery' };
+  const PORTALS = [
+    { centre: { x: 2, z: 2 }, a: 'r0.hall', b: 'r0.gallery' },
+    { centre: { x: 8, z: 2 }, a: 'r0.gallery', b: 'r0.chapel' },
+  ];
+  let at = { x: 0.4, z: 2 };
+  const start = { ...at };
+  let heading = 0, legs = legsFor(PORTALS, PIN), clock = 0, stalled = false;
+  let nav = { pinKey: pinKey(PIN), phase: 'seek', legs: legs.length, since: 0, gained: 0, lastAt: { ...at } };
+  for (let i = 0; i < 60 * 12; i++) {
+    clock += DT;
+    const gained = Math.hypot(nav.lastAt.x - at.x, nav.lastAt.z - at.z);
+    const since = nav.since + DT;
+    const why = replanReason(nav, {
+      pinKey: pinKey(PIN), phase: 'seek', legs: legs.length, since, gained,
+    });
+    if (why === 'stall') {
+      legs = unstickLegs(PORTALS, PIN, BLOCKED, { ...at, roomId: 'r0.hall' });
+      nav = { pinKey: pinKey(PIN), phase: 'seek', legs: legs.length, since: 0, gained: 0, lastAt: { ...at } };
+      stalled = true;
+    } else {
+      nav = { ...nav, since, gained };
+      if (since >= AUTOWALK.stallSec) {
+        nav.since = 0;
+        nav.lastAt = { ...at };
+      }
+    }
+    consumeLegs(legs, at);
+    const leg = legs[0] ?? PIN;
+    heading = lagHeading(heading, headingTo(at, leg), DT);
+    const d = Math.hypot(leg.x - at.x, leg.z - at.z);
+    const drive = d < AUTOWALK.square ? 0 : 1;
+    if (!stalled && legKey(leg) === legKey(BLOCKED)) continue;
+    at = {
+      x: at.x + Math.sin(heading) * drive * SPEED * DT,
+      z: at.z + Math.cos(heading) * drive * SPEED * DT,
+    };
+    if (clock >= AUTOWALK.stallSec * 3) break;
+  }
+  const toward = Math.hypot(start.x - PIN.x, start.z - PIN.z) - Math.hypot(at.x - PIN.x, at.z - PIN.z);
+  t('RI23e · wedged stallSec*3, she still gains stallGain toward the pin after unstick',
+    stalled && toward >= AUTOWALK.stallGain
+    && AUTOWALK.stallGain === 0.75 && AUTOWALK.stallSec === 2.0,
+    `stalled=${stalled} · gained ${toward.toFixed(2)} m toward pin in ${clock.toFixed(1)}s`);
 }
 
 /* =================================================================================================

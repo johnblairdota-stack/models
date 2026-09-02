@@ -27,6 +27,7 @@ import {
   LAST_LOOK, contactMix, retargetHead, occupies, execCamMode,
   stepLastLook, wreckPose, chairTopple, chairEyeline, seatedAim,
   wreckCam, wreckLook, talkCycleShots, talkShotAt, WRECK_SHOT,
+  execLingerCam, lingerBeat, LINGER_TOTAL_S, LINGER_CRIME_S, LINGER_ORBIT_S, LINGER_GROUP_S,
   isFaceScreenName,
 } from './execute-hit.js';
 
@@ -618,23 +619,23 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     tNow = t;
     if (clock < r.t0) return;
     const body = r.body;
+    if (r.wrecked) {
+      body.root.visible = true;
+      stepWreck(r, dt, t);
+      return;
+    }
     if (heldRunner != null && String(r.seat.id) === String(heldRunner)) {
       body.root.visible = false;
       return;
     }
     body.root.visible = true;
 
-    if (r.wrecked) {
-      stepWreck(r, dt, t);
-      return;
-    }
-
     if (pairLock.keys().length && (sendoff.runner === r || sendoff.guide === r)) {
       driveSendoff(r, dt, t);
       return;
     }
 
-    if (exec.phase !== 'off' && exec.swinger === r) {
+    if (exec.phase !== 'off' && exec.swinger === r && !r.seated) {
       driveExecute(r, dt, t);
       if (exec.phase === 'swing' || exec.phase === 'hold') {
         retargetSledge();
@@ -746,6 +747,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     looseChairs: [],
     sledgeLocal: null,
     smashed: false,
+    strikerSat: false,
   };
   /*
    * Pair-lock sendoff. Ring-center walk + spec pan. sitLock drops at WALK for
@@ -810,29 +812,39 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     clampInSpace(_eye, space);
   }
 
+  function fillLingerEye() {
+    const b = exec.victim;
+    if (!b) return;
+    const floorY = room.floorY ?? 0;
+    const chair = exec.looseChairs.find((c) => c.index === b.seatIndex)?.mesh
+      || exec.looseChairs[exec.looseChairs.length - 1]?.mesh;
+    const living = robots.filter((r) => !r.wrecked).map((r) => ({
+      x: r.body.pos.x, z: r.body.pos.z,
+    }));
+    const cam = execLingerCam({
+      body: { x: b.body.pos.x, z: b.body.pos.z },
+      chair: {
+        x: chair ? chair.position.x : (b.chair?.x ?? b.body.pos.x),
+        z: chair ? chair.position.z : (b.chair?.z ?? b.body.pos.z),
+      },
+      cx, cz, floorY, living,
+      elapsed: exec.t - exec.hitAt,
+    });
+    _look.set(cam.look.x, cam.look.y, cam.look.z);
+    _eye.set(cam.eye.x, cam.eye.y, cam.eye.z);
+    clampInSpace(_eye, space);
+  }
+
   /**
    * B — one unbroken ride: crane off the talk arc, walk-up inside the ring,
-   * time-dip + whip a few degrees off impact, settle wide-low on limp body
-   * one way and loose chair the other. A (Showrunner) stays on fillExecuteEye.
+   * time-dip + whip a few degrees off impact. After contact the spec linger
+   * owns the lens (not fillExecuteEye, not a new CUE_KIND).
    */
   function fillExecuteB() {
     const a = exec.swinger;
     const b = exec.victim;
-    const floorY = room.floorY ?? 0;
     if (exec.hit && b) {
-      const chair = exec.looseChairs.find((c) => c.index === b.seatIndex)?.mesh
-        || exec.looseChairs[exec.looseChairs.length - 1]?.mesh;
-      const cam = wreckCam({
-        body: { x: b.body.pos.x, z: b.body.pos.z },
-        chair: {
-          x: chair ? chair.position.x : (b.chair?.x ?? b.body.pos.x),
-          z: chair ? chair.position.z : (b.chair?.z ?? b.body.pos.z),
-        },
-        cx, cz, floorY,
-      });
-      _look.set(cam.look.x, cam.look.y, cam.look.z);
-      _eye.set(cam.eye.x, cam.eye.y, cam.eye.z);
-      clampInSpace(_eye, space);
+      fillLingerEye();
       return;
     }
     if ((exec.phase === 'swing' || exec.phase === 'hold') && a && b) {
@@ -1259,6 +1271,17 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     if (exec.showrunner && !exec.hit && exec.victim && exec.t >= EXECUTE.RISE_DUR + SHOW_CONTACT_S) {
       beginHit(t);
     }
+    if (exec.hit) {
+      const elapsed = exec.t - exec.hitAt;
+      if (lingerBeat(elapsed) === 'group' && exec.swinger && !exec.swinger.wrecked && !exec.strikerSat) {
+        exec.strikerSat = true;
+        exec.swinger.body.avatar?.unmountProp?.();
+        exec.swinger.body.sledge?.forget?.();
+        restoreChair(exec.swinger.seatIndex);
+        parkSit(exec.swinger);
+      }
+      if (elapsed >= LINGER_TOTAL_S) clearExecute();
+    }
   }
 
   function afterBodies(dt) {
@@ -1292,6 +1315,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     exec.hitAt = 0;
     exec.lastLook = LAST_LOOK.OFF;
     exec.sledgeLocal = null;
+    exec.strikerSat = false;
   }
 
   /*
@@ -1677,6 +1701,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       exec.hitAt = 0;
       exec.sledgeLocal = null;
       exec.smashed = false;
+      exec.strikerSat = false;
       exec.lastLook = exec.victim ? LAST_LOOK.LIVE : LAST_LOOK.OFF;
       exec.strike = (exec.swinger && exec.victim)
         ? strikeMark(exec.swinger, exec.victim)
@@ -1904,19 +1929,26 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
 
       /*
        * 🎥 Talk still walks the outside arc. Execution is a different picture:
-       * B rides the walk-up inside the ring and whips to the wreck; Showrunner
-       * degrades to A (fillExecuteEye, outside hold). Never a lid.
+       * B rides the walk-up inside the ring. After contact the spec linger owns
+       * the lens — crime / orbit / group, not fillExecuteEye on the nominator's rear.
+       * Showrunner A holds fillExecuteEye only until contact. Never a lid. No CUE_KIND.
        */
       const useTalk = talking || done;
       if (exec.phase !== 'off') {
-        const cam = execCamMode({ showrunner: exec.showrunner });
-        if (cam === 'A') fillExecuteEye();
-        else fillExecuteB();
-        reelSight?.(_eye, _look);
-        if (cam === 'A') {
-          walkCamOnRing(engine.camera, _lookLive, _eye, _look, cx, cz, dt);
-        } else {
+        if (exec.hit) {
+          fillLingerEye();
+          reelSight?.(_eye, _look);
           whipCam(dt);
+        } else {
+          const cam = execCamMode({ showrunner: exec.showrunner });
+          if (cam === 'A') fillExecuteEye();
+          else fillExecuteB();
+          reelSight?.(_eye, _look);
+          if (cam === 'A') {
+            walkCamOnRing(engine.camera, _lookLive, _eye, _look, cx, cz, dt);
+          } else {
+            whipCam(dt);
+          }
         }
         engine.camera.up.set(0, 1, 0);
         engine.camera.lookAt(_lookLive);

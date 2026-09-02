@@ -3707,13 +3707,14 @@ console.log('\nparty-warm — the lobby-warm night');
     && /classList\.toggle\('rrr-cast', onCast\)/.test(hostSrc)
     && skin.indexOf('.night.on-cast .night-main') > skin.indexOf('.night.on-talk .night-main'));
 
-  t('W36c · ballots ride on the feed as slips, and the overlay language lives in look.js',
+  t('W36c · ballots fade over the feed like emotes, not a 26% slips column',
     /function castOverlay/.test(hostSrc)
-    && /class="cast-overlay"/.test(hostSrc)
-    && /cast-slip/.test(hostSrc)
-    && SHOW_CHROME_CSS.includes('.cast-overlay')
-    && SHOW_CHROME_CSS.includes('.cast-slip')
-    && !/class="cast-overlay"/.test(SHOW_CHROME_CSS));
+    && /data-cast-votes/.test(hostSrc)
+    && /cast-vote-chip/.test(hostSrc)
+    && /function paintVotePopups/.test(hostSrc)
+    && SHOW_CHROME_CSS.includes('.cast-votes')
+    && !/class="cast-overlay"/.test(hostSrc)
+    && !SHOW_CHROME_CSS.includes('width:clamp(230px, 26%, 380px)'));
 
   t('W36d · the four things John cut are gone from the casting beat and stay gone',
     !/Ballots land here/.test(hostSrc)

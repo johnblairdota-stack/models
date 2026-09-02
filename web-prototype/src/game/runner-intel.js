@@ -115,13 +115,67 @@ export function legsFor(portalCentres, goal) {
   for (const p of portalCentres ?? []) {
     const c = p?.centre ?? p;
     if (c && Number.isFinite(Number(c.x)) && Number.isFinite(Number(c.z))) {
-      legs.push({ x: Number(c.x), z: Number(c.z) });
+      const roomId = p?.roomId ?? p?.id ?? (p?.a && p?.b ? `${p.a}>${p.b}` : '');
+      legs.push({ x: Number(c.x), z: Number(c.z), roomId: String(roomId ?? '') });
     }
   }
   if (goal && Number.isFinite(Number(goal.x)) && Number.isFinite(Number(goal.z))) {
-    legs.push({ x: Number(goal.x), z: Number(goal.z) });
+    legs.push({ x: Number(goal.x), z: Number(goal.z), roomId: String(goal.roomId ?? '') });
   }
   return legs;
+}
+
+/**
+ * Identity of a walk leg. Same two-decimal shape as `pinKey`, plus `roomId`, so a stall
+ * replan can refuse the doorway that just failed without comparing object identity.
+ */
+export function legKey(leg) {
+  if (!leg || !Number.isFinite(Number(leg.x)) || !Number.isFinite(Number(leg.z))) return '';
+  return Number(leg.x).toFixed(2) + '|' + Number(leg.z).toFixed(2)
+    + '|' + String(leg.roomId ?? '');
+}
+
+/**
+ * A point beside the snag, not the snag. Perpendicular to the blocked heading so the
+ * first new leg cannot be the (x, z, roomId) that just failed.
+ */
+function sidestepOf(from, blocked, goal) {
+  const at = from && Number.isFinite(Number(from.x)) && Number.isFinite(Number(from.z))
+    ? from : blocked;
+  if (!at || !Number.isFinite(Number(at.x)) || !Number.isFinite(Number(at.z))) return null;
+  const tx = Number((goal && Number.isFinite(goal.x) ? goal.x : blocked?.x) ?? at.x) - Number(at.x);
+  const tz = Number((goal && Number.isFinite(goal.z) ? goal.z : blocked?.z) ?? at.z) - Number(at.z);
+  const len = Math.hypot(tx, tz) || 1;
+  const SIDE = 1.15;
+  return {
+    x: Number(at.x) + (-tz / len) * SIDE,
+    z: Number(at.z) + (tx / len) * SIDE,
+    roomId: String(at.roomId ?? blocked?.roomId ?? ''),
+  };
+}
+
+/**
+ * Stall replan from HERE. Live `pathPortals` still answers the blocked doorway first —
+ * that is a green RI1 and a stuck CAST night. Drop that identity. If the only remaining
+ * target is the snag itself (furniture in front of a pin), sidestep then walk the pin.
+ *
+ * ⚠️ **THIS DOES NOT WALK THE TRUE CAMERA.** The goal is still the guide's pin.
+ */
+export function unstickLegs(portalCentres, goal, blocked, from) {
+  const raw = legsFor(portalCentres, goal);
+  const skip = legKey(blocked);
+  if (!skip) return raw;
+  const rest = raw.filter((leg, i) => !(i === 0 && legKey(leg) === skip));
+  if (rest.length && legKey(rest[0]) !== skip) return rest;
+  const side = sidestepOf(from, blocked, goal);
+  const fallback = rest.length
+    ? rest
+    : (goal && Number.isFinite(Number(goal.x)) && Number.isFinite(Number(goal.z))
+      ? [{ x: Number(goal.x), z: Number(goal.z), roomId: String(goal.roomId ?? '') }]
+      : []);
+  const tail = fallback.filter((l) => !side || legKey(l) !== legKey(side));
+  if (side && legKey(side) && legKey(side) !== skip) return [side, ...tail];
+  return tail;
 }
 
 /** Drop every leg already reached. Mutating, because the caller owns the array. */

@@ -246,10 +246,15 @@ function litFace(p, { halo = true, spec = true, bold = 0, mood = 'idle' } = {}) 
  * `url(#…)`. "Floating AROUND the head" is therefore not available in the literal sense: the
  * tile overlaps the crown, which is what a status pip does anyway.
  *
- * The colours are FIXED per reaction rather than the player's accent. The badge's only job is
- * *which reaction* — identity is already carried twice, by the face and by the name under it —
- * and a fixed colour has to work against all twelve accents rather than disappear into one.
- * Gate: `react-pad` R60+.
+ * The badge colours are FIXED per reaction rather than the player's accent. The badge's only
+ * job is *which reaction* — identity is already carried twice, by the face and by the name
+ * under it — and a fixed colour has to work against all twelve accents rather than disappear
+ * into one. Gate: `react-pad` R60+.
+ *
+ * ⚠️ **THE NAME IS THE PLAYER'S ACCENT, AND THAT OVERRULES THE SENTENCE ABOVE FOR THE NAME
+ * ONLY.** John, CAST 8-bot: emote name (and chip tint) matches that player's name colour.
+ * The four reaction pictures stay distinct. `--react-accent` / inline `react-who` colour
+ * carry the lobby accent; the badge fill stays the table in `BADGE`.
  */
 const BADGE = {
   clap: ['#9ff2c8', '<path d="M72.4 24.4L79 17.6L85.6 24.4" fill="none" stroke="#080604" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>'],
@@ -635,29 +640,15 @@ export const SHOW_CHROME_CSS = `
        plate first. Talk beats keep their reserved bands; nothing here applies to them.
        No panel behind the column, just a scrim that fades out toward the middle of the picture,
        so the ballots read from the couch without boxing off a quarter of the frame. */
-    .cast-overlay { position:absolute; inset:0 0 0 auto; width:clamp(230px, 26%, 380px);
-      display:flex; flex-direction:column; align-content:flex-start; gap:8px;
-      padding:14px 18px 16px; min-height:0; overflow:hidden; pointer-events:none; z-index:2;
-      background:linear-gradient(270deg, rgba(0,0,0,.82) 0%, rgba(0,0,0,.5) 58%, rgba(0,0,0,0) 100%); }
-    .cast-overlay-k { flex:0 0 auto; color:var(--night-accent); font-size:11px;
-      letter-spacing:.28em; text-transform:uppercase; font-weight:800;
-      text-shadow:0 2px 10px rgba(0,0,0,.9); }
-    .cast-slips { display:flex; flex-direction:column; gap:6px; min-height:0; overflow:hidden; }
-    /* No entry animation on a slip. paint() rebuilds root.innerHTML on every socket message and
-       the lobby fans a snapshot several times a second, so a per-slip fade-in would not read as
-       'a ballot just landed' — it would strobe the whole column for the length of the beat. */
-    .cast-slip { display:flex; flex-direction:column; gap:3px; padding:7px 10px;
-      border-radius:0 5px 5px 0; border-left:3px solid var(--night-accent);
-      background:rgba(0,0,0,.86); }
-    .cast-voter { font-size:clamp(15px, 1.5vw, 22px); font-weight:800; line-height:1;
+    .cast-votes { position:absolute; inset:auto 18px 22% auto; display:flex;
+      flex-direction:column-reverse; align-items:flex-end; gap:8px;
+      pointer-events:none; z-index:2; max-width:min(280px, 38vw); }
+    .cast-vote-chip { text-align:right; padding:6px 10px; border-radius:8px;
+      background:rgba(0,0,0,.72); }
+    .cast-vote-picks { display:block; font-size:11px; letter-spacing:.06em;
       color:var(--night-ink); text-shadow:0 2px 10px rgba(0,0,0,.9); }
-    .cast-picks { display:flex; flex-wrap:wrap; gap:4px 14px; font-weight:700;
-      font-size:clamp(12px, 1.1vw, 16px); line-height:1.1; color:var(--night-ink);
-      text-shadow:0 2px 10px rgba(0,0,0,.9); }
-    .cast-picks em { font-style:normal; margin-right:5px; font-size:10px; font-weight:800;
-      letter-spacing:.18em; text-transform:uppercase; color:var(--night-accent); }
-    .cast-empty { margin:0; color:var(--night-dim); font-size:12px; letter-spacing:.16em;
-      text-transform:uppercase; text-shadow:0 2px 10px rgba(0,0,0,.9); }
+    .cast-vote-picks em { font-style:normal; margin-right:4px; font-size:9px; font-weight:800;
+      letter-spacing:.16em; text-transform:uppercase; color:var(--react-accent, var(--night-accent)); }
     /* Directly under the slips, not floated to the bottom of the column — it is the footnote to
        the ballots above it, and a tiebreak line stranded 900px away reads as unrelated chrome. */
     .cast-why { flex:0 0 auto; margin:0; color:var(--night-soft); font-size:11px;
@@ -668,7 +659,7 @@ export const SHOW_CHROME_CSS = `
        column's; it is the CONTENT that stops short, by reserving the column's width as padding.
        Cutting the element short instead drew a hard edge straight down the picture. */
     .cast-strip { position:absolute; inset:auto 0 0 0; pointer-events:none; z-index:2;
-      padding:14px 20px 16px; padding-right:calc(clamp(230px, 26%, 380px) + 20px);
+      padding:14px 20px 16px;
       background:linear-gradient(0deg, rgba(0,0,0,.86) 0%, rgba(0,0,0,.6) 55%, rgba(0,0,0,0) 100%); }
     .cast-strip .cast-board { margin:0; }
     .cast-strip .cast-k { font-size:11px; }

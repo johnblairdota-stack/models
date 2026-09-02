@@ -232,7 +232,8 @@ export function injectNightSkin() {
     .react-chip { display:flex; flex-direction:column; align-items:center; gap:3px;
       --dx:0px; --dy:0px; transform: translate(var(--dx), var(--dy));
       animation: react-float 10s ease-out forwards; }
-    .react-chip .react-who { font-size:11px; letter-spacing:.08em; color:var(--night-soft);
+    .react-chip .react-who { font-size:11px; letter-spacing:.08em;
+      color:var(--react-accent, var(--night-soft));
       max-width:96px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     @keyframes react-float {
       0% { opacity:0; transform: translate(var(--dx), var(--dy)); }
