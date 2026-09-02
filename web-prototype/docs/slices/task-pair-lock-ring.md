@@ -241,3 +241,12 @@ chase / top / crane ran during Casting; a new SHOW_BEATS entry appeared; reactor
 they walk to the door; PR 66 / 68 was used as the branch.
 
 If a stated fact is wrong, say so in the report rather than diverging silently.
+
+Built facts (2026-09-02), not divergences:
+
+- The dress mark is **unnamed.** Authored `D4`/`D5`/`D6` have ids and no `name`.
+  `pairArch` takes the widest ballroom portal, then the nearest to `(cx, cz)` —
+  authored that is **D5**, the doorway the runner leaves by. No second arch.
+- No stand-turn / loco turn is loaded as a callable clip (`CLIPS` has idle/walk/run
+  only; `Walk_Turn_Left_with_Weapon` was rejected as a weapon walk). TURN..HOLD
+  **yaws the root**. No seated-clip name was added.

@@ -20,6 +20,7 @@ import {
 } from './accusation-stage.js';
 import {
   PAIR, createPairLockStage,
+  pairArch, pairMarks, sendoffCam, sendoffU,
 } from './pair-lock-stage.js';
 import {
   HIT_CONTACT, HIT_SLACK, SHOW_CONTACT_S,
@@ -35,8 +36,9 @@ export {
   reactorSeats, settleClip, gaspClip, pickAllowed, seatedReactionAllow,
 } from './accusation-stage.js';
 export {
-  PAIR, PAIR_CLIPS, PAIR_LOCK_MS, pairLockMs,
+  PAIR, PAIR_CLIPS, PAIR_LOCK_MS, PAIR_MARK, pairLockMs,
   createPairLockStage, pairKey, pairRows, planPairLock,
+  pairArch, pairMarks, sendoffCam, sendoffU, SENDOFF_CAM,
 } from './pair-lock-stage.js';
 
 /**
@@ -627,6 +629,11 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       return;
     }
 
+    if (pairLock.keys().length && (sendoff.runner === r || sendoff.guide === r)) {
+      driveSendoff(r, dt, t);
+      return;
+    }
+
     if (exec.phase !== 'off' && exec.swinger === r) {
       driveExecute(r, dt, t);
       if (exec.phase === 'swing' || exec.phase === 'hold') {
@@ -739,6 +746,16 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     looseChairs: [],
     sledgeLocal: null,
     smashed: false,
+  };
+  /*
+   * Pair-lock sendoff. Ring-center walk + spec pan. sitLock drops at WALK for
+   * these two only — copy of beginWalk, not a door walk, not Shot B at the chairs.
+   */
+  const sendoff = {
+    runner: null,
+    guide: null,
+    dropped: new Set(),
+    guideRested: false,
   };
   const _headW = new THREE.Vector3();
   const _aimW = new THREE.Vector3();
@@ -1357,9 +1374,11 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
   });
 
   /*
-   * 🎭 The pair-lock sendoff. Same machine shape as the accusation: keyed `runner>guide`,
-   * sitLock stays on, the clip does the travelling. Reactors: none. Driven after 3·2·1,
-   * before expedition. See `pair-lock-stage.js`.
+   * 🎭 The pair-lock sendoff. Same machine shape as the accusation: keyed `runner>guide`.
+   * sitLock DROPS at WALK for the two named bodies (execute's beginWalk pattern), then
+   * they loco to the ring origin. Reactors: none. Driven after 3·2·1, before expedition.
+   * No stand-turn clip is loaded — Walk_Turn_Left_with_Weapon is a rejected weapon walk
+   * and CLIPS has no turn key — so TURN..HOLD yaws the root. See `pair-lock-stage.js`.
    */
   const pairLock = createPairLockStage({
     seatCount: robots.length,
@@ -1373,11 +1392,126 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       if (hold && av.clip === clip) return true;
       return av.playSeated(clip, { hold: !!hold, fade: PAIR.FADE }) === true;
     },
+    dropSitLock: (seatIndex) => {
+      const r = robots[seatIndex];
+      if (!r || r.wrecked) return;
+      dropSendoffLock(r);
+    },
     rest: (seatIndex) => {
+      restoreCollider(seatIndex);
+      sendoff.dropped.delete(seatIndex);
       const r = robots[seatIndex];
       if (r && !r.wrecked) parkSit(r);
     },
   });
+
+  function sendoffArchOf() {
+    const portals = typeof room.portals === 'function' ? room.portals() : (room.portals || []);
+    return pairArch({ portals, spaceId: space?.id || 'ballroom', cx, cz });
+  }
+
+  function sendoffMarksOf() {
+    return pairMarks({ cx, cz, arch: sendoffArchOf(), floorY: room.floorY ?? 0 });
+  }
+
+  function dropSendoffLock(r) {
+    if (!r || sendoff.dropped.has(r.seatIndex)) return;
+    dropCollider(r.seatIndex);
+    r.body.pos.copy(r.at);
+    r.body.sitLock = true;
+    r.body.avatar?.playLoco?.();
+    r.body.sitLock = false;
+    r.seated = false;
+    r.arrived = true;
+    r.cleared = true;
+    sendoff.dropped.add(r.seatIndex);
+  }
+
+  function lerpYaw(a, b, u) {
+    let d = b - a;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    return a + d * Math.min(1, Math.max(0, u));
+  }
+
+  function bindSendoff(runnerId, guideId) {
+    const runner = robotById(runnerId);
+    const guide = robotById(guideId);
+    sendoff.runner = runner;
+    sendoff.guide = guide;
+    sendoff.dropped.clear();
+    sendoff.guideRested = false;
+  }
+
+  /**
+   * Rise clip under sitLock, drop at WALK (execute pattern), loco to pairMarks
+   * at the ring origin — never to a door. Face camera until TURN, yaw the root
+   * to faceArch over TURN..HOLD. Guide parkSits at HOLD; runner waits for holdForRun.
+   */
+  function driveSendoff(r, dt, t) {
+    const body = r.body;
+    const e = pairLock.elapsed();
+    const role = r === sendoff.runner ? 'runner' : 'guide';
+    const mark = sendoffMarksOf()[role];
+    if (!mark) return;
+
+    if (e >= PAIR.HOLD && role === 'guide') {
+      if (!sendoff.guideRested) {
+        restoreCollider(r.seatIndex);
+        sendoff.dropped.delete(r.seatIndex);
+        parkSit(r);
+        sendoff.guideRested = true;
+      }
+      body.sitLock = true;
+      body.pos.copy(r.sitAt);
+      body.facing = r.face;
+      body.aimYaw = r.face;
+      body.update(dt, t, { move: { x: 0, y: 0 }, run: false, aimYaw: r.face, aimPitch: 0 });
+      return;
+    }
+
+    if (e < PAIR.WALK) {
+      body.sitLock = true;
+      body.pos.copy(r.sitAt);
+      body.facing = r.face;
+      body.aimYaw = r.face;
+      body.update(dt, t, { move: { x: 0, y: 0 }, run: false, aimYaw: r.face, aimPitch: 0 });
+      return;
+    }
+
+    dropSendoffLock(r);
+
+    const gx = mark.x;
+    const gz = mark.z;
+    const d = Math.hypot(gx - body.pos.x, gz - body.pos.z);
+    if (e >= PAIR.ARRIVE && d > ARRIVE) {
+      body.pos.x = gx;
+      body.pos.z = gz;
+    } else if (d > ARRIVE) {
+      steerTo(body, gx, gz, dt, false);
+      return;
+    }
+
+    let want = mark.faceCam;
+    if (e >= PAIR.TURN) {
+      const u = (e - PAIR.TURN) / Math.max(1e-6, PAIR.HOLD - PAIR.TURN);
+      want = lerpYaw(mark.faceCam, mark.faceArch, u);
+    }
+    if (e >= PAIR.HOLD) want = mark.faceArch;
+    const turn = Math.atan2(Math.sin(want - body.aimYaw), Math.cos(want - body.aimYaw));
+    body.aimYaw += turn * (1 - Math.exp(-8.0 * dt));
+    body.facing = body.aimYaw;
+    body.update(dt, t, { move: { x: 0, y: 0 }, run: false, aimYaw: body.aimYaw, aimPitch: 0 });
+  }
+
+  function fillSendoffEye() {
+    const arch = sendoffArchOf();
+    const cam = sendoffCam({
+      cx, cz, floorY: room.floorY ?? 0, arch, u: sendoffU(pairLock.elapsed()),
+    });
+    _eye.set(cam.eye.x, cam.eye.y, cam.eye.z);
+    _look.set(cam.look.x, cam.look.y, cam.look.z);
+  }
 
   if (wreckWant.size) applyWreck([...wreckWant]);
 
@@ -1413,6 +1547,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
         for (const r of robots) {
           if (heldRunner != null && String(r.seat.id) === String(heldRunner)) continue;
           if (exec.phase !== 'off' && exec.swinger === r) continue;
+          if (pairLock.keys().length && (sendoff.runner === r || sendoff.guide === r)) continue;
           if (r.wrecked) continue;
           r.body.root.visible = true;
           parkSit(r);
@@ -1434,6 +1569,10 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
      */
     holdForRun(runnerId) {
       pairLock.set([]);
+      sendoff.runner = null;
+      sendoff.guide = null;
+      sendoff.dropped.clear();
+      sendoff.guideRested = false;
       heldRunner = runnerId ?? null;
       for (const r of robots) {
         const mine = heldRunner != null && String(r.seat.id) === String(heldRunner);
@@ -1482,9 +1621,9 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     },
 
     /**
-     * 🎭 **Casting after lock: the circle PERFORMS the sendoff.** Runner stands at 0,
-     * guide at 0.40, both hold `Sit_to_Stand_Transition_M`. Keyed `runner>guide` — a
-     * re-cue of the same pair is a no-op. Empty clears. Seat lock stays on.
+     * 🎭 **Casting after lock: the circle PERFORMS the sendoff.** Both rise at 0,
+     * sitLock drops at WALK, they loco to ring-center marks, spec pan, turn to the
+     * arch. Keyed `runner>guide` — a re-cue of the same pair is a no-op. Empty clears.
      *
      * Also reached from `setPairs` when the host sends a nameless `{a,b}` pair during
      * sendoff (the whisper `pair` cue carries a merged name; a nameless pair is this).
@@ -1492,8 +1631,18 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     setPairLock(runnerId, guideId) {
       const runner = String(runnerId || '');
       const guide = String(guideId || '');
-      if (!runner || !guide) { pairLock.set([]); return pairLock.keys().length; }
-      return pairLock.set([{ runner, guide }]);
+      if (!runner || !guide) {
+        pairLock.set([]);
+        sendoff.runner = null;
+        sendoff.guide = null;
+        sendoff.dropped.clear();
+        sendoff.guideRested = false;
+        return pairLock.keys().length;
+      }
+      const prev = pairLock.keys().join(',');
+      const n = pairLock.set([{ runner, guide }]);
+      if (prev !== `${runner}>${guide}`) bindSendoff(runner, guide);
+      return n;
     },
 
     /**
@@ -1579,8 +1728,17 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
        * A nameless pair is the locked runner+guide, not a whisper merge. Debrief pairs
        * carry a merged name and must not stand anyone. Empty clears a leftover sendoff.
        */
-      if (nameless.length === 1) pairLock.set([{ runner: nameless[0].a, guide: nameless[0].b }]);
-      else if (!(pairs || []).length) pairLock.set([]);
+      if (nameless.length === 1) {
+        const prev = pairLock.keys().join(',');
+        pairLock.set([{ runner: nameless[0].a, guide: nameless[0].b }]);
+        if (prev !== `${nameless[0].a}>${nameless[0].b}`) bindSendoff(nameless[0].a, nameless[0].b);
+      } else if (!(pairs || []).length) {
+        pairLock.set([]);
+        sendoff.runner = null;
+        sendoff.guide = null;
+        sendoff.dropped.clear();
+        sendoff.guideRested = false;
+      }
       /*
        * 🟢 …and the data crossing the room between them. The merged plate is a change to
        * something the room has already read and stopped looking at; the stream is a new thing
@@ -1613,6 +1771,13 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       pending: pairLock.pending(),
       performing: pairLock.performing(),
       finished: pairLock.finished(),
+      elapsed: pairLock.elapsed(),
+      camU: sendoffU(pairLock.elapsed()),
+      sitLock: {
+        runner: sendoff.runner ? !!sendoff.runner.body.sitLock : null,
+        guide: sendoff.guide ? !!sendoff.guide.body.sitLock : null,
+      },
+      dropped: [...sendoff.dropped],
     }),
 
     /**
@@ -1758,6 +1923,25 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
         engine.camera.rotateZ(Math.sin(t * 0.47) * 0.008);
         if (exec.swinger) focusI = exec.swinger.seatIndex;
         else if (exec.victim) focusI = exec.victim.seatIndex;
+      } else if (pairLock.keys().length) {
+        /*
+         * Spec pan, wreckCam's class — numbers from sendoffCam, not a CUE_KIND.
+         * Not chase, not top, not a crane (eye Y is locked). Snap on the first
+         * frames so the talk-arc Y does not dip into the shot.
+         */
+        fillSendoffEye();
+        reelSight?.(_eye, _look);
+        if (pairLock.elapsed() < 0.05) {
+          engine.camera.position.copy(_eye);
+          _lookLive.copy(_look);
+        } else {
+          const k = 1 - Math.exp(-3.4 * dt);
+          engine.camera.position.lerp(_eye, k);
+          _lookLive.lerp(_look, k);
+        }
+        engine.camera.up.set(0, 1, 0);
+        engine.camera.lookAt(_lookLive);
+        if (sendoff.runner) focusI = sendoff.runner.seatIndex;
       } else if (useTalk) {
         const shot = fillTalkEye();
         reelSight?.(_eye, _look);
