@@ -39,10 +39,11 @@
 import {
   ACCUSE, ACCUSE_CLIPS, createAccusationStage, nomKey, nomRows,
   planAccusation, reactorSeats, settleClip, gaspClip, pickAllowed,
-  planExecute, EXECUTE,
+  planExecute, EXECUTE, accusationFinished, accusationSpan,
 } from '../src/game/accusation-stage.js';
 import { SEATED_REACTION_CLIPS, SEATED_CLIPS_LEAVE_CHAIR, SIT_CLIP_ALLOW } from '../src/game/chair-seats.js';
-import { executioner, SHOWRUNNER } from '../src/party/vote.js';
+import { executioner, nominate, ACCUSATION_PLAYING, SHOWRUNNER } from '../src/party/vote.js';
+import { createRoom } from '../src/party/room.js';
 import { WEAPON_RANGE } from '../src/game/rules.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -451,6 +452,48 @@ console.log('\naccusation-stage · the circle performs the accusation\n');
       living: ['p1', 'p2', 'p3'],
       nominations: [{ nominator: 'p1', target: 'p3' }, { nominator: 'p2', target: 'p5' }],
     }, 'p5') === 'p2');
+}
+
+/* ── SEQ · two noms in one tick are one landing + wait, then the second after finish ──────── */
+{
+  const beats = planAccusation({ nominatorSeat: 1, accusedSeat: 4, seatCount: 8 });
+  const span = accusationSpan(beats);
+  t('SEQ0 · finished is last planned beat (SETTLE 2.00) + FADE 0.25',
+    span === ACCUSE.SETTLE + ACCUSE.FADE
+    && accusationFinished(span, beats)
+    && !accusationFinished(span - 0.01, beats),
+    `span=${span}`);
+
+  const living = IDS;
+  const state = { living, nominations: [] };
+  const first = nominate(state, 'p1', 'p2');
+  state.nominations.push(first.nomination);
+  const dumped = nominate(state, 'p3', 'p4', { playing: true });
+  t('SEQ1 · two noms in one tick: first lands, second waits — accusation playing',
+    first.ok && dumped.ok === false && dumped.why === ACCUSATION_PLAYING
+      && state.nominations.length === 1,
+    JSON.stringify(dumped));
+  const after = nominate(state, 'p3', 'p4', { playing: false });
+  t('SEQ2 · the second lands only after the performance is finished',
+    after.ok && after.nomination.target === 'p4',
+    JSON.stringify(after));
+
+  const r = createRoom({ count: 8, castSeed: 1, worldSeed: 1, send: () => {}, emit: () => {} });
+  r.start();
+  const ids = r.state.players.map((p) => p.id);
+  r.enterReckoning(ids);
+  const t0 = 1_000_000;
+  const a = r.nominatePlayer(ids[0], ids[1], ids, t0);
+  const b = r.nominatePlayer(ids[2], ids[3], ids, t0);
+  t('SEQ3 · room landing: same-tick dump is one stand + wait',
+    a.ok && !b.ok && b.why === ACCUSATION_PLAYING
+      && r.state.nominations.length === 1,
+    JSON.stringify(b));
+  const c = r.nominatePlayer(ids[2], ids[3], ids, t0 + span * 1000);
+  t('SEQ4 · …and the second lands after last beat + fade',
+    c.ok && r.state.nominations.length === 2
+      && r.state.nominations[1].nominator === ids[2],
+    JSON.stringify(c));
 }
 
 console.log(`\naccusation-stage: ${pass} passed, ${fail} failed`);

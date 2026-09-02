@@ -102,6 +102,7 @@ import {
 } from '../net/party/local.mjs';
 import { SHOW_BEATS } from '../src/party/show.js';
 import { PHASE } from '../src/party/phases.js';
+import { accusationSpan } from '../src/game/accusation-stage.js';
 
 const PORT = 5203;
 const PHONES = 5;
@@ -176,6 +177,7 @@ async function nominate(r) {
     .some((n) => n.nominator === wire.from && n.target === wire.to);
   const fanned = (last(r.phones[4], 'noms')?.standing || [])
     .some((n) => n.nominator === wire.from && n.target === wire.to);
+  await sleep(Math.ceil(accusationSpan() * 1000));
   const result = applyNominate(r.room, verb.from, verb.to);
   sent.push(verb);
   await sleep(60);

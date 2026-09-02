@@ -31,8 +31,8 @@ export const HIT_SLACK = 0.22;
 /** Showrunner has no body: fire the hit this long after rise, no ninth robot. */
 export const SHOW_CONTACT_S = 1.20;
 
-/** How long the wreck holds before it is only a plate. */
-export const WRECK_HOLD_S = 2.40;
+/** How long the wreck holds before it is only a plate. Contact reads, then off. */
+export const WRECK_HOLD_S = 0.50;
 
 /**
  * The wreck plate after the execute cue goes empty. Same low pair B used on
@@ -42,8 +42,8 @@ export const WRECK_HOLD_S = 2.40;
 export const WRECK_LOOK_Y = 0.42;
 export const WRECK_EYE_Y = 0.78;
 
-/** Talk-cycle plate. Only scheduled when someone on the bed is wrecked. */
-export const WRECK_SHOT = Object.freeze({ name: 'wreck', dur: 10.0, span: 0.70 });
+/** Named wreck look. Dur 0 — do not linger a 10s talk-cycle wreck plate. */
+export const WRECK_SHOT = Object.freeze({ name: 'wreck', dur: 0, span: 0.70 });
 
 export const LAST_LOOK = Object.freeze({
   OFF: 'off',
@@ -146,6 +146,8 @@ export function wreckPose({ sitAt, face = 0, u = 0, cx = 0, cz = 0, floorY = 0 }
     facing: face + 0.40 * ease,
     pitch: 1.52 * ease,
     roll: 0.22 * ease,
+    // Frozen last-contact frame — never a Sit_* hold on a posed settle.
+    clip: null,
   };
 }
 
@@ -235,12 +237,11 @@ export function wreckLook({ sitAt, seat, face = 0, cx = 0, cz = 0, floorY = 0 } 
   return { ...wreckCam({ body, chair, cx, cz, floorY }), body, chair };
 }
 
-/** Talk cycle: append the wreck plate only when there is wreckage to hold. */
+/** Talk cycle: do not append a wreck plate. Linger was the 10s hold after contact. */
 export function talkCycleShots(base, hasWreck) {
   const shots = Array.isArray(base) ? base : [];
-  if (!hasWreck) return shots;
-  if (shots.some((s) => s?.name === WRECK_SHOT.name)) return shots;
-  return [...shots, WRECK_SHOT];
+  void hasWreck;
+  return shots.filter((s) => !(s?.name === WRECK_SHOT.name && (Number(s.dur) || 0) >= 10));
 }
 
 /** Which named plate is on at `clock`. THREE-free so the gate can prove wreck is visited. */

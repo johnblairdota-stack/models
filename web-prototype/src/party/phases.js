@@ -87,8 +87,9 @@ export const EPISODE_ORDER = [
  *
  * **The number:** ep1 gains 105s (reckoning 45 + vote 25 + execution 20 + verdict 15). A 4/5/6
  * episode night goes 26:25 / 31:50 / 37:15 → **28:10 / 33:35 / 39:00**, and the worst case —
- * three nominations every episode at `EPISODE_CAP` — goes 34:50 → **37:20**, still inside the
- * forty minutes `round-loop` R2c guards. Instrument: `harness/round-loop.mjs` R2/R3.
+ * the 90s Reckoning TIME wall every episode at `EPISODE_CAP` (seven unique names still fit;
+ * `reckoningSeconds(3)` and `reckoningSeconds(7)` are both the cap) — goes 34:50 → **37:20**,
+ * still inside the forty minutes `round-loop` R2c guards. Instrument: `harness/round-loop.mjs` R2/R3.
  */
 export const premiere = (ep) => ep === 1;
 
@@ -99,7 +100,7 @@ export const premiere = (ep) => ep === 1;
  */
 export const orderFor = () => EPISODE_ORDER;
 
-/** `RECKONING` gains 15s per nomination, hard cap 90s. */
+/** `RECKONING` gains 15s per nomination, hard cap 90s. The cap is a TIME wall, not a count cap. */
 export const RECKONING_PER_NOM = 15;
 export const RECKONING_CAP = 90;
 export const reckoningSeconds = (noms) =>

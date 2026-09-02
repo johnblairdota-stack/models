@@ -24,6 +24,7 @@ import { hunterVisibleToGuide, ROOMS } from './coverage.js';
 import { applyTake, resolveContact, MODE, PLATE } from './taken.js';
 import { tallyCasting } from './ballot.js';
 import { tallyVote, executioner, nominate, reckoningClosed, canLynchVote, assumedLynchVotes, nominatorLockedChoice, acceptLynchVotes, NO_ONE } from './vote.js';
+import { accusationFinished, accusationSpan } from '../game/accusation-stage.js';
 import { foldWin, OUTCOME, WIN_TARGETS } from './win.js';
 import { reunion } from './reunion.js';
 import { PHASE, EPISODE_CAP } from './phases.js';
@@ -85,6 +86,9 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     lastPair: { runner: null, guide: null },
     history: Object.fromEntries(deal.seats.map((s) => [s.id, { expeditions: 0, lastEp: null }])),
     nominations: [],
+    /** ms clock of the last landed nom. Sequential wait reads this, not a count cap. */
+    nomLandedAt: null,
+    nomPlayingKey: null,
     lynchVotes: {},
     voteResult: null,
     execution: null,
@@ -900,6 +904,8 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
      */
     enterReckoning(livingOpt = null) {
       state.nominations = [];
+      state.nomLandedAt = null;
+      state.nomPlayingKey = null;
       state.lynchVotes = {};
       state.voteResult = null;
       state.execution = null;
@@ -907,16 +913,39 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       setPhase('RECKONING');
     },
     /**
+     * True while the last landed `nominator>target` performance is still in flight.
+     * Sequential wait is on LANDING. `now` is injectable so a gate can finish the span.
+     */
+    accusationPlaying(nowOpt = null) {
+      if (state.nomLandedAt == null) return false;
+      const now = Number.isFinite(nowOpt) ? nowOpt : Date.now();
+      return !accusationFinished((now - state.nomLandedAt) / 1000);
+    },
+    accusationLeftMs(nowOpt = null) {
+      if (state.nomLandedAt == null) return 0;
+      const now = Number.isFinite(nowOpt) ? nowOpt : Date.now();
+      return Math.max(0, accusationSpan() * 1000 - (now - state.nomLandedAt));
+    },
+    /**
      * One public nomination. `vote.js` is the rule; this is the room applying it.
+     * Sequential wait: a second nom cannot land until the accusation finishes.
+     * @param {string} nominator
+     * @param {string} target
+     * @param {string[]|null} [livingOpt]
+     * @param {number|null} [nowOpt]  injectable clock, ms
      * @returns {{ok:boolean, why?:string, nomination?:object, closed?:boolean}}
      */
-    nominatePlayer(nominator, target, livingOpt = null) {
+    nominatePlayer(nominator, target, livingOpt = null, nowOpt = null) {
       if (state.phase !== 'RECKONING') return { ok: false, why: 'not reckoning' };
       if (livingOpt && Array.isArray(livingOpt)) state.liveLiving = livingOpt.slice();
       const living = episodeLiving();
-      const result = nominate({ living, nominations: state.nominations }, nominator, target);
+      const now = Number.isFinite(nowOpt) ? nowOpt : Date.now();
+      const playing = state.nomLandedAt != null && !accusationFinished((now - state.nomLandedAt) / 1000);
+      const result = nominate({ living, nominations: state.nominations }, nominator, target, { playing });
       if (!result.ok) return result;
       state.nominations.push(result.nomination);
+      state.nomLandedAt = now;
+      state.nomPlayingKey = `${result.nomination.nominator}>${result.nomination.target}`;
       record(makeEvent('nom.made', VIS.PUBLIC, result.nomination));
       broadcast();
       return {

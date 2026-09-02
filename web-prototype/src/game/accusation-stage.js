@@ -230,6 +230,28 @@ export function planAccusation({ nominatorSeat = null, accusedSeat = null, seatC
 }
 
 /**
+ * How long a `nominator>target` performance lasts: last planned beat + fade.
+ * Default plan is a full circle accusation (SETTLE 2.00 + FADE 0.25).
+ * Sequential nom wait is this span, not a standing-count cap.
+ */
+export function accusationSpan(beats) {
+  const list = Array.isArray(beats) && beats.length
+    ? beats
+    : planAccusation({ nominatorSeat: 0, accusedSeat: 1, seatCount: 8 });
+  let last = 0;
+  for (const b of list) {
+    const at = Number(b?.at);
+    if (Number.isFinite(at) && at > last) last = at;
+  }
+  return last + ACCUSE.FADE;
+}
+
+/** True once `elapsed` seconds have covered the last planned beat + fade. */
+export function accusationFinished(elapsed, beats) {
+  return Number(elapsed) >= accusationSpan(beats);
+}
+
+/**
  * 🔨 **WHO ACTS ON EXECUTION.** Pure, THREE-free, public ids only. The RULE is already
  * `vote.js` `executioner()` — first nominator of the executed player, or `SHOWRUNNER` if
  * that nominator was taken. This is the staging plan the TV plays: walk if there is a

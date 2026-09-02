@@ -33,15 +33,12 @@
  * `episode-order`'s lesson is that a hand-kept list in a gate drifts away from the machine it is
  * meant to be watching, and both halves then pass. So NR1 does not list the reasons: it EXERCISES
  * `src/party/vote.js`'s own `canNominate` / `canBeNominated` on crafted states and collects
- * whatever `why` strings they hand back, with `STANDING_CAP` read from the module rather than
- * spelled `3`. A reason added to that file appears in this printout on the next run.
+ * whatever `why` strings they hand back. A reason added to that file appears in this printout
+ * on the next run.
  *
- * NR1c then subtracts what the live wire actually provoked from what the rule can produce, and
- * asserts the remainder is exactly `standing-nomination cap reached`. That one reason is
- * **structurally unreachable from a handset** — `reckoningClosed` ends the beat on the third
- * standing name, so a fourth nomination meets `not reckoning` and never gets as far as the cap.
- * NR8 proves that rather than asserting it. **The day `vote.js` grows a seventh reason, NR1c
- * reddens** until somebody either provokes it here or writes down why it cannot be provoked.
+ * NR8 / NR1c used to assert a standing-count cap. That cap is gone. They are now executed
+ * negatives: `STANDING_CAP` and `standing-nomination cap reached` must not exist, three
+ * unique names must not close Reckoning, and a same-tick second nom is `accusation playing`.
  *
  * The two reasons `applyNominate` owns itself (`not reckoning`, `debrief is still talk`) are not
  * derived — they are OBSERVED, by driving a room into the wrong beat and tapping, which is
@@ -138,8 +135,13 @@ import {
   startServer, applyNominate, livingSeatedIds, seatedPlayerIds,
   FANOUT_KEYS, FANOUT_FORBIDDEN, fanoutViolations,
 } from '../net/party/local.mjs';
-import { canNominate, canBeNominated, STANDING_CAP } from '../src/party/vote.js';
+import { canNominate, canBeNominated, nominate, ACCUSATION_PLAYING } from '../src/party/vote.js';
 import { PHASE } from '../src/party/phases.js';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const VOTE_SRC = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'src/party/vote.js'), 'utf8');
 
 const PORT = 5211;                      // 5209 belongs to `_audio1-mechcheck.mjs`
 const PHONES = 7;
@@ -274,18 +276,17 @@ async function land(r, i, target) {
 // ================================================================= NR1 · the rule's own reasons
 /**
  * Every `why` `src/party/vote.js` can hand back, obtained by exercising its predicates rather
- * than by writing them down. `STANDING_CAP` is read from the module so the cap row follows it.
+ * than by writing them down. The old standing-count cap is gone; sequential wait is a new why.
  */
 function ruleRefusals() {
   const S = (living, nominations) => ({ living, nominations });
-  const capNoms = Array.from({ length: STANDING_CAP }, (_, k) => ({ nominator: `x${k}`, target: `y${k}` }));
   /*
    * ⚠️ Keyed by the `why`, and the VALUE is every predicate that produces it — because two of
    * these strings are produced by BOTH, meaning two different things. `already nominated this
    * episode` from `canNominate` is *you have spent yours*; from `canBeNominated` it is *they are
    * already on the block*. That collision is why the phone disambiguates from the public standing
    * board instead of printing the wire string, and it is visible in this printout rather than
-   * buried.
+   * buried. Sequential wait is a NEW string on `nominate(..., { playing })`.
    */
   const out = new Map();
   const add = (res, where) => {
@@ -294,10 +295,10 @@ function ruleRefusals() {
   };
   add(canNominate(S(['b'], []), 'a'), 'canNominate');
   add(canNominate(S(['a', 'b'], [{ nominator: 'a', target: 'b' }]), 'a'), 'canNominate');
-  add(canNominate(S(['a', 'b'], capNoms), 'a'), 'canNominate');
   add(canBeNominated(S(['a'], []), 'a', 'zzz'), 'canBeNominated');
   add(canBeNominated(S(['a'], []), 'a', 'a'), 'canBeNominated');
   add(canBeNominated(S(['a', 'b'], [{ nominator: 'c', target: 'b' }]), 'a', 'b'), 'canBeNominated');
+  add(nominate(S(['a', 'b', 'c'], []), 'a', 'b', { playing: true }), 'nominate');
   return out;
 }
 const RULE = ruleRefusals();
@@ -305,8 +306,9 @@ const RULE = ruleRefusals();
   say('  ---- the nomination rule\'s refusal reasons, derived from vote.js\'s own predicates ----');
   for (const [why, where] of RULE) say(`       ${where.join(' + ').padEnd(30)} why: "${why}"`);
   t(`NR1 · vote.js's predicates hand back ${RULE.size} distinct refusal reasons, every one a non-empty string`,
-    RULE.size >= 4 && [...RULE.keys()].every((w) => typeof w === 'string' && w.length > 0),
-    `${RULE.size} reasons · STANDING_CAP=${STANDING_CAP}`);
+    RULE.size >= 4 && [...RULE.keys()].every((w) => typeof w === 'string' && w.length > 0)
+      && !RULE.has('standing-nomination cap reached'),
+    `${RULE.size} reasons`);
 }
 
 // ================================================================= NR7 · the shape stays closed
@@ -354,6 +356,7 @@ const shipped = [];
   shipped.push(await attempt(A, 2, A.phones[1].welcome.playerId, 'target already standing'));
   shipped.push(await attempt(A, 4, A.phones[4].welcome.playerId, 'named themselves'));
   shipped.push(await attempt(A, 3, 'zzz-not-a-player', 'target is not a player'));
+  shipped.push(await attempt(A, 5, A.phones[6].welcome.playerId, 'accusation in flight'));
 }
 // The two `applyNominate` owns: the wrong beat entirely, and the Debrief before its late window.
 {
@@ -374,11 +377,12 @@ const shipped = [];
       + ` server: ${JSON.stringify(a.oracle)}  phone: ${a.got.length ? JSON.stringify(a.got[0]) : 'NOTHING'}`);
   }
   t(`NR2 · ground truth — all ${shipped.length} provocations were REFUSED by the server, and none of them wrote`,
-    shipped.length === 6 && shipped.every((a) => a.oracle?.ok === false && typeof a.oracle.why === 'string'
+    shipped.length === 7 && shipped.every((a) => a.oracle?.ok === false && typeof a.oracle.why === 'string'
       && a.oracle.why.length > 0 && a.wrote === 0),
     shipped.map((a) => `${a.oracle?.why ?? '?'}/${a.wrote}`).join(' · '));
   t('NR2b · and they are DISTINCT reasons, so no row passes because one refusal was tested six times',
-    new Set(shipped.map((a) => a.oracle.why)).size >= 4,
+    new Set(shipped.map((a) => a.oracle.why)).size >= 5
+      && shipped.some((a) => a.oracle.why === ACCUSATION_PLAYING),
     `${new Set(shipped.map((a) => a.oracle.why)).size} distinct: ${[...new Set(shipped.map((a) => a.oracle.why))].join(' | ')}`);
 
   t('NR4 · every refusal reached the phone that tapped — one receipt, ok:false, the SERVER\'s own why',
@@ -394,7 +398,7 @@ function ledger(r) {
   return r.phones.map((p, i) => ({ i, taps: p.taps, got: receipts(p).length }));
 }
 {
-  const rooms = [A, shipped[4].room, shipped[5].room];
+  const rooms = [A, shipped[5].room, shipped[6].room];
   const rows = rooms.flatMap(ledger);
   const busy = rows.filter((x) => x.taps > 0);
   const mismatched = rows.filter((x) => x.taps !== x.got);
@@ -411,35 +415,41 @@ function ledger(r) {
     `silent phones with a receipt ${idle.length} · TV receipts ${tvGot} · watchers ${rows.filter((x) => x.taps === 0).length} phones + ${rooms.length} TVs`);
 }
 
-// ================================== NR8 · why the cap reason cannot be reached from a handset
-const capReasons = [];
+// ================================== NR8 · executed negative — the old standing-count cap is gone
 {
-  const K = await reckoningRoom('nr-cap');
+  const voteSrc = VOTE_SRC.replace(/\r\n/g, '\n');
+  t('NR8 · STANDING_CAP and the cap reason are gone from vote.js',
+    !/\bSTANDING_CAP\b/.test(voteSrc)
+      && !/standing-nomination cap reached/.test(voteSrc)
+      && !/nominations\.length\s*>=\s*STANDING_CAP/.test(voteSrc),
+    'old cap must not exist');
+
+  const K = await reckoningRoom('nr-seq');
   const pid = (i) => K.phones[i].welcome.playerId;
-  const landed = [];
-  landed.push(await land(K, 0, pid(1)));
-  landed.push(await land(K, 2, pid(3)));
-  landed.push(await land(K, 4, pid(5)));
-  const standing = K.room.game.state.nominations.length;
-  const beatAtCap = K.room.show;
-  const fourth = await attempt(K, 6, pid(0), 'a fourth tap at the cap');
-  capReasons.push(fourth.oracle?.why);
-  t(`NR8 · ${STANDING_CAP} standing names CLOSE the Reckoning, so a fourth tap meets the beat, never the cap`,
-    landed.every((l) => l.stood) && standing === STANDING_CAP && beatAtCap !== 'reckoning'
-      && fourth.oracle?.why === 'not reckoning',
-    `standing ${standing} · beat at cap "${beatAtCap}" · fourth ${JSON.stringify(fourth.oracle)}`);
-  t('NR8b · and that fourth tap was still answered — the beat had moved, the handset was not left guessing',
-    fourth.got.length === 1 && fourth.got[0].ok === false && fourth.got[0].why === fourth.oracle.why,
-    JSON.stringify(fourth.got[0] ?? null));
+  const first = await land(K, 0, pid(1));
+  const sameTick = await attempt(K, 2, pid(3), 'second nom same tick');
+  t('NR8b · two unique noms in one tick are one landing + accusation playing',
+    first.stood && first.wrote === 1
+      && sameTick.oracle?.ok === false && sameTick.oracle.why === ACCUSATION_PLAYING
+      && sameTick.wrote === 0
+      && K.room.game.state.nominations.length === 1
+      && K.room.show === 'reckoning',
+    `standing ${K.room.game.state.nominations.length} · ${JSON.stringify(sameTick.oracle)}`);
+  t('NR8c · the waiting handset is still answered — not left guessing',
+    sameTick.got.length === 1 && sameTick.got[0].ok === false
+      && sameTick.got[0].why === ACCUSATION_PLAYING,
+    JSON.stringify(sameTick.got[0] ?? null));
   K.close();
 }
 
-// =========================== NR1c · derived minus observed — an unprovoked reason is named
+// =========================== NR1c · derived minus observed — the old cap must not be a remainder
 {
-  const observed = new Set([...shipped.map((a) => a.oracle.why), ...capReasons]);
+  const observed = new Set(shipped.map((a) => a.oracle.why));
   const uncovered = [...RULE.keys()].filter((w) => !observed.has(w));
-  t('NR1c · every rule reason a handset can reach was provoked here; the remainder is the cap, and NR8 says why',
-    uncovered.length === 1 && uncovered[0] === 'standing-nomination cap reached',
+  t('NR1c · every rule reason was provoked; the old cap is not among them',
+    uncovered.length === 0
+      && !RULE.has('standing-nomination cap reached')
+      && ![...observed].includes('standing-nomination cap reached'),
     `observed [${[...observed].join(' | ')}] · unprovoked [${uncovered.join(' | ') || 'none'}]`);
 }
 

@@ -21,9 +21,11 @@
  * No THREE, no DOM.
  */
 
-export const STANDING_CAP = 3;
 export const NO_ONE = 'NO_ONE';
 export const SHOWRUNNER = 'SHOWRUNNER';
+
+/** In-flight sequential wait. Not `already nominated this episode` — phones must disambiguate. */
+export const ACCUSATION_PLAYING = 'accusation playing';
 
 /** @typedef {{nominator:string, target:string}} Nomination */
 
@@ -31,7 +33,6 @@ export const SHOWRUNNER = 'SHOWRUNNER';
 export function canNominate(state, nominator) {
   if (!state.living.includes(nominator)) return { ok: false, why: 'not living' };
   if (state.nominations.some((n) => n.nominator === nominator)) return { ok: false, why: 'already nominated this episode' };
-  if (state.nominations.length >= STANDING_CAP) return { ok: false, why: 'standing-nomination cap reached' };
   return { ok: true };
 }
 
@@ -43,18 +44,46 @@ export function canBeNominated(state, nominator, target) {
   return { ok: true };
 }
 
-export function nominate(state, nominator, target) {
+/**
+ * Sequential wait is on LANDING, not on `canNominate`. `playing` is the in-flight
+ * `nominator>target` performance; refuse with a NEW why so a dump is not "you already nominated".
+ *
+ * @param {{living:string[], nominations:Nomination[]}} state
+ * @param {string} nominator
+ * @param {string} target
+ * @param {{playing?:boolean}} [extra]
+ */
+export function nominate(state, nominator, target, extra = {}) {
   const a = canNominate(state, nominator);
   if (!a.ok) return { ok: false, why: a.why };
   const b = canBeNominated(state, nominator, target);
   if (!b.ok) return { ok: false, why: b.why };
+  if (extra.playing) return { ok: false, why: ACCUSATION_PLAYING };
   return { ok: true, nomination: { nominator, target } };
 }
 
-/** `RECKONING` closes early once every living player has spent their nomination. */
-export const reckoningClosed = (state) =>
-  state.nominations.length >= STANDING_CAP ||
-  state.living.every((id) => state.nominations.some((n) => n.nominator === id));
+/** Any living player who may still spend a nom on a legal unique target. */
+export function canAnyoneNominate(state) {
+  const living = state.living || [];
+  const probe = { living, nominations: state.nominations || [] };
+  return living.some((id) => (
+    canNominate(probe, id).ok
+    && living.some((t) => canBeNominated(probe, id, t).ok)
+  ));
+}
+
+/**
+ * Reckoning closes when nobody can still land a unique nom, or when the 90s TIME
+ * wall has hit AFTER an in-flight accusation finished. No standing-count cap.
+ *
+ * @param {{living:string[], nominations:Nomination[]}} state
+ * @param {{wallHit?:boolean, playing?:boolean}} [extra]
+ */
+export function reckoningClosed(state, extra = {}) {
+  if (!canAnyoneNominate(state)) return true;
+  if (extra.wallHit && !extra.playing) return true;
+  return false;
+}
 
 /**
  * May `voter` pick `choice` on the lynch ballot?
