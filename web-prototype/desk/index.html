@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>THE DESK — Prime Time production office</title>
+<link rel="stylesheet" href="/desk.css">
+</head>
+<body>
+<header class="mast">
+  <div class="mast-brand">
+    <span class="on-air">● REC</span>
+    <h1>THE&nbsp;DESK</h1>
+    <span class="mast-sub">Prime Time production office · intake board</span>
+  </div>
+  <nav class="rail" aria-label="pipeline">
+    <span class="rail-beat" data-beat="pitch">PITCH</span>
+    <span class="rail-arrow">→</span>
+    <span class="rail-beat" data-beat="route">ROUTE</span>
+    <span class="rail-arrow">→</span>
+    <span class="rail-beat" data-beat="verify">VERIFY</span>
+    <span class="rail-arrow">→</span>
+    <span class="rail-beat rail-done" data-beat="done">✓ DONE</span>
+  </nav>
+</header>
+
+<section class="sell">
+  <h2>Chat is not intake.</h2>
+  <p>
+    Right now a feature ships when a chat scrolls past. No sell, no route, no gate —
+    five agents' playtest findings died in transcripts in August because nothing made
+    them land anywhere. The Desk is one board: a card is <strong>pitched</strong>,
+    <strong>routed</strong> to an owner (Spec · Game · Art · Critic · Skills), and
+    <strong>verified</strong> by the backend against the real repo.
+  </p>
+  <p class="sell-rule">
+    Done is not a lane. There is no Done button. Done is a backend check that passed —
+    a grep of the spec, a live import of the wire, a spawned harness that exits 0.
+    Re-verify a Done card whose check now fails and it falls back to Verify.
+  </p>
+</section>
+
+<main class="board" id="board" aria-live="polite">
+  <section class="lane" data-lane="pitch">
+    <h3 class="lane-head">PITCH<small>anyone can pitch — hunches welcome, labelled</small></h3>
+    <div class="lane-cards"></div>
+  </section>
+  <section class="lane" data-lane="route">
+    <h3 class="lane-head">ROUTE<small>spec · game · art · critic · skills — a name goes on it</small></h3>
+    <div class="lane-cards"></div>
+  </section>
+  <section class="lane" data-lane="verify">
+    <h3 class="lane-head">VERIFY<small>the backend reads the repo, not the board</small></h3>
+    <div class="lane-cards"></div>
+  </section>
+  <section class="lane lane-done" data-lane="done">
+    <h3 class="lane-head">✓ DONE<small>continuously earned, never granted</small></h3>
+    <div class="lane-cards"></div>
+  </section>
+</main>
+
+<footer class="foot">
+  desk/server.mjs · zero dependencies · isolated from all game surfaces ·
+  Done rule enforced server-side (<code>POST /move {lane:"done"}</code> → 400)
+</footer>
+
+<template id="card-tpl">
+  <article class="card">
+    <div class="card-top">
+      <span class="badge badge-confidence"></span>
+      <span class="badge badge-route"></span>
+    </div>
+    <h4 class="card-title"></h4>
+    <p class="card-pitch"></p>
+    <ul class="card-evidence"></ul>
+    <p class="card-done-means"><strong>Done means:</strong> <span></span></p>
+    <div class="card-owner-row">
+      <label>route
+        <select class="route-select">
+          <option value="">—</option>
+          <option value="spec">spec</option>
+          <option value="game">game</option>
+          <option value="art">art</option>
+          <option value="critic">critic</option>
+          <option value="skills">skills</option>
+        </select>
+      </label>
+      <label>owner <input class="owner-input" placeholder="a name, not a lane"></label>
+    </div>
+    <div class="card-actions">
+      <button class="btn btn-advance">advance →</button>
+      <button class="btn btn-verify">run verify</button>
+    </div>
+    <div class="verify-report" hidden>
+      <h5>last verify</h5>
+      <ul class="verify-rows"></ul>
+    </div>
+  </article>
+</template>
+
+<script type="module" src="/desk.js"></script>
+</body>
+</html>
