@@ -1,5 +1,13 @@
 # Runner intel — locked until John picks `/design` boards
 
+> ✅ **DISCHARGED 2026-09-01/02.** John picked the boards — Guide E "Neighbours Only", Runner D
+> "Frame Bezel", TV E "Camera Stinger" (`docs/design/refs-runner-intel/canvas/`, untracked; the
+> committed successor board is `docs/design/refs-expedition-locked/canvas/`) — and the route
+> landed: the runner **auto-walks the current guide pin** one door at a time
+> (`src/game/runner-intel.js`, pure), the stick is a lateral dodge with HOLD to hide, and the
+> guide may also pin the job's own objectives (`src/party/objectives.js`). "What waits" below has
+> happened. The Legal / Illegal lists still bind. Gates: `runner-intel`, `intel-pads`, `tv-stinger`.
+
 Job + local senses. This is the lock. Do **not** rewrite `RunnerRoute` until John
 picks Claude `/design` boards. The prompt for that pass is
 `PROMPT-claude-runner-intel.md`.

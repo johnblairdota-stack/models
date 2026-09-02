@@ -17,11 +17,11 @@ Design plan v0.6 — fifteen decisions locked, reconciled against the prototype
 | D6 | **Evil know each other from the start, and see each other's claims live** — including drafts, before the room does. | A read-only Production Panel on evil phones (§7.5). Not a chat. Also the cheapest available fix for R2b: an off-crew evil player always has a live job. |
 | D7 | **Five tasks in v1, designed for many more.** | The deck in §5.2, gated by the **Task Contract** in §5.2.1 — six rules any future task must satisfy or it's a minigame, not a deduction engine. |
 | D8 | **`party-loop.md` owns the Expedition. This document owns the round around it.** | Where they disagree about what happens *inside* the mansion, `party-loop.md` wins. Where it is silent — the vote, roles, the endgame, the Reunion — this document is the spec. Both files say so at the top. |
-| D9 | **The Expedition is a pair: runner + guide.** *(resolves C2)* | Runner is first-person in dark corridors; guide has a private phone flyover. **Six of eight players are now spectating**, so the Broadcast Director matters more, not less. |
+| D9 | **The Expedition is a pair: runner + guide.** *(resolves C2)* | The runner is the one body in the dark corridors, aired on the TV as a **produced follow**; the guide has a private phone map. *(Amended 2026-09-02: "first-person" and "flyover" are both superseded — see D13 and the locked-build note in §5.7.1.)* **Six of eight players are now spectating**, so the Broadcast Director matters more, not less. |
 | D10 | **The hammer is automated.** *(resolves C3)* | `doorway-pick.js` opens a walkable channel in 3 blows. Player-aimed sledge is not the party verb. **P3 is rewritten below** — the lying guide replaces mistimed smashing as evil's main deniable lever. |
 | D11 | **Networking is Cloudflare PartyKit.** | 8 phones + 1 TV per room, QR join. The existing `client.js`/`server.mjs` pair is a reference for the *authority model*, not the transport. |
 | D12 | **The party mode does not reuse `run.js`'s WINDDOWN/DETONATION.** | The bomb timer stays survival-mode only. The aimed-dig survival slice still ships as its own mode and remains the art/physics bed. |
-| D13 | **The runner's first-person view lives on the TV. The phone is a controller, never a viewport.** | **This overrides `party-loop.md`'s "Phone first-person + touch"** — the one place D8's deference is deliberately set aside, on John's call. See §5.7 for what it changes. |
+| D13 | **The runner's camera lives on the TV. The phone is a controller, never a viewport.** *(Amended 2026-09-02: the TV picture is a produced follow — chase inside the ballroom, top-down over the runner's own rooms outside it, a crane between, never a cut under the thumb. It was never built first-person.)* | **This overrides `party-loop.md`'s "Phone first-person + touch"** — the one place D8's deference is deliberately set aside, on John's call. See §5.7 for what it changes. |
 | D14 | **Six players is 2 evil, and that is settled.** | 33% is above the genre band and accepted. R9 is downgraded from a balance risk to a tuning note. Optimisations and cuts are expected to come out of playtest, not out of more planning. |
 | D15 | **Watchability is measured by dead air first, eyes second.** | Replaces the bible's old "count who looks away" line, which was both stale and wrong. See §16.5. |
 
@@ -366,11 +366,37 @@ That is unusually legible for a first-time player, which is a real accessibility
 **Two consequences that need designing, not noting:**
 
 1. **The guide is now the seat evil wants**, and everyone knows it. Casting becomes a referendum on one pick. Expect that to be readable, and expect good players to start refusing to hand the guide's chair to anyone twice.
-2. **An evil *runner* has almost nothing to do** — every action they take is on television. This is a real hole, and the fix is already in the control scheme: the **throttle detent** (STILL / CREEP / WALK / RUN, with the noise ring drawn around the stick) is the runner's dual-use verb. Choosing RUN while the Hunter is close is loud, visible, and *completely deniable as panic*. P3 survives D13 through the throttle, not the hammer.
+2. **An evil *runner* has almost nothing to do** — every action they take is on television. This is a real hole. ~~The fix was the **throttle detent** (STILL / CREEP / WALK / RUN) as the runner's dual-use verb.~~ **Superseded 2026-09-01 by the auto-walk lock:** the stick stopped being "move", so there is no speed to choose. The lever is now **four ordinary controls used at the wrong moment** (`src/game/runner-intel.js` `SABOTAGE` — smash the wrong face, drill through a HOLD, drop the drill, talk over the clock), with **no sabotage button and no verb for one**. P3 survives D13 through misuse, not the hammer — and not the throttle.
 
 **What makes the guide's lie survivable at all is S3's camera gating.** If the guide's map showed everything, the room could reason backwards from the map to the lie perfectly. Because coverage is partial and **nobody but the guide knows how much they could see**, the honest mistake and the lie stay indistinguishable. D13 makes the camera-coverage gate load-bearing twice over.
 
 **What would overturn D13:** at M1b, measure cold boot-to-playable of a stripped runner scene on the worst phone in the test matrix. Under **8 seconds**, phone-rendered first person returns as a v2 A/B. Above it, D13 is permanent.
+
+### 5.7.1 The locked build, 2026-09-01/02 — what the camera and the controls actually are
+
+The sofa pass turned §5.7's sketch into shipped, gated fact. Board: *The Expedition, As Locked*
+(`web-prototype/docs/design/refs-expedition-locked/canvas/`). The five locks, each with its gate:
+
+- **The TV airs a produced follow, not a first-person view.** Chase inside the ballroom, top-down
+  over the runner's own rooms outside it, a 1.35 s crane between — never a cut under the thumb.
+  The TV is never a map: no route, no hunter mark, no whole-house fit. Gates: `party-follow`
+  F11i–F11i5, `party-warm` W26h/W26h3.
+- **The runner AUTO-WALKS the guide's pin, one door at a time; the stick is a lateral dodge only.**
+  HOLD hides behind furniture, and there is no hiding in an open hall. With no pin nobody moves.
+  Gates: `runner-intel` RI20–RI20g, `party-warm` W26g.
+- **The guide may pin the job's own objectives — the twin faces, the two brackets — and the thumb
+  may not pick them.** `src/party/objectives.js` owns the kinds and cannot import the answers; an
+  evil guide pins the decoy and nothing special-cases it. Gates: `runner-intel` RI19–RI19q.
+- **The pin is on the wire at audience `crew`** (`you.pin.{x,z,roomId,kind}`); the TV is told it
+  and may not draw it. Gates: `runner-intel` RI10–RI13, `intel-pads` IP11b–IP11d.
+- **The three screens are John's picked boards:** Guide E "Neighbours Only" (her room plus the
+  door-joined neighbours, never the whole house), Runner D "Frame Bezel" (the bearing is the edge
+  of the phone, no map, no kind printed), TV E "Camera Stinger" (a mount is a two-second moment).
+  The staged red pass is a seeded clock with no position and no target — **the hunter is still a
+  door, and it is shut.** Gates: `intel-pads`, `tv-stinger`, `runner-intel` RI8.
+
+A doc in this repo that still calls the run "first-person" is describing a game that never
+shipped; `harness/expedition-spec.mjs` reddens on the known stale sentences.
 
 ## 6. The Hunter and the attribution problem
 

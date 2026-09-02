@@ -6,11 +6,20 @@ Written 2026-08-19 against `web-prototype/` on `claude/rrr-social-deception-mode
 disagreement. This file replaces §5.2.2 of `rrr-social-deception-mode.md` ("The five") and amends §5.2.1
 (the Task Contract); the rest of the bible stands.
 
-**What changed.** The Crew is a **pair** — one RUNNER (first person, dark corridors) and one GUIDE (private
-phone flyover), chosen by phone vote (`party-loop.md:19-20`). The hammer is **automated**
+**What changed.** The Crew is a **pair** — one RUNNER (the one body in the dark corridors, aired on the TV as a produced follow) and one GUIDE (private
+phone map — Guide E "Neighbours Only" since 2026-09-01, not a whole-house flyover), chosen by phone vote (`party-loop.md:19-20`). The hammer is **automated**
 (`party-loop.md:21`). The objective is **unlocking RRR reality-TV cameras**. The Hunter is AI. A taken
 runner is out of the mansion for good (`party-loop.md:23`). Everyone else watches the TV. Every claim about
 existing behaviour carries a `file:line`; anything absent is labelled **NOT BUILT** rather than assumed.
+
+**Amended 2026-09-02 — the expedition locks land over this file.** The sofa pass (2026-09-01/02) locked
+what the deck below predates: the runner **auto-walks the guide's pin** one door at a time and the stick
+is a lateral dodge with HOLD to hide; the guide **also pins the job's own objectives** (the twin faces on
+a smash night, the two brackets on a drill night) and the thumb may not pick them; the three screens are
+Guide E "Neighbours Only", Runner D "Frame Bezel" and TV E "Camera Stinger" over a **produced follow**;
+two jobs are locked (`WALL_CALL` smash, then DRILL). Where a sentence below says first person, a
+throttle, or a whole-house flyover, the lock wins. Gates: `runner-intel`, `intel-pads`, `tv-stinger`,
+`expedition-jobs`.
 
 ---
 
@@ -46,7 +55,7 @@ invent one.
 
 The whole mode in one task: a robot in unlit corridors and a voice that can see the house.
 
-**What the runner sees.** First person, no map, no compass, lights off. The corridors are genuinely dark —
+**What the runner sees.** The TV, like everyone in the room — the run airs as a produced follow, and her phone shows a bearing on its bezel: no map, no compass (Runner D, 2026-09-01). Lights off. The corridors are genuinely dark —
 mean frame luma in a generated house is measured at **6.65 of 255** (`src/views/game.js:2069-2072`), which
 is why the flyover exists at all. They see a terminal prompt when they are on it, and nothing else. Their
 own speed is their own noise: `player.noise = speed / MOVE.run`
@@ -55,7 +64,7 @@ own speed is their own noise: `player.noise = speed / MOVE.run`
 Stage-1 hunter walks 2.05 m/s (`rules.js:127`), so the runner can always outrun it and can never do so
 quietly. That trade *is* the task.
 
-**What the guide sees.** The existing `[F]` flyover on their phone: roof off, perspective (not ortho) so the
+**What the guide sees** *(amended 2026-09-01 — shipped as Guide E "Neighbours Only": her runner's room plus the door-joined neighbours, never the whole house; the `[F]` flyover below is the pre-lock sketch, kept for the sense-overlay measurements)*. The existing `[F]` flyover on their phone: roof off, perspective (not ortho) so the
 inner faces read, whole envelope fitted, haze and vignette off, hemisphere raised
 (`src/views/game.js:2057-2135`). Named marks `flyover.you` and `flyover.hunter`
 (`src/views/game.js:2451-2461`), plus the sense overlay — the runner's noise disc sized at `hearRange ×
