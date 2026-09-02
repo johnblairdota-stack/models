@@ -14,6 +14,12 @@
  * ⚠️ W1 AND W3 CANNOT COLLIDE. Only the runner is exposed, so a single take is either a good
  * player or an evil one, never both.
  *
+ * ⚠️ **H278 STAYS THE DEFAULT: a cap miss is Production, never RENEWED.** CAST7 / John
+ * 2026-09-03: the one exception is 2 good vs 1 evil. That count is the last vote, not a W5.
+ * Both W5 sites (`phase.VERDICT` and the H278 tail) must skip it, or the live wire
+ * Reunion-from-cap's them again. Do not restore "never RENEWED at the cap" without the skip.
+ * Do not invent 3v1. W4 `>=` is unchanged.
+ *
  * No THREE, no DOM.
  */
 
@@ -82,6 +88,8 @@ export function foldWin(log, { count, alignmentOf, aired } = {}) {
   let hit = null;
   const fire = (rule, outcome, seq) => { if (!hit) hit = { rule, outcome, atSeq: seq }; };
   const missedTargets = () => camerasLit < targets.cameraTarget || fed < targets.feedTarget;
+  /** Last vote, not Production. Only this count. 3g1e is still W5. */
+  const lastVote = () => alive('good') === 2 && alive('evil') === 1;
 
   for (const e of log) {
     if (hit) break;
@@ -108,7 +116,7 @@ export function foldWin(log, { count, alignmentOf, aired } = {}) {
     if (e.type === 'run.camera_lit' && camerasLit >= targets.cameraTarget) {
       fire('W2', OUTCOME.FINALE, e.seq); break;
     }
-    if (e.type === 'phase.VERDICT' && episode >= EPISODE_CAP && missedTargets()) {
+    if (e.type === 'phase.VERDICT' && episode >= EPISODE_CAP && missedTargets() && !lastVote()) {
       fire('W5', OUTCOME.CANCELLED, e.seq); break;
     }
   }
@@ -118,10 +126,14 @@ export function foldWin(log, { count, alignmentOf, aired } = {}) {
    * driver wrote CANCELLED: W5 only fired on a CASTING row that carried
    * `episode`, and live `setPhase` did not. At EPISODE_CAP a miss on cameras
    * or feed is Production — never RENEWED. `aired` is the episode on the air.
+   *
+   * ⚠️ **EXCEPT 2g1e.** CAST7 died on this tail: Ben+Hal vs Dee, cameras 0/4,
+   * W5 stole the last vote. Skip the same count here that the VERDICT branch
+   * skips. Do not restore a blanket "never RENEWED at the cap".
    */
   if (!hit) {
     const atCap = Math.max(episode, aired ?? 0) >= EPISODE_CAP;
-    if (atCap && missedTargets()) fire('W5', OUTCOME.CANCELLED, null);
+    if (atCap && missedTargets() && !lastVote()) fire('W5', OUTCOME.CANCELLED, null);
   }
 
   return {

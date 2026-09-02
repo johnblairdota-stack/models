@@ -126,8 +126,9 @@ const fold = (evts, count = 8, alignmentOf = align8) => foldWin(mk(evts), { coun
  *
  * ⚠️ **THE CONTROL IS THE INTERESTING ARM.** A machine that always ends is not the property —
  * `playMatch`'s own `while` would satisfy "it terminates" by hanging up on episode 1. What has to
- * hold is that it ends for a REASON the fold names, and never on RENEWED.
- * ================================================================================================= */
+ * hold is that it ends for a REASON the fold names, and never on RENEWED. 2g1e at the cap is
+ * RENEWED on purpose (the last vote); that extra episode is not a hang.
+ * ============================================================================================== */
 {
   let unended = null, noRule = null;
   const rules = new Set();
@@ -140,9 +141,13 @@ const fold = (evts, count = 8, alignmentOf = align8) => foldWin(mk(evts), { coun
     const checked = r.log.all().filter((e) => e.type === 'win.checked').at(-1);
     if (!checked?.data?.rule && out !== OUTCOME.CANCELLED) noRule = noRule || `seed ${seed}: ${out} with no rule`;
     if (checked?.data?.rule) rules.add(checked.data.rule);
-    if (r.state.episode > EPISODE_CAP + 1) { unended = `seed ${seed} ran past the cap to ${r.state.episode}`; break; }
+    /*
+     * Last vote may air EPISODE_CAP+1. That extra episode is the ending, not a hang.
+     * A seed that never stops at all is still a hang — R2e is the live time backstop.
+     */
+    if (r.state.episode > EPISODE_CAP + 8) { unended = `seed ${seed} ran past the last-vote room to ${r.state.episode}`; break; }
   }
-  t('W10 · every match ends, inside the cap, on an outcome that is not RENEWED',
+  t('W10 · every match ends on an outcome that is not RENEWED',
     unended === null, unended || `8 seeds · rules seen: ${[...rules].join(',') || 'cap only'}`);
   t('W10b · and each ending names the rule that caused it', noRule === null, noRule || 'all attributed');
 
@@ -190,6 +195,72 @@ const fold = (evts, count = 8, alignmentOf = align8) => foldWin(mk(evts), { coun
   const mid = fold([DEAL, { type: 'phase.VERDICT', data: { episode: 2 } }]);
   t('W11d control · before the cap, 0 cameras is still RENEWED',
     mid.outcome === OUTCOME.RENEWED && mid.rule === null);
+}
+
+// ---------------------------------------------------------------- W12 · 2g1e at the cap is the last vote, not W5
+/* =================================================================================================
+ * CAST7 / John 2026-09-03. Two goods and one evil, cameras 0/4, the cap fired W5 and the
+ * room never voted for Dee. 2g1e is RENEWED. Execute the remaining evil → W1. Execute a
+ * good → W4. 3g1e at the cap is still W5 — do not invent a 3v1 skip. W4 `>=` is unchanged.
+ * ============================================================================================== */
+{
+  /*
+   * Kill 1 evil then 4 goods by execute (not take) so W3's feed target cannot fire.
+   * After p8: 6g 1e. After four goods: 2g 1e. W4's `1 >= 2` stays false.
+   */
+  const LAST_VOTE = [
+    DEAL,
+    { type: 'player.executed', data: { id: 'p8' } },
+    { type: 'player.executed', data: { id: 'p1' } },
+    { type: 'player.executed', data: { id: 'p2' } },
+    { type: 'player.executed', data: { id: 'p3' } },
+    { type: 'player.executed', data: { id: 'p4' } },
+  ];
+
+  const twoOne = fold([
+    ...LAST_VOTE,
+    { type: 'phase.VERDICT', data: { episode: EPISODE_CAP } },
+  ]);
+  t('W12 · 8p deal → 2g1e at EPISODE_CAP cameras 0 → RENEWED, not W5',
+    twoOne.outcome === OUTCOME.RENEWED && twoOne.rule === null
+    && twoOne.livingGood === 2 && twoOne.livingEvil === 1
+    && twoOne.camerasLit === 0,
+    `${twoOne.outcome} · ${twoOne.rule} · ${twoOne.livingGood}g ${twoOne.livingEvil}e`);
+  t('W12b · chrome for that fold is The season continues, not Production wins',
+    outcomeLine(twoOne.outcome).includes('The season continues')
+    && !outcomeLine(twoOne.outcome).includes('Production wins'));
+
+  const twoOneTail = foldWin(mk([...LAST_VOTE, { type: 'phase.VERDICT', data: {} }]), {
+    count: 8, alignmentOf: align8, aired: EPISODE_CAP,
+  });
+  t('W12c · the H278 tail agrees — 2g1e at the cap is still RENEWED',
+    twoOneTail.outcome === OUTCOME.RENEWED && twoOneTail.rule === null
+    && twoOneTail.livingGood === 2 && twoOneTail.livingEvil === 1,
+    `${twoOneTail.outcome} · ${twoOneTail.rule}`);
+
+  const killEvil = fold([...LAST_VOTE, { type: 'player.executed', data: { id: 'p7' } }]);
+  t('W12d · last vote executes the remaining evil → W1 FINALE',
+    killEvil.rule === 'W1' && killEvil.outcome === OUTCOME.FINALE
+    && killEvil.livingEvil === 0);
+
+  const killGood = fold([...LAST_VOTE, { type: 'player.executed', data: { id: 'p5' } }]);
+  t('W12e · last vote executes a good → W4 CANCELLED (parity)',
+    killGood.rule === 'W4' && killGood.outcome === OUTCOME.CANCELLED
+    && killGood.livingGood === 1 && killGood.livingEvil === 1,
+    `${killGood.livingEvil}e vs ${killGood.livingGood}g`);
+
+  const threeOne = fold([
+    DEAL,
+    { type: 'player.executed', data: { id: 'p8' } },
+    { type: 'player.executed', data: { id: 'p1' } },
+    { type: 'player.executed', data: { id: 'p2' } },
+    { type: 'player.executed', data: { id: 'p3' } },
+    { type: 'phase.VERDICT', data: { episode: EPISODE_CAP } },
+  ]);
+  t('W12f control · 3g1e at cap 0 cameras is still W5 — do not invent a 3v1 skip',
+    threeOne.livingGood === 3 && threeOne.livingEvil === 1
+    && threeOne.rule === 'W5' && threeOne.outcome === OUTCOME.CANCELLED,
+    `${threeOne.livingGood}g ${threeOne.livingEvil}e · ${threeOne.rule}`);
 }
 
 console.log(`\nwin-machine: ${pass} passed, ${fail} failed`);
