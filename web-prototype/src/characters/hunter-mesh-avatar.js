@@ -57,10 +57,10 @@ export const HUNTER_PACK = {
  * 1.050 / 1.504 are invalid for this pack and the gate refuses them.
  */
 export const HUNTER_SWINGS = [
-  { role: 'attack', clip: 'attack', file: 'attack.glb', duration: 0, contact: 0, hand: '?',
-    peakHandSpeed: 0, measured: 'FK over GLB tracks at 240 Hz, harness/hunter-door.mjs — re-derive from Meshy attack.glb' },
-  { role: 'combo', clip: 'double-combo', file: 'double-combo-attack.glb', duration: 0, contact: 0, hand: '?',
-    peakHandSpeed: 0, measured: 'FK over GLB tracks at 240 Hz, harness/hunter-door.mjs — re-derive from Meshy double-combo-attack.glb' },
+  { role: 'attack', clip: 'attack', file: 'attack.glb', duration: 2.833, contact: 1.100, hand: 'RightHand',
+    peakHandSpeed: 55.3, measured: 'FK over GLB tracks at 240 Hz, harness/hunter-door.mjs, 2026-09-02' },
+  { role: 'combo', clip: 'double-combo', file: 'double-combo-attack.glb', duration: 2.867, contact: 0.679, hand: 'RightHand',
+    peakHandSpeed: 29.6, measured: 'FK over GLB tracks at 240 Hz, harness/hunter-door.mjs, 2026-09-02' },
 ];
 
 const swingFor = (role) => HUNTER_SWINGS.find((s) => s.role === role);
