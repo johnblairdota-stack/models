@@ -7,9 +7,9 @@
  * The two properties that no unit gate can see, because both are about the whole shape:
  *
  *   **It terminates.** A social deception game that can run forever is a game that ends when
- *   somebody's lift arrives. `EPISODE_CAP` plus W5 is the belt and braces for every count
- *   except 2g1e — that last vote may air one more full episode. R1 runs hundreds of
- *   matches across every player count and every take pattern and requires every one to stop.
+ *   somebody's lift arrives. Matches still close on W1 / W2 / W3 / W4 / W6; a camera miss at
+ *   the cap is RENEWED, not a Production door. R1 runs hundreds of matches across every player
+ *   count and every take pattern and requires every one to stop (hang bound `EPISODE_CAP + 8`).
  *
  *   **It fits.** R2 asserts the arithmetic still says so, because a phase whose length drifts by
  *   fifteen seconds is invisible until it has cost four minutes.

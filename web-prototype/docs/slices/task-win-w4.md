@@ -1,54 +1,56 @@
-# Slice: 2 good vs 1 evil does not end the night — the last vote does
+# Slice: nights do not end because cameras missed — delete W5
 
 Decided plan. The numbers are the numbers to use. If a stated fact is wrong, **say so in the report rather than diverging silently.**
 
-Base: main at aed49a5, docs on PR 73 (docs/cast8-locks). Spec, not the night. Do not merge. Do not start Max. Still Grok. Game is mid-build on 73 and must not ship the old quote-only / no new fold line.
+Base: main at aed49a5, docs on PR 73 (docs/cast8-locks). Spec, not the night. Do not merge. Do not start Max. Still Grok. Game is mid-build and must not ship 3v1-still-W5.
 
-John, 2026-09-03, overrode the quote-only W4/W5 line. CAST7 chrome was 2 good vs 1 evil (Ben+Hal vs Dee; Ada already fell), cameras 0/4, CANCELLED / The Reunion is next — that was W5 at cap. New lock: 2 good vs 1 evil must NOT end the night. Not W5 Production. Not Reunion-from-cap. That last vote to find the remaining evil is the ending — the tension.
-
-Do not invent 3v1 or other counts. W4 parity stays. W1/W2/W3/W6 stay. Only W5 at 2g1e moves.
+John, 2026-09-03, overrode 3v1-still-W5. New lock: get rid of end-on-camera. No W5. No Production win from cameras-short at cap. No CAMERA WARMING cancel. W4 (evils equal remaining goods) stays. W1 (goods find the evil) stays. 2g1e last vote stays. Slice the cap: nights do not end because cameras missed. Do not invent a new SHOW beat.
 
 ---
 
 ## 0. Why this slice exists
-The last three living were two goods and one evil. Production took the night on a camera miss at the cap, so the room never got the vote that would have found Dee or killed a good and handed Production a real W4. That vote is the ending John wants. W5 stole it. Change the fold.
+CAST7 printed Production at 2g1e because W5 fired on cameras 0/4 at cap (CAMERA WARMING). John first kept that vote. He has now killed the door: a camera miss is not a fold, at 2v1 or 3v1 or 6v2. The night ends when goods find the evil (W1) or evils reach parity (W4), or the existing W2/W3/W6 doors. Not because the scorekeeper said 0/4.
+
+John is out (CoS 2026-09-03). Finish this on PR 73. Game may merge it with the build. Do not wait.
 
 ---
 
 ## 1. Quote the machine as it is (aed49a5)
-W4 on take/execute: if living evil >= living good, fire W4 CANCELLED. 1 >= 2 is false, so CAST7 was not W4. Do not change this predicate.
-W5 at EPISODE_CAP (and the H278 tail): missedTargets (camerasLit < cameraTarget OR fed < feedTarget) fires W5 CANCELLED. CAST7 cameras 0/4 is this door. This is the door that closes.
-outcomeLine(CANCELLED) = Production wins. The Reunion is next. outcomeLine(RENEWED) = The season continues. Casting is next. WIN_TARGETS[8] cameraTarget 4, feedTarget 3. EPISODE_CAP 5. TICK_ORDER W1 W3 W2 W4 W5.
+W1 on take/execute: living evil === 0 fires W1 FINALE. Stays.
+W2 on camera_lit: camerasLit >= cameraTarget fires W2 FINALE. Stays. Lighting the cameras still wins for the cast. Missing them does not win for Production.
+W3 on take: fed >= feedTarget fires W3 CANCELLED. Stays.
+W4 on take/execute: living evil >= living good fires W4 CANCELLED. Stays. 2g1e is not this. Last vote that kills a good becomes 1g1e and then W4.
+W5 at EPISODE_CAP (VERDICT branch AND H278 tail): missedTargets (camerasLit < cameraTarget OR fed < feedTarget) fires W5 CANCELLED. DELETE both sites. TICK_ORDER drops W5.
+W6 host.skip ABANDONED stays.
 
 ---
 
 ## 2. The fold change
-W5 does not fire when livingGood === 2 AND livingEvil === 1. Cap miss in that count is RENEWED. They play on. The next episode still runs the full order (casting through verdict) — do not invent a vote-only SHOW beat. The last vote is the ending because W1 or W4 will fire on its execute, not because the rundown shrinks.
-On that vote: execute the remaining evil -> W1 FINALE (cast wins). Execute a good -> 1 good 1 evil -> W4 CANCELLED (parity, Production). Miss / no execute -> still 2g1e, W5 still suppressed, they RENEW again. Do not invent a second cap to stop a 2v1 stall; round-loop R2e sixty-minute ceiling is the existing backstop.
-Apply the same 2g1e test on both W5 sites: the phase.VERDICT branch AND the H278 tail (aired >= EPISODE_CAP && missedTargets). CAST7 died on the tail.
-Do not invent 3v1. 3 good 1 evil at cap with a camera miss is still W5. 6v2 quiet night at cap is still W5. W10c / W11 (nothing happens, 0 cameras, CANCELLED) stay true for those counts.
-Do not change W4 >= . Do not change W1 W2 W3 W6. Do not change WIN_TARGETS or EPISODE_CAP. cam-target-split (3 vs 4) is still Johns open hole; do not pick a number.
+Delete W5. Both sites: the phase.VERDICT branch and the H278 tail. A cap miss is RENEWED. CAMERA WARMING / 0 of 4 is scorekeeping, never a cancel. Do not invent a new SHOW beat. Full episode order still runs past EPISODE_CAP until W1/W2/W3/W4/W6.
+2g1e last vote: execute the remaining evil -> W1 FINALE. Execute a good -> 1g1e -> W4 CANCELLED. That still holds, now for 3v1 and 6v2 too — cap will not steal the vote.
+EPISODE_CAP stays a number in phases.js for session math. It is not a Production door. playMatch / while-episode-lte-cap must not Reunion-from-cap when foldWin returns RENEWED.
+Do not change W1 W2 W3 W4 W6. Do not change WIN_TARGETS. cam-target-split (3 vs 4) is still Johns open hole; do not pick a number. round-loop R2e sixty-minute ceiling stays the time backstop. Do not invent a second cap-as-W5.
 
 ---
 
 ## 3. File ownership
-You may edit: docs/slices/task-win-w4.md ; src/party/win.js (W5 2g1e skip on both sites; header comment so the next agent does not restore H278 blindly); harness/win-machine.mjs (see gates below); harness/round-loop.mjs only if R2/R2c/R2e copy claims the cap always ends the night; src/party/room.js or playMatch while-loop if it stops at EPISODE_CAP without asking foldWin.
+You may edit: docs/slices/task-win-w4.md ; src/party/win.js (delete W5 both sites, drop W5 from TICK_ORDER, header comment so H278 is not restored); harness/win-machine.mjs ; harness/round-loop.mjs if R2 copy claims the cap always ends the night; src/party/room.js or playMatch while-loop if it stops at EPISODE_CAP without foldWin; party-host / verdict chrome if CAMERA WARMING or 0/4 cancels the night.
 Do not edit: follow.js. execute-hit. Expedition pads. Live 5178/5181. The other three slices on PR 73 (stuck runner, wreck linger, emote chrome).
 
 ---
 
 ## 4. Gates
 harness/win-machine.mjs in gates:party.
-KEEP: W4 2e1g on execute is CANCELLED. W5 quiet 8p at cap 0 cameras is CANCELLED (W11 / W10c / H278 for non-2v1). W11d before the cap is RENEWED.
-ADD: 8p deal, kill goods and evils until livingGood is 2 and livingEvil is 1, aired/episode at EPISODE_CAP, cameras 0. Fold is RENEWED, rule null, not W5. Chrome is The season continues, not Production wins.
-ADD: same 2g1e, then execute the remaining evil -> W1 FINALE. Same 2g1e, then execute a good -> W4 CANCELLED.
-ADD control: 3 good 1 evil at cap 0 cameras is still W5. Do not invent a 3v1 skip.
-REWRITE W10 inside-the-cap if a 2v1 seed runs EPISODE_CAP+1 — that extra episode is the last vote, not a hang. R2e sixty-minute ceiling stays.
+KEEP: W1 all evil dead FINALE. W2 camera target FINALE. W3 feed target CANCELLED. W4 2e1g CANCELLED. W6 skip ABANDONED. W11d before the cap 0 cameras is RENEWED.
+REWRITE: old W5 / W11 / W11c / W10c (quiet 8p at cap 0 cameras CANCELLED) become executed negatives — rule is null, outcome RENEWED, chrome is The season continues, not Production wins. Same for 3g1e at cap 0 cameras, and 2g1e at cap 0 cameras.
+ADD: 2g1e then execute remaining evil -> W1. 2g1e then execute a good -> W4. TICK_ORDER no longer contains W5.
+REWRITE W10 inside-the-cap: a night may run past EPISODE_CAP while RENEWED. It still must end on W1/W2/W3/W4/W6, never hang. R2e sixty-minute ceiling stays.
 
 ---
 
 ## 5. Traps
-H278 said a cap miss is never RENEWED. That stays the default. 2g1e is the one exception. Do not delete W5. Do not make 1e vs any goods skip W5. The H278 tail and the VERDICT branch must agree or CAST7 happens again.
-playMatch while (episode <= EPISODE_CAP) will still Reunion-from-cap even if foldWin returns RENEWED. If that loop exists, it is in scope. foldWin alone is not enough.
-Do not invent a new outcome word. RENEWED already says Casting is next. W1 and W4 already say the two last-vote endings.
+H278 said a cap miss is never RENEWED. Overruled. Do not restore it. Deleting only the VERDICT branch and leaving the tail is how CAST7 happens again.
+playMatch while episode <= EPISODE_CAP will Reunion-from-cap even if foldWin is RENEWED. That loop is in scope.
+W2 stays. Lighting cameras still ends it for the cast. Missing cameras does not end it for Production. CAMERA WARMING is not a fold.
+Do not invent a SHOW beat. Do not invent 3v1 as a special count — there is no W5 left to special-case.
 Never npx vite build. If a stated fact is wrong, say so in the report rather than diverging silently.

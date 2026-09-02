@@ -423,8 +423,8 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     state.phase = p;
     state.tick += 1;
     /*
-     * H278. CASTING / VERDICT carry the episode on the air so foldWin's W5
-     * can see the cap. Empty `{}` left episode at 1 and the fold said RENEWED.
+     * CASTING / VERDICT carry the episode on the air so the fold and the
+     * night book see the same number. Empty `{}` left episode at 1 all night.
      */
     const data = (p === 'CASTING' || p === 'VERDICT')
       ? { episode: state.airingEpisode ?? state.episode }
@@ -768,10 +768,8 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
    * correct. Growing a second copy of the win rule in `net/party/local.mjs` is the same mistake
    * one layer down — the two would drift, and each would have a gate saying it was right.
    *
-   * `EPISODE_CAP` is enforced in `foldWin`, not by coercing the outcome here. H278's
-   * "a RENEWED at the cap is a CANCELLED" stays the default inside the fold. The one
-   * exception is 2 good vs 1 evil — that is the last vote (John, 2026-09-03 / CAST7).
-   * Coercing RENEWED → CANCELLED here is how CAST7 skipped Dee. Trust the fold.
+   * Cap is not a Production door. H278's "a RENEWED at the cap is a CANCELLED"
+   * is overruled — do not coerce it here. Trust the fold.
    * ============================================================================================= */
   function foldVerdict() {
     const align = Object.fromEntries(deal.seats.map((s) => [s.id, s.alignment]));
@@ -795,7 +793,8 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     const w = foldWin(log.all(), { count, alignmentOf: (id) => align[id], aired });
     /*
      * Trust the fold. A belt that coerced RENEWED → CANCELLED at the cap stole
-     * CAST7's last vote (2g1e). H278 still lives in foldWin for every other count.
+     * CAST7's last vote. Cap miss is RENEWED; do not restore a cameras-short
+     * Production rewrite here.
      */
     state.outcome = w.outcome;
     /*
@@ -851,9 +850,9 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     playEpisode,
     /**
      * Run episodes until a win predicate fires. foldWin owns the stop.
-     * 2g1e at the cap is RENEWED — that extra episode is the last vote, a full
-     * order, not a hang and not a vote-only beat. Breaking on EPISODE_CAP here
-     * Reunion-from-cap'd CAST7 even when the fold said play on.
+     * A camera miss at the cap is RENEWED — play on, full order, not a hang
+     * and not a vote-only beat. Breaking on EPISODE_CAP here Reunion-from-cap'd
+     * a night the fold said continue.
      */
     playMatch(opts = {}) {
       while (!state.outcome || state.outcome === OUTCOME.RENEWED) {
@@ -1057,9 +1056,8 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
      *
      * 🚨 **THE SKIP IS RECORDED BEFORE THE PHASE, AND THE ORDER IS THE WHOLE CORRECTNESS.**
      * `foldWin` resolves by LOG ORDER and breaks on the first rule that fires — so writing
-     * `phase.VERDICT` first would let W5 (RENEWED at the cap is a CANCELLED) beat the host's own
-     * call by one sequence number, and a night the host abandoned would be recorded as a win for
-     * Production. Skip first; then the phase; then fold.
+     * `phase.VERDICT` first would let any later rule beat the host's own call by one sequence
+     * number. Skip first; then the phase; then fold.
      *
      * ⚠️ **AN ALREADY-DECIDED SEASON IS NOT OVERWRITTEN, AND THAT IS NOT A BUG.** If a rule fired
      * earlier in the log it is earlier in the log, and the fold keeps it: the host pressing SKIP
