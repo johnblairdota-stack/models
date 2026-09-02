@@ -32,14 +32,14 @@
       <div style="font-size: 22px; font-weight: 700;">Silhouette</div>
       <div class="card" style="border-left: 3px solid #ff2418;">
         <div class="tag" style="color: #ff5d4d;">FINDING · NOT FIXABLE IN JS</div>
-        <div style="font-size: 16px; font-weight: 500; line-height: 1.35;">There is no stage-3 hunter mesh in the repo. At all.</div>
-        <div class="body">The brief said a Meshy stage-3 body with grafted extra arms was auto-rigged as a biped and its weights look wrong. In-repo truth: the only rigged body is the Lumi Bot biped (<span class="mono" style="font-size:12px;">char1</span>, 8,346 verts, two arms, no textures). The unmerged side branch <span class="mono" style="font-size:11.5px;">claude/hunters-meshy-smart-topology</span> drives the PLAYER body as a stand-in and says so. Six arms, two heads and the rider need a <b style="color:#e8e4dc;">new Meshy generation + auto-rig</b>. No weight paint can invent limbs a mesh does not have — so none was faked.</div>
-        <div class="gate">gate: none possible — board FINDING · next step: MESHYHUNT-style batch, then re-judge</div>
+        <div style="font-size: 16px; font-weight: 500; line-height: 1.35;">Extra-arm weights: Meshy biped auto-rig vs locked six-arm art.</div>
+        <div class="body">The Lumi Bot stand-in is gone. <span class="mono" style="font-size:12px;">createHunterMeshAvatar</span> loads John's Meshy stage-3 pack (<span class="mono" style="font-size:12px;">walking.glb</span> as the body). Extra arms were auto-rigged as a biped; grafted-limb weights may deform wrong against Dev Art <span class="mono" style="font-size:11.5px;">1785288883855</span>. <b style="color:#e8e4dc;">No JS weight paint.</b> Judge the silhouette in the doorway. Hunter stays a door — no camera was invented. GLBs stay gitignored; copy from Documents.</div>
+        <div class="gate">gate: none possible — board FINDING · re-judge in hunter.animated after copy</div>
       </div>
       <div class="card">
         <div class="tag" style="color: #8a857b;">SHIPPED THIS BRANCH</div>
         <div style="font-size: 16px; font-weight: 500; line-height: 1.35;">The doorway bench — the A/B the sofa lock demands</div>
-        <div class="body"><span class="mono" style="font-size:12px;">?view=hunter.animated</span> (<span class="mono" style="font-size:12px;">NEWHUNTER.bat</span>) stands the clip body in a lit doorway beside the procedural stage-3 in an identical doorway. Silhouette-in-the-door is the bar; the stand-in is expected to LOSE that A/B, visibly, until the real body exists.</div>
+        <div class="body"><span class="mono" style="font-size:12px;">?view=hunter.animated</span> (<span class="mono" style="font-size:12px;">NEWHUNTER.bat</span>) stands the Meshy stage-3 pack in a lit doorway beside the procedural stage-3 in an identical doorway. Silhouette-in-the-door is the bar; extra-arm weights are the FINDING, judged here, not painted over.</div>
         <div class="gate">gate: hunter-door D3 · verdict: hunter-door/VERDICT.md</div>
       </div>
     </div>
@@ -48,15 +48,15 @@
       <div style="font-size: 22px; font-weight: 700;">Bind</div>
       <div class="card">
         <div class="tag" style="color: #8a857b;">SHIPPED THIS BRANCH</div>
-        <div style="font-size: 16px; font-weight: 500; line-height: 1.35;">Six role clips, bound by name, or the load THROWS</div>
-        <div class="body"><span class="mono" style="font-size:12px;">createHunterMeshAvatar</span> (<span class="mono" style="font-size:12px;">src/characters/hunter-mesh-avatar.js</span>) loads the Walking GLB as the body and binds idle / walk / run / attack / combo / grow from the 15-clip merged library onto its 24-joint skeleton. A track that resolves to no bone fails the load with both name lists — no silent limb fade.</div>
-        <div class="gate">gate: hunter-door D1 · 72 tracks × 6 roles on 24 joints, green</div>
+        <div style="font-size: 16px; font-weight: 500; line-height: 1.35;">Walking as carrier; other files bind by bone name, or the load THROWS</div>
+        <div class="body"><span class="mono" style="font-size:12px;">createHunterMeshAvatar</span> loads <span class="mono" style="font-size:12px;">walking.glb</span> as the skinned body and <span class="mono" style="font-size:12px;">bindClipToRig</span> rewrites running / attack / double-combo onto that skeleton (prefix remap). A TRS track that resolves to no bone fails the load with both name lists — no silent limb fade. Baked Meshy textures stay; no <span class="mono" style="font-size:12px;">shellWhite</span>.</div>
+        <div class="gate">gate: hunter-door D1 · skip-honest when the gitignored pack is absent</div>
       </div>
       <div class="card" style="border-left: 3px solid #f2c66d;">
-        <div class="tag" style="color: #f2c66d;">CORRECTED FACT</div>
-        <div style="font-size: 16px; font-weight: 500; line-height: 1.35;">There is no double-combo-attack clip</div>
-        <div class="body">The pack's fifteen clips are listed in <span class="mono" style="font-size:12px;">public/models/anim/hunter/README.md</span>. The follow-up strike role <span class="mono" style="font-size:12px;">combo</span> maps to <span class="mono" style="font-size:12px;">Heavy_Hammer_Swing</span> — the only other committed swing — and says so in <span class="mono" style="font-size:12px;">HUNTER_PACK.roles</span> rather than pretending.</div>
-        <div class="gate">gate: hunter-door D1 (combo role) · swap the mapping when a real export lands</div>
+        <div class="tag" style="color: #4fca6a;">CORRECTED FACT</div>
+        <div style="font-size: 16px; font-weight: 500; line-height: 1.35;">Combo is double-combo-attack.glb — a real clip</div>
+        <div class="body">The Lumi mapping of <span class="mono" style="font-size:12px;">combo</span> to <span class="mono" style="font-size:12px;">Heavy_Hammer_Swing</span> is gone. <span class="mono" style="font-size:12px;">HUNTER_PACK.files.combo</span> is <span class="mono" style="font-size:12px;">double-combo-attack.glb</span>. Copy the four files from Documents into <span class="mono" style="font-size:12px;">public/models/anim/hunter/</span>; they stay gitignored.</div>
+        <div class="gate">gate: hunter-door D3 (combo file) · D1 binds it when the pack is on disk</div>
       </div>
       <div class="card">
         <div class="tag" style="color: #8a857b;">RULE KEPT</div>
@@ -69,17 +69,17 @@
     <div style="display: flex; flex-direction: column; gap: 20px;">
       <div style="font-size: 22px; font-weight: 700;">Contact</div>
       <div class="card" style="border-left: 3px solid #f2c66d;">
-        <div class="tag" style="color: #f2c66d;">CORRECTED FACT</div>
-        <div style="font-size: 16px; font-weight: 500; line-height: 1.35;">No 0.60 placeholder existed — because nothing existed</div>
-        <div class="body">The brief said <span class="mono" style="font-size:12px;">HUNTER_SWINGS[].contact</span> sat at a placeholder 0.60. In-repo truth: no <span class="mono" style="font-size:12px;">HUNTER_SWINGS</span> anywhere; damage fires on the AI's own clocks (<span class="mono" style="font-size:12px;">ATTACK_WINDUP</span> 0.85 s, <span class="mono" style="font-size:12px;">ATTACK_CADENCE</span> 2.35 s in <span class="mono" style="font-size:12px;">src/game/hunter-ai.js</span>) with a procedural arm sweep as the telegraph. The mesh path was born measured instead of born fake.</div>
-        <div class="gate">gate: hunter-door D2 — rejects a placeholder AND recomputes from the GLB</div>
+        <div class="tag" style="color: #f2c66d;">MEASURE FROM THESE GLBs</div>
+        <div style="font-size: 16px; font-weight: 500; line-height: 1.35;">Lumi 1.050 / 1.504 are invalid. Re-derive from the Meshy pack.</div>
+        <div class="body">Contact is FK over the raw tracks of <span class="mono" style="font-size:12px;">attack.glb</span> and <span class="mono" style="font-size:12px;">double-combo-attack.glb</span> at 240 Hz — not the Lumi library's Attack / Heavy_Hammer_Swing. After copy: <span class="mono" style="font-size:12px;">node harness/hunter-door.mjs --write</span>. A 0.60 placeholder is still RED. Pack absent: D2 skips, it does not pass.</div>
+        <div class="gate">gate: hunter-door D2 — rejects Lumi numbers AND recomputes from the Meshy GLB</div>
       </div>
       <div class="card">
         <div class="tag" style="color: #8a857b;">MEASURED · FK OVER GLB TRACKS · 240 Hz</div>
         <div style="font-size: 16px; font-weight: 500; line-height: 1.35;">The fist arrives at a known frame</div>
         <div class="body" style="display: flex; flex-direction: column; gap: 6px;">
-          <div style="display:flex; justify-content:space-between;"><span class="mono" style="font-size:12.5px; color:#e8e4dc;">Attack</span><span class="mono" style="font-size:12.5px;">contact 1.050 s / 2.800 s · RightHand</span></div>
-          <div style="display:flex; justify-content:space-between;"><span class="mono" style="font-size:12.5px; color:#e8e4dc;">Heavy_Hammer_Swing</span><span class="mono" style="font-size:12.5px;">contact 1.504 s / 1.833 s · LeftHand</span></div>
+          <div style="display:flex; justify-content:space-between;"><span class="mono" style="font-size:12.5px; color:#e8e4dc;">attack.glb</span><span class="mono" style="font-size:12.5px;">re-derive · --write</span></div>
+          <div style="display:flex; justify-content:space-between;"><span class="mono" style="font-size:12.5px; color:#e8e4dc;">double-combo-attack.glb</span><span class="mono" style="font-size:12.5px;">re-derive · --write</span></div>
           <div>Method: peak leading-hand speed, then maximum horizontal reach from the hips. The AI cues <span class="mono" style="font-size:12px;">cueStrike(role, windLeft)</span> when its strike clock starts, so the clip's contact frame lands exactly on the damage frame — the AI's clocks are untouched.</div>
         </div>
         <div class="gate">gate: hunter-door D2 · drift &gt; 0.03 s from a fresh FK pass is RED</div>

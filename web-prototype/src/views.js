@@ -94,7 +94,7 @@ export const VIEWS = [
   { id: 'mesh.rigged', group: 'char', title: 'Generated shell mounted on the rig',
     bar: 'Does the generated geometry pose with the skeleton?',
     module: () => import('./views/mesh-rigged.js') },
-  { id: 'hunter.animated', group: 'hunter', title: 'Meshy clip hunter in a doorway — stand-in body, measured strikes',
+  { id: 'hunter.animated', group: 'hunter', title: 'Meshy stage-3 hunter in a doorway — measured strikes',
     bar: 'Dev Art 1785288883855 hero + 1785300149293 STAGE 3 row — silhouette-in-the-door is the bar',
     crop: 'the left doorway, jamb to jamb',
     module: () => import('./views/hunter-animated.js') },

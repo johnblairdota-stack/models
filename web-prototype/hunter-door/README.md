@@ -11,28 +11,38 @@ and re-seed rather than editing the big file.
 ## Run the verify
 
 ```bash
-npm run gate:hunter-door            # the gate: bind / measured contact / pack path / control
+npm run gate:hunter-door                 # bind / measured contact / pack path / control
 node harness/hunter-door.mjs --measure   # reprint fresh FK contact numbers from the GLBs
+node harness/hunter-door.mjs --write     # after copying the pack: fill HUNTER_SWINGS from FK
 ```
 
-The gate also runs at the end of `npm run gates:party`, so CI carries it.
+The gate also runs at the end of `npm run gates:party`. The GLBs are gitignored: when they
+are absent the gate **skips** D1/D2/D4 (never a silent pass of bind/contact) and still
+checks wiring. Copy from
+`C:\Users\John\Documents\Run Robot Run\web-prototype\public\models\anim\hunter\`
+into `public/models/anim/hunter/`, then `--write` and the gate must go green. Do not commit
+the `.glb` files.
 
 ## Look at the thing
 
-- `NEWHUNTER.bat` → `?view=hunter.animated` — the clip body stood in a doorway, procedural
-  stage-3 in a second doorway beside it. Space cycles clips; red flash = measured contact.
+- `NEWHUNTER.bat` → `?view=hunter.animated` — the Meshy stage-3 body stood in a doorway,
+  procedural stage-3 in a second doorway beside it. Space cycles clips; red flash =
+  measured contact. Refuses to start if `walking.glb` is missing.
 - `PLAYHUNTER.bat` → the game with `?hunterm=1`. `PLAY.bat` stays procedural, untouched.
 
-## The one-screen truth (2026-09-02)
+## The one-screen truth (2026-09-02, pack pointed at Meshy)
 
-- The repo holds **no generated stage-3 hunter mesh** — six arms, two heads, rider do not
-  exist as geometry anywhere. The opt-in body is the Lumi Bot biped stand-in, dressed in the
-  authored grime ramp. Fixing that needs a new Meshy generation + auto-rig, not JS.
-- Strike contact is **measured** (FK over GLB tracks, 240 Hz): `Attack` 1.050 s / 2.800 s,
-  `Heavy_Hammer_Swing` 1.504 s / 1.833 s — and the gate re-derives both on every run.
-- The pack has **no double-combo clip**; the `combo` role maps to `Heavy_Hammer_Swing` and
-  says so. Full clip census: `public/models/anim/hunter/README.md`.
-- The look verdict against the locked spec lives in `VERDICT.md` beside this file.
+- `createHunterMeshAvatar` loads `walking.glb` as the skinned body and binds
+  `running.glb` / `attack.glb` / `double-combo-attack.glb` onto that skeleton by bone
+  name (`bindClipToRig`). Combo is the real double-combo clip — **not** mapped to
+  `Heavy_Hammer_Swing`. The Lumi Bot stand-in is gone.
+- Baked Meshy textures stay. No `shellWhite`, no hunter grime ramp.
+- Game owns root XZ (`stripRootXZ`).
+- Strike contact is **measured** (FK over GLB tracks, 240 Hz) once the pack is on disk.
+  Lumi numbers 1.050 / 1.504 are invalid for this pack.
+- **FINDING:** extra-arm skin weights (Meshy biped auto-rig) vs the locked six-arm art —
+  do not fake-paint in JS. Judge in the doorway. Hunter stays a door; no camera was
+  invented.
 
 Spec pointer (not restated here): the expedition/night spec is Project Lead's —
 `docs/design/rrr-social-deception-mode.md`.

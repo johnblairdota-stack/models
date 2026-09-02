@@ -1,48 +1,60 @@
-# The hunter clip pack — what is actually here
+# The hunter clip pack — Meshy stage-3
 
-**There are no GLBs in this folder on purpose.** The hunter's clip pack is the tracked
-Lumi Bot biped set one level up, in `public/models/anim/`. This README exists so the next
-agent looking for "the hunter pack" finds the truth instead of a guess.
+**There are no GLBs in this folder on purpose.** They are large (~30 MB) and stay
+gitignored. The code loads them from here; copy them in from John's Documents pack
+before `?hunterm=1` / `hunter.animated` will show the real body.
 
-## The files (all in `../`)
+## Copy the pack
+
+From:
+
+```
+C:\Users\John\Documents\Run Robot Run\web-prototype\public\models\anim\hunter\
+```
+
+into:
+
+```
+web-prototype/public/models/anim/hunter\
+```
+
+Need at least these four (each file is a full character + one clip):
 
 | file | role |
 |---|---|
-| `Meshy_AI_Lumi_Bot_biped_Animation_Walking_withSkin.glb` | the BODY the avatar loads (`char1`, 8,346 verts, 1.70 m, 24-joint Meshy auto-rig, **no material/textures**) |
-| `Meshy_AI_Lumi_Bot_biped_Meshy_AI_Meshy_Merged_Animations.glb` | the 15-clip LIBRARY bound onto that skeleton |
-| the other `Meshy_AI_*` per-clip files | same clips as single-file exports; kept because `mesh-avatar.js` (the player path) reads them |
+| `walking.glb` | **body + walk** — skinned carrier `createHunterMeshAvatar` loads |
+| `running.glb` | run clip, bound onto walking.glb by bone name |
+| `attack.glb` | attack clip (real strike) |
+| `double-combo-attack.glb` | combo clip — **real Double Combo Attack, not Heavy_Hammer_Swing** |
 
-## The 15 clips in the merged library
+Viewer-only extras if present (`frankenstein-walk.glb`, `slow-orc-walk.glb`,
+`jump-attack.glb`, `left-slash.glb`) stay off the in-game path.
 
-Alert · Arise · Attack · Axe_Breathe_and_Look_Around · Axe_Stance · Charged_Axe_Chop ·
-Crawl_and_Look_Back · Dead · Face_Punch_Reaction · Heavy_Hammer_Swing ·
-Lower_Weapon_Look_Raise · Running · Walk_Turn_Left_with_Weapon · Walking · You_Groove
+Do **not** `git add` the `.glb` files.
 
-**There is NO double-combo-attack clip.** The follow-up strike role (`combo` in
-`src/characters/hunter-mesh-avatar.js` `HUNTER_PACK.roles`) maps to `Heavy_Hammer_Swing`,
-which is the pack's only other committed swing. If a real Double Combo Attack export lands,
-drop it in `../`, point the role at it, and re-run `node harness/hunter-door.mjs --measure`.
+## How the load works
 
-## Measured strike contact (do not hand-edit — the gate re-derives these)
+`walking.glb` is the skinned body. The other three files donate `AnimationClip`s
+that `bindClipToRig` rewrites onto that skeleton by bone name (prefix remap —
+Meshy writes `Armature.Hips` in one file and `walking_rig.Hips` in another). A
+TRS track that binds to no bone **throws**. Baked Meshy textures stay; they are
+not overwritten with `shellWhite` or the hunter grime ramp.
 
-| clip | duration | contact (leading fist arrives) | hand |
-|---|---|---|---|
-| `Attack` | 2.800 s | **1.050 s** (0.375 of clip) | RightHand |
-| `Heavy_Hammer_Swing` | 1.833 s | **1.504 s** (0.820 of clip) | LeftHand |
+`stripRootXZ` pins hip X/Z to frame 0 at load (game owns root XZ; Y keeps the bob).
 
-Method: forward kinematics over the raw GLB tracks at 240 Hz — peak leading-hand speed,
-then maximum horizontal reach from the hips. `harness/hunter-door.mjs` recomputes this on
-every run and goes RED if `HUNTER_SWINGS` in `hunter-mesh-avatar.js` drifts from the GLB.
+After copying, re-measure strike contact:
 
-## Root motion
+```bash
+node harness/hunter-door.mjs --write    # patch HUNTER_SWINGS from FK at 240 Hz
+node harness/hunter-door.mjs            # must go green
+```
 
-Every clip keys `Hips.translation`. **Game owns root XZ** — the avatar flattens hip X/Z to
-frame 0 at load (`stripRootXZ`) and keeps Y for the bob. Do not re-add root XZ in a clip.
+If the files are missing, that gate **skips** D1/D2/D4 (bind, contact, control)
+and still checks wiring. A skip is not a pass of the measurement. CI has no
+GLBs; a red gate on a missing gitignored file would redden every push.
 
-## What is missing for the locked art (the finding, not a bug)
+## What is still a FINDING
 
-The locked stage-3 hunter (Dev Art `1785288883855` hero, `1785300149293` turnaround) has
-six arms, two heads and a rider torso. **No such mesh exists in this repo** — this pack's
-body is the plain biped. Extra arms cannot be conjured by weight painting in JS; that body
-needs a fresh Meshy generation + auto-rig. Until then `?hunterm=1` is an honest stand-in
-for judging motion and contact timing only. See `hunter-door/README.md`.
+Extra arms were Meshy-auto-rigged as a biped. Skin weights on grafted limbs may
+look wrong against the locked six-arm art (Dev Art `1785288883855` /
+`1785300149293`). That is not a JS paint job. See `hunter-door/README.md`.

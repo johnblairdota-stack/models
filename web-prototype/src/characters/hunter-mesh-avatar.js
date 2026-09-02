@@ -1,166 +1,270 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { HUNTER_STAGES } from './hunter.js';
 
 /**
- * The Meshy-clip hunter body — OPT-IN, behind `?hunterm=1`. `PLAY.bat` stays procedural.
+ * The Meshy stage-3 hunter body — OPT-IN, behind `?hunterm=1`. `PLAY.bat` stays procedural.
  *
- * WHAT THIS HONESTLY IS. The repo holds NO generated hunter mesh. The only rigged body in
- * `public/models/anim/` is the Lumi Bot biped (`char1`, 8,346 verts, 1.70 m, textureless),
- * which is the old player chassis that also serves as the project's clip library. This module
- * stands THAT body in the hunter's place, wearing the hunter's authored grime ramp and eyes,
- * driven by the pack's real clips. It is a stand-in for judging motion and contact timing —
- * it is NOT the locked stage-3 silhouette (six arms, rider torso, cracked mint caps; Dev Art
- * 1785288883855 / 1785300149293). Making that silhouette needs a new Meshy generation and
- * auto-rig; no JS weight paint can invent limbs the mesh does not have. The board in
- * `hunter-door/` carries that finding; do not quietly "fix" it here.
+ * WHAT THIS IS. John's Meshy stage-3 pack: each file is a full character + one clip.
+ * `walking.glb` is the skinned body; running / attack / double-combo donate AnimationClips
+ * that `bindClipToRig` rewrites onto that skeleton by bone name (prefix remap). A track
+ * that resolves to no bone THROWS — it does not fade a limb out silently.
  *
- * WHY THE BODY COMES FROM THE WALKING GLB. Every per-clip export carries the same skinned
- * mesh; `Walking` is the smallest complete one, and the merged file carries the fifteen-clip
- * library. Same 24-joint Meshy auto-rig in both, verified by name on every load — a clip
- * with a track that resolves to no bone is a bind failure and THROWS, it does not fade out.
+ * THE GLBs ARE NOT IN GIT. They are large (~30 MB) and stay gitignored. Copy them into
+ * `public/models/anim/hunter/` from the Documents pack:
+ *   `C:\Users\John\Documents\Run Robot Run\web-prototype\public\models\anim\hunter\`
+ * Need at least walking.glb, running.glb, attack.glb, double-combo-attack.glb.
+ * Load failure names that path rather than standing the Lumi Bot in as a fake hunter.
  *
- * GAME OWNS ROOT XZ. Every clip in the pack keys `Hips.translation`. The AI slides the root;
- * a clip that also walks the hips would double-move the body (the "feet moving from the
- * point" bug `_anim_check.mjs` measures). So hip X and Z are FLATTENED to their first frame
- * for every clip at load; Y keeps the bob.
+ * MATERIALS STAY AS THEY ARRIVE. The pack is textured in Meshy. Do NOT overwrite with
+ * `shellWhite` or the hunter grime ramp — those dressed the textureless Lumi stand-in.
  *
- * CONTACT IS MEASURED, NOT GUESSED. `HUNTER_SWINGS` below carries, per strike clip, the
- * moment the leading fist actually arrives — forward kinematics over the raw GLB tracks at
- * 240 Hz (peak leading-hand speed, then max horizontal reach from the hips). The gate
- * `harness/hunter-door.mjs` RE-DERIVES these numbers from the GLB on every run and fails on
- * drift, so the numbers cannot rot into placeholders. `cueStrike` uses them to line the
- * visual impact up with the AI's damage frame; the AI's own clocks are untouched.
+ * GAME OWNS ROOT XZ. Every clip keys hip translation. The AI slides the root; a clip
+ * that also walks the hips would double-move the body. Hip X and Z are FLATTENED to
+ * their first frame at load (`stripRootXZ`); Y keeps the bob.
+ *
+ * CONTACT IS MEASURED, NOT GUESSED. `HUNTER_SWINGS` carries, per strike file, the moment
+ * the leading fist arrives — FK over the raw GLB tracks at 240 Hz. The gate
+ * `harness/hunter-door.mjs` re-derives these from the GLBs on every run (and SKIPS the
+ * FK half honestly when the pack is not on disk). `cueStrike` lines the visual impact
+ * up with the AI's damage frame; the AI's own clocks are untouched.
+ *
+ * FINDING, NOT A FIX. Extra arms were Meshy-auto-rigged as a biped. Skin weights on
+ * grafted limbs may look wrong. No JS weight paint. Judge the silhouette in the
+ * doorway (`hunter.animated`); do not invent a camera. Hunter stays a door.
  */
 
+export const HUNTER_PACK_FROM =
+  'C:\\Users\\John\\Documents\\Run Robot Run\\web-prototype\\public\\models\\anim\\hunter\\';
+
 export const HUNTER_PACK = {
-  base: '/models/anim',
-  body: 'Meshy_AI_Lumi_Bot_biped_Animation_Walking_withSkin.glb',
-  library: 'Meshy_AI_Lumi_Bot_biped_Meshy_AI_Meshy_Merged_Animations.glb',
-  /**
-   * Role -> clip name in the library. There is NO double-combo clip in the pack (fifteen
-   * clips, listed in `public/models/anim/hunter/README.md`); `combo` is the follow-up
-   * strike and maps to `Heavy_Hammer_Swing`, the pack's only other committed swing. If a
-   * real Double Combo Attack export lands, point `combo` at it and re-measure.
-   */
-  roles: { idle: 'Alert', walk: 'Walking', run: 'Running', attack: 'Attack', combo: 'Heavy_Hammer_Swing', grow: 'Arise' },
+  base: '/models/anim/hunter',
+  body: 'walking.glb',
+  files: {
+    walk: 'walking.glb',
+    run: 'running.glb',
+    attack: 'attack.glb',
+    combo: 'double-combo-attack.glb',
+  },
 };
 
 /**
- * Strike timing, MEASURED from the GLB tracks — see the header. `contact` is seconds from
- * clip start to the leading fist's arrival. Numbers are asserted against a fresh FK pass by
- * `harness/hunter-door.mjs` (tolerance 0.03 s); edit them only from that gate's output.
+ * Strike timing, MEASURED from the Meshy GLB tracks — see the header. `contact` is
+ * seconds from clip start to the leading fist's arrival. Numbers are asserted against
+ * a fresh FK pass by `harness/hunter-door.mjs` (tolerance 0.03 s).
+ *
+ * `duration`/`contact`/`hand` here are 0 / '?' until the pack is on disk and the gate
+ * re-derives them (`node harness/hunter-door.mjs --write`). Lumi stand-in numbers
+ * 1.050 / 1.504 are invalid for this pack and the gate refuses them.
  */
 export const HUNTER_SWINGS = [
-  { role: 'attack', clip: 'Attack', duration: 2.800, contact: 1.050, hand: 'RightHand',
-    peakHandSpeed: 26.2, measured: 'FK over GLB tracks at 240 Hz, harness/hunter-door.mjs, 2026-09-02' },
-  { role: 'combo', clip: 'Heavy_Hammer_Swing', duration: 1.833, contact: 1.504, hand: 'LeftHand',
-    peakHandSpeed: 7.4, measured: 'FK over GLB tracks at 240 Hz, harness/hunter-door.mjs, 2026-09-02' },
+  { role: 'attack', clip: 'attack', file: 'attack.glb', duration: 0, contact: 0, hand: '?',
+    peakHandSpeed: 0, measured: 'FK over GLB tracks at 240 Hz, harness/hunter-door.mjs — re-derive from Meshy attack.glb' },
+  { role: 'combo', clip: 'double-combo', file: 'double-combo-attack.glb', duration: 0, contact: 0, hand: '?',
+    peakHandSpeed: 0, measured: 'FK over GLB tracks at 240 Hz, harness/hunter-door.mjs — re-derive from Meshy double-combo-attack.glb' },
 ];
 
 const swingFor = (role) => HUNTER_SWINGS.find((s) => s.role === role);
+const DEFAULT_H = 1.7;
 
-/** Throwing bind check: every track of every role clip must resolve to a bone by name. */
-export function assertClipsBound(clips, skeleton) {
-  const bones = new Set(skeleton.bones.map((b) => b.name));
+const PACK_HINT = `Copy the Meshy hunter pack into public/models/anim/hunter/ `
+  + `from ${HUNTER_PACK_FROM} `
+  + `(walking.glb, running.glb, attack.glb, double-combo-attack.glb). `
+  + `GLBs are gitignored; do not commit them.`;
+
+function leafBone(trackName) {
+  const i = trackName.lastIndexOf('.');
+  const node = i < 0 ? trackName : trackName.slice(0, i);
+  const prop = i < 0 ? '' : trackName.slice(i + 1);
+  const leaf = node.includes('/') ? node.split('/').pop() : node.split('.').pop();
+  return { node, leaf, prop };
+}
+
+/**
+ * Rewrite a clip's tracks onto the carrier skeleton's bone names.
+ *
+ * Meshy writes a full character per file. Bone NAMES match (same auto-rig) but the
+ * node path prefix often does not (`Armature.Hips` vs `walking_rig.Hips`). three.js
+ * binds by the whole track name; a prefix miss is a clip that plays and does nothing.
+ * A TRS track that binds to no bone THROWS.
+ */
+export function bindClipToRig(clip, bones, nameHint) {
+  const next = clip.clone();
+  next.name = nameHint ?? clip.name;
+  let remapped = 0;
   const missing = [];
-  for (const [role, clip] of Object.entries(clips)) {
-    if (!clip) { missing.push(`${role}: clip absent from library`); continue; }
-    for (const tr of clip.tracks) {
-      const bone = tr.name.split('.')[0];
-      if (!bones.has(bone)) missing.push(`${role}/${clip.name}: track ${tr.name} has no bone`);
+  const TRS = new Set(['position', 'quaternion', 'scale']);
+  for (const track of next.tracks) {
+    const { node, leaf, prop } = leafBone(track.name);
+    if (bones[node]) continue;
+    if (leaf && bones[leaf]) {
+      track.name = `${leaf}.${prop}`;
+      remapped++;
+      continue;
+    }
+    const hit = Object.keys(bones).find((b) => b === leaf || node.endsWith(`.${b}`) || node.endsWith(`/${b}`)
+      || (leaf && (leaf.endsWith(b) || b.endsWith(leaf))));
+    if (hit) {
+      track.name = `${hit}.${prop}`;
+      remapped++;
+    } else if (TRS.has(prop)) {
+      missing.push(track.name);
     }
   }
   if (missing.length) {
-    throw new Error(`hunter-mesh-avatar: clips did not bind\n  ${missing.join('\n  ')}\n  bones: ${[...bones].join(',')}`);
+    throw new Error(
+      `hunter-mesh-avatar: clip "${next.name}" did not bind\n`
+      + `  missing: ${missing.join(', ')}\n`
+      + `  bones: ${Object.keys(bones).join(',')}`,
+    );
   }
+  return { clip: next, remapped, missing: 0, tracks: next.tracks.length };
 }
 
 /** Game owns root XZ: pin hip X/Z to frame 0, keep Y. In place, per clip, at load. */
 export function stripRootXZ(clip) {
   for (const tr of clip.tracks) {
-    if (!tr.name.endsWith('Hips.position')) continue;
+    if (!/hips\.position$/i.test(tr.name)) continue;
     const v = tr.values;
     for (let i = 0; i < v.length; i += 3) { v[i] = v[0]; v[i + 2] = v[2]; }
   }
   return clip;
 }
 
+/** Throwing bind check: every TRS track of every role clip must resolve to a bone by name. */
+export function assertClipsBound(clips, skeleton) {
+  const bones = {};
+  for (const b of skeleton.bones) bones[b.name] = b;
+  for (const [role, clip] of Object.entries(clips)) {
+    if (!clip) throw new Error(`hunter-mesh-avatar: role ${role}: clip absent`);
+    bindClipToRig(clip, bones, role);
+  }
+}
+
+function standOnGround(rig, H, url) {
+  rig.updateWorldMatrix(true, true);
+  const b0 = new THREE.Box3().setFromObject(rig);
+  const h0 = b0.max.y - b0.min.y;
+  if (!(h0 > 0)) throw new Error(`hunter-mesh-avatar: ${url} has zero height — load failed`);
+  rig.scale.setScalar(H / h0);
+  rig.updateWorldMatrix(true, true);
+  const b1 = new THREE.Box3().setFromObject(rig);
+  rig.position.set(0, -b1.min.y, 0);
+  rig.updateWorldMatrix(true, true);
+  return { bindHeight: h0, scale: H / h0 };
+}
+
+function prepareMeshes(rig) {
+  let skinned = 0;
+  let baked = 0;
+  rig.traverse((o) => {
+    if (!o.isMesh && !o.isSkinnedMesh) return;
+    o.castShadow = true;
+    o.receiveShadow = true;
+    o.frustumCulled = false; // skinned bounds are bind-pose bounds; see mesh-hunter.md trap 1
+    if (o.isSkinnedMesh) skinned++;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    for (const m of mats) if (m?.map) baked++;
+  });
+  return { skinned, baked };
+}
+
+async function loadGltf(loader, url) {
+  try {
+    return await loader.loadAsync(url);
+  } catch (err) {
+    throw new Error(`hunter-mesh-avatar: failed to load ${url}. ${PACK_HINT} ${err?.message ?? err}`);
+  }
+}
+
 export async function createHunterMeshAvatar(opts = {}) {
+  const H = opts.height ?? DEFAULT_H;
   const base = opts.base ?? HUNTER_PACK.base;
+  const bodyFile = HUNTER_PACK.body;
+  const files = HUNTER_PACK.files;
+
+  const unique = [...new Set([bodyFile, ...Object.values(files)])];
   const loader = new GLTFLoader();
-  const [bodyG, libG] = await Promise.all([
-    loader.loadAsync(`${base}/${HUNTER_PACK.body}`),
-    loader.loadAsync(`${base}/${HUNTER_PACK.library}`),
-  ]);
+  const loaded = new Map();
+  await Promise.all(unique.map(async (file) => {
+    loaded.set(file, await loadGltf(loader, `${base}/${file}`));
+  }));
+
+  const bodyGltf = loaded.get(bodyFile);
+  if (!bodyGltf) throw new Error(`hunter-mesh-avatar: body ${bodyFile} did not load. ${PACK_HINT}`);
+  const rig = bodyGltf.scene;
+  const { bindHeight, scale } = standOnGround(rig, H, `${base}/${bodyFile}`);
+  const { skinned, baked } = prepareMeshes(rig);
+  if (!skinned) throw new Error('hunter-mesh-avatar: no SkinnedMesh — this is not a rigged file');
+  if (baked === 0) {
+    console.warn(`[hunter-mesh-avatar] ${bodyFile} has no baked colour map; leaving Meshy materials as they arrived`);
+  }
 
   const group = new THREE.Group();
   group.name = 'hunter-mesh-avatar';
-  const rigRoot = bodyG.scene;
-  group.add(rigRoot);
+  group.add(rig);
 
-  let skinned = null;
-  rigRoot.traverse((o) => { if (o.isSkinnedMesh && !skinned) skinned = o; });
-  if (!skinned) throw new Error('hunter-mesh-avatar: no skinned mesh in body GLB');
+  const bones = {};
+  rig.traverse((o) => { if (o.isBone) bones[o.name] = o; });
 
-  // The pack body ships with NO material or textures (there is nothing baked to preserve —
-  // checked in the GLB json). Dress it in the hunter's authored shell ramp instead.
-  const stage = opts.stage ?? 1;
-  const mat = new THREE.MeshStandardMaterial({ roughness: 0.62, metalness: 0.35 });
-  mat.name = 'hunter.meshShell';
-  skinned.material = mat;
-  skinned.frustumCulled = false; // skinned bounds are bind-pose bounds; see mesh-hunter.md trap 1
-
-  // the slit eyes, off the rig's own head landmark, in the faceplate material name the AI's
-  // eye drive already looks for on the procedural body
-  const head = rigRoot.getObjectByName('Head');
-  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff2418, toneMapped: false });
-  eyeMat.name = 'hunter.faceplate';
-  if (head) {
-    for (const dx of [-0.045, 0.045]) {
-      const eye = new THREE.Mesh(new THREE.PlaneGeometry(0.055, 0.014), eyeMat);
-      eye.position.set(dx, 0.06, 0.11);
-      head.add(eye);
-    }
-  }
-
-  const clips = {};
-  for (const [role, name] of Object.entries(HUNTER_PACK.roles)) {
-    const clip = libG.animations.find((a) => a.name === name);
-    clips[role] = clip ? stripRootXZ(clip) : null;
-  }
-  assertClipsBound(clips, skinned.skeleton);
-
-  const mixer = new THREE.AnimationMixer(rigRoot);
+  const mixer = new THREE.AnimationMixer(rig);
   const actions = {};
-  for (const [role, clip] of Object.entries(clips)) {
-    actions[role] = mixer.clipAction(clip);
-    actions[role].play();
-    actions[role].setEffectiveWeight(role === 'idle' ? 1 : 0);
-  }
-  for (const role of ['attack', 'combo', 'grow']) {
+  const clips = {};
+  const bindNotes = [];
+
+  const takeClip = (file, key) => {
+    const gltf = loaded.get(file);
+    const src = gltf?.animations?.[0];
+    if (!src) {
+      throw new Error(`hunter-mesh-avatar: ${file} has no animation. `
+        + `Available: ${(gltf?.animations ?? []).map((a) => a.name).join(', ') || '(none)'}. ${PACK_HINT}`);
+    }
+    const { clip, remapped, tracks } = bindClipToRig(src, bones, key);
+    stripRootXZ(clip);
+    clips[key] = clip;
+    bindNotes.push({ key, file, src: src.name, remapped, tracks, duration: clip.duration });
+    const a = mixer.clipAction(clip);
+    a.enabled = true;
+    a.setEffectiveWeight(key === 'walk' ? 1 : 0);
+    a.play();
+    actions[key] = a;
+    return clip;
+  };
+
+  takeClip(files.walk, 'walk');
+  takeClip(files.run, 'run');
+  takeClip(files.attack, 'attack');
+  takeClip(files.combo, 'combo');
+
+  for (const role of ['attack', 'combo']) {
     actions[role].setLoop(THREE.LoopOnce, 1);
     actions[role].clampWhenFinished = false;
     actions[role].stop();
   }
 
-  let strike = null; // { role, delay } — pending cue, started when delay hits 0
+  let strike = null; // { action, delay, offset } — pending cue, started when delay hits 0
+
+  console.log(`[hunter-mesh-avatar] ${bodyFile}: ${skinned} skinned, ${baked} baked, `
+    + `${Object.keys(bones).length} bones, scaled x${scale.toFixed(4)} `
+    + `(bind ${bindHeight.toFixed(3)} m → ${H} m)`);
+  for (const n of bindNotes) {
+    console.log(`[hunter-mesh-avatar]   ${n.key}: ${n.file} "${n.src}" `
+      + `${n.duration.toFixed(2)}s tracks=${n.tracks} remapped=${n.remapped}`);
+  }
 
   const api = {
     group,
     mixer,
     clips,
+    bindNotes,
+    sourceFile: bodyFile,
     pending: [
-      'stage-3 six-arm body: NO generated hunter mesh exists in the repo; this is the Lumi Bot biped standing in',
-      'rider torso (the absorbed player) at stage 3',
+      'extra-arm skin weights: Meshy biped auto-rig — grafted limbs will deform wrong; do not fake-paint in JS',
+      'silhouette vs locked six-arm art (Dev Art 1785288883855) — judge in the doorway; hunter stays a door',
       'scan: baked clips cannot look where the AI looks; needs an additive neck override or a head-turn clip',
     ],
 
-    setStage(s) {
-      const def = HUNTER_STAGES[s] ?? HUNTER_STAGES[1];
-      mat.color.setRGB(...(def.shell ?? [0.8, 0.8, 0.8]));
-      group.scale.setScalar(def.scale ?? 1);
-    },
+    /** Stage morphs are skipped. This body IS the stage-3 silhouette. Materials stay baked. */
+    setStage(_s) { /* no-op: do not overwrite Meshy textures with the procedural grime ramp */ },
 
     /**
      * Line the fist up with the damage frame: the AI calls this THE MOMENT it sets a strike
@@ -171,11 +275,12 @@ export async function createHunterMeshAvatar(opts = {}) {
       const s = swingFor(role) ?? swingFor('attack');
       const a = actions[s.role];
       if (!a) return;
+      const contact = s.contact > 0 ? s.contact : Math.min(0.5, a.getClip().duration * 0.4);
       const lead = Math.max(0, windLeft ?? 0);
-      if (s.contact <= lead) {
-        strike = { action: a, delay: lead - s.contact, offset: 0 };
+      if (contact <= lead) {
+        strike = { action: a, delay: lead - contact, offset: 0 };
       } else {
-        strike = { action: a, delay: 0, offset: s.contact - lead };
+        strike = { action: a, delay: 0, offset: contact - lead };
       }
     },
 
@@ -192,26 +297,27 @@ export async function createHunterMeshAvatar(opts = {}) {
           strike = null;
         }
       }
-      // locomotion weights: a plain speed blend, damped so state flicker cannot pop a pose
-      const want = striking ? { idle: 0, walk: 0, run: 0 }
-        : speed > 2.4 ? { idle: 0, walk: 0, run: 1 }
-          : speed > 0.25 ? { idle: 0, walk: 1, run: 0 }
-            : { idle: 1, walk: 0, run: 0 };
-      for (const r of ['idle', 'walk', 'run']) {
+      const want = striking ? { walk: 0, run: 0 }
+        : speed > 2.4 ? { walk: 0, run: 1 }
+          : { walk: 1, run: 0 };
+      for (const r of ['walk', 'run']) {
         const w = actions[r].getEffectiveWeight();
         actions[r].setEffectiveWeight(w + (want[r] - w) * Math.min(1, dt * 8));
+      }
+      const still = speed < 0.25;
+      const rate = still ? 0.18 : 1;
+      if (!striking) {
+        actions.walk.setEffectiveTimeScale(rate);
+        actions.run.setEffectiveTimeScale(rate);
       }
       mixer.update(dt);
     },
 
     dispose() {
       mixer.stopAllAction();
-      skinned.geometry.dispose();
-      mat.dispose();
-      eyeMat.dispose();
+      rig.traverse((o) => { if (o.isMesh || o.isSkinnedMesh) o.geometry?.dispose?.(); });
     },
   };
 
-  api.setStage(stage);
   return api;
 }

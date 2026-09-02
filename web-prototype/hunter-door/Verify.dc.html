@@ -28,13 +28,13 @@
       <div style="font-size: 22px; font-weight: 700; margin-bottom: 14px;">The gate: <span class="mono" style="font-size: 19px; color: #f2c66d;">harness/hunter-door.mjs</span></div>
       <div class="row"><div class="pass">D1</div><div style="font-size: 14.5px; line-height: 1.5; color: #d8d3c9;">Every role clip binds — a track naming a bone the skeleton lacks is RED, with both name lists printed.</div></div>
       <div class="row"><div class="pass">D2</div><div style="font-size: 14.5px; line-height: 1.5; color: #d8d3c9;">Contact is measured — no <span class="mono" style="font-size:12.5px;">measured:</span> note, a 0.60-style placeholder, or &gt;0.03 s drift from a fresh forward-kinematics pass over the GLB is RED. The number cannot rot.</div></div>
-      <div class="row"><div class="pass">D3</div><div style="font-size: 14.5px; line-height: 1.5; color: #d8d3c9;">The pack path loads — the files <span class="mono" style="font-size:12.5px;">HUNTER_PACK</span> names exist, <span class="mono" style="font-size:12.5px;">?hunterm=1</span> is wired in game.js, the viewer is registered, PLAYHUNTER.bat passes the flag.</div></div>
+      <div class="row"><div class="pass">D3</div><div style="font-size: 14.5px; line-height: 1.5; color: #d8d3c9;">The pack path loads — <span class="mono" style="font-size:12.5px;">walking.glb</span> as body, combo is <span class="mono" style="font-size:12.5px;">double-combo-attack.glb</span>, <span class="mono" style="font-size:12.5px;">?hunterm=1</span> is wired, the viewer is registered, PLAYHUNTER.bat passes the flag. Pack files gitignored: absent is a SKIP with the Documents copy path, not a silent pass of bind/contact.</div></div>
       <div class="row" style="border-bottom: none;"><div class="pass">D4</div><div style="font-size: 14.5px; line-height: 1.5; color: #d8d3c9;">The control must fail — the comparator is fed a deliberately wrong contact; if it accepts it, the whole run is RED. A gate that cannot fail is not verifying.</div></div>
       <div style="margin-top: 18px; background: #16161b; border: 1px solid #26262d; border-radius: 3px; padding: 14px 18px;">
         <div class="mono" style="font-size: 12.5px; color: #b9b4aa; line-height: 1.8;">
-          npm run gate:hunter-door<span style="color:#4fca6a;">&nbsp;&nbsp;# 14/14 green, 2026-09-02</span><br>
-          node harness/hunter-door.mjs --measure<span style="color:#8a857b;">&nbsp;&nbsp;# reprint fresh FK numbers</span><br>
-          npm run gates:party<span style="color:#8a857b;">&nbsp;&nbsp;# hunter-door now runs in the CI chain</span>
+          npm run gate:hunter-door<span style="color:#4fca6a;">&nbsp;&nbsp;# wiring green; pack absent → D1/D2/D4 SKIP</span><br>
+          node harness/hunter-door.mjs --write<span style="color:#8a857b;">&nbsp;&nbsp;# after copy: fill HUNTER_SWINGS from FK</span><br>
+          npm run gates:party<span style="color:#8a857b;">&nbsp;&nbsp;# hunter-door at the end of the CI chain</span>
         </div>
       </div>
     </div>
@@ -45,12 +45,12 @@
         <div class="mono" style="font-size: 11px; letter-spacing: 0.16em; color: #ff5d4d;">RRR-CRITIQUE · SILHOUETTE-IN-THE-DOOR</div>
         <div style="font-size: 15px; line-height: 1.55; color: #d8d3c9;">
           Judged against the locked spec (hero <span class="mono" style="font-size:12.5px;">1785288883855</span>,
-          turnaround <span class="mono" style="font-size:12.5px;">1785300149293</span>): the stand-in biped
-          <b style="color:#e8e4dc;">does not read as the stage-3 hunter and cannot</b> — two arms, one head,
-          no rider, no cracked mint caps. Motion and strike timing are the honest wins; the body is the gap.
-          Full verdict with captures: <span class="mono" style="font-size:12.5px;">hunter-door/VERDICT.md</span>.
+          turnaround <span class="mono" style="font-size:12.5px;">1785300149293</span>): the Lumi stand-in is
+          <b style="color:#e8e4dc;">gone</b>. Remaining FINDING is extra-arm weights on the Meshy biped
+          auto-rig vs the six-arm hero — do not fake-paint. Re-judge in the doorway after copy.
+          Full verdict: <span class="mono" style="font-size:12.5px;">hunter-door/VERDICT.md</span>.
         </div>
-        <div class="mono" style="font-size: 11.5px; color: #8a857b;">Unblocks: a fresh Meshy generation + auto-rig of the stage-3 body. Until then ?hunterm=1 stays opt-in.</div>
+        <div class="mono" style="font-size: 11.5px; color: #8a857b;">Unblocks: copy the Documents pack, --write, re-judge extra-arm weights in the door. Until then ?hunterm=1 stays opt-in.</div>
       </div>
       <div style="margin-top: 18px; background: #16161b; border: 1px solid #26262d; border-radius: 3px; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px;">
         <div class="mono" style="font-size: 11px; letter-spacing: 0.16em; color: #8a857b;">WHAT DID NOT CHANGE — BY DESIGN</div>
