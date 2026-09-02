@@ -13,6 +13,7 @@
 import { foldWin, WIN_TARGETS, OUTCOME, TICK_ORDER, outcomeLine } from '../src/party/win.js';
 import { EPISODE_CAP } from '../src/party/phases.js';
 import { createRoom } from '../src/party/room.js';
+import { readFileSync } from 'node:fs';
 
 let pass = 0, fail = 0;
 const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' · ' + d : ''}`); } else { fail++; console.log(`  FAIL ${n}${d ? ' · ' + d : ''}`); } return c; };
@@ -31,7 +32,7 @@ const fold = (evts, count = 8, alignmentOf = align8) => foldWin(mk(evts), { coun
     `${quiet.outcome} · livingGood=${quiet.livingGood} livingEvil=${quiet.livingEvil}`);
 }
 
-// ---------------------------------------------------------------- W1..W5 · every path fires
+// ---------------------------------------------------------------- W1..W4 · every path fires; a camera miss is not a fold
 {
   const w1 = fold([DEAL, { type: 'player.executed', data: { id: 'p7' } }, { type: 'player.executed', data: { id: 'p8' } }]);
   t('W1 · no living evil ends it for good', w1.rule === 'W1' && w1.outcome === OUTCOME.FINALE);
@@ -52,9 +53,12 @@ const fold = (evts, count = 8, alignmentOf = align8) => foldWin(mk(evts), { coun
   t('W4 · parity ends it for evil', w4.rule === 'W4' && w4.outcome === OUTCOME.CANCELLED,
     `${w4.livingEvil} evil vs ${w4.livingGood} good`);
 
-  const w5 = fold([DEAL, { type: 'phase.CASTING', data: { episode: EPISODE_CAP } }, { type: 'phase.VERDICT', data: {} }]);
-  t('W5 · running out of episodes short of the cameras ends it for evil',
-    w5.rule === 'W5' && w5.outcome === OUTCOME.CANCELLED, `episode ${w5.episode} of ${EPISODE_CAP}`);
+  const capMiss = fold([DEAL, { type: 'phase.CASTING', data: { episode: EPISODE_CAP } }, { type: 'phase.VERDICT', data: {} }]);
+  t('cap-miss · running out of episodes short of the cameras does NOT end it',
+    capMiss.rule === null && capMiss.outcome === OUTCOME.RENEWED, `episode ${capMiss.episode} of ${EPISODE_CAP}`);
+  t('cap-miss-b · chrome for that fold is The season continues, not Production wins',
+    outcomeLine(capMiss.outcome).includes('The season continues')
+    && !outcomeLine(capMiss.outcome).includes('Production wins'));
 
   const w6 = fold([DEAL, { type: 'host.skip' }, ...Array(4).fill({ type: 'run.camera_lit' })]);
   t('W6 · SKIP TO REUNION abandons without handing anyone a win',
@@ -95,7 +99,9 @@ const fold = (evts, count = 8, alignmentOf = align8) => foldWin(mk(evts), { coun
     return w.cameraTarget === (n <= 5 ? 3 : 4) && w.feedTarget === (n <= 5 ? 2 : 3);
   }), [4, 5, 6, 7, 8].map((n) => `${n}p:${WIN_TARGETS[n].cameraTarget}cam/${WIN_TARGETS[n].feedTarget}fed`).join(' '));
 
-  t('W8c · same-tick order is written in exactly one place', TICK_ORDER.join(',') === 'W1,W3,W2,W4,W5');
+  t('W8c · same-tick order is written in exactly one place', TICK_ORDER.join(',') === 'W1,W3,W2,W4');
+  const winSrc = readFileSync(new URL('../src/party/win.js', import.meta.url), 'utf8');
+  t('W8c2 · win.js contains no cameras-short Production rule token', !winSrc.includes('W5'));
 }
 
 // ---------------------------------------------------------------- W9 · the controls
@@ -126,8 +132,11 @@ const fold = (evts, count = 8, alignmentOf = align8) => foldWin(mk(evts), { coun
  *
  * ⚠️ **THE CONTROL IS THE INTERESTING ARM.** A machine that always ends is not the property —
  * `playMatch`'s own `while` would satisfy "it terminates" by hanging up on episode 1. What has to
- * hold is that it ends for a REASON the fold names, and never on RENEWED.
- * ================================================================================================= */
+ * hold is that it ends for a REASON the fold names, and never on RENEWED. A night
+ * may run past the cap while RENEWED (a camera miss is not a fold); that extra
+ * episode is not a hang. Default `playMatch` lights cameras, so these seeds still
+ * close on W1 / W2 / W3 / W4 / W6.
+ * ============================================================================================== */
 {
   let unended = null, noRule = null;
   const rules = new Set();
@@ -138,18 +147,22 @@ const fold = (evts, count = 8, alignmentOf = align8) => foldWin(mk(evts), { coun
     const out = r.state.outcome;
     if (!out || out === OUTCOME.RENEWED) { unended = `seed ${seed} finished on ${out}`; break; }
     const checked = r.log.all().filter((e) => e.type === 'win.checked').at(-1);
-    if (!checked?.data?.rule && out !== OUTCOME.CANCELLED) noRule = noRule || `seed ${seed}: ${out} with no rule`;
+    if (!checked?.data?.rule) noRule = noRule || `seed ${seed}: ${out} with no rule`;
     if (checked?.data?.rule) rules.add(checked.data.rule);
-    if (r.state.episode > EPISODE_CAP + 1) { unended = `seed ${seed} ran past the cap to ${r.state.episode}`; break; }
+    /*
+     * A camera miss may air past EPISODE_CAP. That extra episode is play-on, not a hang.
+     * A seed that never stops at all is still a hang — R2e is the live time backstop.
+     */
+    if (r.state.episode > EPISODE_CAP + 8) { unended = `seed ${seed} ran past the last-vote room to ${r.state.episode}`; break; }
   }
-  t('W10 · every match ends, inside the cap, on an outcome that is not RENEWED',
+  t('W10 · every match ends on an outcome that is not RENEWED',
     unended === null, unended || `8 seeds · rules seen: ${[...rules].join(',') || 'cap only'}`);
   t('W10b · and each ending names the rule that caused it', noRule === null, noRule || 'all attributed');
 
   /*
-   * The cap is the backstop and `foldVerdict` is the only place it is enforced: a season that runs
-   * out of episodes without lighting its cameras is one Production won. Asserted here as the
-   * TERMINATION guarantee — with no rule firing at all, the night still has to stop.
+   * Quiet `scaffold:false` is the negative: cameras never light, nobody dies, the
+   * cap is not a Production door. Bounded `for`, not `playMatch` — a silent loop
+   * must not hang the assertion. After the cap the fold is still RENEWED.
    */
   const quiet = createRoom({ count: 8, castSeed: 4242, worldSeed: 42, send: () => {}, emit: () => {} });
   quiet.start();
@@ -157,39 +170,107 @@ const fold = (evts, count = 8, alignmentOf = align8) => foldWin(mk(evts), { coun
     if (quiet.state.outcome && quiet.state.outcome !== OUTCOME.RENEWED) break;
     quiet.playEpisode({ scaffold: false, hunterRoom: 'cellar' });
   }
-  t('W10c · a night where nothing happens still ends at EPISODE_CAP, and evil takes it',
-    quiet.state.outcome === OUTCOME.CANCELLED && quiet.state.episode > EPISODE_CAP,
+  t('W10c · a night where nothing happens stays RENEWED past the cap — cameras short is not a fold',
+    quiet.state.outcome === OUTCOME.RENEWED && quiet.state.episode > EPISODE_CAP,
     `${quiet.state.outcome} after ${quiet.state.episode - 1} episodes, cap ${EPISODE_CAP}`);
-  t('W10d · and the last aired verdict is CANCELLED — never RENEWED at the cap (H278)',
-    quiet.log.all().filter((e) => e.type === 'verdict.aired').at(-1)?.data?.status === OUTCOME.CANCELLED
-      && quiet.log.all().filter((e) => e.type === 'win.checked').at(-1)?.data?.rule === 'W5',
+  t('W10d · and the last aired verdict is RENEWED — chrome says the season continues',
+    quiet.log.all().filter((e) => e.type === 'verdict.aired').at(-1)?.data?.status === OUTCOME.RENEWED
+      && quiet.log.all().filter((e) => e.type === 'win.checked').at(-1)?.data?.rule == null
+      && outcomeLine(OUTCOME.RENEWED).includes('The season continues'),
     JSON.stringify(quiet.log.all().filter((e) => e.type === 'verdict.aired').at(-1)?.data));
 }
 
-// ---------------------------------------------------------------- W11 · H278 · cap miss is never RENEWED
+// ---------------------------------------------------------------- W11 · H278 overruled · cap miss is RENEWED
 {
   const dusk = foldWin(mk([DEAL, { type: 'phase.VERDICT', data: {} }]), {
     count: 8, alignmentOf: align8, aired: EPISODE_CAP,
   });
-  t('W11 · at the cap with 0 of 4 cameras the fold is CANCELLED, never RENEWED',
-    dusk.outcome === OUTCOME.CANCELLED && dusk.rule === 'W5' && dusk.camerasLit === 0,
+  t('W11 · at the cap with 0 of 4 cameras the fold is RENEWED, never Production',
+    dusk.outcome === OUTCOME.RENEWED && dusk.rule === null && dusk.camerasLit === 0,
     `${dusk.outcome} · ${dusk.rule} · ${dusk.camerasLit} cam`);
-  t('W11b · chrome for that fold is Production, not "the season continues"',
-    outcomeLine(dusk.outcome).includes('Production wins')
-      && !outcomeLine(dusk.outcome).includes('continues'));
+  t('W11b · chrome for that fold is The season continues, not Production wins',
+    outcomeLine(dusk.outcome).includes('The season continues')
+      && !outcomeLine(dusk.outcome).includes('Production wins'));
 
   const short = fold([
     DEAL,
     ...Array(WIN_TARGETS[8].cameraTarget - 1).fill({ type: 'run.camera_lit' }),
     { type: 'phase.VERDICT', data: { episode: EPISODE_CAP } },
   ]);
-  t('W11c · one camera short at the cap is still a miss — CANCELLED',
-    short.outcome === OUTCOME.CANCELLED && short.rule === 'W5' && short.camerasLit === 3,
+  t('W11c · one camera short at the cap is still a miss — and still RENEWED',
+    short.outcome === OUTCOME.RENEWED && short.rule === null && short.camerasLit === 3,
     `${short.camerasLit} lit · ${short.outcome}`);
 
   const mid = fold([DEAL, { type: 'phase.VERDICT', data: { episode: 2 } }]);
   t('W11d control · before the cap, 0 cameras is still RENEWED',
     mid.outcome === OUTCOME.RENEWED && mid.rule === null);
+}
+
+// ---------------------------------------------------------------- W12 · last vote still W1 / W4; 3g1e at the cap is also RENEWED
+/* =================================================================================================
+ * CAST7 / John 2026-09-03, then the 3v1-still-W5 override. Two goods and one evil, cameras 0/4,
+ * used to fire Production at the cap. Cap miss is RENEWED at every count. Execute the remaining
+ * evil → W1. Execute a good → W4. 3g1e at the cap is RENEWED too — do not ship 3v1-still-W5.
+ * W4 `>=` is unchanged.
+ * ============================================================================================== */
+{
+  /*
+   * Kill 1 evil then 4 goods by execute (not take) so W3's feed target cannot fire.
+   * After p8: 6g 1e. After four goods: 2g 1e. W4's `1 >= 2` stays false.
+   */
+  const LAST_VOTE = [
+    DEAL,
+    { type: 'player.executed', data: { id: 'p8' } },
+    { type: 'player.executed', data: { id: 'p1' } },
+    { type: 'player.executed', data: { id: 'p2' } },
+    { type: 'player.executed', data: { id: 'p3' } },
+    { type: 'player.executed', data: { id: 'p4' } },
+  ];
+
+  const twoOne = fold([
+    ...LAST_VOTE,
+    { type: 'phase.VERDICT', data: { episode: EPISODE_CAP } },
+  ]);
+  t('W12 · 8p deal → 2g1e at EPISODE_CAP cameras 0 → RENEWED',
+    twoOne.outcome === OUTCOME.RENEWED && twoOne.rule === null
+    && twoOne.livingGood === 2 && twoOne.livingEvil === 1
+    && twoOne.camerasLit === 0,
+    `${twoOne.outcome} · ${twoOne.rule} · ${twoOne.livingGood}g ${twoOne.livingEvil}e`);
+  t('W12b · chrome for that fold is The season continues, not Production wins',
+    outcomeLine(twoOne.outcome).includes('The season continues')
+    && !outcomeLine(twoOne.outcome).includes('Production wins'));
+
+  const twoOneTail = foldWin(mk([...LAST_VOTE, { type: 'phase.VERDICT', data: {} }]), {
+    count: 8, alignmentOf: align8, aired: EPISODE_CAP,
+  });
+  t('W12c · aired=cap agrees — 2g1e at the cap is still RENEWED',
+    twoOneTail.outcome === OUTCOME.RENEWED && twoOneTail.rule === null
+    && twoOneTail.livingGood === 2 && twoOneTail.livingEvil === 1,
+    `${twoOneTail.outcome} · ${twoOneTail.rule}`);
+
+  const killEvil = fold([...LAST_VOTE, { type: 'player.executed', data: { id: 'p7' } }]);
+  t('W12d · last vote executes the remaining evil → W1 FINALE',
+    killEvil.rule === 'W1' && killEvil.outcome === OUTCOME.FINALE
+    && killEvil.livingEvil === 0);
+
+  const killGood = fold([...LAST_VOTE, { type: 'player.executed', data: { id: 'p5' } }]);
+  t('W12e · last vote executes a good → W4 CANCELLED (parity)',
+    killGood.rule === 'W4' && killGood.outcome === OUTCOME.CANCELLED
+    && killGood.livingGood === 1 && killGood.livingEvil === 1,
+    `${killGood.livingEvil}e vs ${killGood.livingGood}g`);
+
+  const threeOne = fold([
+    DEAL,
+    { type: 'player.executed', data: { id: 'p8' } },
+    { type: 'player.executed', data: { id: 'p1' } },
+    { type: 'player.executed', data: { id: 'p2' } },
+    { type: 'player.executed', data: { id: 'p3' } },
+    { type: 'phase.VERDICT', data: { episode: EPISODE_CAP } },
+  ]);
+  t('W12f · 3g1e at cap 0 cameras is RENEWED — do not ship 3v1-still-W5',
+    threeOne.livingGood === 3 && threeOne.livingEvil === 1
+    && threeOne.rule === null && threeOne.outcome === OUTCOME.RENEWED,
+    `${threeOne.livingGood}g ${threeOne.livingEvil}e · ${threeOne.rule}`);
 }
 
 console.log(`\nwin-machine: ${pass} passed, ${fail} failed`);

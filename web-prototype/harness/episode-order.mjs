@@ -136,8 +136,8 @@ const NOT_AFTER_RUN = [PHASE.CASTING, PHASE.EXPEDITION];
  *
  * The fix was `state.airingEpisode` — the episode ON THE AIR, set by both paths at the top of the
  * episode, so it means the same thing in both. This asserts the property rather than the fix: a
- * season that decides nothing runs exactly `EPISODE_CAP` episodes, counted the way a viewer would.
- * The live half is `party-night` N17n, which drives a real socket room to the same number.
+ * season that decides nothing stays RENEWED past `EPISODE_CAP`. The cap is not a Production door.
+ * The live half is `party-night` N17n, which drives a real socket room to the same fold.
  * ================================================================================================= */
 {
   const quiet = createRoom({ count: 8, castSeed: 77, worldSeed: 7, send: () => {}, emit: () => {} });
@@ -148,12 +148,12 @@ const NOT_AFTER_RUN = [PHASE.CASTING, PHASE.EXPEDITION];
     quiet.playEpisode({ scaffold: false, hunterRoom: 'cellar' });
     aired++;
   }
-  t('E6 · a season that decides nothing airs exactly EPISODE_CAP episodes and then stops',
-    aired === EPISODE_CAP && quiet.outcome() === 'CANCELLED',
+  t('E6 · a season that decides nothing stays RENEWED past EPISODE_CAP — the cap is not a Production door',
+    aired === EPISODE_CAP + 4 && quiet.outcome() === 'RENEWED',
     `${aired} aired, cap ${EPISODE_CAP}, ended ${quiet.outcome()}`);
   t('E6b · and the aired number is what the verdict reports — not the one being set up',
-    quiet.log.all().filter((e) => e.type === 'verdict.aired').length === EPISODE_CAP
-      && quiet.state.airingEpisode === EPISODE_CAP,
+    quiet.log.all().filter((e) => e.type === 'verdict.aired').length === aired
+      && quiet.state.airingEpisode === aired,
     `airing ${quiet.state.airingEpisode}, episode ${quiet.state.episode}`);
 }
 

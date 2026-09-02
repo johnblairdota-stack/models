@@ -33,7 +33,6 @@ import { deadIdsFromPublic, describeCastTiebreaks, livingFromPublic, previewCast
 import { MAX_PAIRS, pairShape } from '../party/link.js';
 import { missionFor } from '../party/mission.js';
 import { FAIL_CHROME, JOB, SMASH_CHROME, toolLabel } from '../party/jobs.js';
-import { EPISODE_CAP } from '../party/phases.js';
 import { isStinging, stepSting, stingHtml } from '../party/stinger.js';
 
 /** TV chrome 3·2·1 after every living ballot (or the 20s backstop), then `{ t: 'episode' }`. */
@@ -2579,9 +2578,14 @@ function executionLine(result, names) {
  * their seat and their face, so a table with two Sams can tell which), and this line names the
  * hand. `executionLine` is untouched — the phone and the log still want the whole sentence.
  */
-/** At the cap the season ends — chrome must not offer another Casting (H277 / DUSK6). */
+/**
+ * Cap is not a Production door. Execution cannot see the upcoming fold, so this
+ * kicker always names Casting. 'The Reunion is next' is Verdict chrome
+ * (`outcomeLine`) once the fold is not RENEWED.
+ */
 function executionNextLine(episode) {
-  return Number(episode) >= EPISODE_CAP ? 'The Reunion is next.' : 'Casting is next.';
+  void episode;
+  return 'Casting is next.';
 }
 
 /**
