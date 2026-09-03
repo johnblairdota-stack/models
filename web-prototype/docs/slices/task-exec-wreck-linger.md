@@ -1,48 +1,48 @@
-# Slice: executed bodies stay wreckage; 5s spec pan (CAST9 redelivery)
+# Slice: keep wreckPose after HIT (CAST10 redelivery)
 
 Decided plan. The numbers are the numbers to use. If a stated fact is wrong, **say so in
 the report rather than diverging silently.**
 
-Base: `main` at `0f9f0a0` (PR 76 merge). Spec, not the night. **Grok, not Max. Do not merge.**
-Game waits on this docs PR. Treat PR 76 as **failed delivery**, not a new look.
+Base: `main` at `381ae40` (PR 78 merge). Spec, not the night. **Grok, not Max. Do not merge.**
+Game waits on this docs PR. Treat PR 78 as **failed delivery of linger**, not a new look.
 
-CAST9 sat on `0f9f0a0` after 76 shipped `LINGER_CRIME_S 1.50` / `LINGER_ORBIT_S 1.50` /
-`LINGER_GROUP_S 2.00` (`LINGER_TOTAL_S 5.00`) in `execute-hit.js`. CAST9 still saw
-Gus `wreck=true sit=false` and `EXECUTION 12s` `CAMERA WARM`. Keep `wreckPose`. Wire the
-HIT clock. Do not retune the 5s numbers. Not a CUE_KIND.
+CAST10 sat on `381ae40` after 78 shipped linger-on-HIT. Still Fox / Eli `wreck=true
+sit=false`; `EXECUTION 11s` / `9s`. Keep `wreckPose` after HIT. Wire the HIT clock.
+Do not retune the 5s numbers. Not a CUE_KIND.
 
-Quote CAST9: `THE SEASON IS OVER` / `The Showrunner is deciding.` Evils Fox+Gus OUT.
-No W5. No 2g1e.
+Do not reslice emote chrome. Vote-HIT stays mixed, not this build.
 
-CAST9 lock `lingerWreck` = FAIL:
+Quote CAST10: `CANCELLED` / `Production wins`. Evils Cy+Dee still living. 3g2e. No W5.
 
-- quote: `Gus wreck=true sit=false` tv=`PRIME TIME ON AIR EPISODE 5 · EXECUTION`
-  `EXECUTION 12s` `PRIME TIME EXECUTION · CAMERA WARM`
+CAST10 lock `lingerWreck` = FAIL:
+
+- quote: `Eli wreck=true sit=false` tv=`PRIME TIME ON AIR EPISODE 5 · EXECUTION`
+  `EXECUTION 9s` `PRIME TIME EXECUTION Eli 5 Cy ELI`
+- CoS: Fox and Eli both `wreck=true sit=false`; EXECUTION 11s / 9s.
 - `sit=false` with wreck flag is the vanish class (body not holding `wreckPose` on the
-  floor). `CAMERA WARM` on the execution TV means linger never owned the HIT camera.
+  floor). Keep `wreckPose` after HIT.
 
-Do not invent a follow.js camera. This pan is a spec camera (`wreckCam` / `sendoffCam`
-class). Do not restage Shot B.
+Numbers already on tip — do not retune: `LINGER_CRIME_S 1.50` / `LINGER_ORBIT_S 1.50` /
+`LINGER_GROUP_S 2.00` / `LINGER_TOTAL_S 5.00`. `WRECK_HOLD_S` 0.50. `WRECK_SHOT.dur` 0.
+`EXECUTION` stays 20s (beat clock ≠ linger).
 
 ---
 
 ## 0. Why this slice exists
 
-After the sledge connects the show has to leave the wreck without losing the body. CAST9
-overran the 5s pan (12s, CAMERA WARM) and Gus was wreck=true sit=false. 76 shipped the
-numbers; CAST9 failed the picture.
+After the sledge connects the show has to leave the wreck without losing the body. CAST10
+overran the 5s pan (11s / 9s) and Fox / Eli were wreck=true sit=false. 78 shipped the
+HIT-clock claim; CAST10 failed the picture.
 
 ---
 
-## 1. Numbers (use these — already on tip; do not retune)
+## 1. Numbers (already on tip; do not retune)
 
 `LINGER_TOTAL_S = 5.00` after contact.
 `LINGER_CRIME_S = 1.50` pan up/away onto the wreck.
 `LINGER_ORBIT_S = 1.50` quick pan around wreck + toppled chair.
 `LINGER_GROUP_S = 2.00` refocus on the seated living group.
-Striker `parkSit` during GROUP (unmount sledge, restore their chair). Victim stays
-`wreckPose` u=1. `WRECK_HOLD_S` stays 0.50. `WRECK_SHOT.dur` stays 0. `EXECUTION` stays
-20s. `WRECK_LOOK_Y` 0.42, `WRECK_EYE_Y` 0.78 stay the crime-scene eyeline.
+Striker `parkSit` during GROUP. Victim stays `wreckPose` u=1.
 
 ---
 
@@ -50,18 +50,14 @@ Striker `parkSit` during GROUP (unmount sledge, restore their chair). Victim sta
 
 You may edit: `docs/slices/task-exec-wreck-linger.md` ; `src/game/execute-hit.js` (drive
 `execLingerCam` on the HIT clock, do not retune numbers); `src/game/intro-bed.js`
-(persist wrecked, drive linger cam, `parkSit` swinger during GROUP, never `parkSit` a
-wrecked victim, never hide wreckage, `sit=false` vanish is red); `harness/execute-hit.mjs`
-(H7 H11 plus linger 5.00 on the HIT clock, CAST9-class 12s `CAMERA WARM` is red, Gus
-`wreck=true sit=false` is red, no 10s plate, no `fillExecuteEye` after contact, no new
-CUE_KIND).
-`accusation-stage.js` only if EXECUTE needs a linger phase key — prefer linger in
-`execute-hit.js`. `follow.js` only if `intros.wrecked` fanout drops ids. Do not add
-CUE_KIND. last-look hard-cut stays.
+(persist wrecked, `parkSit` swinger during GROUP, never `parkSit` a wrecked victim,
+never hide wreckage, `sit=false` vanish is red); `harness/execute-hit.mjs` (linger 5.00
+on the HIT clock, CAST10-class 11s / 9s and Fox/Eli `wreck=true sit=false` are red, no
+new CUE_KIND).
 
 Do not edit: `follow.js` chase/top/crane/CUE_KINDS. Hunter art. Live 5178/5181.
-`phases.js` EXECUTION 20s. `win.js`. Expedition pads. pair-lock sendoff numbers.
-Do not restore W5.
+`phases.js` EXECUTION 20s. `win.js`. Expedition auto-walk (other slice). Emote chrome
+(PASS). Vote-HIT (mixed). Do not restore W5. Do not restage Shot B.
 
 ---
 
@@ -70,24 +66,19 @@ Do not restore W5.
 1. After contact the victim is wreckage: `wreckPose` u=1, visor crashed, chair toppled.
    Not ragdoll. Not sit-idle. Not missing. `wreck=true sit=false` is a defect.
 2. Wreckage persists for the rest of the night. Alignment hidden until Reunion.
-3. After contact the camera does NOT linger on the nominator's rear and does NOT sit on
-   `CAMERA WARM`. Spec pan: crime 1.50, orbit 1.50, group 2.00. Total 5.00 on the HIT
-   clock, not the EXECUTION beat clock (20s) and not VOTE chrome.
+3. Spec pan on the HIT clock: crime 1.50, orbit 1.50, group 2.00. Total 5.00. CAST10
+   11s / 9s is red.
 4. Striker `parkSit` to their own chair during GROUP. Sledge unmounts.
 5. Spec camera (`wreckCam` class), NOT a follow.js mode. No new CUE_KIND.
-6. Do not restore `WRECK_SHOT` dur 10. Do not change EXECUTION from 20s to 5s. Do not
-   restage Shot B. Do not retune 1.50 / 1.50 / 2.00.
+6. Do not retune 1.50 / 1.50 / 2.00. Do not change EXECUTION from 20s to 5s.
 
 ---
 
 ## 4. Traps and verification
 
-`fillExecuteEye` staying on after contact is the rear shot. `applyWreck` then rebuild
-without wrecked ids is the vanish. `parkSit(victim)` on empty execute cue was H11.
-CAST9 `CAMERA WARM` on EXECUTION 12s means linger never owned the HIT camera. Never
-npx vite build.
+`parkSit(victim)` or rebuild without wrecked ids is the vanish. 78's linger-on-HIT
+claim is not a pass if CAST10 still photographs `sit=false` at 9s / 11s.
 Gate: `harness/execute-hit.mjs` in `gates:party`.
-Red: wrecked id missing after empty execute cue; `wreckPose` u=1 not on floorY;
-`wreck=true sit=false`; linger on HIT clock not 5.00; CAST9-class ~12s `CAMERA WARM`;
-`WRECK_SHOT.dur` >= 10; new CUE_KIND; swinger still `fillExecuteEye` after contact.
+Red: `wreckPose` u=1 not on floorY; `wreck=true sit=false`; linger on HIT clock not
+5.00; CAST10-class 11s / 9s; new CUE_KIND.
 If a stated fact is wrong, say so in the report rather than diverging silently.
