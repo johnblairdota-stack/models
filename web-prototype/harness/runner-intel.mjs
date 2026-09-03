@@ -730,6 +730,94 @@ console.log('\n  unstick');
     'a painted pad with an empty pin[] does not skip · the tap clocks · no host ]');
 }
 
+{
+  /*
+   * CAST13 H514 / H559 pinClocksRecap FAIL (skip true): pinPad=true PARTIAL
+   * PASS (1921 ticks), pin[] empty all night; TV ] at 100s. 84's pin[] clock
+   * in node is not this bar. CAST bots pin during the 3·2·1; a run cue that
+   * assigns perf.pin = null empties pin[] for every AUTO-WALK tick. Host ]
+   * is not a product walk. Do not licensed-skip.
+   */
+  const TAP = { x: 6, z: 2, roomId: 'r0.gallery', kind: 'room' };
+  const freezeMs = 100_000;
+  const DT = 1 / 60;
+  const SPEED = 2.6;
+  const painted = true;
+  const pad = pinPadLive({ role: 'guide', painted });
+  const cast13Start = { pinPad: pad, pin: [] };
+  let pairPin = TAP;
+  let pin = pairPin;
+  let pins = clockPin([], pin);
+  pairPin = null;
+  pin = pairPin ? pairPin : pin;
+  pins = pin ? clockPin([], pin) : [];
+  let at = { x: 0.4, z: 2 };
+  let heading = 0;
+  let legs = legsFor([{ centre: { x: 3, z: 2 }, a: 'r0.hall', b: 'r0.gallery' }], pin);
+  let recapAt = null;
+  let emptyOnWalk = false;
+  let padDied = false;
+  let walkClock = 0;
+  const phase = 'seek';
+  const live = pins[pins.length - 1] || pin;
+  for (let i = 0; i < 60 * 40; i++) {
+    walkClock += DT;
+    if (live) pins = clockPin(pins, live);
+    if (!pins.length) emptyOnWalk = true;
+    consumeLegs(legs, at);
+    const leg = legs[0] ?? live;
+    heading = lagHeading(heading, headingTo(at, leg), DT);
+    const d = Math.hypot(leg.x - at.x, leg.z - at.z);
+    const drive = d < AUTOWALK.arrive ? 0 : 1;
+    at = {
+      x: at.x + Math.sin(heading) * drive * SPEED * DT,
+      z: at.z + Math.cos(heading) * drive * SPEED * DT,
+    };
+    const arrived = Math.hypot(at.x - live.x, at.z - live.z) < AUTOWALK.arrive;
+    const walking = legs.length > 0 && !arrived;
+    if (!pinPadLive({ role: 'guide', painted }) && walking) padDied = true;
+    const recap = pinClocksRecap({
+      phase, walking, hidden: false, arrived, pinPad: pad,
+    });
+    if (recap.skip) padDied = true;
+    if (recap.clock && recapAt == null) recapAt = walkClock;
+    if (recapAt != null) break;
+  }
+  const wiped = { pin: null, pins: [] };
+  const runFn = bedSrc.slice(bedSrc.indexOf("if (c.kind === 'run')"), bedSrc.indexOf("if (c.kind === 'pin')"));
+  const pinFn = bedSrc.slice(bedSrc.indexOf("if (c.kind === 'pin')"), bedSrc.indexOf("if (c.kind === 'shot'"));
+  const pubFn13 = phoneSrc.slice(phoneSrc.indexOf('function publishPhone'), phoneSrc.indexOf('function guidePinPad'));
+  t('RI29 · CAST13 clocked pin[] survives sendoff — countdown tap is on AUTO-WALK ticks',
+    recapAt != null && recapAt * 1000 < freezeMs
+    && !padDied && !emptyOnWalk
+    && pins.length > 0
+    && cast13Start.pinPad === true && cast13Start.pin.length === 0
+    && !(cast13Start.pinPad === true && pins.length === 0 && recapAt == null)
+    && wiped.pins.length === 0
+    && !(wiped.pin == null && wiped.pins.length === 0 && pins.length === 0)
+    && /pairPin/.test(runFn) && /clockPin\(\[\]/.test(runFn)
+    && !/perf\.pin = null/.test(runFn)
+    && /pairPin/.test(pinFn)
+    && /you\?\.pin/.test(pubFn13)
+    && /state\.pin = frame\.you\.pin/.test(pubFn13)
+    && AUTOWALK.stallSec === 2.0 && AUTOWALK.stallGain === 0.75
+    && CUE_KINDS.join(',') === 'intros,run,move,shot,idle,noms,pair,execute,pin',
+    `clocked at ${recapAt?.toFixed?.(2)}s · pin[] ${pins.length} · CAST13 start pinPad=${cast13Start.pinPad} pin=${cast13Start.pin.length}`);
+  t('RI29b · CAST13-class pinPad=true pin=[] all night + 100s ] is red',
+    recapAt != null && recapAt * 1000 < freezeMs
+    && pins.length > 0
+    && pinPadLive({ role: 'guide', painted: true }) === true
+    && pinClocksRecap({ phase: 'seek', walking: false, pinPad: true }).clock === false
+    && pinClocksRecap({ phase: 'seek', walking: false, pinPad: true }).skip === false
+    && pinClocksRecap({ phase: 'seek', arrived: true, pinPad: true }).clock === true
+    && pinClocksRecap({ phase: 'seek', arrived: true }).skip === false
+    && !(true && [].length === 0 && recapAt == null)
+    && /DEV_SKIP[\s\S]*expedition:\s*'recap'/.test(hostSrc)
+    && /e\.key !== '\]'/.test(hostSrc)
+    && CUE_KINDS.join(',') === 'intros,run,move,shot,idle,noms,pair,execute,pin',
+    'a countdown pin rides sendoff · empty pin[] on AUTO-WALK is not this night · no host ]');
+}
+
 /* =================================================================================================
  * RI4 · LOCK 2 — the stick is a LATERAL DODGE and cannot steer into another room
  * ============================================================================================== */

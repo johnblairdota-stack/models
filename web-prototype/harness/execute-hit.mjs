@@ -732,6 +732,63 @@ t('H10 · seatedAim is a visor-height torso when Head is missing',
     `Dee sit=${dee.sit} wreckPose.y=${dee.wreckPose.y} · linger ${LINGER_TOTAL_S}s · CAST12 vanish is not this mesh`);
 }
 
+{
+  /*
+   * CAST13 lingerWreck FAIL: wreck=true sit=false wreckPose=false.
+   * EXECUTION 10s Fox (same Eli/Ben/Gus/Hal). Hal EXECUTION 20s is the
+   * beat clock — do not treat 20s as linger fail. 84 planting wreckPose
+   * in node is not a pass. H518 is the bar. Numbers stay 1.50/1.50/2.00/5.00.
+   */
+  const hal = wreckSnap({
+    wrecked: true, seated: true, sitAt: { x: 2, y: 0.9, z: 0 }, face: 0,
+    wreckPose: wreckPose({ sitAt: { x: 2, y: 0.9, z: 0 }, u: 1, floorY: 0 }),
+  }, { floorY: 0 });
+  const fox13 = wreckSnap({
+    wrecked: true, seated: true, sitAt: { x: 3, y: 0.9, z: 0 }, face: 0,
+  }, { floorY: 0 });
+  const vanished13 = { wreck: true, sit: false, wreckPose: false };
+  const after10 = wreckSnap({
+    wrecked: true, seated: true, sitAt: { x: 3, y: 0.9, z: 0 }, face: 0,
+    wreckPose: wreckPose({ sitAt: { x: 3, y: 0.9, z: 0 }, u: 1, floorY: 0 }),
+  }, { floorY: 0 });
+  const plantFn13 = introSrc.slice(
+    introSrc.indexOf('function plantWreck'),
+    introSrc.indexOf('function stepWreck'),
+  );
+  const driveFn13 = introSrc.slice(
+    introSrc.indexOf('function driveOne'),
+    introSrc.indexOf('function driveOne') + 1200,
+  );
+  const kinds13 = followSrc.match(/export const CUE_KINDS = \[([^\]]+)\]/)?.[1] || '';
+  const poseU = wreckPose({ sitAt: { x: 1, y: 0.9, z: 0 }, u: 1, floorY: 0 });
+  t('H17o · CAST13-class sit=false wreckPose=false after HIT + 10s is red; EXECUTION 20s is not linger fail',
+    hal.wreck === true && hal.sit === true && hal.wreckPose && hal.wreckPose.y === 0
+    && hal.wreckPose.u === 1
+    && fox13.wreck === true && fox13.sit === true && fox13.wreckPose && fox13.wreckPose.u === 1
+    && after10.wreck === true && after10.sit === true && after10.wreckPose && after10.wreckPose.u === 1
+    && after10.wreckPose !== false && after10.sit !== false
+    && vanished13.sit === false && vanished13.wreckPose === false
+    && !(hal.wreck === true && hal.sit === false && hal.wreckPose === false)
+    && poseU.u === 1
+    && wreckSit({ wrecked: true, seated: false }) === true
+    && LINGER_TOTAL_S === 5.00
+    && LINGER_TOTAL_S < 10
+    && lingerBeat(5.00) === 'group'
+    && lingerBeat(10) === 'group'
+    && lingerBeat(20) === 'group'
+    && /elapsed = exec\.t - exec\.hitAt/.test(stepFn)
+    && /elapsed >= LINGER_TOTAL_S/.test(stepFn)
+    && /r\.seated = true/.test(plantFn13)
+    && /r\.wreckPose = limp/.test(plantFn13)
+    && /plantWreck\(r\)/.test(introSrc)
+    && /if \(r\.wrecked\) return;/.test(introSrc)
+    && /body\.root\.visible = true/.test(driveFn13)
+    && WRECK_HOLD_S === 0.50
+    && WRECK_SHOT.dur === 0
+    && kinds13.replace(/\s+/g, '') === "'intros','run','move','shot','idle','noms','pair','execute','pin'",
+    `Hal sit=${hal.sit} wreckPose.u=${hal.wreckPose.u} · linger ${LINGER_TOTAL_S}s · EXECUTION 20s is the beat · CAST13 vanish is not this mesh`);
+}
+
 if (fail) {
   console.log(`\nFAIL ${fail}  pass ${pass}\n`);
   process.exit(1);

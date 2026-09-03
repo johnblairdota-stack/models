@@ -1146,9 +1146,10 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     body.root.rotation.z = limp.roll;
     r.wreckPose = limp;
     /*
-     * CAST12 H488: applyWreck used to set seated=false and leave the
+     * CAST13 H518: applyWreck used to set seated=false and leave the
      * photograph `sit=false wreckPose=false` even after the flag was
-     * wreck=true. Planted wreckage is sit=true. Never parkSit this body.
+     * wreck=true. Planted wreckage is sit=true, wreckPose u=1. Never
+     * parkSit this body. The mesh stays after HIT and after the 5s linger.
      */
     r.seated = true;
     hideChairInstance(r.seatIndex);

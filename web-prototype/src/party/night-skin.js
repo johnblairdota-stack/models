@@ -376,7 +376,7 @@ export function injectNightSkin() {
       padding:0 40px 24px; overflow:hidden; }
     .night.on-cards .cast-board { margin:0; }
     .night.on-cards .cast-k { font-size:13px; letter-spacing:.3em; }
-    .night.on-cards .cast-lead { font-size:clamp(34px, 4.2vw, 68px); margin-top:12px; }
+    .night.on-cards .cast-lead { font-size:0; margin:0; min-height:0; }
     .night.on-cards .cast-lamps { margin-top:clamp(18px, 3vh, 40px); gap:16px;
       grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); }
     .night.on-cards .cast-lamp { padding:clamp(16px, 2.4vh, 30px) 12px clamp(14px, 2vh, 24px); gap:14px; }

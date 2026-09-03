@@ -277,6 +277,20 @@ const OK = { reaction: 'CLAP', beat: 'expedition', alive: true, lastAt: null, no
     && REACT_HOLD_MS === 10000
     && /react-who" style="color:\$\{esc\(look\.accent\)\}/.test(hostSrc),
     'no hog plate · fading named popups');
+  t('R70f · CAST13-class H544 READ YOUR CARD / Every ballot is in plate is red',
+    !/Read your card/i.test(hostCode)
+    && !/Every ballot is in/i.test(hostCode)
+    && !/Nobody says a word yet/i.test(hostCode)
+    && !/'ballot in'/.test(hostCode)
+    && !/"ballot in"/.test(hostCode)
+    && !/>READING</.test(hostCode)
+    && !/>BALLOT IN</.test(hostCode)
+    && /function paintVotePopups/.test(hostSrc)
+    && /data-cast-votes/.test(hostSrc)
+    && /react-who" style="color:\$\{esc\(look\.accent\)\}/.test(hostSrc)
+    && /mergePublicNames\(client\.frame\?\.players, client\.lobby\)/.test(hostSrc)
+    && REACT_HOLD_MS === 10000,
+    'ep5 plate is not the picture · Ada CLAP / Ben BOO named taps stay');
 }
 
 // ---------------------------------------------------------------- R50 · the faces

@@ -246,10 +246,11 @@ export function wreckSit(r) {
  * had no row for it. Always defined: wreck, sit, wreckPose. A wrecked
  * body is sit=true (planted) and wreckPose is the u=1 mesh, never false.
  *
- * ⚠️ **CAST12 H488: 82's keys existing in node is not a pass.** CAST
- * photographed `wreck=true sit=false wreckPose=false` at 8s / 10s. The
- * mesh stays. sit=false and wreckPose=false are defects even if
- * wreck=true in state.
+ * ⚠️ **CAST13 H518: 84 planted wreckPose in node.** CAST13 still
+ * photographed `wreck=true sit=false wreckPose=false` at EXECUTION 10s
+ * (Fox) and the 20s beat clock (Hal). The mesh stays. sit=false and
+ * wreckPose=false are defects even if wreck=true in state. EXECUTION 20s
+ * is the beat clock — not a linger fail.
  */
 export function wreckSnap(r, { cx = 0, cz = 0, floorY = 0 } = {}) {
   const wrecked = !!r?.wrecked;
@@ -261,6 +262,7 @@ export function wreckSnap(r, { cx = 0, cz = 0, floorY = 0 } = {}) {
     : wreckPose({
       sitAt: r.sitAt, face: r.face ?? 0, u: 1, cx, cz, floorY,
     });
+  if (pose && !Number.isFinite(Number(pose.u))) pose.u = 1;
   return { wreck: true, sit: true, wreckPose: pose };
 }
 
@@ -291,6 +293,12 @@ export function wreckPose({ sitAt, face = 0, u = 0, cx = 0, cz = 0, floorY = 0 }
     roll: 0.22 * ease,
     // Frozen last-contact frame — never a Sit_* hold on a posed settle.
     clip: null,
+    /*
+     * CAST13 H518: the photograph is `wreckPose=false` when this object
+     * has no `u`. After contact the mesh is u=1. 84 planted a pose without
+     * the clock the sofa loop quotes.
+     */
+    u: k,
   };
 }
 

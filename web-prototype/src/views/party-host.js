@@ -1252,11 +1252,7 @@ export default async function partyHost({ params }) {
       if (meta && !out) meta.textContent = '';
     }
     const lead = root.querySelector('.cast-lead');
-    if (lead) {
-      const lamps = [...root.querySelectorAll('.cast-lamp[data-voter]:not(.out)')];
-      const all = lamps.length > 0 && lamps.every((el) => el.classList.contains('on'));
-      lead.textContent = all ? 'Every ballot is in.' : 'Nobody says a word yet.';
-    }
+    if (lead) lead.textContent = '';
   }
 
   function startClockTick() {
@@ -2956,8 +2952,11 @@ function castBoard(lobby, votes, warm, livingIds) {
    * 🚫 **NO `n of m` UNDER THE LAMPS.** John cut the counter off the casting screen, and the
    * lamps are why it can go: eight of them, one per chair, each lit by that player's own ballot —
    * a watcher reads the same fact off the row without a number restating it, and the slips on the
-   * right name every ballot the number was summarising. `done` / `all` stay: `all` is what swaps
-   * the lead line to "Every ballot is in."
+   * right name every ballot the number was summarising.
+   *
+   * ⚠️ **CAST13 H544: the lead must not own the TV.** 78 killed the card-read
+   * plate; ep5 put those hog words back as the picture. Lamps stay. Votes fade
+   * like emotes. `all` still drives the bake-bar foot, not a plate.
    *
    * ⚠️ **THE BAKE BAR IS NOT THE COUNTER AND DOES NOT GO WITH IT.** While the mansion is
    * compiling, no ballot can exist — intros wait on `ui.warm === 'ready'` and the first ballot
@@ -2965,9 +2964,10 @@ function castBoard(lobby, votes, warm, livingIds) {
    * loading indicator John asked for by name. `party-warm` W35c2 is the control on that.
    */
   const foot = baking ? `<div class="cast-warm">${warm.bar}</div>` : '';
+  void all;
   return `<div class="cast-board">
     <div class="cast-k"></div>
-    <div class="cast-lead">${all ? 'Every ballot is in.' : 'Nobody says a word yet.'}</div>
+    <div class="cast-lead"></div>
     <div class="cast-lamps">${lamps}</div>
     ${foot}
   </div>`;
