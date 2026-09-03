@@ -602,7 +602,7 @@ t('H10 · seatedAim is a visor-height torso when Head is missing',
     && /mode = 'intros'/.test(execCue)
     && /fillLingerEye\(\)/.test(introSrc)
     && /lingerOn/.test(bedSrc)
-    && !/camera warming/.test(hostSrc.slice(hostSrc.indexOf('function talkSlateHtml'), hostSrc.indexOf('function talkSlateHtml') + 900))
+    && !/camera warming/.test((hostSrc.slice(hostSrc.indexOf('function talkSlateHtml'), hostSrc.indexOf('function talkSlateHtml') + 900)).replace(/\/\*[\s\S]*?\*\//g, ''))
     && WRECK_SHOT.dur === 0
     && WRECK_SHOT.dur < 10,
     `HIT ${LINGER_TOTAL_S}s · no CAMERA WARM in host chrome`);

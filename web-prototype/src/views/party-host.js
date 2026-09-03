@@ -2286,9 +2286,9 @@ function castOverlay() {
  */
 function talkSlateHtml(beat) {
   /*
-   * Brand only. "beat · camera warming" stayed readable in TV body after the
-   * follow went live (opacity-0, same class as the old run-slot hog). Linger
-   * owns the HIT camera — CAST9 EXECUTION 12s CAMERA WARM was that leftover.
+   * Brand only. The old sub-line stayed readable in TV body after follow
+   * went live (opacity-0, same class as the old run-slot hog). Linger
+   * owns the HIT camera — CAST9 EXECUTION 12s leftover was that copy.
    */
   return `<div class="talk-slate" aria-hidden="true">
     <div class="talk-slate-mark">${esc(SHOW_TITLE)}</div>
