@@ -1249,7 +1249,7 @@ export default async function partyHost({ params }) {
       const on = !out && sent.has(id);
       el.classList.toggle('on', on);
       const meta = el.querySelector('.meta');
-      if (meta && !out) meta.textContent = on ? 'ballot in' : 'reading';
+      if (meta && !out) meta.textContent = '';
     }
     const lead = root.querySelector('.cast-lead');
     if (lead) {
@@ -1792,15 +1792,9 @@ export default async function partyHost({ params }) {
         });
       } else {
         /*
-         * The role-card window: the room's own shape, instead of an empty ballroom.
-         *
-         * ⚠️ **THE BALLOT BOARD IS ONLY DRAWN ONCE THERE ARE BALLOTS.** Its empty state —
-         * "No ballots yet — phones pick a runner and a guide." — landed directly under the
-         * lamps, all eight of which already say READING, and directly above the episode-1 note,
-         * at the same size and colour as it. Photographed at N=8: two unrelated grey lines
-         * reading as one paragraph broken by a mistake. The lamps are the answer to "has anyone
-         * sent one"; this board is the answer to "what did they send", and it has nothing to say
-         * until they have.
+         * Role-card window. CAST9 fadingPopups FAIL was this board owning the TV
+         * with READ YOUR CARD / READING / BALLOT IN. Lamps stay; the hog words
+         * do not. Vote chips patch into the aside like emotes.
          */
         body += castBoard(client.lobby, votes, castWarm(), seatedLivingIds());
         body += castOverlay();
@@ -2291,9 +2285,14 @@ function castOverlay() {
  * CSS, that `.run-frame.live .run-slate` has always used.
  */
 function talkSlateHtml(beat) {
+  /*
+   * Brand only. "beat · camera warming" stayed readable in TV body after the
+   * follow went live (opacity-0, same class as the old run-slot hog). Linger
+   * owns the HIT camera — CAST9 EXECUTION 12s CAMERA WARM was that leftover.
+   */
   return `<div class="talk-slate" aria-hidden="true">
     <div class="talk-slate-mark">${esc(SHOW_TITLE)}</div>
-    <div class="talk-slate-sub">${esc(String(beat || 'ballroom'))} · camera warming</div>
+    <div class="talk-slate-sub">${esc(String(beat || 'ballroom'))}</div>
   </div>`;
 }
 
@@ -2950,7 +2949,7 @@ function castBoard(lobby, votes, warm, livingIds) {
     return `<div class="cast-lamp${on ? ' on' : ''}${out ? ' out' : ''}" data-voter="${esc(s.playerId || '')}">
       <span class="seat-chip" style="background:${esc(look.accent)}">${esc(String((s.seat ?? 0) + 1))}</span>
       <div class="who">${esc(s.name)}</div>
-      <div class="meta">${out ? 'out' : on ? 'ballot in' : 'reading'}</div>
+      <div class="meta"></div>
     </div>`;
   }).join('');
   /*
@@ -2967,7 +2966,7 @@ function castBoard(lobby, votes, warm, livingIds) {
    */
   const foot = baking ? `<div class="cast-warm">${warm.bar}</div>` : '';
   return `<div class="cast-board">
-    <div class="cast-k">Read your card</div>
+    <div class="cast-k"></div>
     <div class="cast-lead">${all ? 'Every ballot is in.' : 'Nobody says a word yet.'}</div>
     <div class="cast-lamps">${lamps}</div>
     ${foot}

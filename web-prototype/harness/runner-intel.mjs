@@ -70,7 +70,7 @@ import { fileURLToPath } from 'node:url';
 import {
   AUTOWALK, COVER, DODGE, RED, REPLAN_TRIGGERS, SABOTAGE, TELL, TELL_FORBIDDEN,
   clampToRoom, consumeLegs, coverNear, dodgeLateral, headingTo, hideTick, holdTell,
-  lagHeading, legKey, legsFor, pinKey, redPassAt, replanReason, unstickLegs,
+  lagHeading, legKey, legsFor, pinKey, pinClocksRecap, redPassAt, replanReason, unstickLegs,
 } from '../src/game/runner-intel.js';
 import { CUE_KEYS, CUE_KINDS, MOVE_KEYS, PIN_KINDS, PIN_WIRE_KEYS, WORLD_MISSION_KEYS, cueViolations, moveViolations, pinViolations, pinWireShape } from '../src/party/follow.js';
 import {
@@ -377,6 +377,69 @@ console.log('\n  unstick');
     && /unstickLegs\(portals, goal, blocked/.test(bedSrc)
     && !/licensedSkip|skipHall|forceRecap/.test(bedCode),
     'unstick on stall · no licensed skip');
+}
+
+{
+  /*
+   * CAST9 H382 pinClocksRecap FAIL: expedition at ~100s then TV ]. skip true.
+   * Quote: PRIME TIME ON AIR EPISODE 5 · EXPEDITION Hal is running Hal walks.
+   * 76's unstickLegs plus recap-clock comments are not a pass. Job finish
+   * clocks recap. Host ] is DEV only. No licensed skip.
+   */
+  const bedCode = codeOf(bedSrc);
+  const hostSrc = src('src/views/party-host.js');
+  const freezeMs = 100_000;
+  let walkClock = 0;
+  const DT = 1 / 60;
+  const SPEED = 2.6;
+  const PIN = { x: 6, z: 2, roomId: 'r0.gallery', kind: 'face-left' };
+  let at = { x: 0.4, z: 2 };
+  let heading = 0;
+  let legs = legsFor([{ centre: { x: 3, z: 2 }, a: 'r0.hall', b: 'r0.gallery' }], PIN);
+  let phase = 'seek';
+  let recapAt = null;
+  for (let i = 0; i < 60 * 40; i++) {
+    walkClock += DT;
+    consumeLegs(legs, at);
+    const leg = legs[0] ?? PIN;
+    heading = lagHeading(heading, headingTo(at, leg), DT);
+    const d = Math.hypot(leg.x - at.x, leg.z - at.z);
+    const drive = d < AUTOWALK.square ? 0 : 1;
+    at = {
+      x: at.x + Math.sin(heading) * drive * SPEED * DT,
+      z: at.z + Math.cos(heading) * drive * SPEED * DT,
+    };
+    if (drive === 0 && phase === 'seek') phase = 'return';
+    const recap = pinClocksRecap({
+      phase, walking: legs.length > 0, hidden: false,
+    });
+    if (recap.clock && recapAt == null) recapAt = walkClock;
+    if (recapAt != null) break;
+  }
+  t('RI25 · pin walk / job finish clocks recap inside 100s — no host ]',
+    recapAt != null && recapAt * 1000 < freezeMs
+    && pinClocksRecap({ phase: 'return' }).clock === true
+    && pinClocksRecap({ phase: 'done' }).clock === true
+    && pinClocksRecap({ phase: 'return' }).skip === false
+    && pinClocksRecap({ phase: 'seek', walking: true }).clock === false
+    && pinClocksRecap({ phase: 'seek', hidden: true }).clock === false
+    && /pinClocksRecap\(/.test(bedSrc)
+    && /mission\.phase = 'done'/.test(bedCode),
+    `clocked at ${recapAt?.toFixed?.(2)}s · freeze ${freezeMs / 1000}s`);
+  t('RI25b · CAST9-class pinClocksRecap FAIL (skip true, 100s sit, ] BEAT) is red',
+    pinClocksRecap({ phase: 'seek', walking: false, hidden: false }).skip === false
+    && pinClocksRecap({ phase: 'seek' }).clock === false
+    && !/licensedSkip|skipHall|forceRecap/.test(bedCode)
+    && /DEV_SKIP[\s\S]*expedition:\s*'recap'/.test(hostSrc)
+    && /e\.key !== '\]'/.test(hostSrc)
+    && !/\] BEAT/.test(bedCode)
+    && /badge\.textContent = 'DEV · \] BEAT · P CAMERA'/.test(hostSrc)
+    && CUE_KINDS.join(',') === 'intros,run,move,shot,idle,noms,pair,execute,pin',
+    'skip stays false · ] is DEV chrome · no new CUE_KIND');
+  t('RI25c · stall numbers stay 2.0 / 0.75 unless a measured fact moved them',
+    AUTOWALK.stallSec === 2.0 && AUTOWALK.stallGain === 0.75
+    && !/CUE_KINDS/.test(intelSrc),
+    `stallSec ${AUTOWALK.stallSec} · stallGain ${AUTOWALK.stallGain}`);
 }
 
 /* =================================================================================================

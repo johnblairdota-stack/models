@@ -23,7 +23,7 @@ import { camHang, DRILL, JOB, TWIN, twinHang, WALL_CAM } from '../party/jobs.js'
  */
 import {
   AUTOWALK, clampToRoom, consumeLegs, coverNear, dodgeLateral, headingTo, hideTick,
-  lagHeading, legsFor, pinKey, redPassAt, replanReason, unstickLegs,
+  lagHeading, legsFor, pinKey, pinClocksRecap, redPassAt, replanReason, unstickLegs,
 } from './runner-intel.js';
 import { isObjectivePin, mountFor, objectiveGoal } from '../party/objectives.js';
 import { NoiseBus, NOISE_KIND } from './noise.js';
@@ -1763,8 +1763,20 @@ export async function buildFollowBed(engine, opts = {}) {
         perf.contactAt = -1;
       }
     }
-    if (mission.phase === 'return' && ballroom) {
-      if (inBallroom()) mission.phase = 'done';
+    if (mission.phase === 'return') {
+      /*
+       * ⏱️ **PIN / JOB FINISH CLOCKS RECAP.** CAST9 sat on expedition until ~100s
+       * then the host cut with `]`. Walking home is scenery; `return` already
+       * means the smash landed or the mount filled. The next world report must
+       * be `done` so `setWorld` / `endRunOnMission` flip the beat. Host `]` is
+       * not a product walk. Seek still holds while she walks or hides.
+       */
+      const clock = pinClocksRecap({
+        phase: mission.phase,
+        walking: !!(perf.legs && perf.legs.length) && !inBallroom(),
+        hidden: !!perf.hold?.hiding,
+      });
+      if (clock.clock) mission.phase = 'done';
     }
   }
 
@@ -2072,8 +2084,13 @@ export async function buildFollowBed(engine, opts = {}) {
     if (mode === 'intros') {
       intro?.step(dt, t);
       hunter.step(dt);
+      /*
+       * After contact the spec linger owns the lens. rig.follow would walk
+       * the talk arc over it and the TV would sit on CAMERA WARM.
+       */
+      const lingerOn = !!intro?.executionReport?.()?.hit;
       const space = room.spaceAt(engine.camera.position);
-      if (space) {
+      if (space && !lingerOn) {
         engine.camera.getWorldDirection(_dir);
         rig.follow(space, dt, {
           pos: engine.camera.position, dir: _dir,
@@ -2146,6 +2163,8 @@ export async function buildFollowBed(engine, opts = {}) {
       stepRedPass(t);
       missionTick(t, dt);
       afterBody(dt, t);
+      /* Wrecks stay posed while the expedition owns the lens. */
+      intro?.holdStep?.(dt, t);
       return;
     }
 
@@ -2602,6 +2621,17 @@ export async function buildFollowBed(engine, opts = {}) {
       }
       if (c.kind === 'execute') {
         if (c.target) rememberWrecked([c.target]);
+        /*
+         * Linger owns the HIT camera. A night that never left run mode (CAST9
+         * `]` off expedition) left fillLingerEye uncalled and the TV on
+         * CAMERA WARM. Hand the lens to the intro bed before the swing.
+         */
+        if (c.target) {
+          runner.root.visible = false;
+          intro?.releaseRun?.();
+          intro?.setTalk?.(true);
+          mode = 'intros';
+        }
         intro?.setExecute?.(c.executioner, c.target);
         applySeenWreck();
         return;

@@ -276,6 +276,20 @@ const NO_LOCK = { runner: null, guide: null };
     && !/\.cast-overlay \{[^}]*26%/.test(lookSrc)
     && /data-cast-votes/.test(hostSrc),
     'fade like emotes · no 26% column');
+  const hostCode = hostSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+  const boardFn = hostSrc.slice(hostSrc.indexOf('function castBoard'));
+  const boardCode = boardFn.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+  t('B17 · CAST9-class READ YOUR CARD / READING / BALLOT IN plate is red',
+    !/Read your card/i.test(hostCode)
+    && !/'ballot in'/.test(hostCode)
+    && !/"ballot in"/.test(hostCode)
+    && !/'reading'/.test(boardCode)
+    && !/class="cast-overlay"/.test(hostSrc)
+    && /function paintVotePopups/.test(hostSrc)
+    && /m\.t === 'ballots'/.test(hostSrc)
+    && /ui\.beat === 'casting'/.test(hostSrc)
+    && /return;/.test(hostSrc.slice(hostSrc.indexOf("if (m.t === 'ballots')"), hostSrc.indexOf("if (m.t === 'ballots')") + 520)),
+    'hog plate gone · ballot does not paint()');
 }
 
 {
