@@ -232,6 +232,10 @@ export function pinPadLive({ role, hasScope = false, painted } = {}) {
  * is one slot and a second tap REPLACES it. This array is the CAST tick log
  * (`pin[]`), not a route — auto-walk still reads the one current pin.
  * CAST11 H480 `pin=[]` all night is the empty clock, not a missing function.
+ *
+ * ⚠️ **CAST12 H484: 82 painted the pad (`pinPad=true`) and never clocked a
+ * tap.** `pinPad=true` with `pin=[]` is that night, not a pass. A door /
+ * painting / camera-install tap must land in `pin[]` that AUTO-WALK tick.
  */
 export function clockPin(pins, pin) {
   const list = Array.isArray(pins) ? pins.slice() : [];

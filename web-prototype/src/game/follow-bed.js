@@ -2035,6 +2035,13 @@ export async function buildFollowBed(engine, opts = {}) {
       }
     }
 
+    /*
+     * CAST12 H484: quote the clocked pin[] every AUTO-WALK tick. 82 clocked
+     * only on the cue hop — a tap that never arrived left pin=[] all night
+     * while pinPad stayed true. The product slot is still one pin (D2);
+     * clockPin replaces. Do not drop the pin mid-walk.
+     */
+    if (perf.pin) perf.pins = clockPin(perf.pins, perf.pin);
     consumeLegs(perf.legs, runner.pos);
     if (mission.phase === 'return' && !inBallroom() && !perf.legs.length && homeGoal() && !perf.homing) {
       perf.homing = true;
@@ -2529,6 +2536,10 @@ export async function buildFollowBed(engine, opts = {}) {
         role: 'guide',
         painted: mode === 'run' && Number.isFinite(Number(runner.pos.x)),
       }),
+      /*
+       * CAST12 H484: pin[] is the clocked taps, quoted every AUTO-WALK tick.
+       * pinPad=true with pin=[] is CAST12, not a pass.
+       */
       pin: (perf.pins || []).slice(),
     }),
     setThrottle(name) { if (THROTTLE_DRIVE[name]) perf.throttle = name; },

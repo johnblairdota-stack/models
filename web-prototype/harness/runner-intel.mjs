@@ -626,6 +626,110 @@ console.log('\n  unstick');
     'painted pad + clocked pin[] leave expedition · CAST11 dead pad is not this night');
 }
 
+{
+  /*
+   * CAST12 H484 pinClocksRecap FAIL (skip true): pinPad=true PARTIAL PASS,
+   * pin[] empty all night; still TV ] at ~100s. 82's RI27 pinPad paint is
+   * not this bar. A tap on a door / painting / camera-install must land in
+   * pin[] that AUTO-WALK tick. Host ] is not a product walk. Do not
+   * licensed-skip.
+   */
+  const TAP = { x: 6, z: 2, roomId: 'r0.gallery', kind: 'room' };
+  const FACE = { x: 5.75, z: 0.22, roomId: 'r0.gallery', kind: 'face-right' };
+  const MOUNT = { x: 11.78, z: 2.5, roomId: 'r0.gallery', kind: 'mount-floor' };
+  const freezeMs = 100_000;
+  let pins = [];
+  let walkClock = 0;
+  const DT = 1 / 60;
+  const SPEED = 2.6;
+  let at = { x: 0.4, z: 2 };
+  let heading = 0;
+  let legs = [];
+  const phase = 'seek';
+  let recapAt = null;
+  let emptyOnWalk = false;
+  let padDied = false;
+  const painted = true;
+  const pad = pinPadLive({ role: 'guide', painted });
+  const cast12Start = { pinPad: pad, pin: pins.slice() };
+  pins = clockPin(pins, TAP);
+  pins = clockPin(pins, FACE);
+  pins = clockPin(pins, MOUNT);
+  const live = pins[pins.length - 1] || TAP;
+  legs = legsFor([{ centre: { x: 3, z: 2 }, a: 'r0.hall', b: 'r0.gallery' }], live);
+  for (let i = 0; i < 60 * 40; i++) {
+    walkClock += DT;
+    if (live) pins = clockPin(pins, live);
+    if (!pins.length) emptyOnWalk = true;
+    consumeLegs(legs, at);
+    const leg = legs[0] ?? live;
+    heading = lagHeading(heading, headingTo(at, leg), DT);
+    const d = Math.hypot(leg.x - at.x, leg.z - at.z);
+    const drive = d < AUTOWALK.arrive ? 0 : 1;
+    at = {
+      x: at.x + Math.sin(heading) * drive * SPEED * DT,
+      z: at.z + Math.cos(heading) * drive * SPEED * DT,
+    };
+    const arrived = Math.hypot(at.x - live.x, at.z - live.z) < AUTOWALK.arrive;
+    const walking = legs.length > 0 && !arrived;
+    if (!pinPadLive({ role: 'guide', painted }) && walking) padDied = true;
+    const recap = pinClocksRecap({
+      phase, walking, hidden: false, arrived, pinPad: pad,
+    });
+    if (recap.skip) padDied = true;
+    if (recap.clock && recapAt == null) recapAt = walkClock;
+    if (recapAt != null) break;
+  }
+  let emptyClock = [];
+  let emptyRecap = null;
+  for (let i = 0; i < 60 * 100; i++) {
+    const recap = pinClocksRecap({
+      phase: 'seek', walking: false, hidden: false, arrived: false, pinPad: true,
+    });
+    if (recap.skip) emptyRecap = 'skip';
+    if (recap.clock && emptyRecap == null) emptyRecap = i * DT;
+  }
+  const phoneSrc12 = src('src/views/party-phone.js');
+  const phoneCode12 = codeOf(phoneSrc12);
+  const bindFn = phoneSrc12.slice(phoneSrc12.indexOf('function bindPinPad'), phoneSrc12.indexOf('function bezelInner'));
+  const pubFn = phoneSrc12.slice(phoneSrc12.indexOf('function publishPhone'), phoneSrc12.indexOf('function guidePinPad'));
+  const walkFn = bedSrc.slice(bedSrc.indexOf('function autoWalkInput'), bedSrc.indexOf('function stepRedPass'));
+  t('RI28 · CAST12 clocked pin[] from a painted-pad tap — door / face / mount land that tick',
+    recapAt != null && recapAt * 1000 < freezeMs
+    && !padDied && !emptyOnWalk
+    && pins.length > 0
+    && clockPin([], TAP).length === 1
+    && clockPin(clockPin([], TAP), FACE).some((p) => p.kind === 'face-right')
+    && clockPin(clockPin([], TAP), MOUNT).some((p) => p.kind === 'mount-floor')
+    && pinPadLive({ role: 'guide', painted: true }) === true
+    && cast12Start.pinPad === true && cast12Start.pin.length === 0
+    && !(cast12Start.pinPad === true && pins.length === 0 && recapAt == null)
+    && /clockPin\(/.test(pubFn) && /you\?\.pin/.test(pubFn)
+    && /clockPin\(/.test(walkFn)
+    && /pinPadBound/.test(phoneCode12)
+    && /pointerup/.test(bindFn)
+    && /\[data-pin\], \[data-spot\]/.test(bindFn)
+    && !/if\s*\(\s*!scope\s*\)\s*return;/.test(codeOf(bindFn))
+    && /1\.5/.test(phoneSrc12.slice(phoneSrc12.indexOf('function guideScopeFor'), phoneSrc12.indexOf('function publishPhone')))
+    && AUTOWALK.stallSec === 2.0 && AUTOWALK.stallGain === 0.75
+    && CUE_KINDS.join(',') === 'intros,run,move,shot,idle,noms,pair,execute,pin',
+    `clocked at ${recapAt?.toFixed?.(2)}s · pin[] ${pins.length} · CAST12 start pinPad=${cast12Start.pinPad} pin=${cast12Start.pin.length}`);
+  t('RI28b · CAST12-class pinPad=true pin=[] all night + 100s ] is red',
+    recapAt != null && recapAt * 1000 < freezeMs
+    && pins.length > 0
+    && pinPadLive({ role: 'guide', painted: true }) === true
+    && emptyClock.length === 0 && emptyRecap == null
+    && pinClocksRecap({ phase: 'seek', walking: false, pinPad: true }).clock === false
+    && pinClocksRecap({ phase: 'seek', walking: false, pinPad: true }).skip === false
+    && pinClocksRecap({ phase: 'seek', arrived: true, pinPad: true }).clock === true
+    && pinClocksRecap({ phase: 'seek', arrived: true }).skip === false
+    && !(true && [].length === 0 && recapAt == null)
+    && /DEV_SKIP[\s\S]*expedition:\s*'recap'/.test(hostSrc)
+    && /e\.key !== '\]'/.test(hostSrc)
+    && CUE_KINDS.join(',') === 'intros,run,move,shot,idle,noms,pair,execute,pin',
+    'a painted pad with an empty pin[] does not skip · the tap clocks · no host ]');
+}
+
 /* =================================================================================================
  * RI4 · LOCK 2 — the stick is a LATERAL DODGE and cannot steer into another room
  * ============================================================================================== */

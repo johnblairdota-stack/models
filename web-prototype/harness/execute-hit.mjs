@@ -687,6 +687,49 @@ t('H10 · seatedAim is a visor-height torso when Head is missing',
     && WRECK_SHOT.dur === 0
     && kinds.replace(/\s+/g, '') === "'intros','run','move','shot','idle','noms','pair','execute','pin'",
     `Cy sit=${cy.sit} wreckPose.y=${cy.wreckPose.y} · linger ${LINGER_TOTAL_S}s · CAST11 vanish is not this snap`);
+
+  /*
+   * CAST12 lingerWreck FAIL: wreck=true sit=false wreckPose=false.
+   * EXECUTION 10s Fox; same class Ben/Eli/Gus/Hal/Dee. Dee EXECUTION 8s.
+   * Quote: Dee wreck=true sit=false wreckPose=false tv=EPISODE 6 · EXECUTION
+   * EXECUTION 8s. 82's wreckSnap keys in node is not a pass. H488 is the bar.
+   * Numbers stay 1.50/1.50/2.00/5.00. Linger on the HIT clock. No new CUE_KIND.
+   */
+  const dee = wreckSnap({
+    wrecked: true, seated: true, sitAt: { x: 2, y: 0.9, z: 0 }, face: 0,
+    wreckPose: wreckPose({ sitAt: { x: 2, y: 0.9, z: 0 }, u: 1, floorY: 0 }),
+  }, { floorY: 0 });
+  const fox12 = wreckSnap({
+    wrecked: true, seated: true, sitAt: { x: 3, y: 0.9, z: 0 }, face: 0,
+  }, { floorY: 0 });
+  const vanished12 = { wreck: true, sit: false, wreckPose: false };
+  const plantFn = introSrc.slice(
+    introSrc.indexOf('function plantWreck'),
+    introSrc.indexOf('function stepWreck'),
+  );
+  t('H17n · CAST12-class sit=false wreckPose=false after HIT + 8s/10s is red',
+    dee.wreck === true && dee.sit === true && dee.wreckPose && dee.wreckPose.y === 0
+    && fox12.wreck === true && fox12.sit === true && fox12.wreckPose && fox12.wreckPose.y === 0
+    && dee.wreckPose !== false && dee.sit !== false
+    && vanished12.sit === false && vanished12.wreckPose === false
+    && !(dee.wreck === true && dee.sit === false && dee.wreckPose === false)
+    && wreckSit({ wrecked: true, seated: true }) === true
+    && LINGER_TOTAL_S === 5.00
+    && LINGER_TOTAL_S < 8 && LINGER_TOTAL_S < 10
+    && lingerBeat(5.00) === 'group'
+    && lingerBeat(8) === 'group'
+    && lingerBeat(10) === 'group'
+    && /elapsed = exec\.t - exec\.hitAt/.test(stepFn)
+    && /elapsed >= LINGER_TOTAL_S/.test(stepFn)
+    && /r\.seated = true/.test(plantFn)
+    && /r\.wreckPose = limp/.test(plantFn)
+    && /plantWreck\(r\)/.test(introSrc)
+    && /if \(r\.wrecked\) return;/.test(introSrc)
+    && /body\.root\.visible = true/.test(driveFn)
+    && WRECK_HOLD_S === 0.50
+    && WRECK_SHOT.dur === 0
+    && kinds.replace(/\s+/g, '') === "'intros','run','move','shot','idle','noms','pair','execute','pin'",
+    `Dee sit=${dee.sit} wreckPose.y=${dee.wreckPose.y} · linger ${LINGER_TOTAL_S}s · CAST12 vanish is not this mesh`);
 }
 
 if (fail) {

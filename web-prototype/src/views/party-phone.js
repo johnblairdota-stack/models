@@ -82,6 +82,8 @@ export default async function partyPhone({ params }) {
      * the photograph (`pin[]`) quoted on `__rrrPhone` every tick.
      */
     pinClock: [],
+    /** CAST12: pin-pad listener is delegated once on the root. */
+    pinPadBound: false,
     /**
      * 🕹️ The pad's own state. `x`/`y` is the stick as a clamped unit vector; `sent` is the last
      * thing put on the wire, which is what makes the 20 Hz tick change-gated rather than a
@@ -1399,7 +1401,17 @@ export default async function partyPhone({ params }) {
   function guideScopeFor(frame) {
     const c = state.client;
     const seed = c?.worldSeed == null ? null : pickPlanSeed(c.worldSeed).seed;
-    const meMark = (frame?.flyover?.marks ?? []).find((k) => k.kind === 'you') ?? null;
+    /*
+     * CAST12 H484: 82 painted the shell without a you-mark and bindPinPad
+     * bailed, so chips never existed for a tap to clock. room.js already
+     * plants a fallback you-mark at (1.5, -2.0). Use that (or you.at) so
+     * the door / painting / camera-install chips exist the first expedition
+     * frame worldSeed is known — pinPad=true with no chips is still CAST12.
+     */
+    const meMark = (frame?.flyover?.marks ?? []).find((k) => k.kind === 'you')
+      ?? (Number.isFinite(Number(frame?.you?.at?.x)) && Number.isFinite(Number(frame?.you?.at?.z))
+        ? { x: Number(frame.you.at.x), z: Number(frame.you.at.z), kind: 'you' }
+        : (seed == null ? null : { x: 1.5, z: -2.0, kind: 'you' }));
     if (seed == null || !meMark) return null;
     const missionRoom = [...(c.events ?? [])].reverse()
       .find((e) => String(e.type ?? '').startsWith('mission.'))?.data?.room ?? null;
@@ -1418,6 +1430,16 @@ export default async function partyPhone({ params }) {
    * frame; a `const` arrow here is the RI22d dead zone.
    */
   function publishPhone(frame, beat, extra) {
+    /*
+     * CAST12 H484: clock the wire pin AND the D2 slot into `pin[]` every
+     * tick the sofa loop photographs. 82 quoted pinPad and left pinClock
+     * empty unless bindPinPad's click fired — CAST bots that send t:pin
+     * (or a tap whose listener had bailed) photographed pin=[] all night.
+     */
+    if (beat === 'expedition') {
+      if (frame?.you?.pin) state.pinClock = clockPin(state.pinClock, frame.you.pin);
+      if (state.pin) state.pinClock = clockPin(state.pinClock, state.pin);
+    }
     const painted = !!(extra?.iAmGuide && beat === 'expedition' && root.querySelector('[data-pin-pad]'));
     window.__rrrPhone = {
       frame,
@@ -1499,13 +1521,15 @@ export default async function partyPhone({ params }) {
    * is not `pair.guide` and refuses any shape that is not those four fields.
    */
   function bindPinPad(scope) {
-    if (!scope) return;
     /*
-     * 📍 ASSIGNMENT, not push. See `state.pin`'s header — one slot is the whole of D2. A door chip
-     * and an objective chip write the SAME slot through the SAME send, which is why a guide who
-     * taps LEFT FACE and then taps NORTH has one pin and not two: `pinDoor` and `pinSpot` both
-     * return a fresh object, and `state.pin = …` is what "replaces" means.
+     * CAST12 H484: 82 bound click on this paint's buttons and bailed when
+     * scope was null, so a tap on a later chip never reached clockPin.
+     * Delegate once on the root — rebuilds replace the buttons, not the
+     * listener. Resolve scope at the tap so a door / painting / camera-
+     * install lands in pin[] that AUTO-WALK tick. D2 still one product slot.
      */
+    if (state.pinPadBound) return;
+    state.pinPadBound = true;
     const tap = (pin) => {
       state.pin = pin;
       if (pin) {
@@ -1515,12 +1539,19 @@ export default async function partyPhone({ params }) {
       }
       paint();
     };
-    root.querySelectorAll('[data-pin]').forEach((btn) => {
-      btn.addEventListener('click', () => tap(pinDoor(scope, String(btn.dataset.pin || ''))));
-    });
-    root.querySelectorAll('[data-spot]').forEach((btn) => {
-      btn.addEventListener('click', () => tap(pinSpot(scope, String(btn.dataset.spot || ''))));
-    });
+    const onPinTap = (e) => {
+      const btn = e.target?.closest?.('[data-pin], [data-spot]');
+      if (!btn || btn.disabled || !root.contains(btn)) return;
+      if (e.type === 'pointerup' && e.pointerType === 'mouse') return;
+      const live = guideScopeFor(state.client?.frame) || scope;
+      const pin = btn.dataset.spot != null && btn.dataset.spot !== ''
+        ? pinSpot(live, String(btn.dataset.spot || ''))
+        : pinDoor(live, String(btn.dataset.pin || ''));
+      if (!pin) return;
+      tap(pin);
+    };
+    root.addEventListener('click', onPinTap);
+    root.addEventListener('pointerup', onPinTap);
   }
 
   /**

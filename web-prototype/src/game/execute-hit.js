@@ -245,6 +245,11 @@ export function wreckSit(r) {
  * / `wreckPose=false` was the vanish — the mesh was planted and the snap
  * had no row for it. Always defined: wreck, sit, wreckPose. A wrecked
  * body is sit=true (planted) and wreckPose is the u=1 mesh, never false.
+ *
+ * ⚠️ **CAST12 H488: 82's keys existing in node is not a pass.** CAST
+ * photographed `wreck=true sit=false wreckPose=false` at 8s / 10s. The
+ * mesh stays. sit=false and wreckPose=false are defects even if
+ * wreck=true in state.
  */
 export function wreckSnap(r, { cx = 0, cz = 0, floorY = 0 } = {}) {
   const wrecked = !!r?.wrecked;

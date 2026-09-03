@@ -1101,7 +1101,6 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
       if (!r) continue;
       if (!r.wrecked) {
         r.wrecked = true;
-        r.seated = false;
         r.arrived = true;
         r.cleared = true;
         r.body.sitLock = true;
@@ -1146,6 +1145,12 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     body.root.rotation.x = limp.pitch;
     body.root.rotation.z = limp.roll;
     r.wreckPose = limp;
+    /*
+     * CAST12 H488: applyWreck used to set seated=false and leave the
+     * photograph `sit=false wreckPose=false` even after the flag was
+     * wreck=true. Planted wreckage is sit=true. Never parkSit this body.
+     */
+    r.seated = true;
     hideChairInstance(r.seatIndex);
   }
 
@@ -1836,7 +1841,10 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
        * null, so `wreck: exec.hit ? limp : null` photographed
        * snap.wreck=undefined. Quote the planted wrecked body instead.
        */
-      const wreckedBot = robots.find((r) => r.wrecked) || exec.victim || null;
+      const wreckedBot = (exec.victim && exec.victim.wrecked ? exec.victim : null)
+        || robots.find((r) => r.wrecked)
+        || exec.victim
+        || null;
       const planted = wreckSnap(wreckedBot, { cx, cz, floorY });
       return {
         phase: exec.phase,
@@ -1927,8 +1935,8 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
           seated: wreckSit(r),
           wrecked: !!r.wrecked,
           wreck: snap.wreck,
-          sit: wreckSit(r),
-          wreckPose: snap.wreckPose,
+        sit: snap.sit,
+        wreckPose: snap.wreckPose,
           snap,
           seatIndex: r.seatIndex,
           clip: r.body.avatar?.clip ?? sitIdleClip(r.seatIndex),
