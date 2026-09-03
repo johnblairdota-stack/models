@@ -799,7 +799,7 @@ console.log('\n  unstick');
     && !/perf\.pin = null/.test(runFn)
     && /pairPin/.test(pinFn)
     && /you\?\.pin/.test(pubFn13)
-    && /state\.pin = frame\.you\.pin/.test(pubFn13)
+    && /takePin\(frame\.you\.pin/.test(pubFn13)
     && AUTOWALK.stallSec === 2.0 && AUTOWALK.stallGain === 0.75
     && CUE_KINDS.join(',') === 'intros,run,move,shot,idle,noms,pair,execute,pin',
     `clocked at ${recapAt?.toFixed?.(2)}s · pin[] ${pins.length} · CAST13 start pinPad=${cast13Start.pinPad} pin=${cast13Start.pin.length}`);
