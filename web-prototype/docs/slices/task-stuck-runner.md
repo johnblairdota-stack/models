@@ -1,28 +1,34 @@
-# Slice: unstick the expedition runner (CAST9 redelivery)
+# Slice: pin clocks recap (CAST10 redelivery)
 
 Decided plan. The numbers are the numbers to use. If a stated fact is wrong, **say so in
 the report rather than diverging silently.**
 
-Base: `main` at `0f9f0a0` (PR 76 merge). Spec, not the night. **Grok, not Max. Do not merge.**
-Game waits on this docs PR. Treat PR 76 as **failed delivery**, not a new look.
+Base: `main` at `381ae40` (PR 78 merge). Spec, not the night. **Grok, not Max. Do not merge.**
+Game waits on this docs PR. Treat PR 78 as **failed delivery of pin**, not a new look.
 
-CAST9 (`harness/_loop8/season-cast9.json`, holeIds H382-H403) sat on `0f9f0a0` after 76
-claimed the runner unstuck. Still expedition at ~100s then TV `]`. H382 class. Pin must
-clock recap. **This is the next hole.** Not a new camera.
+CAST10 (`harness/_loop8/season-cast10.json`, holeIds H404-H446) sat on `381ae40` after 78
+shipped `pinClocksRecap()`. Still expedition ~100s then TV `]`. `pinPad=false`. H404 class.
+**This is the next hole.** Pin must clock recap. Not a new camera.
 
-Quote CAST9: `THE SEASON IS OVER` / `The Showrunner is deciding.` Evils Fox+Gus OUT.
-No W5. No 2g1e. Outcome REUNION, rule W1 both evils dead.
+Do not reslice emote chrome (`fadingPopups` PASS). Vote-HIT stays mixed, not this build.
 
-CAST9 lock `pinClocksRecap` = FAIL (skip true — do not licensed-skip):
+Quote CAST10: `CANCELLED` / `Production wins` / reunion `CANCELLED ROLL CALL` …
+`The cast Cy PRODUCER · SURVIVED PRODUCTION`. Evils Cy+Dee still living. 3g2e. Past ep5
+(ep6–8). No 2g1e. Not W4. W5 stays deleted. Do not invent a SHOW beat.
 
-- quote: `PRIME TIME ON AIR EPISODE 5 · EXPEDITION` Hal is running Hal walks. Gus talks.
+CAST10 lock `pinClocksRecap` = FAIL (skip true — do not licensed-skip):
+
+- quote: `PRIME TIME ON AIR EPISODE 6 · EXPEDITION` Hal is running Hal walks. Cy talks.
   The house can hear a drill.
-- Ep 1-5 `cameraQuote` all include `] BEAT`.
+- H442: Auto-walk/sendoff did not leave expedition in 100s. pair=Hal/Cy warmPct=100.
+  Expected: after 3·2·1 + ring-center sendoff the pair auto-walks to the pinned door and
+  the beat leaves expedition without TV `]`.
+- Ep 1, 2, 4, 5, 6, 8 `cameraQuote` include `] BEAT`.
+- H443 sels include `pinPad=false` (guide pin pad dead while the walk is wedged).
 - Wait natural recap <=100s. Host `]` is not a product walk.
 
-76 already shipped `unstickLegs` / stall replan in `runner-intel.js` and recap-clock
-comments in `follow-bed.js`. CAST9 still froze. The defect is pin arrival never clocks
-expedition to recap, not a missing stall trigger.
+78 already shipped `pinClocksRecap()` and RI25. CAST10 still froze. The defect is pin
+arrival / pin pad still not clocking expedition to recap, not a missing function name.
 
 Sofa lock (do not reopen): auto-walk the guide pin; pin paintings and the camera install,
 not just doors; stick = dodge/hide; hunter is a door; Guide E / Runner D / TV E.
@@ -31,9 +37,9 @@ not just doors; stick = dodge/hide; hunter is a door; Guide E / Runner D / TV E.
 
 ## 0. Why this slice exists
 
-A pinned runner who does not arrive never mounts the camera. CAST9 then sat on expedition
-chrome until ~100s and the host cut with `]`. 76 shipped an unstick claim; CAST9 failed
-it the same way CAST8 did (H358 then H382). Next: pin clocks recap without `]`.
+A pinned runner who does not arrive never mounts the camera. CAST10 sat on expedition
+chrome until ~100s and the host cut with `]`, with `pinPad=false`. 78 shipped a clock
+claim; CAST10 failed it the same way CAST8/CAST9 did (H358, H382, now H404/H442).
 
 ---
 
@@ -45,14 +51,14 @@ it the same way CAST8 did (H358 then H382). Next: pin clocks recap without `]`.
 |---|---|
 | `docs/slices/task-stuck-runner.md` | this file |
 | `src/game/runner-intel.js` | stall replan must not re-issue the same blocked leg; keep stallSec 2.0 / stallGain 0.75 unless a measured fact is wrong |
-| `src/game/follow-bed.js` | drive the unstick from where she stands. When the pin walk / job finishes, **clock expedition to recap**. No authored waypoint list. Do not walk the true camera |
+| `src/game/follow-bed.js` | drive the unstick from where she stands. When the pin walk / job finishes, **clock expedition to recap**. `pinPad` must stay live on the guide. No authored waypoint list. Do not walk the true camera |
 | `src/party/objectives.js` | only if objectiveGoal hands a non-walkable point |
-| `harness/runner-intel.mjs` | CAST9-class 100s freeze plus host `]` is red; new legs are not the blocked identity; body gains stallGain toward the pin |
-| `harness/expedition-spec.mjs` | only if the paper would claim a walk the code no longer does |
+| `harness/runner-intel.mjs` | CAST10-class 100s freeze plus host `]` plus `pinPad=false` is red; `pinClocksRecap` FAIL is red |
 
 **Do not edit:** `follow.js` CUE_KINDS / chase / top / crane / liveRunShot. Hunter art.
-phases.js expedition ceiling. Live 5178/5181. `win.js`. Execute / wreck / emote / vote
-chrome (other slices). Do not restore W5.
+phases.js expedition ceiling. Live 5178/5181. `win.js` (see the cancelled-not-w5 flag
+slice if you touch a leftover Production fold). Execute linger (other slice). Emote
+chrome (PASS — do not touch). Vote-HIT (mixed, not this build). Do not restore W5.
 
 ---
 
@@ -66,29 +72,26 @@ chrome (other slices). Do not restore W5.
 4. Evil sabotage stays job fumbles, not a freeze of the walk.
 5. **Pin clocks recap.** Expedition chrome may only hold for a walking or hidden body,
    or a finished / failed job. A wedged body is a defect. Host `]` is not a product walk.
-   The expedition wall is still the ceiling if nobody pins.
+   `pinPad=false` during the walk is a defect.
 6. **Not a new camera.** Do not add a CUE_KIND. Do not put a map on the TV.
 
 ---
 
 ## 3. Traps
 
-- A stall trigger that replans onto the same portal is a green RI1 and a stuck CAST night.
-- 76's `unstickLegs` plus recap-clock comments are not a pass. CAST9 `pinClocksRecap`
-  FAIL is the bar.
-- Auto-walking the true camera install is the lie the twins exist to protect. Walk the
-  pin the guide tapped.
+- 78's `pinClocksRecap()` plus RI25 is not a pass. CAST10 `pinClocksRecap` FAIL is the bar.
+- Do not licensed-skip halls (`pinClocksRecap.skip` was true on CAST10). Quote chrome.
+- Auto-walking the true camera install is the lie the twins exist to protect.
 - Do not restore forward drive on the stick. Lateral dodge only.
-- Do not licensed-skip halls (`pinClocksRecap.skip` was true on CAST9). Quote chrome.
 - Never npx vite build.
 
 ---
 
 ## 4. Verification
 
-Gate: `harness/runner-intel.mjs` in `gates:party`, plus a CAST9-class executed negative
-(100s freeze / host `]` / `pinClocksRecap` FAIL).
-Red: stall replan returns the blocked leg; body sits stallSec*3 without stallGain toward
-the pin; expedition never clocks to recap without `]`; a new CUE_KIND appeared.
+Gate: `harness/runner-intel.mjs` in `gates:party`, plus a CAST10-class executed negative
+(100s freeze / host `]` / `pinPad=false` / `pinClocksRecap` FAIL).
+Red: stall replan returns the blocked leg; expedition never clocks to recap without `]`;
+guide `pinPad` is false while the runner is on the pin path; a new CUE_KIND appeared.
 Done is that gate, not a screenshot of an unstuck night.
 If a stated fact is wrong, say so in the report rather than diverging silently.
