@@ -214,11 +214,40 @@ export function pinClocksRecap({
  * Guide pin pad stays live on the walk. CAST10 H443 photographed `pinPad=false`
  * while the runner was on the pin path — the chips were gone, so she could not
  * re-pin a wedged body. Scope (seed + you-mark) is what `guidePinPad` needs;
- * without it the pad is an empty string. This does not invent a TV map.
+ * without it the pad used to be an empty string. This does not invent a TV map.
+ *
+ * ⚠️ **CAST11 H480: `painted` is the bar, not `hasScope: true`.** 80's
+ * `pinPadLive({ hasScope: true }) === true` in a harness is a licensed skip
+ * when the painted pad is still false. The phone quotes the DOM `[data-pin-pad]`;
+ * a hardcoded true here is not that photograph.
  */
-export function pinPadLive({ role, hasScope = false } = {}) {
+export function pinPadLive({ role, hasScope = false, painted } = {}) {
   if (String(role || '') !== 'guide') return true;
+  if (painted !== undefined) return !!painted;
   return !!hasScope;
+}
+
+/**
+ * Photograph clock of pins the guide tapped. D2 still holds: the PRODUCT pin
+ * is one slot and a second tap REPLACES it. This array is the CAST tick log
+ * (`pin[]`), not a route — auto-walk still reads the one current pin.
+ * CAST11 H480 `pin=[]` all night is the empty clock, not a missing function.
+ */
+export function clockPin(pins, pin) {
+  const list = Array.isArray(pins) ? pins.slice() : [];
+  if (!pin || !Number.isFinite(Number(pin.x)) || !Number.isFinite(Number(pin.z))) return list;
+  const next = {
+    x: Number(pin.x),
+    z: Number(pin.z),
+    roomId: String(pin.roomId || ''),
+    kind: String(pin.kind || pin.pinKind || 'room'),
+  };
+  const key = pinKey(next);
+  if (!key) return list;
+  const i = list.findIndex((p) => pinKey(p) === key);
+  if (i >= 0) list[i] = next;
+  else list.push(next);
+  return list;
 }
 
 /** Drop every leg already reached. Mutating, because the caller owns the array. */

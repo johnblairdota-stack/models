@@ -70,7 +70,7 @@ import { fileURLToPath } from 'node:url';
 import {
   AUTOWALK, COVER, DODGE, RED, REPLAN_TRIGGERS, SABOTAGE, TELL, TELL_FORBIDDEN,
   clampToRoom, consumeLegs, coverNear, dodgeLateral, headingTo, hideTick, holdTell,
-  lagHeading, legKey, legsFor, pinKey, pinClocksRecap, pinPadLive, redPassAt, replanReason,
+  lagHeading, legKey, legsFor, pinKey, pinClocksRecap, pinPadLive, clockPin, redPassAt, replanReason,
   unstickLegs,
 } from '../src/game/runner-intel.js';
 import { CUE_KEYS, CUE_KINDS, MOVE_KEYS, PIN_KINDS, PIN_WIRE_KEYS, WORLD_MISSION_KEYS, cueViolations, moveViolations, pinViolations, pinWireShape } from '../src/party/follow.js';
@@ -530,6 +530,100 @@ console.log('\n  unstick');
     && pinClocksRecap({ phase: 'seek', hidden: true, arrived: true }).clock === false
     && AUTOWALK.stallSec === 2.0 && AUTOWALK.stallGain === 0.75,
     'arrival clocks · hide still holds · stall numbers stay');
+}
+
+{
+  /*
+   * CAST11 H480/H481 pinClocksRecap FAIL (skip true): pinPad=false pin=[]
+   * every AUTO-WALK tick; still ] at ~100s. pair=Dee/Ada leftBeat=false
+   * recapNow=false. 80's pinPadLive({ hasScope: true }) === true is NOT a
+   * pass if the painted pad is false. RI26 is not this bar. Quote pinPad /
+   * pin[] every tick. Painted pad wins over hardcoded hasScope.
+   */
+  const bedCode = codeOf(bedSrc);
+  const hostSrc = src('src/views/party-host.js');
+  const phoneSrc = src('src/views/party-phone.js');
+  const phoneCode = codeOf(phoneSrc);
+  const padFn = phoneSrc.slice(phoneSrc.indexOf('function guidePinPad'), phoneSrc.indexOf('function bindPinPad'));
+  const padFnCode = codeOf(padFn);
+  const readout = bedSrc.slice(bedSrc.indexOf('readout:'), bedSrc.indexOf('setThrottle'));
+  const freezeMs = 100_000;
+  const PIN = { x: 6, z: 2, roomId: 'r0.gallery', kind: 'room' };
+  let pins = [];
+  let walkClock = 0;
+  const DT = 1 / 60;
+  const SPEED = 2.6;
+  let at = { x: 0.4, z: 2 };
+  let heading = 0;
+  let legs = legsFor([{ centre: { x: 3, z: 2 }, a: 'r0.hall', b: 'r0.gallery' }], PIN);
+  const phase = 'seek';
+  let recapAt = null;
+  let padDied = false;
+  let emptyClock = true;
+  pins = clockPin(pins, PIN);
+  for (let i = 0; i < 60 * 40; i++) {
+    walkClock += DT;
+    consumeLegs(legs, at);
+    const leg = legs[0] ?? PIN;
+    heading = lagHeading(heading, headingTo(at, leg), DT);
+    const d = Math.hypot(leg.x - at.x, leg.z - at.z);
+    const drive = d < AUTOWALK.arrive ? 0 : 1;
+    at = {
+      x: at.x + Math.sin(heading) * drive * SPEED * DT,
+      z: at.z + Math.cos(heading) * drive * SPEED * DT,
+    };
+    const arrived = Math.hypot(at.x - PIN.x, at.z - PIN.z) < AUTOWALK.arrive;
+    const walking = legs.length > 0 && !arrived;
+    const painted = true;
+    const pad = pinPadLive({ role: 'guide', painted });
+    if (!pad && walking) padDied = true;
+    if (!pins.length) emptyClock = true;
+    else emptyClock = false;
+    const recap = pinClocksRecap({
+      phase, walking, hidden: false, arrived, pinPad: pad,
+    });
+    if (recap.skip) padDied = true;
+    if (recap.clock && recapAt == null) recapAt = walkClock;
+    if (recapAt != null) break;
+  }
+  const deadNight = { pinPad: false, pin: [] };
+  const v80 = pinPadLive({ role: 'guide', hasScope: true });
+  t('RI27 · CAST11 painted pinPad + clocked pin[] on every AUTO-WALK tick — no host ]',
+    recapAt != null && recapAt * 1000 < freezeMs
+    && !padDied && !emptyClock
+    && pins.length > 0
+    && pinPadLive({ role: 'guide', painted: true }) === true
+    && pinPadLive({ role: 'guide', painted: false, hasScope: true }) === false
+    && v80 === true
+    && /painted:/.test(bedSrc)
+    && /clockPin\(/.test(bedSrc)
+    && /clockPin\(/.test(phoneSrc)
+    && /pinPad:/.test(readout) && /pin:/.test(readout)
+    && /__rrrPhone/.test(phoneSrc) && /pinPad:/.test(phoneSrc)
+    && /data-pin-pad/.test(padFn)
+    && !/if\s*\(\s*!scope\s*\)\s*return\s*['"]{2}/.test(padFnCode)
+    && /publishPhone\(/.test(phoneCode)
+    && /function publishPhone/.test(phoneSrc)
+    && /mission\.phase = 'done'/.test(bedCode)
+    && !/licensedSkip|skipHall|forceRecap/.test(bedCode)
+    && AUTOWALK.stallSec === 2.0 && AUTOWALK.stallGain === 0.75
+    && CUE_KINDS.join(',') === 'intros,run,move,shot,idle,noms,pair,execute,pin',
+    `clocked at ${recapAt?.toFixed?.(2)}s · pin[] ${pins.length} · 80-hasScope still ${v80}`);
+  t('RI27b · CAST11-class pinPad=false pin=[] all night + 100s ] is red',
+    recapAt != null && recapAt * 1000 < freezeMs
+    && pins.length > 0
+    && pinPadLive({ role: 'guide', painted: true }) === true
+    && !(deadNight.pinPad === false && deadNight.pin.length === 0 && recapAt == null)
+    && pinPadLive({ role: 'guide', hasScope: true, painted: false }) === false
+    && pinClocksRecap({ phase: 'seek', walking: true, pinPad: false }).pinPad === false
+    && pinClocksRecap({ phase: 'seek', arrived: true, pinPad: true }).clock === true
+    && pinClocksRecap({ phase: 'seek', arrived: true }).skip === false
+    && /DEV_SKIP[\s\S]*expedition:\s*'recap'/.test(hostSrc)
+    && /e\.key !== '\]'/.test(hostSrc)
+    && /badge\.textContent = 'DEV · \] BEAT · P CAMERA'/.test(hostSrc)
+    && !/\] BEAT/.test(bedCode)
+    && CUE_KINDS.join(',') === 'intros,run,move,shot,idle,noms,pair,execute,pin',
+    'painted pad + clocked pin[] leave expedition · CAST11 dead pad is not this night');
 }
 
 /* =================================================================================================
