@@ -25,7 +25,7 @@ import {
 import {
   HIT_CONTACT, HIT_SLACK, SHOW_CONTACT_S,
   LAST_LOOK, contactMix, retargetHead, occupies, execCamMode,
-  stepLastLook, wreckPose, wreckSit, chairTopple, chairEyeline, seatedAim,
+  stepLastLook, wreckPose, wreckSit, wreckSnap, chairTopple, chairEyeline, seatedAim,
   wreckCam, wreckLook, talkCycleShots, talkShotAt, WRECK_SHOT,
   execLingerCam, lingerBeat, LINGER_TOTAL_S, LINGER_CRIME_S, LINGER_ORBIT_S, LINGER_GROUP_S,
   isFaceScreenName,
@@ -1145,6 +1145,7 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     body.root.rotation.y = limp.facing;
     body.root.rotation.x = limp.pitch;
     body.root.rotation.z = limp.roll;
+    r.wreckPose = limp;
     hideChairInstance(r.seatIndex);
   }
 
@@ -1825,10 +1826,18 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
     /** Harness hook: who is walking, whether they have swung, which phase. */
     executionReport: () => {
       const snap = contactSnapshot();
+      const floorY = room.floorY ?? 0;
       const limp = wreckPose({
         sitAt: exec.victim?.sitAt, face: exec.victim?.face ?? 0,
-        u: exec.hit ? (exec.t - exec.hitAt) / 0.72 : 0, cx, cz, floorY: room.floorY ?? 0,
+        u: exec.hit ? (exec.t - exec.hitAt) / 0.72 : 0, cx, cz, floorY,
       });
+      /*
+       * CAST11 H483: after linger, exec.hit is false and exec.victim is
+       * null, so `wreck: exec.hit ? limp : null` photographed
+       * snap.wreck=undefined. Quote the planted wrecked body instead.
+       */
+      const wreckedBot = robots.find((r) => r.wrecked) || exec.victim || null;
+      const planted = wreckSnap(wreckedBot, { cx, cz, floorY });
       return {
         phase: exec.phase,
         key: exec.key,
@@ -1836,13 +1845,17 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
         swung: exec.swung,
         showrunner: exec.showrunner,
         actor: exec.swinger ? String(exec.swinger.seat.id) : null,
-        target: exec.victim ? String(exec.victim.seat.id) : null,
+        target: exec.victim ? String(exec.victim.seat.id) : (wreckedBot ? String(wreckedBot.seat.id) : null),
         sitLock: exec.swinger ? !!exec.swinger.body.sitLock : null,
         seated: exec.swinger ? !!exec.swinger.seated : null,
         hit: exec.hit,
-        wrecked: !!exec.victim?.wrecked,
-        limp: !!(exec.hit && exec.victim && !exec.victim.seated),
-        damaged: !!(exec.smashed || exec.victim?.smashed),
+        wrecked: planted.wreck,
+        wreck: planted.wreck,
+        sit: planted.sit,
+        wreckPose: planted.wreckPose,
+        snap: planted,
+        limp: !!(planted.wreck && wreckedBot && !wreckedBot.seated),
+        damaged: !!(exec.smashed || exec.victim?.smashed || wreckedBot?.smashed),
         wreckedIds: robots.filter((r) => r.wrecked).map((r) => String(r.seat.id)),
         chairLoose: exec.looseChairs.length > 0,
         chairToppled: exec.looseChairs.some((c) => c.t > 0.15),
@@ -1851,14 +1864,14 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
           const w = robots.find((r) => r.wrecked);
           if (!w) return null;
           const cam = wreckLook({
-            sitAt: w.sitAt, seat: w.chair, face: w.face, cx, cz, floorY: room.floorY ?? 0,
+            sitAt: w.sitAt, seat: w.chair, face: w.face, cx, cz, floorY,
           });
           return { lookY: cam.look.y, eyeY: cam.eye.y, shot: WRECK_SHOT.name };
         })(),
         lastLook: exec.lastLook,
         cam: execCamMode({ showrunner: exec.showrunner }),
         contact: snap,
-        wreck: exec.hit ? { x: limp.x, y: limp.y, z: limp.z, roll: limp.roll } : null,
+        pose: exec.hit ? { x: limp.x, y: limp.y, z: limp.z, roll: limp.roll } : (planted.wreckPose || null),
         linger: exec.hit ? {
           elapsed: exec.t - exec.hitAt,
           beat: lingerBeat(exec.t - exec.hitAt),
@@ -1908,11 +1921,15 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
           pelvis.z = r.body.pos.z;
         }
         const floorY = room.floorY ?? 0;
+        const snap = wreckSnap(r, { cx, cz, floorY });
         return {
           id: String(r.seat.id),
           seated: wreckSit(r),
           wrecked: !!r.wrecked,
+          wreck: snap.wreck,
           sit: wreckSit(r),
+          wreckPose: snap.wreckPose,
+          snap,
           seatIndex: r.seatIndex,
           clip: r.body.avatar?.clip ?? sitIdleClip(r.seatIndex),
           pelvis,

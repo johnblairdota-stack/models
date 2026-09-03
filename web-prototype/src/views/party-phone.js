@@ -20,6 +20,7 @@ import { cardFor, faceDownHtml, mountRoleCard, premiereHtml } from '../party/rol
 import { EVIL } from '../party/cast.js';
 import { guideMapSvg } from '../party/guidemap.js';
 import { COMPASS_4, guidePad, pinDoor, pinShape, pinSpot, runnerPad } from '../party/intel-pad.js';
+import { clockPin, pinPadLive } from '../game/runner-intel.js';
 import { pickPlanSeed, planRoomLabels, roomLabel } from '../party/mansion.js';
 import { missionFor, seekLine } from '../party/mission.js';
 import {
@@ -76,6 +77,11 @@ export default async function partyPhone({ params }) {
      * `MATRIX` is deny-by-default so a field without one is a hard red (`party-isolation` I1c).
      */
     pin: null,
+    /**
+     * CAST11 H480 clock. `pin` above is still D2's one slot. This array is
+     * the photograph (`pin[]`) quoted on `__rrrPhone` every tick.
+     */
+    pinClock: [],
     /**
      * 🕹️ The pad's own state. `x`/`y` is the stick as a clamped unit vector; `sent` is the last
      * thing put on the wire, which is what makes the 20 Hz tick change-gated rather than a
@@ -653,7 +659,7 @@ export default async function partyPhone({ params }) {
         + `:${hasCard() ? 'card' : 'nocard'}${camStamp}${guideStamp}`
       : null;
     if (liveStamp && root.dataset.liveUi === liveStamp && patchLive(frame)) {
-      window.__rrrPhone = { frame, beat, seat: me.seat, iAmRunner, iAmGuide };
+      publishPhone(frame, beat, { iAmRunner, iAmGuide, seat: me.seat });
       return;
     }
 
@@ -1002,10 +1008,11 @@ export default async function partyPhone({ params }) {
      * what the entitlement matrix already decided this socket may see, so exposing it cannot leak
      * anything a screenshot of this screen would not.
      */
-    window.__rrrPhone = { frame, beat, seat: me.seat, iAmRunner, iAmGuide, showUntil: c.showUntil };
+    publishPhone(frame, beat, { iAmRunner, iAmGuide, seat: me.seat, showUntil: c.showUntil });
 
     if (beat !== 'reckoning' && beat !== 'debrief') { state.nominated = false; state.nomOk = null; }
     if (beat !== 'vote') state.voted = false;
+    if (beat !== 'expedition') { state.pinClock = []; }
     // My thumb belongs to ONE beat. Carrying it into the next would silently hand the next
     // talk beat a majority nobody voted for.
     if (beat !== state.readyBeat) { state.ready = false; state.readyBeat = beat; }
@@ -1403,8 +1410,38 @@ export default async function partyPhone({ params }) {
     return state.scopeMemo.scope;
   }
 
+  /**
+   * CAST11 H480: quote the painted pad and the pin clock on the handle
+   * the sofa loop photographs. 80 named pinPadLive() and never put these
+   * on `__rrrPhone`, so every AUTO-WALK tick read pinPad=false pin=[].
+   * Hoisted `function` — paint() and patchLive both call this off a socket
+   * frame; a `const` arrow here is the RI22d dead zone.
+   */
+  function publishPhone(frame, beat, extra) {
+    const painted = !!(extra?.iAmGuide && beat === 'expedition' && root.querySelector('[data-pin-pad]'));
+    window.__rrrPhone = {
+      frame,
+      beat,
+      ...extra,
+      pinPad: extra?.iAmGuide ? pinPadLive({ role: 'guide', painted }) : false,
+      pin: (state.pinClock || []).slice(),
+    };
+  }
+
   function guidePinPad(scope) {
-    if (!scope) return '';
+    /*
+     * CAST11 H480: the pad SHELL paints on expedition even before a you-mark
+     * lands. `if (!scope) return ''` was the dead pad — pinPad=false all
+     * night because the first world report is not the first AUTO-WALK tick.
+     * Chips stay empty until scope arrives; bindPinPad still bails on null.
+     */
+    if (!scope) {
+      return `<div class="pin-pad" data-pin-pad>
+      <p class="hint">Pin a door. She walks to it. Then say which one, out loud.</p>
+      <div class="pin-row"></div>
+      <p class="pin-say" data-pin-say>Waiting for the house…</p>
+    </div>`;
+    }
     const gates = new Map((scope.gates ?? []).map((g) => [g.dir, g]));
     const chips = COMPASS_4.map((dir) => {
       const g = gates.get(dir);
@@ -1472,6 +1509,7 @@ export default async function partyPhone({ params }) {
     const tap = (pin) => {
       state.pin = pin;
       if (pin) {
+        state.pinClock = clockPin(state.pinClock, pin);
         const wire = pinShape(pin);
         state.client?.send({ t: 'pin', x: wire.x, z: wire.z, roomId: wire.roomId, kind: wire.kind });
       }

@@ -23,7 +23,7 @@ import { camHang, DRILL, JOB, TWIN, twinHang, WALL_CAM } from '../party/jobs.js'
  */
 import {
   AUTOWALK, clampToRoom, consumeLegs, coverNear, dodgeLateral, headingTo, hideTick,
-  lagHeading, legsFor, pinKey, pinClocksRecap, pinPadLive, redPassAt, replanReason, unstickLegs,
+  lagHeading, legsFor, pinKey, pinClocksRecap, pinPadLive, clockPin, redPassAt, replanReason, unstickLegs,
 } from './runner-intel.js';
 import { isObjectivePin, mountFor, objectiveGoal } from '../party/objectives.js';
 import { NoiseBus, NOISE_KIND } from './noise.js';
@@ -1406,6 +1406,12 @@ export async function buildFollowBed(engine, opts = {}) {
      * pinned, and null means the body stands still — the guide having a reason to exist.
      */
     pin: null,
+    /**
+     * CAST11 H480 clock. The PRODUCT pin above is still one slot (D2). This
+     * array is the AUTO-WALK tick photograph (`pin[]`) — a tap clocks it,
+     * a mid-walk does not drop it. A new `run` cue starts a fresh clock.
+     */
+    pins: [],
     /** The legs of the CURRENT plan. Thrown away and rebuilt on every replan — never cached. */
     legs: [],
     /** Replan bookkeeping. `since`/`gained` are D3's stall trigger; `lastAt` is where we measured. */
@@ -1774,12 +1780,18 @@ export async function buildFollowBed(engine, opts = {}) {
     const arrived = !!(pin
       && Number.isFinite(Number(pin.x)) && Number.isFinite(Number(pin.z))
       && Math.hypot(runner.pos.x - pin.x, runner.pos.z - pin.z) < AUTOWALK.arrive);
+    /*
+     * CAST11 H480: quote the painted pad, not `hasScope: true`. On a live
+     * run the guide has a you-mark (this body's position), so the phone
+     * paints `[data-pin-pad]`. Hardcoding true here was 80's false pass.
+     */
+    const painted = mode === 'run' && Number.isFinite(Number(runner.pos.x));
     const clock = pinClocksRecap({
       phase: mission.phase,
       walking: !!(perf.legs && perf.legs.length) && !arrived,
       hidden: !!perf.hold?.hiding,
       arrived,
-      pinPad: pinPadLive({ role: 'guide', hasScope: true }),
+      pinPad: pinPadLive({ role: 'guide', painted }),
     });
     if (clock.clock && mission.phase !== 'none') mission.phase = 'done';
   }
@@ -2509,6 +2521,15 @@ export async function buildFollowBed(engine, opts = {}) {
         ? (perf.run ? 'RUN' : (stickMag(perf.stick.x, perf.stick.y) > 0 ? 'WALK' : 'STILL'))
         : (perf.hesitateFor > 0 ? 'CREEP' : perf.throttle),
       speed: +runner.speed.toFixed(2),
+      /*
+       * CAST11 H480: quote pinPad / pin[] on every AUTO-WALK tick. 80 named
+       * pinPadLive() and never put these on the photograph CAST reads.
+       */
+      pinPad: pinPadLive({
+        role: 'guide',
+        painted: mode === 'run' && Number.isFinite(Number(runner.pos.x)),
+      }),
+      pin: (perf.pins || []).slice(),
     }),
     setThrottle(name) { if (THROTTLE_DRIVE[name]) perf.throttle = name; },
     step,
@@ -2705,6 +2726,7 @@ export async function buildFollowBed(engine, opts = {}) {
          * into this episode's recap.
          */
         perf.pin = null;
+        perf.pins = [];
         perf.legs = [];
         perf.blocked = [];
         perf.homing = false;
@@ -2732,6 +2754,7 @@ export async function buildFollowBed(engine, opts = {}) {
         perf.pin = Number.isFinite(+c.x) && Number.isFinite(+c.z)
           ? { x: +c.x, z: +c.z, roomId: String(c.roomId || ''), kind: String(c.pinKind || 'room') }
           : null;
+        if (perf.pin) perf.pins = clockPin(perf.pins, perf.pin);
         if (mode === 'run') perf.driven = true;
         perf.blocked = [];
         perf.homing = false;

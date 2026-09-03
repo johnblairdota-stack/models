@@ -241,6 +241,25 @@ export function wreckSit(r) {
 }
 
 /**
+ * CAST11 H483 photograph. State `wreck=true` with `snap.wreck=undefined`
+ * / `wreckPose=false` was the vanish — the mesh was planted and the snap
+ * had no row for it. Always defined: wreck, sit, wreckPose. A wrecked
+ * body is sit=true (planted) and wreckPose is the u=1 mesh, never false.
+ */
+export function wreckSnap(r, { cx = 0, cz = 0, floorY = 0 } = {}) {
+  const wrecked = !!r?.wrecked;
+  if (!wrecked) {
+    return { wreck: false, sit: wreckSit(r), wreckPose: false };
+  }
+  const pose = r.wreckPose && Number.isFinite(Number(r.wreckPose.y))
+    ? r.wreckPose
+    : wreckPose({
+      sitAt: r.sitAt, face: r.face ?? 0, u: 1, cx, cz, floorY,
+    });
+  return { wreck: true, sit: true, wreckPose: pose };
+}
+
+/**
  * Kinematic un-sit. Body skids tangent + outward so the chair can go the
  * other way. `u` is 0 at contact, 1 when the wreck has read.
  */

@@ -27,7 +27,7 @@ import {
   HIT_CONTACT, HIT_SLACK, SHOW_CONTACT_S, LAST_LOOK, WRECK_HOLD_S,
   contactMix, retargetHead, occupies, execCamMode,
   stepLastLook, lastLookLive, lastLookOnAir,
-  wreckPose, wreckSit, chairTopple, chairEyeline, seatedAim,
+  wreckPose, wreckSit, wreckSnap, chairTopple, chairEyeline, seatedAim,
   wreckLook, wreckCam, talkCycleShots, talkShotAt, WRECK_SHOT, WRECK_LOOK_Y, WRECK_EYE_Y,
   execLingerCam, lingerBeat, LINGER_TOTAL_S, LINGER_CRIME_S, LINGER_ORBIT_S, LINGER_GROUP_S,
   isFaceScreenName,
@@ -648,6 +648,45 @@ t('H10 · seatedAim is a visor-height torso when Head is missing',
     && WRECK_SHOT.dur === 0
     && kinds.replace(/\s+/g, '') === "'intros','run','move','shot','idle','noms','pair','execute','pin'",
     `Fox y=${fox.y} Eli y=${eli.y} · sit planted at 9s/11s · linger ${LINGER_TOTAL_S}s`);
+
+  /*
+   * CAST11 lingerWreck FAIL: sit=false wreckPose=false every HIT.
+   * Fox 10s, Ben 11s, Cy 10s. Quote: Cy wreck=true sit=false wreckPose=false
+   * tv=EPISODE 6 · EXECUTION EXECUTION 10s. H483: snap.wreck=undefined
+   * snap.sit=undefined. 80's H17 gates are not a pass. The mesh stays.
+   */
+  const cy = wreckSnap({
+    wrecked: true, seated: false, sitAt: { x: 2, y: 0.9, z: 0 }, face: 0,
+  }, { floorY: 0 });
+  const fox11 = wreckSnap({
+    wrecked: true, seated: false, sitAt: { x: 3, y: 0.9, z: 0 }, face: 0,
+  }, { floorY: 0 });
+  const ben = wreckSnap({
+    wrecked: true, seated: false, sitAt: { x: -1, y: 0.9, z: 1 }, face: 0,
+  }, { floorY: 0 });
+  const vanished = { wreck: true, sit: false, wreckPose: false, snap: {} };
+  t('H17m · CAST11-class sit=false wreckPose=false every HIT + 10s/11s is red',
+    cy.wreck === true && cy.sit === true && cy.wreckPose && cy.wreckPose.y === 0
+    && fox11.wreck === true && fox11.sit === true && fox11.wreckPose && fox11.wreckPose.y === 0
+    && ben.wreck === true && ben.sit === true && ben.wreckPose && ben.wreckPose.y === 0
+    && cy.wreck !== undefined && cy.sit !== undefined && cy.wreckPose !== false
+    && cy.sit !== false
+    && vanished.sit === false && vanished.wreckPose === false && vanished.snap.wreck === undefined
+    && LINGER_TOTAL_S === 5.00
+    && LINGER_TOTAL_S < 10 && LINGER_TOTAL_S < 11
+    && lingerBeat(5.00) === 'group'
+    && lingerBeat(10) === 'group'
+    && lingerBeat(11) === 'group'
+    && /wreckSnap\(/.test(introSrc)
+    && /wreckPose:/.test(introSrc)
+    && /r\.wreckPose = limp/.test(introSrc)
+    && /plantWreck\(r\)/.test(introSrc)
+    && /if \(r\.wrecked\) return;/.test(introSrc)
+    && /body\.root\.visible = true/.test(driveFn)
+    && WRECK_HOLD_S === 0.50
+    && WRECK_SHOT.dur === 0
+    && kinds.replace(/\s+/g, '') === "'intros','run','move','shot','idle','noms','pair','execute','pin'",
+    `Cy sit=${cy.sit} wreckPose.y=${cy.wreckPose.y} · linger ${LINGER_TOTAL_S}s · CAST11 vanish is not this snap`);
 }
 
 if (fail) {
