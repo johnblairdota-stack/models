@@ -186,16 +186,39 @@ export function unstickLegs(portalCentres, goal, blocked, from) {
 /**
  * Pin walk / job finish clocks recap. Expedition chrome may only hold for a
  * walking or hidden body, or an in-progress job. A wedged body is a defect.
- * Host `]` is not a product walk — CAST9 pinClocksRecap.skip was that skip.
+ * Host `]` is not a product walk — CAST9/CAST10 pinClocksRecap.skip was that skip.
  *
- * `return` is the smash or a finished mount. `done` is already home. Either
- * clocks. Seek holds only while she is walking or hidden.
+ * ⚠️ **CAST10 (H404/H442): arriving at the pin clocks, even while still `seek`.**
+ * 78's function only clocked `return` / `done`. CAST bots pin a door, walk it,
+ * never smash or drill, and sat in seek until ~100s then TV `]`. H442's product
+ * walk is sendoff → pinned door → recap. A fake `return` in a gate is not that.
+ *
+ * `return` is the smash or a finished mount. `done` is already home. `arrived`
+ * is the body on the pin. Any of those clocks. Hidden still holds. `skip` stays
+ * false — do not licensed-skip a 100s sit. `pinPad=false` during the walk is a
+ * defect (H443) and is reported, never excused.
  */
-export function pinClocksRecap({ phase, walking = false, hidden = false } = {}) {
+export function pinClocksRecap({
+  phase, walking = false, hidden = false, arrived = false, pinPad = true,
+} = {}) {
   const p = String(phase || '');
-  if (p === 'done' || p === 'return') return { clock: true, skip: false };
-  if (walking || hidden) return { clock: false, skip: false };
-  return { clock: false, skip: false };
+  const pad = pinPad !== false;
+  if (p === 'done' || p === 'return') return { clock: true, skip: false, pinPad: pad };
+  if (hidden) return { clock: false, skip: false, pinPad: pad };
+  if (arrived) return { clock: true, skip: false, pinPad: pad };
+  if (walking) return { clock: false, skip: false, pinPad: pad };
+  return { clock: false, skip: false, pinPad: pad };
+}
+
+/**
+ * Guide pin pad stays live on the walk. CAST10 H443 photographed `pinPad=false`
+ * while the runner was on the pin path — the chips were gone, so she could not
+ * re-pin a wedged body. Scope (seed + you-mark) is what `guidePinPad` needs;
+ * without it the pad is an empty string. This does not invent a TV map.
+ */
+export function pinPadLive({ role, hasScope = false } = {}) {
+  if (String(role || '') !== 'guide') return true;
+  return !!hasScope;
 }
 
 /** Drop every leg already reached. Mutating, because the caller owns the array. */
