@@ -23,7 +23,7 @@ import { camHang, DRILL, JOB, TWIN, twinHang, WALL_CAM } from '../party/jobs.js'
  */
 import {
   AUTOWALK, clampToRoom, consumeLegs, coverNear, dodgeLateral, headingTo, hideTick,
-  lagHeading, legsFor, pinKey, pinClocksRecap, redPassAt, replanReason, unstickLegs,
+  lagHeading, legsFor, pinKey, pinClocksRecap, pinPadLive, redPassAt, replanReason, unstickLegs,
 } from './runner-intel.js';
 import { isObjectivePin, mountFor, objectiveGoal } from '../party/objectives.js';
 import { NoiseBus, NOISE_KIND } from './noise.js';
@@ -1763,21 +1763,25 @@ export async function buildFollowBed(engine, opts = {}) {
         perf.contactAt = -1;
       }
     }
-    if (mission.phase === 'return') {
-      /*
-       * ⏱️ **PIN / JOB FINISH CLOCKS RECAP.** CAST9 sat on expedition until ~100s
-       * then the host cut with `]`. Walking home is scenery; `return` already
-       * means the smash landed or the mount filled. The next world report must
-       * be `done` so `setWorld` / `endRunOnMission` flip the beat. Host `]` is
-       * not a product walk. Seek still holds while she walks or hides.
-       */
-      const clock = pinClocksRecap({
-        phase: mission.phase,
-        walking: !!(perf.legs && perf.legs.length) && !inBallroom(),
-        hidden: !!perf.hold?.hiding,
-      });
-      if (clock.clock) mission.phase = 'done';
-    }
+    /*
+     * ⏱️ **PIN ARRIVAL / JOB FINISH CLOCKS RECAP.** CAST10 sat on expedition
+     * until ~100s then the host cut with `]`, pinPad=false. 78 only asked this
+     * on `return` (smash / mount). H442's walk is sendoff → the pinned door →
+     * recap, still in seek. Host `]` is not a product walk. Hidden still holds.
+     * pinPad stays live on the guide — the bed does not drop the pin mid-walk.
+     */
+    const pin = pinGoal();
+    const arrived = !!(pin
+      && Number.isFinite(Number(pin.x)) && Number.isFinite(Number(pin.z))
+      && Math.hypot(runner.pos.x - pin.x, runner.pos.z - pin.z) < AUTOWALK.arrive);
+    const clock = pinClocksRecap({
+      phase: mission.phase,
+      walking: !!(perf.legs && perf.legs.length) && !arrived,
+      hidden: !!perf.hold?.hiding,
+      arrived,
+      pinPad: pinPadLive({ role: 'guide', hasScope: true }),
+    });
+    if (clock.clock && mission.phase !== 'none') mission.phase = 'done';
   }
 
   /* ===============================================================================================

@@ -70,7 +70,8 @@ import { fileURLToPath } from 'node:url';
 import {
   AUTOWALK, COVER, DODGE, RED, REPLAN_TRIGGERS, SABOTAGE, TELL, TELL_FORBIDDEN,
   clampToRoom, consumeLegs, coverNear, dodgeLateral, headingTo, hideTick, holdTell,
-  lagHeading, legKey, legsFor, pinKey, pinClocksRecap, redPassAt, replanReason, unstickLegs,
+  lagHeading, legKey, legsFor, pinKey, pinClocksRecap, pinPadLive, redPassAt, replanReason,
+  unstickLegs,
 } from '../src/game/runner-intel.js';
 import { CUE_KEYS, CUE_KINDS, MOVE_KEYS, PIN_KINDS, PIN_WIRE_KEYS, WORLD_MISSION_KEYS, cueViolations, moveViolations, pinViolations, pinWireShape } from '../src/party/follow.js';
 import {
@@ -440,6 +441,95 @@ console.log('\n  unstick');
     AUTOWALK.stallSec === 2.0 && AUTOWALK.stallGain === 0.75
     && !/CUE_KINDS/.test(intelSrc),
     `stallSec ${AUTOWALK.stallSec} · stallGain ${AUTOWALK.stallGain}`);
+}
+
+{
+  /*
+   * CAST10 H404/H442 pinClocksRecap FAIL (skip true): expedition ~100s then TV ].
+   * Quote: PRIME TIME ON AIR EPISODE 6 · EXPEDITION Hal is running Hal walks.
+   * Cy talks. The house can hear a drill.
+   * H442: Auto-walk/sendoff did not leave expedition in 100s. pair=Hal/Cy
+   * warmPct=100. Expected: after 3·2·1 + ring-center sendoff the pair
+   * auto-walks to the pinned door and the beat leaves expedition without TV ].
+   * H443 sels include pinPad=false.
+   *
+   * 78's pinClocksRecap() plus RI25 is NOT a pass. RI25 fakes phase='return'
+   * on arrival. CAST10 sat in seek after the pin walk. Arrival clocks. pinPad
+   * stays live. No licensed skip. No new CUE_KIND.
+   */
+  const bedCode = codeOf(bedSrc);
+  const hostSrc = src('src/views/party-host.js');
+  const phoneSrc = src('src/views/party-phone.js');
+  const freezeMs = 100_000;
+  let walkClock = 0;
+  const DT = 1 / 60;
+  const SPEED = 2.6;
+  const PIN = { x: 6, z: 2, roomId: 'r0.gallery', kind: 'room' };
+  let at = { x: 0.4, z: 2 };
+  let heading = 0;
+  let legs = legsFor([{ centre: { x: 3, z: 2 }, a: 'r0.hall', b: 'r0.gallery' }], PIN);
+  const phase = 'seek';
+  let recapAt = null;
+  let padDied = false;
+  for (let i = 0; i < 60 * 40; i++) {
+    walkClock += DT;
+    consumeLegs(legs, at);
+    const leg = legs[0] ?? PIN;
+    heading = lagHeading(heading, headingTo(at, leg), DT);
+    const d = Math.hypot(leg.x - at.x, leg.z - at.z);
+    const drive = d < AUTOWALK.arrive ? 0 : 1;
+    at = {
+      x: at.x + Math.sin(heading) * drive * SPEED * DT,
+      z: at.z + Math.cos(heading) * drive * SPEED * DT,
+    };
+    const arrived = Math.hypot(at.x - PIN.x, at.z - PIN.z) < AUTOWALK.arrive;
+    const walking = legs.length > 0 && !arrived;
+    const pad = pinPadLive({ role: 'guide', hasScope: true });
+    if (!pad && walking) padDied = true;
+    const recap = pinClocksRecap({
+      phase, walking, hidden: false, arrived, pinPad: pad,
+    });
+    if (recap.skip) padDied = true;
+    if (recap.clock && recapAt == null) recapAt = walkClock;
+    if (recapAt != null) break;
+  }
+  const v78 = pinClocksRecap({ phase: 'seek', walking: false, hidden: false });
+  t('RI26 · CAST10 pin arrival clocks recap in seek — no fake return, no host ]',
+    recapAt != null && recapAt * 1000 < freezeMs
+    && phase === 'seek'
+    && pinClocksRecap({ phase: 'seek', arrived: true, pinned: true, pinPad: true }).clock === true
+    && pinClocksRecap({ phase: 'seek', arrived: true }).skip === false
+    && v78.clock === false
+    && v78.skip === false
+    && /arrived/.test(bedSrc)
+    && /pinPadLive\(/.test(bedSrc)
+    && /pinClocksRecap\(/.test(bedSrc)
+    && /mission\.phase = 'done'/.test(bedCode)
+    && !/licensedSkip|skipHall|forceRecap/.test(bedCode),
+    `clocked at ${recapAt?.toFixed?.(2)}s still seek · 78-without-arrived stays ${v78.clock}`);
+  t('RI26b · CAST10-class 100s freeze + host ] + pinPad=false + pinClocksRecap FAIL is red',
+    recapAt != null && recapAt * 1000 < freezeMs
+    && !padDied
+    && pinPadLive({ role: 'guide', hasScope: true }) === true
+    && pinPadLive({ role: 'guide', hasScope: false }) === false
+    && pinClocksRecap({ phase: 'seek', walking: true, pinPad: false }).skip === false
+    && pinClocksRecap({ phase: 'seek', walking: true, pinPad: false }).pinPad === false
+    && pinClocksRecap({ phase: 'seek', walking: true, pinPad: false }).clock === false
+    && /data-pin-pad/.test(phoneSrc)
+    && /function guidePinPad/.test(phoneSrc)
+    && /guideStamp/.test(phoneSrc)
+    && /DEV_SKIP[\s\S]*expedition:\s*'recap'/.test(hostSrc)
+    && /e\.key !== '\]'/.test(hostSrc)
+    && /badge\.textContent = 'DEV · \] BEAT · P CAMERA'/.test(hostSrc)
+    && !/\] BEAT/.test(bedCode)
+    && CUE_KINDS.join(',') === 'intros,run,move,shot,idle,noms,pair,execute,pin',
+    'pad stays live on the walk · skip stays false · ] is DEV · no new CUE_KIND');
+  t('RI26c · 78 RI25 fake-return is not this bar — seek+arrived clocks, seek+standing does not',
+    pinClocksRecap({ phase: 'seek', arrived: true }).clock === true
+    && pinClocksRecap({ phase: 'seek', walking: false, arrived: false }).clock === false
+    && pinClocksRecap({ phase: 'seek', hidden: true, arrived: true }).clock === false
+    && AUTOWALK.stallSec === 2.0 && AUTOWALK.stallGain === 0.75,
+    'arrival clocks · hide still holds · stall numbers stay');
 }
 
 /* =================================================================================================

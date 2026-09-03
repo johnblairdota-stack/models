@@ -230,6 +230,17 @@ export function lastLookOnAir(state) {
 }
 
 /**
+ * CAST10 lingerWreck: `wreck=true sit=false` is the vanish (body not holding
+ * wreckPose). A wrecked victim is planted for the rest of the night — sit is
+ * true. Never parkSit a wrecked body. The onFloor heuristic photographed Eli
+ * as sit=false at EXECUTION 9s when pos.y was a hip, not a missing corpse.
+ */
+export function wreckSit(r) {
+  if (r?.wrecked) return true;
+  return !!r?.seated;
+}
+
+/**
  * Kinematic un-sit. Body skids tangent + outward so the chair can go the
  * other way. `u` is 0 at contact, 1 when the wreck has read.
  */

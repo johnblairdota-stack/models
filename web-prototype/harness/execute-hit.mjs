@@ -27,7 +27,7 @@ import {
   HIT_CONTACT, HIT_SLACK, SHOW_CONTACT_S, LAST_LOOK, WRECK_HOLD_S,
   contactMix, retargetHead, occupies, execCamMode,
   stepLastLook, lastLookLive, lastLookOnAir,
-  wreckPose, chairTopple, chairEyeline, seatedAim,
+  wreckPose, wreckSit, chairTopple, chairEyeline, seatedAim,
   wreckLook, wreckCam, talkCycleShots, talkShotAt, WRECK_SHOT, WRECK_LOOK_Y, WRECK_EYE_Y,
   execLingerCam, lingerBeat, LINGER_TOTAL_S, LINGER_CRIME_S, LINGER_ORBIT_S, LINGER_GROUP_S,
   isFaceScreenName,
@@ -609,12 +609,45 @@ t('H10 · seatedAim is a visor-height torso when Head is missing',
   t('H17j · CAST9-class wreck=true sit=false vanish is red — wreckPose u=1 stays planted',
     body.y === 0
     && wreckPose({ sitAt: { x: 3, y: 0, z: 0 }, u: 1, floorY: 0 }).y === 0
-    && /sit: r\.wrecked \? onFloor/.test(introSrc)
+    && wreckSit({ wrecked: true, seated: false }) === true
+    && /wreckSit\(r\)/.test(introSrc)
     && /wrecked: !!r\.wrecked/.test(introSrc)
     && /if \(r\.wrecked\) return;/.test(introSrc)
     && !/fillExecuteEye\(\)/.test(stepFn)
     && kinds.replace(/\s+/g, '') === "'intros','run','move','shot','idle','noms','pair','execute','pin'",
     `floorY ${body.y} · sit planted when wrecked`);
+
+  /*
+   * CAST10 lingerWreck FAIL: Fox / Eli wreck=true sit=false; EXECUTION 11s / 9s.
+   * Quote: Eli wreck=true sit=false tv=PRIME TIME ON AIR EPISODE 5 · EXECUTION
+   * EXECUTION 9s. 78's linger-on-HIT claim is not a pass if CAST10 still
+   * photographs sit=false at 9s / 11s. Numbers stay 1.50/1.50/2.00/5.00.
+   * Linger on the HIT clock. WreckPose u=1 rest of night. No new CUE_KIND.
+   */
+  const fox = wreckPose({ sitAt: { x: 3, y: 0.9, z: 0 }, u: 1, floorY: 0 });
+  const eli = wreckPose({ sitAt: { x: -2, y: 0.9, z: 1 }, u: 1, floorY: 0 });
+  t('H17k · CAST10-class 11s/9s Fox/Eli wreck=true sit=false is red',
+    fox.y === 0 && eli.y === 0
+    && wreckSit({ wrecked: true, seated: false }) === true
+    && wreckSit({ wrecked: true, seated: false }) !== false
+    && LINGER_TOTAL_S === 5.00
+    && LINGER_TOTAL_S < 9
+    && LINGER_TOTAL_S < 11
+    && lingerBeat(5.00) === 'group'
+    && lingerBeat(9) === 'group'
+    && lingerBeat(11) === 'group'
+    && /elapsed = exec\.t - exec\.hitAt/.test(stepFn)
+    && /elapsed >= LINGER_TOTAL_S/.test(stepFn)
+    && /plantWreck\(r\)/.test(introSrc)
+    && /u: 1/.test(introSrc.slice(
+      introSrc.indexOf('function plantWreck'),
+      introSrc.indexOf('function plantWreck') + 400,
+    ))
+    && /wreckSit\(r\)/.test(introSrc)
+    && !/sit: r\.wrecked \? onFloor/.test(introSrc)
+    && WRECK_SHOT.dur === 0
+    && kinds.replace(/\s+/g, '') === "'intros','run','move','shot','idle','noms','pair','execute','pin'",
+    `Fox y=${fox.y} Eli y=${eli.y} · sit planted at 9s/11s · linger ${LINGER_TOTAL_S}s`);
 }
 
 if (fail) {

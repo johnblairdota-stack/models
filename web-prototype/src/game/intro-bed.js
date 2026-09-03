@@ -25,7 +25,7 @@ import {
 import {
   HIT_CONTACT, HIT_SLACK, SHOW_CONTACT_S,
   LAST_LOOK, contactMix, retargetHead, occupies, execCamMode,
-  stepLastLook, wreckPose, chairTopple, chairEyeline, seatedAim,
+  stepLastLook, wreckPose, wreckSit, chairTopple, chairEyeline, seatedAim,
   wreckCam, wreckLook, talkCycleShots, talkShotAt, WRECK_SHOT,
   execLingerCam, lingerBeat, LINGER_TOTAL_S, LINGER_CRIME_S, LINGER_ORBIT_S, LINGER_GROUP_S,
   isFaceScreenName,
@@ -1119,31 +1119,38 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
         if (r.tag) r.tag.visible = false;
       }
       r.wreckAge = Math.max(r.wreckAge || 0, 0.72);
+      /*
+       * Plant u=1 NOW. CAST10 photographed Fox/Eli wreck=true sit=false at
+       * EXECUTION 9s/11s because applyWreck set the flag and left pos at hip
+       * height until a later stepWreck — or never, if intros was not stepping.
+       * Victim stays wreckPose u=1 the rest of the night.
+       */
+      plantWreck(r);
       for (const ch of exec.looseChairs) {
         if (ch.index === r.seatIndex) ch.t = Math.max(ch.t, 0.62);
       }
     }
   }
 
-  function stepWreck(r, dt, t) {
-    r.wreckAge = (r.wreckAge || 0) + dt;
-    const u = r.wreckAge / 0.72;
+  function plantWreck(r) {
     const limp = wreckPose({
-      sitAt: r.sitAt, face: r.face, u, cx, cz, floorY: room.floorY ?? 0,
+      sitAt: r.sitAt, face: r.face, u: 1, cx, cz, floorY: room.floorY ?? 0,
     });
     const body = r.body;
     body.sitLock = true;
     body.pos.set(limp.x, limp.y, limp.z);
     body.facing = limp.facing;
     body.aimYaw = limp.facing;
-    /*
-     * Do not body.update — that re-enables gait + mixer idle on the corpse.
-     * Root pose is kinematic; the mixer stays frozen from holdDead.
-     */
     if (!body.avatar?.dead) body.avatar?.holdDead?.();
     body.root.rotation.y = limp.facing;
     body.root.rotation.x = limp.pitch;
     body.root.rotation.z = limp.roll;
+    hideChairInstance(r.seatIndex);
+  }
+
+  function stepWreck(r, dt, t) {
+    r.wreckAge = Math.max(r.wreckAge || 0, 0.72) + dt;
+    plantWreck(r);
     hideChairInstance(r.seatIndex);
     void t;
   }
@@ -1901,12 +1908,11 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
           pelvis.z = r.body.pos.z;
         }
         const floorY = room.floorY ?? 0;
-        const onFloor = r.wrecked && Math.abs((r.body.pos.y ?? 0) - floorY) < 0.02;
         return {
           id: String(r.seat.id),
-          seated: r.wrecked ? onFloor : !!r.seated,
+          seated: wreckSit(r),
           wrecked: !!r.wrecked,
-          sit: r.wrecked ? onFloor : !!r.seated,
+          sit: wreckSit(r),
           seatIndex: r.seatIndex,
           clip: r.body.avatar?.clip ?? sitIdleClip(r.seatIndex),
           pelvis,
