@@ -261,6 +261,22 @@ const OK = { reaction: 'CLAP', beat: 'expedition', alive: true, lastAt: null, no
     && REACT_HOLD_MS === 10000
     && !/\.cast-overlay \{[^}]*26%/.test(lookSrc),
     'popups · REACT_HOLD_MS · ballot does not paint()');
+  const hostCode = hostSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+  const boardFn = hostSrc.slice(hostSrc.indexOf('function castBoard'), hostSrc.indexOf('\nfunction esc'));
+  const boardCode = boardFn.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+  t('R70e · CAST9-class READ YOUR CARD / READING / BALLOT IN plate is red',
+    !/Read your card/i.test(hostCode)
+    && !/'ballot in'/.test(hostCode)
+    && !/"ballot in"/.test(hostCode)
+    && !/'reading'/.test(boardCode)
+    && !/>READING</.test(hostCode)
+    && !/>BALLOT IN</.test(hostCode)
+    && !/class="cast-overlay"/.test(hostSrc)
+    && /function paintVotePopups/.test(hostSrc)
+    && /data-cast-votes/.test(hostSrc)
+    && REACT_HOLD_MS === 10000
+    && /react-who" style="color:\$\{esc\(look\.accent\)\}/.test(hostSrc),
+    'no hog plate · fading named popups');
 }
 
 // ---------------------------------------------------------------- R50 · the faces

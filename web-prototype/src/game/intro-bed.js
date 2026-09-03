@@ -1852,6 +1852,11 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
         cam: execCamMode({ showrunner: exec.showrunner }),
         contact: snap,
         wreck: exec.hit ? { x: limp.x, y: limp.y, z: limp.z, roll: limp.roll } : null,
+        linger: exec.hit ? {
+          elapsed: exec.t - exec.hitAt,
+          beat: lingerBeat(exec.t - exec.hitAt),
+          total: LINGER_TOTAL_S,
+        } : null,
       };
     },
 
@@ -1895,9 +1900,13 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
           pelvis.x = r.body.pos.x;
           pelvis.z = r.body.pos.z;
         }
+        const floorY = room.floorY ?? 0;
+        const onFloor = r.wrecked && Math.abs((r.body.pos.y ?? 0) - floorY) < 0.02;
         return {
           id: String(r.seat.id),
-          seated: !!r.seated,
+          seated: r.wrecked ? onFloor : !!r.seated,
+          wrecked: !!r.wrecked,
+          sit: r.wrecked ? onFloor : !!r.seated,
           seatIndex: r.seatIndex,
           clip: r.body.avatar?.clip ?? sitIdleClip(r.seatIndex),
           pelvis,

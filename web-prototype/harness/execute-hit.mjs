@@ -586,6 +586,35 @@ t('H10 · seatedAim is a visor-height torso when Head is missing',
     && /if \(r\.wrecked\)/.test(driveFn)
     && driveFn.indexOf('if (r.wrecked)') < driveFn.indexOf('heldRunner')
     && /body\.root\.visible = true/.test(driveFn));
+
+  /*
+   * CAST9 lingerWreck FAIL: Gus wreck=true sit=false; EXECUTION 12s CAMERA WARM.
+   * Numbers stay 1.50/1.50/2.00/5.00. Linger on the HIT clock. Execute cue
+   * hands the lens to intros so fillLingerEye owns it. No new CUE_KIND.
+   */
+  const hostSrc = read('src/views/party-host.js').replace(/\r\n/g, '\n');
+  const execCue = bedSrc.slice(bedSrc.indexOf("if (c.kind === 'execute')"), bedSrc.indexOf("if (c.kind === 'pair')"));
+  t('H17i · CAST9-class 12s CAMERA WARM is red — linger is 5.00 on the HIT clock',
+    LINGER_TOTAL_S === 5.00
+    && LINGER_TOTAL_S < 12
+    && /elapsed = exec\.t - exec\.hitAt/.test(stepFn)
+    && /elapsed >= LINGER_TOTAL_S/.test(stepFn)
+    && /mode = 'intros'/.test(execCue)
+    && /fillLingerEye\(\)/.test(introSrc)
+    && /lingerOn/.test(bedSrc)
+    && !/camera warming/.test((hostSrc.slice(hostSrc.indexOf('function talkSlateHtml'), hostSrc.indexOf('function talkSlateHtml') + 900)).replace(/\/\*[\s\S]*?\*\//g, ''))
+    && WRECK_SHOT.dur === 0
+    && WRECK_SHOT.dur < 10,
+    `HIT ${LINGER_TOTAL_S}s · no CAMERA WARM in host chrome`);
+  t('H17j · CAST9-class wreck=true sit=false vanish is red — wreckPose u=1 stays planted',
+    body.y === 0
+    && wreckPose({ sitAt: { x: 3, y: 0, z: 0 }, u: 1, floorY: 0 }).y === 0
+    && /sit: r\.wrecked \? onFloor/.test(introSrc)
+    && /wrecked: !!r\.wrecked/.test(introSrc)
+    && /if \(r\.wrecked\) return;/.test(introSrc)
+    && !/fillExecuteEye\(\)/.test(stepFn)
+    && kinds.replace(/\s+/g, '') === "'intros','run','move','shot','idle','noms','pair','execute','pin'",
+    `floorY ${body.y} · sit planted when wrecked`);
 }
 
 if (fail) {

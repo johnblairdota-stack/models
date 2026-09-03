@@ -183,6 +183,21 @@ export function unstickLegs(portalCentres, goal, blocked, from) {
   return tail;
 }
 
+/**
+ * Pin walk / job finish clocks recap. Expedition chrome may only hold for a
+ * walking or hidden body, or an in-progress job. A wedged body is a defect.
+ * Host `]` is not a product walk — CAST9 pinClocksRecap.skip was that skip.
+ *
+ * `return` is the smash or a finished mount. `done` is already home. Either
+ * clocks. Seek holds only while she is walking or hidden.
+ */
+export function pinClocksRecap({ phase, walking = false, hidden = false } = {}) {
+  const p = String(phase || '');
+  if (p === 'done' || p === 'return') return { clock: true, skip: false };
+  if (walking || hidden) return { clock: false, skip: false };
+  return { clock: false, skip: false };
+}
+
 /** Drop every leg already reached. Mutating, because the caller owns the array. */
 export function consumeLegs(legs, at, r = AUTOWALK.arrive) {
   if (!Array.isArray(legs) || !at) return legs ?? [];
