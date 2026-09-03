@@ -233,9 +233,10 @@ export function pinPadLive({ role, hasScope = false, painted } = {}) {
  * (`pin[]`), not a route — auto-walk still reads the one current pin.
  * CAST11 H480 `pin=[]` all night is the empty clock, not a missing function.
  *
- * ⚠️ **CAST12 H484: 82 painted the pad (`pinPad=true`) and never clocked a
- * tap.** `pinPad=true` with `pin=[]` is that night, not a pass. A door /
- * painting / camera-install tap must land in `pin[]` that AUTO-WALK tick.
+ * ⚠️ **CAST13 H514: 84 clocked taps in node; CAST13 still photographed
+ * `pinPad=true` with `pin=[]` all night.** The painted pad is live; a tap
+ * AND the wire pin must land in `pin[]` that AUTO-WALK tick. A `run` cue
+ * must not wipe this pair's pin (CAST bots pin during the 3·2·1).
  */
 export function clockPin(pins, pin) {
   const list = Array.isArray(pins) ? pins.slice() : [];

@@ -1409,9 +1409,17 @@ export async function buildFollowBed(engine, opts = {}) {
     /**
      * CAST11 H480 clock. The PRODUCT pin above is still one slot (D2). This
      * array is the AUTO-WALK tick photograph (`pin[]`) — a tap clocks it,
-     * a mid-walk does not drop it. A new `run` cue starts a fresh clock.
+     * a mid-walk does not drop it.
+     *
+     * ⚠️ **CAST13 H514: a new `run` cue does NOT wipe this pair's pin.** CAST
+     * bots pin during the 3·2·1 (pair locked, beat still casting). 84 clocked
+     * that cue, then `run` assigned `perf.pin = null` / `perf.pins = []` and
+     * photographed `pin=[]` all night. This pair's pin rides sendoff; last
+     * episode's pin does not (`pairPin` is only a pin cue since the last run).
      */
     pins: [],
+    /** Pin cue since the last `run`. Survives sendoff. Null after a run consumes it. */
+    pairPin: null,
     /** The legs of the CURRENT plan. Thrown away and rebuilt on every replan — never cached. */
     legs: [],
     /** Replan bookkeeping. `since`/`gained` are D3's stall trigger; `lastAt` is where we measured. */
@@ -2726,18 +2734,20 @@ export async function buildFollowBed(engine, opts = {}) {
         // Put the runner back on its feet in the ballroom — the pair is sent in from the circle.
         runner.pos.set(start.x, room.floorY ?? 0, start.z);
         runner.vel.set(0, 0, 0);
-        // The pair is sent in from the circle, so the night starts on the ballroom's own camera
-        // and any pin from a previous episode's inspection is dropped with it.
+        // The pair is sent in from the circle, so the night starts on the ballroom's own camera.
         perf.loopView = BALLROOM_PERSPECTIVE;
         perf.pinned = false;
         /*
-         * 📍 A pin belongs to the pair that made it, so a new expedition starts unpinned — the
-         * same rule `room.js` `beginCasting` applies on the server. The hold ledger resets with
-         * it: those durations are one run's, and carrying them would put last episode's quiet
-         * into this episode's recap.
+         * 📍 CAST13 H514 / H559: this pair's pin survives sendoff. CAST bots
+         * pin during the 3·2·1; 84 wiped `perf.pin` here and the body stood
+         * until TV `]` at 100s. Last episode's pin is already gone — `pairPin`
+         * is only a pin cue since the last run. A night with no pin still
+         * starts unpinned (the guide has to speak). Hold ledger resets: those
+         * durations are one run's.
          */
-        perf.pin = null;
-        perf.pins = [];
+        perf.pin = perf.pairPin;
+        perf.pins = perf.pin ? clockPin([], perf.pin) : [];
+        perf.pairPin = null;
         perf.legs = [];
         perf.blocked = [];
         perf.homing = false;
@@ -2765,6 +2775,11 @@ export async function buildFollowBed(engine, opts = {}) {
         perf.pin = Number.isFinite(+c.x) && Number.isFinite(+c.z)
           ? { x: +c.x, z: +c.z, roomId: String(c.roomId || ''), kind: String(c.pinKind || 'room') }
           : null;
+        /*
+         * CAST13 H514: remember this pair's pin so a later `run` cue cannot
+         * empty pin[]. D2 still one product slot — a second tap replaces.
+         */
+        perf.pairPin = perf.pin;
         if (perf.pin) perf.pins = clockPin(perf.pins, perf.pin);
         if (mode === 'run') perf.driven = true;
         perf.blocked = [];

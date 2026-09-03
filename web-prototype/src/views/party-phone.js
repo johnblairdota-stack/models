@@ -1429,16 +1429,34 @@ export default async function partyPhone({ params }) {
    * Hoisted `function` — paint() and patchLive both call this off a socket
    * frame; a `const` arrow here is the RI22d dead zone.
    */
+  /*
+   * D2 one slot. A tap and the wire pin both ASSIGN here — RI12b counts
+   * `state.pin = ` once. A wire pin does not re-send (the server already
+   * has it). Hoisted `function` — publishPhone runs off a socket frame.
+   */
+  function takePin(pin, send) {
+    state.pin = pin;
+    if (pin) {
+      state.pinClock = clockPin(state.pinClock, pin);
+      if (send) {
+        const wire = pinShape(pin);
+        state.client?.send({ t: 'pin', x: wire.x, z: wire.z, roomId: wire.roomId, kind: wire.kind });
+      }
+    }
+  }
+
   function publishPhone(frame, beat, extra) {
     /*
-     * CAST12 H484: clock the wire pin AND the D2 slot into `pin[]` every
-     * tick the sofa loop photographs. 82 quoted pinPad and left pinClock
-     * empty unless bindPinPad's click fired — CAST bots that send t:pin
-     * (or a tap whose listener had bailed) photographed pin=[] all night.
+     * CAST13 H514: clock the wire pin AND the D2 slot into `pin[]` every
+     * tick the sofa loop photographs. 84 clocked these in node; CAST13 still
+     * photographed pin=[] all night because the wire pin never landed in the
+     * D2 slot the pad walks. The guide reads her pin back off the wire
+     * (assignment, D2 one slot) so a t:pin from a CAST bot — or a tap —
+     * is on pin[] that AUTO-WALK tick. pinPad=true with pin=[] is CAST13.
      */
     if (beat === 'expedition') {
-      if (frame?.you?.pin) state.pinClock = clockPin(state.pinClock, frame.you.pin);
-      if (state.pin) state.pinClock = clockPin(state.pinClock, state.pin);
+      if (frame?.you?.pin) takePin(frame.you.pin, false);
+      else if (state.pin) state.pinClock = clockPin(state.pinClock, state.pin);
     }
     const painted = !!(extra?.iAmGuide && beat === 'expedition' && root.querySelector('[data-pin-pad]'));
     window.__rrrPhone = {
@@ -1531,12 +1549,7 @@ export default async function partyPhone({ params }) {
     if (state.pinPadBound) return;
     state.pinPadBound = true;
     const tap = (pin) => {
-      state.pin = pin;
-      if (pin) {
-        state.pinClock = clockPin(state.pinClock, pin);
-        const wire = pinShape(pin);
-        state.client?.send({ t: 'pin', x: wire.x, z: wire.z, roomId: wire.roomId, kind: wire.kind });
-      }
+      takePin(pin, true);
       paint();
     };
     const onPinTap = (e) => {
@@ -2110,6 +2123,18 @@ export default async function partyPhone({ params }) {
         paint();
       }
       if (c?.beat !== 'debrief') state.lateNomShown = false;
+      /*
+       * CAST13 H514: quote pin[] on the sofa tick, not only on paint/patch.
+       * A wire pin that arrives between paints used to sit on the frame
+       * while __rrrPhone.pin stayed []. Do not rebuild the sheet.
+       */
+      if (c?.beat === 'expedition') {
+        publishPhone(c.frame, c.beat, {
+          iAmRunner: !!window.__rrrPhone?.iAmRunner,
+          iAmGuide: !!window.__rrrPhone?.iAmGuide,
+          seat: window.__rrrPhone?.seat,
+        });
+      }
     }, 250);
   }
 

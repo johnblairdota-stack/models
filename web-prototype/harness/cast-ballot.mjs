@@ -290,6 +290,18 @@ const NO_LOCK = { runner: null, guide: null };
     && /ui\.beat === 'casting'/.test(hostSrc)
     && /return;/.test(hostSrc.slice(hostSrc.indexOf("if (m.t === 'ballots')"), hostSrc.indexOf("if (m.t === 'ballots')") + 520)),
     'hog plate gone · ballot does not paint()');
+  t('B18 · CAST13-class H544 READ YOUR CARD / Every ballot is in plate is red',
+    !/Read your card/i.test(hostCode)
+    && !/Every ballot is in/i.test(hostCode)
+    && !/Nobody says a word yet/i.test(hostCode)
+    && !/'ballot in'/.test(hostCode)
+    && !/"ballot in"/.test(hostCode)
+    && /function paintVotePopups/.test(hostSrc)
+    && /m\.t === 'ballots'/.test(hostSrc)
+    && /ui\.beat === 'casting'/.test(hostSrc)
+    && /data-cast-votes/.test(hostSrc)
+    && /return;/.test(hostSrc.slice(hostSrc.indexOf("if (m.t === 'ballots')"), hostSrc.indexOf("if (m.t === 'ballots')") + 520)),
+    'ep5 plate is not the picture · fading named popups stay');
 }
 
 {
