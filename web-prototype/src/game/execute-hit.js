@@ -246,11 +246,12 @@ export function wreckSit(r) {
  * had no row for it. Always defined: wreck, sit, wreckPose. A wrecked
  * body is sit=true (planted) and wreckPose is the u=1 mesh, never false.
  *
- * ⚠️ **CAST13 H518: 84 planted wreckPose in node.** CAST13 still
+ * ⚠️ **CAST14 H566: 86 planted wreckPose u=1 in node.** CAST14 still
  * photographed `wreck=true sit=false wreckPose=false` at EXECUTION 10s
- * (Fox) and the 20s beat clock (Hal). The mesh stays. sit=false and
- * wreckPose=false are defects even if wreck=true in state. EXECUTION 20s
- * is the beat clock — not a linger fail.
+ * (Fox) and 13s (Hal). The mesh stays. sit=false and wreckPose=false
+ * are defects even if wreck=true in state. After HIT a rebuild must
+ * plant, not skip, the victim. EXECUTION 20s is the beat clock — not
+ * a linger fail. Numbers stay 1.50 / 1.50 / 2.00 / 5.00.
  */
 export function wreckSnap(r, { cx = 0, cz = 0, floorY = 0 } = {}) {
   const wrecked = !!r?.wrecked;
