@@ -1092,7 +1092,13 @@ export function buildIntroBed(engine, { room, cast, materials, avatar, reelSight
    * walk-up still has a seated accused until contact.
    */
   function applyWreck(ids, { live = false } = {}) {
-    const liveTarget = (!live && exec.phase !== 'off' && exec.victim)
+    /*
+     * CAST14 H566: skip the live accused so the walk-up still sits — until
+     * contact. After HIT a rebuild / applySeenWreck that skipped the victim
+     * left wreck=true in state and sit=false wreckPose=false on the mesh
+     * (Fox 10s / Hal 13s). Once hit, plant. EXECUTION 20s is the beat clock.
+     */
+    const liveTarget = (!live && exec.phase !== 'off' && exec.victim && !exec.hit)
       ? String(exec.victim.seat.id) : null;
     for (const raw of ids || []) {
       const id = String(raw || '');

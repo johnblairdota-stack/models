@@ -23,7 +23,7 @@ import { camHang, DRILL, JOB, TWIN, twinHang, WALL_CAM } from '../party/jobs.js'
  */
 import {
   AUTOWALK, clampToRoom, consumeLegs, coverNear, dodgeLateral, headingTo, hideTick,
-  lagHeading, legsFor, pinKey, pinClocksRecap, pinPadLive, clockPin, redPassAt, replanReason, unstickLegs,
+  lagHeading, legsFor, pinKey, pinClocksRecap, pinPadLive, clockPin, takeRunPin, redPassAt, replanReason, unstickLegs,
 } from './runner-intel.js';
 import { isObjectivePin, mountFor, objectiveGoal } from '../party/objectives.js';
 import { NoiseBus, NOISE_KIND } from './noise.js';
@@ -1420,6 +1420,8 @@ export async function buildFollowBed(engine, opts = {}) {
     pins: [],
     /** Pin cue since the last `run`. Survives sendoff. Null after a run consumes it. */
     pairPin: null,
+    /** Episode the last `run` named. A retry on the same episode must not wipe pin[]. */
+    runEpisode: 0,
     /** The legs of the CURRENT plan. Thrown away and rebuilt on every replan — never cached. */
     legs: [],
     /** Replan bookkeeping. `since`/`gained` are D3's stall trigger; `lastAt` is where we measured. */
@@ -2738,16 +2740,21 @@ export async function buildFollowBed(engine, opts = {}) {
         perf.loopView = BALLROOM_PERSPECTIVE;
         perf.pinned = false;
         /*
-         * 📍 CAST13 H514 / H559: this pair's pin survives sendoff. CAST bots
-         * pin during the 3·2·1; 84 wiped `perf.pin` here and the body stood
-         * until TV `]` at 100s. Last episode's pin is already gone — `pairPin`
-         * is only a pin cue since the last run. A night with no pin still
-         * starts unpinned (the guide has to speak). Hold ledger resets: those
-         * durations are one run's.
+         * 📍 CAST14 H562 / H595: a `run` must not empty this pair's pin[].
+         * CAST13 kept `pairPin` across sendoff, then the iframe `ready`
+         * retry sent a second run with `pairPin` already null and wiped
+         * `pin=[]` for every AUTO-WALK tick. Same episode keeps the pin.
+         * A new episode without a new pairPin drops last pair's. A night
+         * with no pin still starts unpinned (the guide has to speak).
          */
-        perf.pin = perf.pairPin;
-        perf.pins = perf.pin ? clockPin([], perf.pin) : [];
-        perf.pairPin = null;
+        const taken = takeRunPin({
+          pairPin: perf.pairPin, pin: perf.pin, pins: perf.pins,
+          episode: c.episode ?? 1, lastEpisode: perf.runEpisode,
+        });
+        perf.pin = taken.pin;
+        perf.pins = taken.pins;
+        perf.pairPin = taken.pairPin;
+        perf.runEpisode = taken.episode;
         perf.legs = [];
         perf.blocked = [];
         perf.homing = false;

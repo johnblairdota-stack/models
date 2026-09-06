@@ -237,6 +237,12 @@ export function pinPadLive({ role, hasScope = false, painted } = {}) {
  * `pinPad=true` with `pin=[]` all night.** The painted pad is live; a tap
  * AND the wire pin must land in `pin[]` that AUTO-WALK tick. A `run` cue
  * must not wipe this pair's pin (CAST bots pin during the 3·2·1).
+ *
+ * ⚠️ **CAST14 H562 / H595: 86's sendoff `pairPin` in node is not this bar.**
+ * CAST14 photographed `AUTO-WALK t=99.9s pinPad=true pin=[]` then TV `]`.
+ * A 3·2·1 tap must stay on `pin[]` until expedition, a retry `run` (iframe
+ * `ready`) must not empty this episode's clock, and arrival still clocks
+ * recap. `pinPad=true` with `pin=[]` at ~100s is CAST14, not a pass.
  */
 export function clockPin(pins, pin) {
   const list = Array.isArray(pins) ? pins.slice() : [];
@@ -253,6 +259,28 @@ export function clockPin(pins, pin) {
   if (i >= 0) list[i] = next;
   else list.push(next);
   return list;
+}
+
+/**
+ * What a `run` cue does to the pin clock. CAST14 H562: the iframe `ready`
+ * retry sends a second run after the first already consumed `pairPin`.
+ * Same episode keeps the pin. A new episode without a new pairPin drops
+ * last pair's pin — one pair, one pin. Never licensed-skip a 100s sit.
+ */
+export function takeRunPin({
+  pairPin = null, pin = null, pins = [], episode = 1, lastEpisode = 0,
+} = {}) {
+  const ep = Number(episode) || 1;
+  const last = Number(lastEpisode) || 0;
+  const fresh = last !== 0 && ep !== last;
+  let next = pairPin || pin || null;
+  let list = Array.isArray(pins) ? pins.slice() : [];
+  if (fresh && !pairPin) {
+    next = null;
+    list = [];
+  }
+  if (next) list = clockPin(list, next);
+  return { pin: next, pins: list, pairPin: null, episode: ep };
 }
 
 /** Drop every leg already reached. Mutating, because the caller owns the array. */

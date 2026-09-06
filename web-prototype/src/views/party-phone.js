@@ -20,7 +20,7 @@ import { cardFor, faceDownHtml, mountRoleCard, premiereHtml } from '../party/rol
 import { EVIL } from '../party/cast.js';
 import { guideMapSvg } from '../party/guidemap.js';
 import { COMPASS_4, guidePad, pinDoor, pinShape, pinSpot, runnerPad } from '../party/intel-pad.js';
-import { clockPin, pinPadLive } from '../game/runner-intel.js';
+import { clockPin, pinKey, pinPadLive } from '../game/runner-intel.js';
 import { pickPlanSeed, planRoomLabels, roomLabel } from '../party/mansion.js';
 import { missionFor, seekLine } from '../party/mission.js';
 import {
@@ -82,6 +82,13 @@ export default async function partyPhone({ params }) {
      * the photograph (`pin[]`) quoted on `__rrrPhone` every tick.
      */
     pinClock: [],
+    /**
+     * CAST14 H562: last beat that owned the pin clock. A 3·2·1 tap lives
+     * through casting; a new Casting after an expedition drops last pair's.
+     */
+    pinBeat: '',
+    /** Last pin key flushed onto the wire once expedition is on (pair locked). */
+    pinFlush: '',
     /** CAST12: pin-pad listener is delegated once on the root. */
     pinPadBound: false,
     /**
@@ -316,6 +323,19 @@ export default async function partyPhone({ params }) {
       },
     });
     state.client = client;
+    /*
+     * CAST14 H562: CAST bots send `t:'pin'` on the socket during 3·2·1
+     * without going through takePin. Clock that send onto pin[] so the
+     * expedition flush can re-send once the pair is locked. takePin's
+     * own send still uses the one `t:'pin'` site (RI12b).
+     */
+    const rawSend = client.send.bind(client);
+    client.send = (msg) => {
+      if (msg && msg.t === 'pin') {
+        takePin({ x: msg.x, z: msg.z, roomId: msg.roomId, kind: msg.kind }, false);
+      }
+      return rawSend(msg);
+    };
     /*
      * 🔍 `?dev=1` ONLY — a read-only window into the pad, for probes.
      *
@@ -1014,7 +1034,18 @@ export default async function partyPhone({ params }) {
 
     if (beat !== 'reckoning' && beat !== 'debrief') { state.nominated = false; state.nomOk = null; }
     if (beat !== 'vote') state.voted = false;
-    if (beat !== 'expedition') { state.pinClock = []; }
+    /*
+     * CAST14 H562: do not wipe pin[] on every 3·2·1 paint. CAST bots pin
+     * during casting; `if (beat !== 'expedition') pinClock = []` emptied
+     * the clock before the run, then AUTO-WALK read pin=[] until TV `]`.
+     * A new Casting after an expedition drops last pair's pin.
+     */
+    if (beat === 'casting' && state.pinBeat === 'expedition') {
+      takePin(null, false);
+      state.pinClock = [];
+      state.pinFlush = '';
+    }
+    if (beat === 'expedition' || beat === 'casting') state.pinBeat = beat;
     // My thumb belongs to ONE beat. Carrying it into the next would silently hand the next
     // talk beat a majority nobody voted for.
     if (beat !== state.readyBeat) { state.ready = false; state.readyBeat = beat; }
@@ -1447,16 +1478,22 @@ export default async function partyPhone({ params }) {
 
   function publishPhone(frame, beat, extra) {
     /*
-     * CAST13 H514: clock the wire pin AND the D2 slot into `pin[]` every
-     * tick the sofa loop photographs. 84 clocked these in node; CAST13 still
-     * photographed pin=[] all night because the wire pin never landed in the
-     * D2 slot the pad walks. The guide reads her pin back off the wire
-     * (assignment, D2 one slot) so a t:pin from a CAST bot — or a tap —
-     * is on pin[] that AUTO-WALK tick. pinPad=true with pin=[] is CAST13.
+     * CAST14 H562 / H595: clock the tap AND the wire pin into `pin[]` every
+     * AUTO-WALK tick. 86's sendoff pairPin in node is not this bar — CAST14
+     * still photographed pinPad=true pin=[] at t=99.9s. A 3·2·1 tap is
+     * refused until the pair locks (`playEpisode`); flush it once expedition
+     * is on so follow-bed auto-walks and recap clocks without TV `]`.
      */
-    if (beat === 'expedition') {
+    if (beat === 'expedition' || beat === 'casting') {
       if (frame?.you?.pin) takePin(frame.you.pin, false);
       else if (state.pin) state.pinClock = clockPin(state.pinClock, state.pin);
+    }
+    if (beat === 'expedition' && state.pin) {
+      const key = pinKey(state.pin);
+      if (key && state.pinFlush !== key) {
+        takePin(state.pin, true);
+        state.pinFlush = key;
+      }
     }
     const painted = !!(extra?.iAmGuide && beat === 'expedition' && root.querySelector('[data-pin-pad]'));
     window.__rrrPhone = {

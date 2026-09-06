@@ -70,7 +70,7 @@ import { fileURLToPath } from 'node:url';
 import {
   AUTOWALK, COVER, DODGE, RED, REPLAN_TRIGGERS, SABOTAGE, TELL, TELL_FORBIDDEN,
   clampToRoom, consumeLegs, coverNear, dodgeLateral, headingTo, hideTick, holdTell,
-  lagHeading, legKey, legsFor, pinKey, pinClocksRecap, pinPadLive, clockPin, redPassAt, replanReason,
+  lagHeading, legKey, legsFor, pinKey, pinClocksRecap, pinPadLive, clockPin, takeRunPin, redPassAt, replanReason,
   unstickLegs,
 } from '../src/game/runner-intel.js';
 import { CUE_KEYS, CUE_KINDS, MOVE_KEYS, PIN_KINDS, PIN_WIRE_KEYS, WORLD_MISSION_KEYS, cueViolations, moveViolations, pinViolations, pinWireShape } from '../src/party/follow.js';
@@ -795,7 +795,7 @@ console.log('\n  unstick');
     && !(cast13Start.pinPad === true && pins.length === 0 && recapAt == null)
     && wiped.pins.length === 0
     && !(wiped.pin == null && wiped.pins.length === 0 && pins.length === 0)
-    && /pairPin/.test(runFn) && /clockPin\(\[\]/.test(runFn)
+    && /pairPin/.test(runFn) && /takeRunPin\(/.test(runFn)
     && !/perf\.pin = null/.test(runFn)
     && /pairPin/.test(pinFn)
     && /you\?\.pin/.test(pubFn13)
@@ -816,6 +816,121 @@ console.log('\n  unstick');
     && /e\.key !== '\]'/.test(hostSrc)
     && CUE_KINDS.join(',') === 'intros,run,move,shot,idle,noms,pair,execute,pin',
     'a countdown pin rides sendoff · empty pin[] on AUTO-WALK is not this night · no host ]');
+}
+
+{
+  /*
+   * CAST14 H562 / H595 pinClocksRecap FAIL (skip true): AUTO-WALK t=99.9s
+   * beat=expedition pinPad=true pin=[] then LOCK pin→recap FAIL used TV ]
+   * last resort. 86's sendoff pairPin in node is not this bar. CAST bots
+   * pin during the 3·2·1 (refused until the pair locks); a retry `run`
+   * after the first consumed pairPin wiped pin[] for every AUTO-WALK tick.
+   * Host ] is not a product walk. Do not licensed-skip.
+   */
+  const TAP = { x: 6, z: 2, roomId: 'r0.gallery', kind: 'room' };
+  const WIRE = { x: 6, z: 2, roomId: 'r0.gallery', kind: 'room' };
+  const freezeMs = 100_000;
+  const DT = 1 / 60;
+  const SPEED = 2.6;
+  const painted = true;
+  const pad = pinPadLive({ role: 'guide', painted });
+  const cast14Tick = { t: 99.9, beat: 'expedition', pinPad: pad, pin: [] };
+  let pinClock = [];
+  let pinBeat = 'casting';
+  if (!(pinBeat === 'casting' && pinBeat === 'expedition')) {
+    pinClock = clockPin(pinClock, TAP);
+  }
+  pinClock = clockPin(pinClock, WIRE);
+  let taken = takeRunPin({
+    pairPin: null, pin: null, pins: [], episode: 7, lastEpisode: 0,
+  });
+  const afterFirstRun = { pinPad: pad, pin: taken.pins.slice() };
+  taken = takeRunPin({
+    pairPin: TAP, pin: taken.pin, pins: taken.pins, episode: 7, lastEpisode: taken.episode,
+  });
+  const afterFlush = takeRunPin({
+    pairPin: null, pin: taken.pin, pins: taken.pins, episode: 7, lastEpisode: taken.episode,
+  });
+  const wipedRetry = { pin: null, pins: [] };
+  let pin = afterFlush.pin;
+  let pins = afterFlush.pins.slice();
+  let at = { x: 0.4, z: 2 };
+  let heading = 0;
+  let legs = legsFor([{ centre: { x: 3, z: 2 }, a: 'r0.hall', b: 'r0.gallery' }], pin);
+  let recapAt = null;
+  let emptyOnWalk = false;
+  let padDied = false;
+  let walkClock = 0;
+  const phase = 'seek';
+  const live = pins[pins.length - 1] || pin;
+  for (let i = 0; i < 60 * 40; i++) {
+    walkClock += DT;
+    if (live) pins = clockPin(pins, live);
+    if (!pins.length) emptyOnWalk = true;
+    consumeLegs(legs, at);
+    const leg = legs[0] ?? live;
+    heading = lagHeading(heading, headingTo(at, leg), DT);
+    const d = Math.hypot(leg.x - at.x, leg.z - at.z);
+    const drive = d < AUTOWALK.arrive ? 0 : 1;
+    at = {
+      x: at.x + Math.sin(heading) * drive * SPEED * DT,
+      z: at.z + Math.cos(heading) * drive * SPEED * DT,
+    };
+    const arrived = Math.hypot(at.x - live.x, at.z - live.z) < AUTOWALK.arrive;
+    const walking = legs.length > 0 && !arrived;
+    if (!pinPadLive({ role: 'guide', painted }) && walking) padDied = true;
+    const recap = pinClocksRecap({
+      phase, walking, hidden: false, arrived, pinPad: pad,
+    });
+    if (recap.skip) padDied = true;
+    if (recap.clock && recapAt == null) recapAt = walkClock;
+    if (recapAt != null) break;
+  }
+  const runFn14 = bedSrc.slice(bedSrc.indexOf("if (c.kind === 'run')"), bedSrc.indexOf("if (c.kind === 'pin')"));
+  const pubFn14 = phoneSrc.slice(phoneSrc.indexOf('function publishPhone'), phoneSrc.indexOf('function guidePinPad'));
+  const paintFn14 = phoneSrc.slice(phoneSrc.indexOf('if (beat !== \'vote\')'), phoneSrc.indexOf('if (beat !== state.readyBeat)'));
+  t('RI30 · CAST14 clocked pin[] survives 3·2·1 + retry run — AUTO-WALK ticks are not empty',
+    recapAt != null && recapAt * 1000 < freezeMs
+    && !padDied && !emptyOnWalk
+    && pins.length > 0
+    && cast14Tick.pinPad === true && cast14Tick.pin.length === 0
+    && afterFirstRun.pin.length === 0
+    && afterFlush.pins.length > 0 && afterFlush.pin
+    && !(cast14Tick.pinPad === true && pins.length === 0 && recapAt == null)
+    && wipedRetry.pins.length === 0
+    && !(wipedRetry.pin == null && wipedRetry.pins.length === 0 && afterFlush.pins.length === 0)
+    && /takeRunPin\(/.test(runFn14)
+    && !/perf\.pin = perf\.pairPin/.test(runFn14)
+    && !/perf\.pins = perf\.pin \? clockPin\(\[\], perf\.pin\) : \[\]/.test(runFn14)
+    && /pinFlush/.test(pubFn14) && /takePin\(state\.pin, true\)/.test(pubFn14)
+    && /beat === 'expedition' \|\| beat === 'casting'/.test(pubFn14)
+    && /pinBeat === 'expedition'/.test(paintFn14)
+    && !/if \(beat !== 'expedition'\) \{ state\.pinClock = \[\]; \}/.test(phoneCode)
+    && AUTOWALK.stallSec === 2.0 && AUTOWALK.stallGain === 0.75
+    && CUE_KINDS.join(',') === 'intros,run,move,shot,idle,noms,pair,execute,pin',
+    `clocked at ${recapAt?.toFixed?.(2)}s · pin[] ${pins.length} · CAST14 t=${cast14Tick.t}s pinPad=${cast14Tick.pinPad} pin=${cast14Tick.pin.length}`);
+  t('RI30b · CAST14-class AUTO-WALK t=99.9s pinPad=true pin=[] then TV ] is red',
+    recapAt != null && recapAt * 1000 < freezeMs
+    && pins.length > 0
+    && pinPadLive({ role: 'guide', painted: true }) === true
+    && pinClocksRecap({ phase: 'seek', walking: false, pinPad: true }).clock === false
+    && pinClocksRecap({ phase: 'seek', walking: false, pinPad: true }).skip === false
+    && pinClocksRecap({ phase: 'seek', arrived: true, pinPad: true }).clock === true
+    && pinClocksRecap({ phase: 'seek', arrived: true }).skip === false
+    && !(true && [].length === 0 && recapAt == null)
+    && !(cast14Tick.pinPad === true && cast14Tick.pin.length === 0 && recapAt == null)
+    && takeRunPin({ pairPin: TAP, pins: [], episode: 7, lastEpisode: 0 }).pins.length > 0
+    && takeRunPin({
+      pairPin: null,
+      pin: TAP,
+      pins: clockPin([], TAP),
+      episode: 7,
+      lastEpisode: 7,
+    }).pins.length > 0
+    && /DEV_SKIP[\s\S]*expedition:\s*'recap'/.test(hostSrc)
+    && /e\.key !== '\]'/.test(hostSrc)
+    && CUE_KINDS.join(',') === 'intros,run,move,shot,idle,noms,pair,execute,pin',
+    'a 3·2·1 tap + retry run stay on AUTO-WALK ticks · empty pin[] at 99.9s is not this night · no host ]');
 }
 
 /* =================================================================================================
