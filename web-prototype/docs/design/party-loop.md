@@ -12,15 +12,42 @@ Players are robots seated on ornate chairs in a destructible mansion, looking at
 
 Evil count scales: **1 at 4–5 players, 2 at 6–8**.
 
-Assumed win (change if John says so): goods unlock cameras and catch evil; evil feeds enough goods to the hunter.
+## Win / fold (locked 2026-09-08)
+
+Adopt Last House Live's ending shape into RRR. Not a full LHL port.
+
+### Win
+- Good team wins if **at least one good robot escapes** by the end of the night.
+- Saboteurs / evils win if **no good robot escapes**.
+- Captured or expelled players still share their team's result.
+- Clearing every saboteur does **not** end the night; the hunter remains dangerous until escape resolves.
+- Allegiances reveal at the **ending**, not after each death or expulsion.
+
+### Fear / removal
+- **Assimilation stays** as the hunter's fear beat: taken robots are consumed into the hunter (embedded face), permanent for that night, no ghost powers. Speaks IRL only.
+- Between expeditions / jobs: thin **KEEP / EXPEL** checkpoint — nominate a living robot, short defense, private ballot. Strict majority expels; tie keeps. Expulsion removes them from the next job without revealing allegiance.
+
+### Still steal (mechanics, not win rewrite)
+- Peelable yellow stickies (one-shot per session)
+- Choosable route / task menu for jobs
+- Private-heat (or equivalent private-cost) sabotage that looks like honest struggle
+
+### Dies (do not build / do not keep as win)
+- **Cameras-as-info** as the season goal (unlock cameras to catch evil)
+- **W1–W4** as the win ladder
+- **2g1e / find-the-evil** as the primary win fold
+
+Guide/runner hall energy and living-room TV+phones stay. Spec rewrite owns how escape maps onto the existing night loop.
+
+~~Struck 2026-09-08:~~ cameras-as-info win / catch-evil / feed-hunter season fold. See `docs/slices/task-win-escape-night.md`.
 
 ## A turn
 
 1. Seated circle on the TV. Phones vote to pick a **pair**.
 2. One is the **runner** (the one body in the dark corridors, quiet — aired on the TV as a produced follow; **amended 2026-09-02**, the picture was never built first-person). One is the **guide** (private phone map; **amended 2026-09-01** from the `[F]` flyover to Guide E "Neighbours Only" — her runner's room plus the door-joined neighbours). The TV is **not** the map.
-3. They go complete a **task**: breach a wall or barricaded door (hammer is **automated**; picker aims for `DamageField.channel(0.34, 1.70, 0.30).open` — a walkable doorway, measured at 3 blows. `COLLAPSE.fail` is a different test and must not be the goal; collapse is an allowed side effect), reach a terminal, unlock more **RRR reality-TV cameras**.
-4. Those cameras feed **everyone** on the TV. The TV plays the run like a reality show following the runner (will the hunter take them?).
-5. If the hunter takes the runner: they are **out for the rest of the game**. They can still **speak in real life** about what they know. No ghost phone UI. The guide cannot be taken (they are not in the halls). Task fails, that terminal's cameras stay dark.
+3. They go complete a **task**: breach a wall or barricaded door (hammer is **automated**; picker aims for `DamageField.channel(0.34, 1.70, 0.30).open` — a walkable doorway, measured at 3 blows. `COLLAPSE.fail` is a different test and must not be the goal; collapse is an allowed side effect), reach a terminal, complete the job (cameras may still air as spectacle; ~~cameras-as-score struck 2026-09-08~~).
+4. The TV plays the run like a reality show following the runner (will the hunter assimilate them?). Camera feeds may still air as spectacle; they are **not** the season score.
+5. If the hunter **assimilates** the runner: they are consumed into the hunter (embedded face), **out for the rest of the night**, no ghost powers. They can still **speak in real life**. No ghost phone UI. The guide cannot be taken (they are not in the halls). Task fails. ~~Cameras-as-score struck 2026-09-08~~ — escape is the night ender, not camera unlocks.
 
 Both-partners-running is a later A/B, not the first playable.
 
@@ -59,3 +86,4 @@ Player-aimed sledge. Look stays for running halls.
 - Treat `session-model.md` as the spec.
 - Give evil red eyes (that is the hunter's silhouette). Evil looks like goods unless John changes this.
 - Write a ghost UI for taken players.
+- Treat cameras-as-info, W1–W4, or 2g1e/find-the-evil as the win fold (killed 2026-09-08).
