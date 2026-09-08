@@ -34,8 +34,9 @@ import { removalWord } from '../party/taken.js';
 import { deadIdsFromPublic, describeCastTiebreaks, livingFromPublic, previewCastTiebreaks, shouldArmCastSend } from '../party/ballot.js';
 import { MAX_PAIRS, pairShape } from '../party/link.js';
 import { missionFor } from '../party/mission.js';
-import { FAIL_CHROME, HELD_BRIEF, JOB, SMASH_CHROME, routeMenuHtml, toolLabel } from '../party/jobs.js';
-import { lightsBoardHtml } from '../party/heat.js';
+import { FAIL_CHROME, JOB, SMASH_CHROME, heldBrief, routeMenuHtml, toolLabel } from '../party/jobs.js';
+import { isLightsJob, lightsBoardHtml } from '../party/heat.js';
+import { galleryBoardHtml, isPortraitJob } from '../party/portrait.js';
 import { isStinging, stepSting, stingHtml } from '../party/stinger.js';
 
 /** TV chrome 3·2·1 after every living ballot (or the 20s backstop), then `{ t: 'episode' }`. */
@@ -896,7 +897,9 @@ export default async function partyHost({ params }) {
       const pair = client.frame?.pair || {};
       const recap = recapFromEvents(client.events);
       const runnerId = pair.runner || recap.runner || null;
-      if (runnerId) {
+      const catalog = client.frame?.route?.selected;
+      if (runnerId && !isPortraitJob(catalog) && !isLightsJob(catalog)
+        && !client.frame?.portrait && !client.frame?.lights) {
         ui.cuedRunner = null;
         cueRun(runnerId, players());
       }
@@ -1600,6 +1603,7 @@ export default async function partyHost({ params }) {
         recap,
         route: frame?.route,
         lights: frame?.lights,
+        portrait: frame?.portrait,
       });
       /*
        * 🗑️ **THE RECAP BUTTON IS GONE, AND IT IS THE AFFORDANCE RATHER THAN THE BEAT THAT WENT.**
@@ -1828,6 +1832,7 @@ export default async function partyHost({ params }) {
         }
       }
       if (frame?.lights) body += lightsBoardHtml(frame.lights);
+      if (frame?.portrait) body += galleryBoardHtml(frame.portrait);
       body += `<div class="actions">`;
       if (sendLeft != null) {
         const n = Math.max(1, Math.ceil(sendLeft / 1000));
@@ -2041,7 +2046,10 @@ export default async function partyHost({ params }) {
      * arrives several times a second — from re-cueing the same person and resetting them to the
      * ballroom mid-corridor. Only set after a successful postMessage (see `cueRun`).
      */
-    if (follow.mode === 'run' && runnerId) cueRun(runnerId, names);
+    if (follow.mode === 'run' && runnerId && !isPortraitJob(frame?.route?.selected) && !isLightsJob(frame?.route?.selected)
+      && !frame?.portrait && !frame?.lights) {
+      cueRun(runnerId, names);
+    }
   }
 
   paint();
@@ -2111,7 +2119,25 @@ function followLine({ events, episode, cameras, runEnd, recap }) {
   return '';
 }
 
-function runStage({ names, lobby, runnerId, guideId, cameras, alarms, followLive, events, episode, runEnd, recap, route, lights }) {
+function runStage({ names, lobby, runnerId, guideId, cameras, alarms, followLive, events, episode, runEnd, recap, route, lights, portrait }) {
+  const selected = route?.selected || null;
+  const held = selected ? heldBrief(selected) : null;
+  if (isPortraitJob(selected) || portrait) {
+    return `
+      <div class="run-stage gallery-stage">
+        ${galleryBoardHtml(portrait || {})}
+        ${held ? `<div class="route-held" data-route-held>${esc(held)}</div>` : ''}
+        <div class="react-strip" data-react-strip aria-live="off"></div>
+      </div>`;
+  }
+  if (isLightsJob(selected) || lights) {
+    return `
+      <div class="run-stage lights-stage">
+        ${lights ? lightsBoardHtml(lights) : ''}
+        ${held ? `<div class="route-held" data-route-held>${esc(held)}</div>` : ''}
+        <div class="react-strip" data-react-strip aria-live="off"></div>
+      </div>`;
+  }
   const runner = joinedName(names, runnerId, 'The runner');
   const guide = joinedName(names, guideId, 'The guide');
   const look = seatLook(lobby, runnerId) || DEFAULT_LOOK;
@@ -2131,8 +2157,7 @@ function runStage({ names, lobby, runnerId, guideId, cameras, alarms, followLive
         </div>
       </div>
       <div class="pair-hero">${esc(runner)} walks. ${esc(guide)} talks.</div>
-      ${route?.selected ? `<div class="route-held" data-route-held>${esc(HELD_BRIEF)}</div>` : ''}
-      ${lights ? lightsBoardHtml(lights) : ''}
+      ${held ? `<div class="route-held" data-route-held>${esc(held)}</div>` : ''}
       ${line ? `<div class="run-follow-line">${esc(line)}</div>` : ''}
       ${tool}
       <div class="run-facts">Cameras ${cams?.unlocked ?? '—'} / ${cams?.needed ?? '—'} · alarms ${alarms ?? 0}</div>

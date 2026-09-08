@@ -139,11 +139,11 @@ export const KEEP_EXPEL_BALLOT_MS = 5_000;
 export const ROUTE_VOTE_MS = 30_000;
 
 /**
- * Lights heat practice → play. Not an EPISODE_ORDER beat — inserting one would
- * reopen the night clock. Live night still launches held guide/runner; heat
- * ticks behind the Lights job / harness path.
+ * Lights / Portrait practice → play. Not an EPISODE_ORDER beat — inserting one
+ * would reopen the night clock. Dispatch is by `selectedJob` after crew lock.
  */
 export { HEAT_STEP, HEAT_TRIP_MS } from './heat.js';
+export { PORTRAIT_STEP } from './portrait.js';
 
 /** Whole-session budget, premiere + N episodes + Reunion. */
 export function sessionSeconds(episodes, noms = 0) {

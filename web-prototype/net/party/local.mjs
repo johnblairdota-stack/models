@@ -510,6 +510,7 @@ function runEpisodeFromBallots(room, votes, opts = {}) {
     // Live night: mansion reports cameras/alarms — do not invent gate scaffold on the TV.
     scaffold: false,
   });
+  if (room.game.state.heatArmed || room.game.state.portraitArmed) startJobClock(room);
   // Pair is public now so phones can hold Locked while the sendoff plays.
   fanout(room, lobbySnapshot(room));
   startPairLock(room);
@@ -547,6 +548,26 @@ function startRouteClock(room) {
     room.game.closeRouteVote(livingSeatedIds(room));
   }, ROUTE_VOTE_MS);
   room.routeClock.unref?.();
+}
+
+function clearJobClock(room) {
+  if (room.jobClock) clearInterval(room.jobClock);
+  room.jobClock = null;
+  room.jobClockAt = null;
+}
+
+function startJobClock(room) {
+  clearJobClock(room);
+  room.jobClockAt = Date.now();
+  room.jobClock = setInterval(() => {
+    const now = Date.now();
+    const dt = Math.max(0, (now - (room.jobClockAt || now)) / 1000);
+    room.jobClockAt = now;
+    const st = room.game.state;
+    if (st.heatArmed) room.game.tickHeat(now, dt);
+    if (st.portraitArmed) room.game.tickPortraitPlay(now, dt);
+  }, 250);
+  room.jobClock.unref?.();
 }
 
 function startCastingClock(room) {
@@ -1005,6 +1026,7 @@ function enterNextCasting(room) {
     return;
   }
   clearShowClock(room);
+  clearJobClock(room);
   room.ballots.clear();
   room.game.beginCasting();
   room.showUntil = null;
@@ -2007,7 +2029,8 @@ function handleClient(room, bound, self, msg) {
     return;
   }
   if (msg.t === 'crewLock' && isTV) {
-    room.game.lockCrew(livingSeatedIds(room));
+    const locked = room.game.lockCrew(livingSeatedIds(room));
+    if (locked?.play?.ok && locked.play.smash === false) startJobClock(room);
     return;
   }
   if (msg.t === 'keepExpelNom' && self && !isTV && self.playerId) {
@@ -2036,6 +2059,18 @@ function handleClient(room, bound, self, msg) {
   }
   if (msg.t === 'heatCross' && self && !isTV && self.playerId) {
     room.game.crossGate(self.playerId);
+    return;
+  }
+  if (msg.t === 'portraitPull' && self && !isTV && self.playerId) {
+    room.game.pulsePortraitPull(self.playerId);
+    return;
+  }
+  if (msg.t === 'portraitCrawl' && self && !isTV && self.playerId) {
+    room.game.setPortraitCrawl(self.playerId, !!msg.on);
+    return;
+  }
+  if (msg.t === 'portraitCatch' && self && !isTV && self.playerId) {
+    room.game.catchPortraitLock(self.playerId);
     return;
   }
   if (msg.t === 'casting') {
