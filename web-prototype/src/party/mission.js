@@ -101,6 +101,16 @@ export function freshLightsBind(selectedJob, step = HEAT_STEP.PRACTICE) {
 
 export { HEAT_STEP, LIGHTS_JOB, isLightsJob, projectLights };
 
+/**
+ * Next-job roster. Expulsion pulls a living seat out of the upcoming job
+ * without killing them. Wrecked / assimilated are already absent from
+ * `living` (`alive: false`).
+ */
+export function jobRoster(living, expelled = []) {
+  const out = new Set(expelled || []);
+  return (living || []).filter((id) => id && !out.has(id));
+}
+
 export function seekLine(spec, { here = null, missionRoom = null, phase = 'seek' } = {}) {
   const s = spec ?? MISSION_PAINTING;
   if (phase === 'done') return 'Home. That is the run.';

@@ -206,6 +206,24 @@ export const MATRIX = [
   ['you.stationConfirmed',     'self'],
 
   /*
+   * ---- KEEP/EXPEL mid-night checkpoint. Ballots are NOT here.
+   *
+   * `checkpoint.waiting` is a count. `you.keepExpel` is the private KEEP|EXPEL.
+   * `players[].expelled` is sat-out-next-job, never a side. No allegiance row.
+   */
+  ['checkpoint.open',          'all'],
+  ['checkpoint.step',          'all'],
+  ['checkpoint.nominee',       'all'],
+  ['checkpoint.nominator',     'all'],
+  ['checkpoint.until',         'all'],
+  ['checkpoint.waiting',       'all'],
+  ['checkpoint.voted',         'all'],
+  ['checkpoint.living',        'all'],
+  ['checkpoint.result',        'all'],
+  ['you.keepExpel',            'self'],
+  ['players[].expelled',       'all'],
+
+  /*
    * ---- private-heat on a Lights / generator job. `docs/slices/task-private-heat.md`.
    *
    * `you.heat` / `you.tripLeft` are SELF and only written onto that socket's `you`

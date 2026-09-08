@@ -25,6 +25,11 @@ export const PHASE = {
   EXECUTION:  'EXECUTION',
   VERDICT:    'VERDICT',
   REUNION:    'REUNION',
+  /**
+   * Mid-night KEEP/EXPEL checkpoint. Between jobs — after Recap, before Debrief.
+   * Not a season finale. Not a `win.js` fold.
+   */
+  KEEP_EXPEL: 'KEEP_EXPEL',
 };
 
 /** Seconds. `RECKONING` is a floor; see `reckoningSeconds`. */
@@ -33,6 +38,12 @@ export const SECONDS = {
   [PHASE.CASTING]: 45,
   [PHASE.EXPEDITION]: 90,
   [PHASE.RECAP]: 10,
+  /**
+   * Thin between-jobs checkpoint. Nominate + short defense + private ballot.
+   * 15s keeps the typical-night 40-minute budget (round-loop R2c). Defense
+   * is 7s of that and must not be skipped.
+   */
+  [PHASE.KEEP_EXPEL]: 15,
   /**
    * 🚨 **A CEILING, NOT A WAIT.** 75 -> 300 on 2026-08-25, John's call: he wanted Blood on the
    * Clocktower's long day, where five minutes of argument is normal. The beat is ended by the
@@ -62,7 +73,7 @@ export const SECONDS = {
 
 /** The order an ordinary episode runs in. */
 export const EPISODE_ORDER = [
-  PHASE.CASTING, PHASE.EXPEDITION, PHASE.RECAP, PHASE.DEBRIEF,
+  PHASE.CASTING, PHASE.EXPEDITION, PHASE.RECAP, PHASE.KEEP_EXPEL, PHASE.DEBRIEF,
   PHASE.RECKONING, PHASE.VOTE, PHASE.EXECUTION, PHASE.VERDICT,
 ];
 
@@ -111,6 +122,15 @@ export const EPISODE_CAP = 5;
 
 export const episodeSeconds = (ep, noms = 0) =>
   orderFor(ep).reduce((a, p) => a + (p === PHASE.RECKONING ? reckoningSeconds(noms) : SECONDS[p]), 0);
+
+/**
+ * KEEP/EXPEL inner clocks. The phase hold is `SECONDS[KEEP_EXPEL]`; these
+ * carve it. Defense must run in full — `advanceCheckpoint` will not open
+ * ballots until `KEEP_EXPEL_DEFENSE_MS` has elapsed.
+ */
+export const KEEP_EXPEL_NOMINATE_MS = 3_000;
+export const KEEP_EXPEL_DEFENSE_MS = 7_000;
+export const KEEP_EXPEL_BALLOT_MS = 5_000;
 
 /**
  * 🗺️ Route-vote window. Not an EPISODE_ORDER beat — inserting one would reopen the

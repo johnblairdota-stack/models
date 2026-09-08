@@ -19,18 +19,20 @@ import {
   LATE_DEBRIEF_MS, EMPTY_RECKONING_EXTEND_CAP,
   remainingMs, formatRemain, normalizeCodeDisplay, normalizeCodeWire,
 } from '../src/party/night-client.js';
-import { PHASE, SECONDS, EPISODE_CAP } from '../src/party/phases.js';
-import { missionFor, MISSION_PAINTING, MISSION_DRILL } from '../src/party/mission.js';
+import { PHASE, SECONDS, EPISODE_CAP, KEEP_EXPEL_DEFENSE_MS } from '../src/party/phases.js';
+import { missionFor, MISSION_PAINTING, MISSION_DRILL, jobRoster } from '../src/party/mission.js';
 import { RUN_END, CASTING_BACKSTOP_MS, readyNeeded } from '../src/party/show.js';
 import { CAST_BACKSTOP_MS, livingFromPublic, shouldArmCastSend } from '../src/party/ballot.js';
 import { ACCENTS, SHELLS, cleanLook } from '../src/party/look.js';
 import { applyCastLock, applyCastTap, ballotFromCast, CAST_BLOCK_WHY, castPrompt, castRowBlock, castRowMark, freshCast, mergePublicNames, nominationPlayers, publicName } from '../src/party/cast-ui.js';
 import { createRoom } from '../src/party/room.js';
 import { lightsLeaks } from '../src/party/heat.js';
-import { NO_ONE } from '../src/party/vote.js';
+import { NO_ONE, KEEP, EXPEL, EXPELLED, tallyKeepExpel, eligibleKeepExpel, checkpointHostHtml, projectCheckpoint } from '../src/party/vote.js';
 import { accusationSpan } from '../src/game/accusation-stage.js';
 import { PAIR_LOCK_MS } from '../src/game/pair-lock-stage.js';
 import { OUTCOME, outcomeLine } from '../src/party/win.js';
+import { rollCall } from '../src/party/reunion.js';
+import { EVIL } from '../src/party/cast.js';
 
 /*
  * ⚠️ PORT CLUSTER 5222–5225 (PORT, +1, +2, +3). Was 5198–5201: PORT+1 hit 5199, where The Desk
@@ -101,6 +103,151 @@ function last(box, type) {
       && !/armLightsHeat|tickHeat|you\.heat/.test(win)
       && !/armLightsHeat|tickHeat|HEAT_TRIP/.test(follow)
       && !/armLightsHeat|tickHeat|HEAT_TRIP/.test(guidemap));
+}
+
+{
+  const src = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8');
+  const win = src('../src/party/win.js');
+  const taken = src('../src/party/taken.js');
+  const follow = src('../src/party/follow.js');
+  const eight = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+  const majority = tallyKeepExpel({
+    living: eight, nominee: 'c',
+    votes: Object.fromEntries(eight.map((id, i) => [id, i < 5 ? EXPEL : KEEP])),
+  });
+  const tie = tallyKeepExpel({
+    living: eight, nominee: 'c',
+    votes: Object.fromEntries(eight.map((id, i) => [id, i < 4 ? EXPEL : KEEP])),
+  });
+  t('N27 · strict majority EXPEL expels; tie keeps — living denominator, no coinflip',
+    majority.result === EXPELLED && majority.expelled === true && majority.threshold === 5
+      && tie.result === KEEP && tie.expelled === false
+      && tallyKeepExpel({ living: eight, nominee: 'c', votes: {} }).result === KEEP);
+
+  const frames = {};
+  const room = createRoom({ count: 8, castSeed: 8, worldSeed: 8, send: (id, f) => { frames[id] = f; } });
+  room.start();
+  const living = room.state.players.filter((p) => p.alive).map((p) => p.id);
+  const wreck = room.state.players[0];
+  wreck.alive = false;
+  const eligible = eligibleKeepExpel(room.state.players, []);
+  t('N27a · only living seats are nominable — wrecked / assimilated (alive:false) are out',
+    !eligible.includes(wreck.id) && eligible.length === 7);
+
+  room.playEpisode({ scaffold: false, hunterRoom: 'cellar' });
+  const phases = room.log.all().filter((e) => e.type.startsWith('phase.')).map((e) => e.type.slice(6));
+  t('N27b · checkpoint phase runs after the job, before Debrief / next job',
+    phases.includes('KEEP_EXPEL')
+      && phases.indexOf('KEEP_EXPEL') > phases.indexOf('EXPEDITION')
+      && phases.indexOf('KEEP_EXPEL') > phases.indexOf('RECAP')
+      && phases.indexOf('KEEP_EXPEL') < phases.indexOf('DEBRIEF'),
+    phases.join('/'));
+
+  const room2 = createRoom({ count: 8, castSeed: 8, worldSeed: 8, send: (id, f) => { frames[id] = f; } });
+  room2.start();
+  const ids = room2.state.players.filter((p) => p.alive).map((p) => p.id);
+  const nom = ids[1];
+  const nominator = ids[0];
+  room2.playEpisode({
+    scaffold: false, hunterRoom: 'cellar',
+    checkpoint: {
+      nominator, target: nom,
+      votes: Object.fromEntries(ids.map((id) => [id, EXPEL])),
+    },
+  });
+  t('N27c · one living nominee; defense then ballot; unanimous EXPEL flags next-job sit-out',
+    room2.state.checkpoint.step === 'result'
+      && room2.state.checkpoint.result === EXPELLED
+      && room2.state.checkpoint.nominee === nom
+      && room2.expelledIds().includes(nom)
+      && room2.state.players.find((p) => p.id === nom)?.expelled === true
+      && room2.state.players.find((p) => p.id === nom)?.alive === true);
+
+  const hostHtml = checkpointHostHtml(projectCheckpoint(room2.state.checkpoint, ids), {
+    names: Object.fromEntries(room2.state.players.map((p) => [p.id, p.name])),
+  });
+  const hostTv = JSON.stringify(frames.tv?.checkpoint || {});
+  t('N27d · private KEEP|EXPEL: host snapshot is waiting/result only — no per-seat votes, no allegiance',
+    frames.tv && !('votes' in (frames.tv.checkpoint || {}))
+      && frames['phone-0']?.you?.keepExpel != null
+      && !/production|plant|saboteur|\bgood\b|\bevil\b|2g1e/i.test(hostHtml + hostTv)
+      && /EXPELLED|KEEP/.test(hostHtml)
+      && (frames.tv.checkpoint?.waiting === 0 || frames.tv.checkpoint?.result));
+
+  const roster = jobRoster(ids, room2.expelledIds());
+  t('N27e · next job roster excludes expelled; they are still alive',
+    !roster.includes(nom) && roster.length === ids.length - 1
+      && room2.state.players.find((p) => p.id === nom)?.alive === true);
+
+  const pair = [room2.state.pair.runner, room2.state.pair.guide];
+  room2.playEpisode({ scaffold: false, hunterRoom: 'gallery' });
+  t('N27f · the following job does not seat the expelled as runner/guide',
+    room2.state.pair.runner !== nom && room2.state.pair.guide !== nom,
+    JSON.stringify({ pair: room2.state.pair, prev: pair }));
+
+  const room3 = createRoom({ count: 8, castSeed: 8, worldSeed: 8, send: () => {} });
+  room3.start();
+  const evil = room3.deal.seats.filter((s) => s.alignment === EVIL).map((s) => s.id);
+  for (const id of evil) {
+    room3.state.expelled.add(id);
+    const p = room3.state.players.find((x) => x.id === id);
+    if (p) p.expelled = true;
+  }
+  room3.playEpisode({ scaffold: false, hunterRoom: 'cellar' });
+  const fold = room3.log.all().filter((e) => e.type === 'win.checked').at(-1);
+  t('N27g · expelling all saboteurs does not win/fold or end the night',
+    room3.outcome() === OUTCOME.RENEWED && !fold?.data?.rule
+      && !/keepExpel|KEEP_EXPEL|checkpoint/.test(win)
+      && /applyAssimilate/.test(taken)
+      && !/keepExpel|KEEP_EXPEL/.test(taken)
+      && !/keepExpel|KEEP_EXPEL/.test(follow),
+    JSON.stringify({ outcome: room3.outcome(), rule: fold?.data?.rule, evil }));
+
+  const room4 = createRoom({ count: 8, castSeed: 8, worldSeed: 8, send: () => {} });
+  room4.start();
+  const ids4 = room4.state.players.filter((p) => p.alive).map((p) => p.id);
+  const sat = ids4[2];
+  room4.playEpisode({
+    scaffold: false, hunterRoom: 'cellar', blocked: true,
+    checkpoint: {
+      nominator: ids4[0], target: sat,
+      votes: Object.fromEntries(ids4.map((id) => [id, EXPEL])),
+    },
+  });
+  const call = rollCall(room4.log.all());
+  t('N27h · ending still shares allegiance reveal with the expelled seat',
+    call.some((s) => s.id === sat && s.alignment)
+      && room4.state.players.find((p) => p.id === sat)?.expelled === true
+      && room4.state.players.find((p) => p.id === sat)?.alive === true,
+    JSON.stringify(call.find((s) => s.id === sat)));
+
+  const room5 = createRoom({ count: 8, castSeed: 8, worldSeed: 8, send: () => {} });
+  room5.start();
+  const ids5 = room5.state.players.filter((p) => p.alive).map((p) => p.id);
+  room5.enterKeepExpel(ids5, 0);
+  const nomOk = room5.nominateCheckpoint(ids5[0], ids5[1], ids5, 0);
+  const during = room5.advanceCheckpoint(KEEP_EXPEL_DEFENSE_MS - 1);
+  t('N27i · after a nominee, advance before defense until stays on defense — not skipped',
+    nomOk.ok && during.step === 'defense' && room5.state.checkpoint.step === 'defense');
+  const opened = room5.advanceCheckpoint(KEEP_EXPEL_DEFENSE_MS);
+  t('N27i2 · ballots open only after defense elapses',
+    opened.step === 'ballot' && room5.state.checkpoint.step === 'ballot');
+
+  const liveCp = createRoom({ count: 8, castSeed: 8, worldSeed: 8, send: () => {} });
+  liveCp.start();
+  const nightCp = {
+    game: liveCp, conns: new Map(), seatsTaken: new Set(), tvTaken: false,
+    show: 'recap', showClock: null, showUntil: null,
+    reckoningStartedAt: null, reckoningEmptyExtends: 0, runEnd: RUN_END.SMASHED,
+    ballots: new Map(),
+  };
+  progressShow(nightCp);
+  const idsLive = liveCp.state.players.filter((p) => p.alive).map((p) => p.id);
+  liveCp.nominateCheckpoint(idsLive[0], idsLive[1], idsLive);
+  const stayed = expireShowHold(nightCp);
+  t('N27j · live expire during defense stays on KEEP/EXPEL — does not skip to Debrief',
+    stayed === 'keep_expel' && nightCp.show === 'keep_expel'
+      && liveCp.state.checkpoint.step === 'defense');
 }
 
 {
@@ -209,15 +356,17 @@ t('N1c3 · recap hold is 10s and debrief hold is 300s — the shooting schedule,
  * 🫀 Couch Plan Rung 2: `nextShowBeat('expedition')` is `'recap'`. It used to be null, and
  * `progressShow` on the run was a no-op that skipped Recap. Recap is in `orderFor`; it airs.
  */
-t('N1c4 · after a finished run the clock is Recap → Debrief → Reckoning → Vote → Execution → Verdict → Casting',
-  AFTER_RUN_BEATS.join(',') === 'recap,debrief,reckoning,vote,execution,verdict,casting'
-    && nextShowBeat('recap') === 'debrief' && nextShowBeat('debrief') === 'reckoning'
+t('N1c4 · after a finished run the clock is Recap → KEEP/EXPEL → Debrief → Reckoning → Vote → Execution → Verdict → Casting',
+  AFTER_RUN_BEATS.join(',') === 'recap,keep_expel,debrief,reckoning,vote,execution,verdict,casting'
+    && nextShowBeat('recap') === 'keep_expel' && nextShowBeat('keep_expel') === 'debrief'
+    && nextShowBeat('debrief') === 'reckoning'
     && nextShowBeat('reckoning') === 'vote' && nextShowBeat('vote') === 'execution'
     && nextShowBeat('execution') === 'verdict' && nextShowBeat('verdict') === 'casting'
     && nextShowBeat('expedition') === 'recap'
     && holdMsFor('reckoning', 0) === RECKONING_HOLD_MS && holdMsFor('vote') === VOTE_HOLD_MS
     && holdMsFor('execution') === EXECUTION_HOLD_MS
     && holdMsFor('verdict') === VERDICT_HOLD_MS && VERDICT_HOLD_MS === SECONDS[PHASE.VERDICT] * 1000
+    && holdMsFor('keep_expel') === SECONDS[PHASE.KEEP_EXPEL] * 1000 && SECONDS[PHASE.KEEP_EXPEL] === 15
     && formatRemain(0) === '0s' && formatRemain(65000) === '1:05'
     && remainingMs(1000, 1000) === 0
     && remainingMs(null) === null && remainingMs('') === null);
@@ -699,9 +848,16 @@ t('N13c · a refresh resumes the server show beat, not casting',
     JSON.stringify(last(host, 'show')));
   const phases = [];
   phases.push(night.show);
+  const toKeep = progressShow(night);
+  await sleep(40);
+  t('N17b0 · progressShow walks Recap → KEEP/EXPEL',
+    toKeep === 'keep_expel' && night.show === 'keep_expel'
+      && last(host, 'show')?.beat === 'keep_expel',
+    JSON.stringify({ show: night.show, host: last(host, 'show')?.beat }));
+  phases.push(night.show);
   const toDebrief = progressShow(night);
   await sleep(40);
-  t('N17b · progressShow walks Recap → Debrief',
+  t('N17b · progressShow walks KEEP/EXPEL → Debrief',
     toDebrief === 'debrief' && night.show === 'debrief'
       && last(host, 'show')?.beat === 'debrief',
     JSON.stringify({ show: night.show, host: last(host, 'show')?.beat }));
@@ -846,8 +1002,8 @@ t('N13c · a refresh resumes the server show beat, not casting',
       && nextShowBeat('reunion') == null,
     JSON.stringify({ until: night.showUntil, clock: night.showClock != null, next: nextShowBeat('reunion') }));
   phases.push(night.show);
-  t('N17i · the live beat order after a completed run is recap, debrief, reckoning, vote, execution, verdict, reunion',
-    phases.join(',') === 'recap,debrief,reckoning,vote,execution,verdict,reunion',
+  t('N17i · the live beat order after a completed run is recap, keep_expel, debrief, reckoning, vote, execution, verdict, reunion',
+    phases.join(',') === 'recap,keep_expel,debrief,reckoning,vote,execution,verdict,reunion',
     phases.join(','));
 }
 
@@ -1089,7 +1245,7 @@ t('N13c · a refresh resumes the server show beat, not casting',
 {
   const renewed = showRoom();
   const walked = [renewed.show];
-  for (let i = 0; i < 6 && walked.length < 8; i++) {
+  for (let i = 0; i < 7 && walked.length < 9; i++) {
     /*
      * 📺 HEAT6. Empty Reckoning now skips Vote + Execution (N19). This gate is the
      * other side of the fold — RENEWED → Casting — so stand a name before leaving
@@ -1103,8 +1259,8 @@ t('N13c · a refresh resumes the server show beat, not casting',
     if (!to || to === walked[walked.length - 1]) break;
     walked.push(to);
   }
-  t('N17j · a RENEWED Verdict hands back to Casting, and the walk is the same seven beats',
-    walked.join(',') === 'recap,debrief,reckoning,vote,execution,verdict,casting'
+  t('N17j · a RENEWED Verdict hands back to Casting, and the walk is the same eight beats',
+    walked.join(',') === 'recap,keep_expel,debrief,reckoning,vote,execution,verdict,casting'
       && renewed.game.outcome() === OUTCOME.RENEWED
       && renewed.show === 'casting'
       && renewed.game.state.phase === 'CASTING'
@@ -1132,8 +1288,8 @@ function showRoom() {
   t('N19 · late-debrief window is the last 20s of the 75s talk hold',
     LATE_DEBRIEF_MS === 20000 && EMPTY_RECKONING_EXTEND_CAP === 0);
   const early = showRoom();
-  t('N19a · progressShow still walks recap → debrief → reckoning',
-    progressShow(early) === 'debrief' && progressShow(early) === 'reckoning'
+  t('N19a · progressShow still walks recap → keep_expel → debrief → reckoning',
+    progressShow(early) === 'keep_expel' && progressShow(early) === 'debrief' && progressShow(early) === 'reckoning'
       && early.show === 'reckoning' && early.game.state.phase === 'RECKONING');
   /*
    * ⚠️ INVERTED HEAT6. Empty expiry used to re-arm 3× (N19b/c) then walk to Vote (N19d).
@@ -1156,7 +1312,9 @@ function showRoom() {
       && (early.game.state.nominations || []).length === 0,
     JSON.stringify(afterZero));
 
+  // Recap → KEEP/EXPEL → Debrief → Reckoning, then nominate before zero.
   const named = showRoom();
+  progressShow(named);
   progressShow(named);
   progressShow(named);
   const living = named.game.episodeLiving();
@@ -1165,7 +1323,9 @@ function showRoom() {
     nom.ok && named.game.state.nominations.length === 1
       && expireShowHold(named) === 'vote' && named.show === 'vote');
 
+  // Recap → KEEP/EXPEL → Debrief; early talk still phones-down.
   const talk = showRoom();
+  progressShow(talk);
   progressShow(talk);
   talk.showUntil = Date.now() + 60000;
   const livingTalk = talk.game.episodeLiving();

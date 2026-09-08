@@ -36,7 +36,7 @@ import { STICK_DEADZONE, warmLabel } from '../party/follow.js';
 import { formatRemain, isTalkBeat, LATE_DEBRIEF_MS, remainingMs } from '../party/show.js';
 import { outcomeLine } from '../party/win.js';
 import { removalWord } from '../party/taken.js';
-import { NO_ONE } from '../party/vote.js';
+import { NO_ONE, checkpointPadHtml } from '../party/vote.js';
 import { clearsLine } from '../party/scorekeeper.js';
 
 export default async function partyPhone({ params }) {
@@ -718,7 +718,10 @@ export default async function partyPhone({ params }) {
        * frame was late or still on LOBBY. From John's seat that is a pad that never
        * offered a name. Match the beat first.
        */
-      if (beat === 'debrief') {
+      if (beat === 'keep_expel') {
+        body += checkpointPadHtml(frame?.checkpoint, { ...me, keepExpel: frame?.you?.keepExpel, id: me.playerId }, players);
+        body += padFxHtml();
+      } else if (beat === 'debrief') {
         if (c.runEnd) body += `<h1>${esc(c.runEnd)}</h1>`;
         body += `<h1>Debrief.</h1>${phoneClock(c)}`;
         if (debriefNominateOpen(c)) {
@@ -999,7 +1002,7 @@ export default async function partyPhone({ params }) {
        * inventing TIME before the room has said so.
        */
       if (c.runEnd) body += `<h1>${esc(c.runEnd)}</h1>`;
-      body += `<p class="hint">Phones down. Debrief is next.</p>`;
+      body += `<p class="hint">Phones down. KEEP / EXPEL is next.</p>`;
     }
 
     // 🚨 §2.3: *"a persistent ROLE tab … reopens it in any phase"*. It used to be a static CLEAR
@@ -1041,6 +1044,7 @@ export default async function partyPhone({ params }) {
     startPhoneClock();
     bindNominate(c);
     bindLynchVote(c);
+    bindKeepExpel(c);
     bindReady(c);
     bindLink(c, players);
     paintWhispers();
@@ -2023,7 +2027,8 @@ export default async function partyPhone({ params }) {
     }
     const cast = state.cast;
     const phase = cast.phase;
-    const living = (players || []).filter((p) => p.alive !== false);
+    const living = (players || []).filter((p) => p.alive !== false && !p.expelled);
+    const satOut = (players || []).some((p) => p.id === me.playerId && p.expelled);
     const { lastPair } = historyFromCastEvents(state.client?.events);
     const lockCtx = { lastPair, livingCount: living.length, selfId: me.playerId };
     /*
@@ -2055,10 +2060,11 @@ export default async function partyPhone({ params }) {
         ? ' Dashed names ran or guided last time — they may swap chairs.'
         : '';
       body += `<h1>${esc(castPrompt(slot, ep))}</h1>
+        ${satOut ? `<p class="hint">EXPELLED · you sit out this job. You can still send a pair.</p>` : ''}
         <p class="hint">${phase === 'guide'
           ? `${esc(playerName(players, cast.runner))} walks. Pick someone else — nothing is sent until you lock it.`
           : `Tap a name. Nothing is sent until you lock it.${lockHint}`}</p>
-        ${castList(players, me.playerId, cast, lockCtx)}
+        ${castList(living, me.playerId, cast, lockCtx)}
         <p class="cast-note" id="cast-note" ${state.castNote ? '' : 'hidden'}>${esc(state.castNote || ' ')}</p>
         <div class="lock-slot" id="lock-slot" ${cast.draft ? '' : 'hidden'}>
           <button class="btn wide lock-btn${cast.draft ? ' in' : ''}" id="lock-pick">${padlockSvg()} Lock ${slot}</button>
@@ -3007,6 +3013,21 @@ export default async function partyPhone({ params }) {
         state.voted = true;
         padFx('Locked in.', '', [0, 35]);
         c.send({ t: 'lynchVote', choice });
+        paint();
+      });
+    }
+  }
+
+  function bindKeepExpel(c) {
+    for (const b of root.querySelectorAll('[data-keep-nom]')) {
+      b.addEventListener('click', () => {
+        c.send({ t: 'keepExpelNom', target: b.dataset.keepNom });
+        paint();
+      });
+    }
+    for (const b of root.querySelectorAll('[data-keep-vote]')) {
+      b.addEventListener('click', () => {
+        c.send({ t: 'keepExpelVote', choice: b.dataset.keepVote });
         paint();
       });
     }

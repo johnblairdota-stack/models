@@ -352,7 +352,7 @@ const NO_LOCK = { runner: null, guide: null };
     && !/fire\('W2'/.test(winSrc)
     && !/fire\('W3'/.test(winSrc)
     && !/fire\('W4'/.test(winSrc)
-    && SHOW_BEATS.join(',') === 'lobby,casting,expedition,recap,debrief,reckoning,vote,execution,verdict,reunion'
+    && SHOW_BEATS.join(',') === 'lobby,casting,expedition,recap,keep_expel,debrief,reckoning,vote,execution,verdict,reunion'
     && !EPISODE_ORDER.includes('HIT')
     && CUE_KINDS.join(',') === 'intros,run,move,shot,idle,noms,pair,execute,pin',
     `${TICK_ORDER.join(' ')} · ${SHOW_BEATS.length} beats`);

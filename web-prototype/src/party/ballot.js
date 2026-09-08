@@ -194,6 +194,11 @@ export function previewCastTiebreaks({ ballots, living, events, ep, matchSeed })
 }
 
 /**
+ * KEEP/EXPEL majority is `vote.js` `tallyKeepExpel` — same living-denominator
+ * as `tallyVote`. Casting ties stay here; the checkpoint is not a cast.
+ */
+
+/**
  * REFUSE THE CHAIR — once per game, public, attributed, permanent.
  *
  * The veto re-pointed: a statement about a job you were given rather than about somebody else's

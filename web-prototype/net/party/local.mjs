@@ -47,7 +47,7 @@ import {
   isReadyBeat, readyNeeded, readyMet, READY_COUNTDOWN_MS,
   isBackwardTalkJump,
 } from '../../src/party/show.js';
-import { reckoningSeconds, ROUTE_VOTE_MS } from '../../src/party/phases.js';
+import { reckoningSeconds, ROUTE_VOTE_MS, KEEP_EXPEL_NOMINATE_MS } from '../../src/party/phases.js';
 import { standingTally } from '../../src/party/vote.js';
 import { reactCheck } from '../../src/party/react.js';
 import { pairLockMs } from '../../src/game/pair-lock-stage.js';
@@ -614,7 +614,12 @@ export function progressShow(room) {
     enterRecapLive(room, room.runEnd || RUN_END.TIME);
     return 'recap';
   }
+  if (next === 'keep_expel') {
+    enterKeepExpelLive(room);
+    return 'keep_expel';
+  }
   if (next === 'debrief') {
+    room.game.closeCheckpoint?.();
     enterDebriefLive(room);
     return 'debrief';
   }
@@ -711,6 +716,28 @@ export function expireShowHold(room) {
       }
     }
   }
+  if (room.show === 'keep_expel' && room.game?.advanceCheckpoint) {
+    let stepped = room.game.advanceCheckpoint();
+    if (stepped?.step === 'ballot' && !stepped.closed && checkpointLeftMs(room) <= 0) {
+      stepped = room.game.advanceCheckpoint();
+    }
+    if (stepped?.closed || stepped?.step === 'result') {
+      if (!room.keepExpelResultArmed) {
+        room.keepExpelResultArmed = true;
+        armCheckpointClock(room, KEEP_EXPEL_RESULT_MS);
+        return room.show;
+      }
+      room.keepExpelResultArmed = false;
+      return progressShow(room);
+    }
+    if (stepped?.step === 'nominate' || stepped?.step === 'defense' || stepped?.step === 'ballot') {
+      const left = (stepped.left | 0) > 0 ? stepped.left : checkpointLeftMs(room);
+      if (left > 0) {
+        armCheckpointClock(room, left);
+        return room.show;
+      }
+    }
+  }
   return progressShow(room);
 }
 
@@ -753,6 +780,29 @@ function enterRecapLive(room, end = null) {
   }
   room.game.enterRecap?.();
   scheduleShowProgress(room);
+}
+
+/** Brief KEEP/EXPELLED plate after the tally, before Debrief. Not in the 15s budget. */
+const KEEP_EXPEL_RESULT_MS = 1000;
+
+function checkpointLeftMs(room, now = Date.now()) {
+  const until = room.game?.state?.checkpoint?.until;
+  if (!Number.isFinite(Number(until))) return 0;
+  return Math.max(0, Number(until) - now);
+}
+
+function armCheckpointClock(room, waitOpt = null) {
+  if (!room || room.show !== 'keep_expel') return;
+  const wait = Number.isFinite(waitOpt) ? waitOpt : checkpointLeftMs(room);
+  scheduleShowProgress(room, Math.max(0, Number.isFinite(wait) ? wait : KEEP_EXPEL_NOMINATE_MS));
+}
+
+function enterKeepExpelLive(room) {
+  const living = livingSeatedIds(room);
+  room.keepExpelResultArmed = false;
+  room.game.enterKeepExpel?.(living.length ? living : null);
+  setShow(room, 'keep_expel');
+  armCheckpointClock(room);
 }
 
 function enterDebriefLive(room) {
@@ -1018,6 +1068,7 @@ function enterNextCasting(room) {
  * ============================================================================================= */
 const BEAT_DOOR = {
   recap: enterRecapLive,
+  keep_expel: enterKeepExpelLive,
   debrief: enterDebriefLive,
   reckoning: enterReckoningLive,
   vote: enterVoteLive,
@@ -1957,6 +2008,21 @@ function handleClient(room, bound, self, msg) {
   }
   if (msg.t === 'crewLock' && isTV) {
     room.game.lockCrew(livingSeatedIds(room));
+    return;
+  }
+  if (msg.t === 'keepExpelNom' && self && !isTV && self.playerId) {
+    if (room.show !== 'keep_expel') return;
+    const nom = room.game.nominateCheckpoint(self.playerId, msg.target, livingSeatedIds(room));
+    if (nom?.ok) armCheckpointClock(room);
+    return;
+  }
+  if (msg.t === 'keepExpelVote' && self && !isTV && self.playerId) {
+    if (room.show !== 'keep_expel') return;
+    const ballot = room.game.castKeepExpelVote(self.playerId, msg.choice, livingSeatedIds(room));
+    if (ballot?.closed) {
+      room.keepExpelResultArmed = true;
+      armCheckpointClock(room, KEEP_EXPEL_RESULT_MS);
+    }
     return;
   }
   /*
