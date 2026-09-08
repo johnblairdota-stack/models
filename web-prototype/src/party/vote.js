@@ -268,3 +268,196 @@ export function canRouteVote(voter, jobId, living, available) {
   return { ok: true };
 }
 
+/* =============================================================================================
+ * KEEP / EXPEL — mid-night checkpoint, not a lynch and not a win fold.
+ *
+ * Strict majority of the LIVING must EXPEL, same threshold as `tallyVote`
+ * (`counts * 2 > living.length`). Tie or KEEP majority keeps. No coinflip.
+ * The nominee votes (KEEP/EXPEL is not a self-name on the lynch ballot).
+ * ============================================================================================= */
+
+export const KEEP = 'KEEP';
+export const EXPEL = 'EXPEL';
+export const EXPELLED = 'EXPELLED';
+
+export function freshCheckpoint() {
+  return {
+    step: 'idle',
+    nominee: null,
+    nominator: null,
+    votes: {},
+    until: null,
+    result: null,
+    openedAt: null,
+    livingIds: null,
+  };
+}
+
+/** Living, not wrecked / assimilated, not already sitting out the next job. */
+export function eligibleKeepExpel(players, expelled = []) {
+  const out = new Set(expelled || []);
+  return (players || [])
+    .filter((p) => p && p.alive && p.id && !out.has(p.id))
+    .map((p) => p.id);
+}
+
+export function canKeepExpelNominate(living, nominator, target, nominee = null) {
+  if (nominee) return { ok: false, why: 'already nominated' };
+  if (!living?.includes(nominator)) return { ok: false, why: 'not living' };
+  if (!living?.includes(target)) return { ok: false, why: 'not living' };
+  if (target === nominator) return { ok: false, why: 'no self-nomination' };
+  return { ok: true };
+}
+
+export function nominateKeepExpel(living, nominator, target, nominee = null) {
+  const allowed = canKeepExpelNominate(living, nominator, target, nominee);
+  if (!allowed.ok) return allowed;
+  return { ok: true, nomination: { nominator, target } };
+}
+
+export function canKeepExpelVote(voter, choice, living) {
+  if (!living?.includes(voter)) return { ok: false, why: 'not living' };
+  if (choice !== KEEP && choice !== EXPEL) return { ok: false, why: 'not a ballot' };
+  return { ok: true };
+}
+
+/**
+ * Strict majority of the LIVING must EXPEL. Abstain is not EXPEL, so it
+ * protects — same living-denominator as `tallyVote`. Tie keeps.
+ */
+export function tallyKeepExpel({ living = [], votes = {}, nominee = null } = {}) {
+  const ids = living || [];
+  let expel = 0;
+  let keep = 0;
+  let abstained = 0;
+  for (const id of ids) {
+    const v = votes?.[id];
+    if (v === EXPEL) expel += 1;
+    else if (v === KEEP) keep += 1;
+    else abstained += 1;
+  }
+  const threshold = Math.floor(ids.length / 2) + 1;
+  const out = !!(nominee && expel * 2 > ids.length);
+  return {
+    result: out ? EXPELLED : KEEP,
+    expelled: out,
+    expel,
+    keep,
+    abstained,
+    threshold,
+    nominee: nominee || null,
+  };
+}
+
+/**
+ * Public checkpoint shape. Ballots stay off this object until the result
+ * word — waiting is a count, never per-seat choices, never a side.
+ */
+export function projectCheckpoint(checkpoint, livingIds = []) {
+  const living = Array.isArray(livingIds) ? livingIds.filter(Boolean) : [];
+  const step = checkpoint?.step || 'idle';
+  const votes = checkpoint?.votes || {};
+  const voted = living.filter((id) => votes[id] === KEEP || votes[id] === EXPEL).length;
+  const result = checkpoint?.result === EXPELLED || checkpoint?.result === KEEP
+    ? checkpoint.result
+    : null;
+  return {
+    open: step !== 'idle',
+    step,
+    nominee: checkpoint?.nominee || null,
+    nominator: checkpoint?.nominator || null,
+    until: checkpoint?.until ?? null,
+    waiting: Math.max(0, living.length - voted),
+    voted,
+    living: living.length,
+    result,
+  };
+}
+
+function escKeep(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
+/** TV checkpoint plate. Waiting count only — no per-seat KEEP/EXPEL. */
+export function checkpointHostHtml(checkpoint, { names = {} } = {}) {
+  const c = checkpoint || {};
+  if (!c.open && c.step === 'idle') return '';
+  const who = c.nominee ? (names[c.nominee] || c.nominee) : '';
+  const step = c.step || 'idle';
+  let line = 'Nominate one living robot.';
+  if (step === 'defense') line = `${who || 'They'} speak.`;
+  else if (step === 'ballot') line = `Waiting on ${c.waiting | 0}.`;
+  else if (step === 'result') line = c.result === EXPELLED ? 'EXPELLED · sat out the next job.' : 'KEEP.';
+  const nom = who
+    ? `<p class="keep-who" data-keep-nominee="${escKeep(c.nominee)}">${escKeep(who)}</p>`
+    : '<p class="keep-who" data-keep-nominee="">One name.</p>';
+  const wait = step === 'ballot'
+    ? `<p class="hint" data-keep-waiting>Waiting on ${c.waiting | 0}</p>`
+    : '';
+  const result = step === 'result'
+    ? `<p class="keep-result" data-keep-result="${escKeep(c.result || KEEP)}">${c.result === EXPELLED ? 'EXPELLED' : 'KEEP'}</p>`
+    : '';
+  return `<section class="keep-expel" data-keep-expel data-step="${escKeep(step)}">
+    <p class="keep-k">KEEP / EXPEL</p>
+    ${nom}
+    <p class="hint">${escKeep(line)}</p>
+    ${wait}${result}
+  </section>`;
+}
+
+/** Phone nominate / defense / private KEEP|EXPEL. No allegiance copy. */
+export function checkpointPadHtml(checkpoint, you = {}, players = []) {
+  const c = checkpoint || {};
+  const me = you?.id;
+  const step = c.step || 'idle';
+  const nameOf = (id) => {
+    const p = (players || []).find((x) => x.id === id);
+    return p?.name || id || '';
+  };
+  if (step === 'nominate') {
+    const others = (players || []).filter((p) => p.alive && p.id && p.id !== me && !p.expelled);
+    const buttons = others.map((p) => (
+      `<button type="button" class="btn wide" data-keep-nom="${escKeep(p.id)}">${escKeep(p.name || p.id)}</button>`
+    )).join('');
+    return `<div class="keep-pad" data-keep-pad>
+      <h1>KEEP / EXPEL</h1>
+      <p class="hint">Name one living robot. Then they speak.</p>
+      <div class="pick-list">${buttons}</div>
+    </div>`;
+  }
+  if (step === 'defense') {
+    const mine = me && c.nominee === me;
+    return `<div class="keep-pad" data-keep-pad>
+      <h1>${mine ? 'Your defense.' : 'Defense.'}</h1>
+      <p class="hint">${mine ? 'Speak. The table is listening.' : `${escKeep(nameOf(c.nominee))} speaks. Watch the TV.`}</p>
+    </div>`;
+  }
+  if (step === 'ballot') {
+    const pick = you?.keepExpel;
+    const keepOn = pick === KEEP ? ' on' : '';
+    const expelOn = pick === EXPEL ? ' on' : '';
+    return `<div class="keep-pad" data-keep-pad>
+      <h1>KEEP or EXPEL.</h1>
+      <p class="hint">Private. The TV only sees how many are in.</p>
+      <div class="pick-list">
+        <button type="button" class="btn wide${keepOn}" data-keep-vote="${KEEP}">KEEP</button>
+        <button type="button" class="btn wide${expelOn}" data-keep-vote="${EXPEL}">EXPEL</button>
+      </div>
+    </div>`;
+  }
+  if (step === 'result') {
+    const word = c.result === EXPELLED ? 'EXPELLED' : 'KEEP';
+    const mine = me && c.nominee === me;
+    const ack = c.result === EXPELLED
+      ? (mine ? 'You sit out the next job.' : `${escKeep(nameOf(c.nominee))} sits out the next job.`)
+      : (mine ? 'You stay in.' : `${escKeep(nameOf(c.nominee))} stays in.`);
+    return `<div class="keep-pad" data-keep-pad>
+      <h1>${escKeep(word)}</h1>
+      <p class="hint">${escKeep(ack)}</p>
+    </div>`;
+  }
+  return '';
+}
+

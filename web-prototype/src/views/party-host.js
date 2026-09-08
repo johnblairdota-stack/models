@@ -26,7 +26,7 @@ import {
   formatRemain, holdMsFor, isTalkBeat, nextShowBeat, remainingMs, reunionBeatAt,
   rollCallRevealed, rundownRibbon,
 } from '../party/show.js';
-import { NO_ONE, SHOWRUNNER, heldHit, standingTally } from '../party/vote.js';
+import { NO_ONE, SHOWRUNNER, heldHit, standingTally, checkpointHostHtml } from '../party/vote.js';
 import { hitHoldReady } from '../party/phases.js';
 import { clearsLine, executionPlate, lynchBoardRows, tallyBoardCopy } from '../party/scorekeeper.js';
 import { outcomeLine } from '../party/win.js';
@@ -1625,13 +1625,29 @@ export default async function partyHost({ params }) {
        */
       body += talkStage({
         recap, names, lobby: client.lobby, runEnd: ui.runEnd, clock,
-        kicker: 'Phones down. Debrief is next.', beat: 'recap',
+        kicker: 'Phones down. KEEP / EXPEL is next.', beat: 'recap',
         who: joinedName(names, recap.runner, 'The circle'),
         whoSub: 'live · recap',
         whoId: recap.runner,
         facts: recapFacts(recap, names, ui.runEnd),
       });
       body += `<div class="actions recap-actions"><button class="btn ghost" id="to-run">Run</button></div>`;
+    } else if (show === 'keep_expel') {
+      const cp = frame?.checkpoint || {};
+      const nomineeName = cp.nominee ? joinedName(names, cp.nominee, 'A robot') : '';
+      const nameMap = Object.fromEntries((names || []).map((p) => [p.id, p.name]));
+      let kicker = 'Nominate one living robot.';
+      if (cp.step === 'defense') kicker = 'They speak. Then the ballot.';
+      else if (cp.step === 'ballot') kicker = `Waiting on ${cp.waiting | 0}.`;
+      else if (cp.step === 'result') kicker = cp.result === 'EXPELLED' ? 'EXPELLED. Sat out the next job.' : 'KEEP.';
+      body += talkStage({
+        recap, names, lobby: client.lobby, runEnd: ui.runEnd, clock,
+        kicker, beat: 'keep_expel',
+        who: nomineeName || 'KEEP / EXPEL',
+        whoSub: cp.step === 'ballot' ? 'live · ballot' : (cp.step === 'defense' ? 'live · defense' : 'live · checkpoint'),
+        whoId: cp.nominee,
+        aside: checkpointHostHtml(cp, { names: nameMap }),
+      });
     } else if (show === 'debrief') {
       /*
        * ⚠️ **THE READY COUNT IS NO LONGER A FALLBACK.** `linkKicker(names, readyKicker(...))`

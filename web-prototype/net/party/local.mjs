@@ -614,7 +614,12 @@ export function progressShow(room) {
     enterRecapLive(room, room.runEnd || RUN_END.TIME);
     return 'recap';
   }
+  if (next === 'keep_expel') {
+    enterKeepExpelLive(room);
+    return 'keep_expel';
+  }
   if (next === 'debrief') {
+    room.game.closeCheckpoint?.();
     enterDebriefLive(room);
     return 'debrief';
   }
@@ -711,6 +716,32 @@ export function expireShowHold(room) {
       }
     }
   }
+  if (room.show === 'keep_expel' && room.game?.advanceCheckpoint) {
+    const stepped = room.game.advanceCheckpoint();
+    if (stepped?.step === 'defense' && (stepped.left | 0) > 0) {
+      clearShowClock(room);
+      room.showClock = setTimeout(() => {
+        room.showClock = null;
+        expireShowHold(room);
+      }, stepped.left);
+      room.showClock.unref?.();
+      return room.show;
+    }
+    if (stepped?.step === 'ballot' && !stepped.closed) {
+      const until = room.game.state.checkpoint?.until;
+      const left = Number.isFinite(Number(until)) ? Number(until) - Date.now() : 0;
+      if (left > 0) {
+        clearShowClock(room);
+        room.showClock = setTimeout(() => {
+          room.showClock = null;
+          expireShowHold(room);
+        }, left);
+        room.showClock.unref?.();
+        return room.show;
+      }
+      room.game.advanceCheckpoint();
+    }
+  }
   return progressShow(room);
 }
 
@@ -752,6 +783,13 @@ function enterRecapLive(room, end = null) {
     setShow(room, 'recap');
   }
   room.game.enterRecap?.();
+  scheduleShowProgress(room);
+}
+
+function enterKeepExpelLive(room) {
+  const living = livingSeatedIds(room);
+  room.game.enterKeepExpel?.(living.length ? living : null);
+  setShow(room, 'keep_expel');
   scheduleShowProgress(room);
 }
 
@@ -1018,6 +1056,7 @@ function enterNextCasting(room) {
  * ============================================================================================= */
 const BEAT_DOOR = {
   recap: enterRecapLive,
+  keep_expel: enterKeepExpelLive,
   debrief: enterDebriefLive,
   reckoning: enterReckoningLive,
   vote: enterVoteLive,
@@ -1957,6 +1996,16 @@ function handleClient(room, bound, self, msg) {
   }
   if (msg.t === 'crewLock' && isTV) {
     room.game.lockCrew(livingSeatedIds(room));
+    return;
+  }
+  if (msg.t === 'keepExpelNom' && self && !isTV && self.playerId) {
+    if (room.show !== 'keep_expel') return;
+    room.game.nominateCheckpoint(self.playerId, msg.target, livingSeatedIds(room));
+    return;
+  }
+  if (msg.t === 'keepExpelVote' && self && !isTV && self.playerId) {
+    if (room.show !== 'keep_expel') return;
+    room.game.castKeepExpelVote(self.playerId, msg.choice, livingSeatedIds(room));
     return;
   }
   /*

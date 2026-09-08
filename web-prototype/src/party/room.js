@@ -23,16 +23,21 @@ import { createLog, visibleTo } from './log.js';
 import { hunterVisibleToGuide, ROOMS } from './coverage.js';
 import { applyTake, applyAssimilate, resolveContact, MODE, PLATE } from './taken.js';
 import { tallyCasting } from './ballot.js';
-import { tallyVote, executioner, nominate, reckoningClosed, canLynchVote, assumedLynchVotes, nominatorLockedChoice, acceptLynchVotes, NO_ONE } from './vote.js';
+import {
+  tallyVote, executioner, nominate, reckoningClosed, canLynchVote, assumedLynchVotes,
+  nominatorLockedChoice, acceptLynchVotes, NO_ONE,
+  freshCheckpoint, nominateKeepExpel, canKeepExpelVote, tallyKeepExpel, projectCheckpoint,
+  KEEP, EXPEL, EXPELLED,
+} from './vote.js';
 import { accusationFinished, accusationSpan } from '../game/accusation-stage.js';
 import { foldWin, OUTCOME, WIN_TARGETS } from './win.js';
 import { reunion } from './reunion.js';
-import { PHASE, EPISODE_CAP, ROUTE_VOTE_MS } from './phases.js';
+import { PHASE, EPISODE_CAP, ROUTE_VOTE_MS, KEEP_EXPEL_DEFENSE_MS, KEEP_EXPEL_BALLOT_MS, KEEP_EXPEL_NOMINATE_MS } from './phases.js';
 import { cleanLook } from './look.js';
 import { STALE_MAX, intelFor } from './intel.js';
 import { coverageRoomOf } from './mansion.js';
 import { mapFeed } from './mapfeed.js';
-import { missionFor, stampSelectedJob, lightsArmedFor } from './mission.js';
+import { missionFor, stampSelectedJob, lightsArmedFor, jobRoster } from './mission.js';
 import {
   endGrace, freshSeat, HEAT_STEP, LIGHTS_JOB, leaveGenerator,
   projectLights, setGenerating, tickBoard, tickSeat, tripLeft,
@@ -89,6 +94,7 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       id: s.id, seat: s.seat, name: `Robot ${s.seat + 1}`, alive: true,
       shell: null, accent: null,
       claim: null, plate: PLATE.UNDECLARED,
+      expelled: false,
     })),
     hunterRoom: ROOMS[0],
     pair: { runner: null, guide: null },
@@ -166,6 +172,12 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     heatStep: HEAT_STEP.IDLE,
     seats: {},
     lights: null,
+    /**
+     * KEEP/EXPEL between jobs. Ballots live here, not on the frame —
+     * `projectCheckpoint` is the public shape. Expulsion is next-job only.
+     */
+    checkpoint: freshCheckpoint(),
+    expelled: new Set(),
   };
 
   /**
@@ -208,6 +220,7 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       cameras: { ...state.cameras },
       incident: { ...state.incident },
       route: projectRoute(state.route, routeLiving()),
+      checkpoint: projectCheckpoint(state.checkpoint, checkpointLiving()),
     };
     if (!sock.isTV && deal.seats.some((s) => s.id === sock.playerId)) {
       const v = viewFor(deal, sock.playerId);
@@ -217,6 +230,7 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
         routePick: state.route.votes[sock.playerId] || null,
         station: claim.station || null,
         stationConfirmed: !!claim.confirmed,
+        keepExpel: state.checkpoint.votes[sock.playerId] || null,
       };
     } else if (!sock.isTV) {
       /*
@@ -490,10 +504,27 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
    * Robot N chairs are not a vote. Gates omit it and use every alive player.
    */
   function routeLiving() {
+    let ids;
     if (Array.isArray(state.route.livingIds) && state.route.livingIds.length) {
-      return state.route.livingIds.filter((id) => state.players.some((p) => p.id === id && p.alive));
+      ids = state.route.livingIds.filter((id) => state.players.some((p) => p.id === id && p.alive));
+    } else {
+      ids = state.players.filter((p) => p.alive).map((p) => p.id);
     }
-    return state.players.filter((p) => p.alive).map((p) => p.id);
+    return jobRoster(ids, [...state.expelled]);
+  }
+
+  function checkpointLiving() {
+    if (Array.isArray(state.checkpoint.livingIds) && state.checkpoint.livingIds.length) {
+      return state.checkpoint.livingIds.filter((id) => state.players.some((p) => p.id === id && p.alive));
+    }
+    return state.players.filter((p) => p.alive && !p.expelled).map((p) => p.id);
+  }
+
+  function jobRosterLiving(livingOpt = null) {
+    const living = (Array.isArray(livingOpt) && livingOpt.length)
+      ? livingOpt.filter((id) => state.players.some((p) => p.id === id && p.alive))
+      : state.players.filter((p) => p.alive).map((p) => p.id);
+    return jobRoster(living, [...state.expelled]);
   }
 
   function resetHeat() {
@@ -503,6 +534,144 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     state.heatStep = HEAT_STEP.IDLE;
     state.seats = {};
     state.lights = null;
+  }
+
+  function clearSitOut() {
+    state.expelled = new Set();
+    for (const p of state.players) p.expelled = false;
+  }
+
+  /**
+   * Between-jobs KEEP/EXPEL. Previous sit-out has been served by the job
+   * that just recapped. Defense cannot be skipped when a nominee exists.
+   */
+  function enterKeepExpel(livingOpt = null, nowOpt = null) {
+    clearSitOut();
+    const living = (Array.isArray(livingOpt) && livingOpt.length)
+      ? livingOpt.filter((id) => state.players.some((p) => p.id === id && p.alive))
+      : state.players.filter((p) => p.alive).map((p) => p.id);
+    const now = Number.isFinite(nowOpt) ? nowOpt : Date.now();
+    state.checkpoint = {
+      ...freshCheckpoint(),
+      step: 'nominate',
+      livingIds: living.slice(),
+      until: now + KEEP_EXPEL_NOMINATE_MS,
+      openedAt: now,
+    };
+    record(makeEvent('checkpoint.opened', VIS.PUBLIC, { living: living.length, until: state.checkpoint.until }));
+    setPhase('KEEP_EXPEL');
+    return { ok: true, until: state.checkpoint.until };
+  }
+
+  function nominateCheckpoint(nominator, target, livingOpt = null, nowOpt = null) {
+    if (state.checkpoint.step !== 'nominate') return { ok: false, why: 'not nominate' };
+    if (livingOpt && Array.isArray(livingOpt)) state.checkpoint.livingIds = livingOpt.slice();
+    const living = checkpointLiving();
+    const result = nominateKeepExpel(living, nominator, target, state.checkpoint.nominee);
+    if (!result.ok) return result;
+    const now = Number.isFinite(nowOpt) ? nowOpt : Date.now();
+    state.checkpoint.nominee = result.nomination.target;
+    state.checkpoint.nominator = result.nomination.nominator;
+    state.checkpoint.step = 'defense';
+    state.checkpoint.until = now + KEEP_EXPEL_DEFENSE_MS;
+    record(makeEvent('checkpoint.nominated', VIS.PUBLIC, {
+      nominator: result.nomination.nominator,
+      nominee: result.nomination.target,
+    }));
+    broadcast();
+    return { ok: true, nomination: result.nomination };
+  }
+
+  function resolveCheckpoint({ empty = false } = {}) {
+    const living = checkpointLiving();
+    const nominee = empty ? null : state.checkpoint.nominee;
+    const box = (!nominee)
+      ? { result: KEEP, expelled: false, nominee: null }
+      : tallyKeepExpel({ living, votes: state.checkpoint.votes, nominee });
+    state.checkpoint.step = 'result';
+    state.checkpoint.result = box.result;
+    state.checkpoint.until = null;
+    if (box.expelled && nominee) {
+      state.expelled.add(nominee);
+      const p = state.players.find((x) => x.id === nominee);
+      if (p) p.expelled = true;
+    }
+    record(makeEvent('checkpoint.resolved', VIS.PUBLIC, {
+      result: box.result,
+      nominee: nominee || null,
+    }));
+    broadcast();
+    return { ok: true, closed: true, result: box.result, nominee: nominee || null };
+  }
+
+  function advanceCheckpoint(nowOpt = null) {
+    const now = Number.isFinite(nowOpt) ? nowOpt : Date.now();
+    const cp = state.checkpoint;
+    if (!cp || cp.step === 'idle') return { ok: true, step: 'idle', closed: false };
+    if (cp.step === 'result') return { ok: true, step: 'result', closed: true, result: cp.result };
+    if (cp.step === 'nominate') {
+      if (now >= (Number(cp.until) || 0)) return resolveCheckpoint({ empty: true });
+      return { ok: true, step: 'nominate' };
+    }
+    if (cp.step === 'defense') {
+      const until = Number(cp.until) || 0;
+      if (now < until) return { ok: true, step: 'defense', left: until - now };
+      cp.step = 'ballot';
+      cp.until = now + KEEP_EXPEL_BALLOT_MS;
+      record(makeEvent('checkpoint.ballot', VIS.PUBLIC, { nominee: cp.nominee, until: cp.until }));
+      broadcast();
+      return { ok: true, step: 'ballot' };
+    }
+    if (cp.step === 'ballot') {
+      const living = checkpointLiving();
+      const allIn = living.every((id) => cp.votes[id] === KEEP || cp.votes[id] === EXPEL);
+      if (allIn || now >= (Number(cp.until) || 0)) return resolveCheckpoint();
+      return { ok: true, step: 'ballot' };
+    }
+    return { ok: true, step: cp.step };
+  }
+
+  function castKeepExpelVote(voter, choice, livingOpt = null) {
+    if (state.checkpoint.step !== 'ballot') return { ok: false, why: 'not ballot' };
+    if (livingOpt && Array.isArray(livingOpt)) state.checkpoint.livingIds = livingOpt.slice();
+    const living = checkpointLiving();
+    const allowed = canKeepExpelVote(voter, choice, living);
+    if (!allowed.ok) return allowed;
+    state.checkpoint.votes[voter] = choice;
+    broadcast();
+    const allIn = living.every((id) => state.checkpoint.votes[id] === KEEP || state.checkpoint.votes[id] === EXPEL);
+    if (allIn) return { ...resolveCheckpoint(), auto: true };
+    return { ok: true, pick: choice };
+  }
+
+  function runScriptedCheckpoint(checkpoint, living, now0 = 0) {
+    enterKeepExpel(living, now0);
+    if (!checkpoint || !checkpoint.target) {
+      advanceCheckpoint(now0 + KEEP_EXPEL_NOMINATE_MS);
+      return;
+    }
+    const nom = nominateCheckpoint(checkpoint.nominator || living[0], checkpoint.target, living, now0);
+    if (!nom.ok) {
+      advanceCheckpoint(now0 + KEEP_EXPEL_NOMINATE_MS);
+      return;
+    }
+    advanceCheckpoint(now0 + KEEP_EXPEL_DEFENSE_MS);
+    const votes = checkpoint.votes || {};
+    for (const id of checkpointLiving()) {
+      if (votes[id] === KEEP || votes[id] === EXPEL) castKeepExpelVote(id, votes[id], living);
+    }
+    if (state.checkpoint.step === 'ballot') {
+      advanceCheckpoint(now0 + KEEP_EXPEL_DEFENSE_MS + KEEP_EXPEL_BALLOT_MS);
+    }
+  }
+
+  function closeCheckpoint() {
+    let last = { ok: true, step: state.checkpoint.step };
+    for (let i = 0; i < 4; i++) {
+      last = advanceCheckpoint(Number.MAX_SAFE_INTEGER);
+      if (last.closed || last.step === 'idle' || last.step === 'result') return last;
+    }
+    return last;
   }
 
   function refreshLights() {
@@ -645,9 +814,7 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       return { ok: false, why: 'not lights' };
     }
     if (!state.selectedJob) state.selectedJob = LIGHTS_JOB;
-    const living = (Array.isArray(livingOpt) && livingOpt.length)
-      ? livingOpt.filter((id) => state.players.some((p) => p.id === id && p.alive))
-      : state.players.filter((p) => p.alive).map((p) => p.id);
+    const living = jobRosterLiving(livingOpt);
     if (!living.length) return { ok: false, why: 'no living' };
     state.heatArmed = true;
     state.heatNow = Number(nowMs) || 0;
@@ -858,7 +1025,7 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
   }
 
   /** Play one scripted episode. Deterministic — the gates need two runs to agree exactly. */
-  function playEpisode({ takeRunner = false, hunterRoom = null, ballots = null, votes = null, nominations = null, living: livingOpt = null, scaffold = true, escaped = null, blocked = false } = {}) {
+  function playEpisode({ takeRunner = false, hunterRoom = null, ballots = null, votes = null, nominations = null, living: livingOpt = null, scaffold = true, escaped = null, blocked = false, checkpoint = null } = {}) {
     const takeRunnerThisEpisode = takeRunner;
     if (hunterRoom) state.hunterRoom = hunterRoom;
     const allLiving = state.players.filter((p) => p.alive).map((p) => p.id);
@@ -879,11 +1046,13 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     setPhase('CASTING');
     // 🚨 THE PAIR COMES OUT OF A BALLOT, NOT A SEAT INDEX. `ballot.js` resolves every tie
     // deterministically and publicly, so casting never stalls and never waits on a human.
+    const roster = jobRosterLiving(living);
+    const castPool = roster.length >= 2 ? roster : living;
     const cast = tallyCasting({
-      ballots: ballots || living.map((v, i) => ({
-        voter: v, runner: living[(i + 1) % living.length], guide: living[(i + 2) % living.length],
+      ballots: ballots || castPool.map((v, i) => ({
+        voter: v, runner: castPool[(i + 1) % castPool.length], guide: castPool[(i + 2) % castPool.length],
       })),
-      living, history: state.history, lastPair: state.lastPair, ep: state.episode, worldSeed,
+      living: castPool, history: state.history, lastPair: state.lastPair, ep: state.episode, worldSeed,
       matchSeed: worldSeed,
     });
     const runner = state.players.find((p) => p.id === cast.runner);
@@ -1008,6 +1177,7 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     }
 
     setPhase('RECAP');
+    runScriptedCheckpoint(checkpoint, living, 0);
     setPhase('DEBRIEF');
 
     // ---- RECKONING / VOTE / EXECUTION, on EVERY episode including the premiere.
@@ -1204,6 +1374,13 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     confirmStation,
     lockCrew,
     resetRoute,
+    enterKeepExpel,
+    nominateCheckpoint,
+    castKeepExpelVote,
+    advanceCheckpoint,
+    closeCheckpoint,
+    jobRosterLiving,
+    expelledIds: () => [...state.expelled],
     armLightsHeat,
     startLightsPlay,
     setGenerate,

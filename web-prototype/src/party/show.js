@@ -14,7 +14,7 @@
 import { PHASE, SECONDS, reckoningSeconds, EPISODE_ORDER, orderFor } from './phases.js';
 
 export const SHOW_BEATS = [
-  'lobby', 'casting', 'expedition', 'recap', 'debrief',
+  'lobby', 'casting', 'expedition', 'recap', 'keep_expel', 'debrief',
   'reckoning', 'vote', 'execution', 'verdict',
   /*
    * 🎬 Session-end, not an episode beat. It is in SHOW_BEATS because `setShow` refuses anything
@@ -66,6 +66,8 @@ export const EXECUTION_HOLD_MS = SECONDS[PHASE.EXECUTION] * 1000;
  * simply never advance — a stall that reads as a design choice.
  */
 export const VERDICT_HOLD_MS = SECONDS[PHASE.VERDICT] * 1000;
+/** Between-jobs KEEP/EXPEL. Inner steps (nominate / defense / ballot) carve this. */
+export const KEEP_EXPEL_HOLD_MS = SECONDS[PHASE.KEEP_EXPEL] * 1000;
 
 /**
  * Last slice of Debrief — phones wake and may name someone before Reckoning proper.
@@ -144,7 +146,7 @@ export const EMPTY_RECKONING_EXTEND_CAP = 0;
  * the merged pair names still belong on the plates (`cuePairs`), and does the phone draw a
  * seated sheet rather than a pad (`party-phone.js`). Nobody presses anything on either beat.
  */
-export const TALK_BEATS = ['debrief', 'reckoning', 'vote', 'execution', 'verdict', 'reunion'];
+export const TALK_BEATS = ['keep_expel', 'debrief', 'reckoning', 'vote', 'execution', 'verdict', 'reunion'];
 export const isTalkBeat = (beat) => TALK_BEATS.includes(String(beat || ''));
 
 /* =================================================================================================
@@ -268,7 +270,7 @@ export const STUB_SHOW_PLAN = [
  * This chain was the shipped behaviour all along; `phases.js` `orderFor` was the half that
  * disagreed, and it was changed to match this one rather than the other way round.
  */
-export const AFTER_RUN_BEATS = ['recap', 'debrief', 'reckoning', 'vote', 'execution', 'verdict', 'casting'];
+export const AFTER_RUN_BEATS = ['recap', 'keep_expel', 'debrief', 'reckoning', 'vote', 'execution', 'verdict', 'casting'];
 
 /**
  * 🗞️ **RECAP AIRS.** `AFTER_RUN_BEATS` is still the post-run HOLD chain (unchanged literal —
@@ -280,7 +282,8 @@ export const AFTER_RUN_BEATS = ['recap', 'debrief', 'reckoning', 'vote', 'execut
  */
 const AFTER_RUN_NEXT = {
   expedition: 'recap',
-  recap: 'debrief',
+  recap: 'keep_expel',
+  keep_expel: 'debrief',
   debrief: 'reckoning',
   reckoning: 'vote',
   vote: 'execution',
@@ -309,6 +312,7 @@ export function holdMsFor(beat, noms = 0) {
   if (beat === 'vote') return VOTE_HOLD_MS;
   if (beat === 'execution') return EXECUTION_HOLD_MS;
   if (beat === 'verdict') return VERDICT_HOLD_MS;
+  if (beat === 'keep_expel') return KEEP_EXPEL_HOLD_MS;
   return null;
 }
 
@@ -323,7 +327,7 @@ export function nextShowBeat(beat) {
  * re-enters Reckoning CLEARS standing noms. Forward is the product clock; backward is
  * a strobe. Recap→expedition (Watch the run) and verdict→casting are not on this list.
  */
-export const TALK_WALK = ['recap', 'debrief', 'reckoning', 'vote', 'execution', 'verdict'];
+export const TALK_WALK = ['recap', 'keep_expel', 'debrief', 'reckoning', 'vote', 'execution', 'verdict'];
 
 export function isBackwardTalkJump(from, to) {
   const a = TALK_WALK.indexOf(String(from || ''));

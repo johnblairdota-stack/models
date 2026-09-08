@@ -1696,8 +1696,9 @@ console.log('\nparty-warm — the lobby-warm night');
    */
   t('W27 · debrief is a show beat, and the run walks all the way to the Verdict',
     SHOW_BEATS.includes('debrief') && SHOW_BEATS.includes('reckoning')
-      && AFTER_RUN_BEATS.join(',') === 'recap,debrief,reckoning,vote,execution,verdict,casting'
-      && nextShowBeat('recap') === 'debrief' && nextShowBeat('debrief') === 'reckoning'
+      && AFTER_RUN_BEATS.join(',') === 'recap,keep_expel,debrief,reckoning,vote,execution,verdict,casting'
+      && nextShowBeat('recap') === 'keep_expel' && nextShowBeat('keep_expel') === 'debrief'
+      && nextShowBeat('debrief') === 'reckoning'
       && nextShowBeat('execution') === 'verdict' && nextShowBeat('verdict') === 'casting');
   // Debrief 75s -> 300s on 2026-08-25: a CEILING now, ended by a majority tapping READY
   // (`party-night` N21). What the change cost the night budget is argued in `round-loop` R2.
@@ -1729,7 +1730,7 @@ console.log('\nparty-warm — the lobby-warm night');
   t('W27e · the host derives its seated beats from TALK_BEATS, and canLock looks at this pair',
     /const onTalk = show === 'recap' \|\| onStage;/.test(hostSrc)
     && !/const onTalk = show === 'recap' \|\| show === 'debrief'/.test(hostSrc)
-    && ['debrief', 'reckoning', 'vote', 'execution', 'verdict', 'reunion'].every(isTalkBeat)
+    && ['keep_expel', 'debrief', 'reckoning', 'vote', 'execution', 'verdict', 'reunion'].every(isTalkBeat)
     && !isTalkBeat('recap') && !isTalkBeat('expedition') && !isTalkBeat('casting')
     && /!pair\.runner/.test(hostSrc)
     && /show === 'debrief'/.test(hostSrc));
@@ -2211,7 +2212,7 @@ console.log('\nparty-warm — the lobby-warm night');
 {
   const hostSrc = await readFile(new URL('../src/views/party-host.js', import.meta.url), 'utf8');
   t('W30 · the rail is lobby plus phases.js EPISODE_ORDER — not a second table',
-    RUNDOWN_BEATS.join(',') === 'lobby,casting,expedition,recap,debrief,reckoning,vote,execution,verdict'
+    RUNDOWN_BEATS.join(',') === 'lobby,casting,expedition,recap,keep_expel,debrief,reckoning,vote,execution,verdict'
       && RUNDOWN_BEATS[0] === 'lobby'
       && RUNDOWN_BEATS.includes('verdict')
       && !RUNDOWN_BEATS.includes('reunion')

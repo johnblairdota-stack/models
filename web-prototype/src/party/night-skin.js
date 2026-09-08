@@ -401,6 +401,13 @@ export function injectNightSkin() {
     .route-meta, .route-stations { margin:0; color:#8a7d70; font-size:13px; line-height:1.4; }
     .route-held { color:#e8c36a; font-size:14px; font-weight:700; margin:10px 0 0; }
     .route-roster { margin:10px 0 0; padding-left:1.2em; color:#f3ece3; font-size:15px; }
+    .keep-expel { margin:12px 0 8px; padding:14px 16px; border-radius:10px;
+      border:1px solid rgba(245,161,74,.22); background:#161310; }
+    .keep-k { font-size:12px; letter-spacing:.28em; text-transform:uppercase; color:#f5a14a;
+      font-weight:800; margin:0 0 8px; }
+    .keep-who { margin:0 0 8px; font-size:clamp(28px, 4vw, 48px); font-weight:800; color:#f3ece3; }
+    .keep-result { margin:10px 0 0; font-size:22px; font-weight:800; letter-spacing:.12em;
+      text-transform:uppercase; color:#f5a14a; }
     .lights-board { margin:16px 0 8px; padding:14px 16px; border-radius:10px;
       border:1px solid rgba(245,161,74,.22); background:#161310; }
     .lights-k { font-size:12px; letter-spacing:.28em; text-transform:uppercase; color:#f5a14a;

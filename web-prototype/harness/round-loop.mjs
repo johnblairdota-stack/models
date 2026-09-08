@@ -95,8 +95,8 @@ const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' �
    * change and these four assertions are what will tell you everything that moves with it.
    * ========================================================================================== */
 
-  t('R2 · 4/5/6 episodes land on the budgeted 43:10 / 52:20 / 61:30',
-    Math.abs(sessionSeconds(4) - 2590) < 1 && Math.abs(sessionSeconds(5) - 3140) < 1 && Math.abs(sessionSeconds(6) - 3690) < 1,
+  t('R2 · 4/5/6 episodes land on the budgeted 44:10 / 53:35 / 63:00',
+    Math.abs(sessionSeconds(4) - 2650) < 1 && Math.abs(sessionSeconds(5) - 3215) < 1 && Math.abs(sessionSeconds(6) - 3780) < 1,
     `${mins(4).toFixed(1)} / ${mins(5).toFixed(1)} / ${mins(6).toFixed(1)} min`);
 
   /*
