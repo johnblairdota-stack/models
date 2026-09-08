@@ -1538,7 +1538,7 @@ console.log('\nparty-warm — the lobby-warm night');
   t('W21g control · the lobby warm layer is still the dim blurred backdrop',
     /filter: blur\(2px\)/.test(skin) && /\.run-cam-layer\.warm \{/.test(skin));
   t('W21h — late bake must not fire cast intros once the expedition owns the TV',
-    /ui\.beat === 'expedition' \|\| ui\.beat === 'recap' \|\| ui\.beat === 'debrief'/.test(hostSrc)
+    /ui\.beat === 'expedition' \|\| ui\.beat === 'recap' \|\| ui\.beat === 'keep_expel' \|\| ui\.beat === 'debrief'/.test(hostSrc)
     && /maybeIntros/.test(hostSrc));
 
   t('W22 — live expedition does not paint a Watch the run button', (() => {

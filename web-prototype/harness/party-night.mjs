@@ -232,6 +232,22 @@ function last(box, type) {
   const opened = room5.advanceCheckpoint(KEEP_EXPEL_DEFENSE_MS);
   t('N27i2 · ballots open only after defense elapses',
     opened.step === 'ballot' && room5.state.checkpoint.step === 'ballot');
+
+  const liveCp = createRoom({ count: 8, castSeed: 8, worldSeed: 8, send: () => {} });
+  liveCp.start();
+  const nightCp = {
+    game: liveCp, conns: new Map(), seatsTaken: new Set(), tvTaken: false,
+    show: 'recap', showClock: null, showUntil: null,
+    reckoningStartedAt: null, reckoningEmptyExtends: 0, runEnd: RUN_END.SMASHED,
+    ballots: new Map(),
+  };
+  progressShow(nightCp);
+  const idsLive = liveCp.state.players.filter((p) => p.alive).map((p) => p.id);
+  liveCp.nominateCheckpoint(idsLive[0], idsLive[1], idsLive);
+  const stayed = expireShowHold(nightCp);
+  t('N27j · live expire during defense stays on KEEP/EXPEL — does not skip to Debrief',
+    stayed === 'keep_expel' && nightCp.show === 'keep_expel'
+      && liveCp.state.checkpoint.step === 'defense');
 }
 
 {
@@ -1296,7 +1312,9 @@ function showRoom() {
       && (early.game.state.nominations || []).length === 0,
     JSON.stringify(afterZero));
 
+  // Recap → KEEP/EXPEL → Debrief → Reckoning, then nominate before zero.
   const named = showRoom();
+  progressShow(named);
   progressShow(named);
   progressShow(named);
   const living = named.game.episodeLiving();
@@ -1305,7 +1323,9 @@ function showRoom() {
     nom.ok && named.game.state.nominations.length === 1
       && expireShowHold(named) === 'vote' && named.show === 'vote');
 
+  // Recap → KEEP/EXPEL → Debrief; early talk still phones-down.
   const talk = showRoom();
+  progressShow(talk);
   progressShow(talk);
   talk.showUntil = Date.now() + 60000;
   const livingTalk = talk.game.episodeLiving();

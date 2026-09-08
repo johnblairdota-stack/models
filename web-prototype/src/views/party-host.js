@@ -969,7 +969,7 @@ export default async function partyHost({ params }) {
      * the follow layer stamped INTROS · WALK over the live run. Intros are a casting
      * beat — once the pair is walking, the run cue owns the camera.
      */
-    if (ui.beat === 'expedition' || ui.beat === 'recap' || ui.beat === 'debrief') return;
+    if (ui.beat === 'expedition' || ui.beat === 'recap' || ui.beat === 'keep_expel' || ui.beat === 'debrief') return;
     if (ui.beat === 'reckoning' || ui.beat === 'vote' || ui.beat === 'execution') return;
     if (!introCast().length) return;
     ui.introsSent = true;

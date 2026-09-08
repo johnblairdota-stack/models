@@ -47,7 +47,7 @@ import {
   isReadyBeat, readyNeeded, readyMet, READY_COUNTDOWN_MS,
   isBackwardTalkJump,
 } from '../../src/party/show.js';
-import { reckoningSeconds, ROUTE_VOTE_MS } from '../../src/party/phases.js';
+import { reckoningSeconds, ROUTE_VOTE_MS, KEEP_EXPEL_NOMINATE_MS } from '../../src/party/phases.js';
 import { standingTally } from '../../src/party/vote.js';
 import { reactCheck } from '../../src/party/react.js';
 import { pairLockMs } from '../../src/game/pair-lock-stage.js';
@@ -717,29 +717,25 @@ export function expireShowHold(room) {
     }
   }
   if (room.show === 'keep_expel' && room.game?.advanceCheckpoint) {
-    const stepped = room.game.advanceCheckpoint();
-    if (stepped?.step === 'defense' && (stepped.left | 0) > 0) {
-      clearShowClock(room);
-      room.showClock = setTimeout(() => {
-        room.showClock = null;
-        expireShowHold(room);
-      }, stepped.left);
-      room.showClock.unref?.();
-      return room.show;
+    let stepped = room.game.advanceCheckpoint();
+    if (stepped?.step === 'ballot' && !stepped.closed && checkpointLeftMs(room) <= 0) {
+      stepped = room.game.advanceCheckpoint();
     }
-    if (stepped?.step === 'ballot' && !stepped.closed) {
-      const until = room.game.state.checkpoint?.until;
-      const left = Number.isFinite(Number(until)) ? Number(until) - Date.now() : 0;
-      if (left > 0) {
-        clearShowClock(room);
-        room.showClock = setTimeout(() => {
-          room.showClock = null;
-          expireShowHold(room);
-        }, left);
-        room.showClock.unref?.();
+    if (stepped?.closed || stepped?.step === 'result') {
+      if (!room.keepExpelResultArmed) {
+        room.keepExpelResultArmed = true;
+        armCheckpointClock(room, KEEP_EXPEL_RESULT_MS);
         return room.show;
       }
-      room.game.advanceCheckpoint();
+      room.keepExpelResultArmed = false;
+      return progressShow(room);
+    }
+    if (stepped?.step === 'nominate' || stepped?.step === 'defense' || stepped?.step === 'ballot') {
+      const left = (stepped.left | 0) > 0 ? stepped.left : checkpointLeftMs(room);
+      if (left > 0) {
+        armCheckpointClock(room, left);
+        return room.show;
+      }
     }
   }
   return progressShow(room);
@@ -786,11 +782,27 @@ function enterRecapLive(room, end = null) {
   scheduleShowProgress(room);
 }
 
+/** Brief KEEP/EXPELLED plate after the tally, before Debrief. Not in the 15s budget. */
+const KEEP_EXPEL_RESULT_MS = 1000;
+
+function checkpointLeftMs(room, now = Date.now()) {
+  const until = room.game?.state?.checkpoint?.until;
+  if (!Number.isFinite(Number(until))) return 0;
+  return Math.max(0, Number(until) - now);
+}
+
+function armCheckpointClock(room, waitOpt = null) {
+  if (!room || room.show !== 'keep_expel') return;
+  const wait = Number.isFinite(waitOpt) ? waitOpt : checkpointLeftMs(room);
+  scheduleShowProgress(room, Math.max(0, Number.isFinite(wait) ? wait : KEEP_EXPEL_NOMINATE_MS));
+}
+
 function enterKeepExpelLive(room) {
   const living = livingSeatedIds(room);
+  room.keepExpelResultArmed = false;
   room.game.enterKeepExpel?.(living.length ? living : null);
   setShow(room, 'keep_expel');
-  scheduleShowProgress(room);
+  armCheckpointClock(room);
 }
 
 function enterDebriefLive(room) {
@@ -2000,12 +2012,17 @@ function handleClient(room, bound, self, msg) {
   }
   if (msg.t === 'keepExpelNom' && self && !isTV && self.playerId) {
     if (room.show !== 'keep_expel') return;
-    room.game.nominateCheckpoint(self.playerId, msg.target, livingSeatedIds(room));
+    const nom = room.game.nominateCheckpoint(self.playerId, msg.target, livingSeatedIds(room));
+    if (nom?.ok) armCheckpointClock(room);
     return;
   }
   if (msg.t === 'keepExpelVote' && self && !isTV && self.playerId) {
     if (room.show !== 'keep_expel') return;
-    room.game.castKeepExpelVote(self.playerId, msg.choice, livingSeatedIds(room));
+    const ballot = room.game.castKeepExpelVote(self.playerId, msg.choice, livingSeatedIds(room));
+    if (ballot?.closed) {
+      room.keepExpelResultArmed = true;
+      armCheckpointClock(room, KEEP_EXPEL_RESULT_MS);
+    }
     return;
   }
   /*
