@@ -105,6 +105,33 @@ const winSrc = readFileSync(new URL('../src/party/win.js', import.meta.url), 'ut
   const assim = fold([DEAL, { type: 'player.taken', data: { id: 'p1', kind: 'assimilated' } }]);
   t('ASSIM · hunter assimilation does not end the night',
     assim.rule === null && assim.outcome === OUTCOME.RENEWED && assim.fed === 1);
+
+  const capturedThenEsc = fold([
+    DEAL,
+    { type: 'player.taken', data: { id: 'p1', kind: 'assimilated' } },
+    { type: 'player.escaped', data: { id: 'p2' } },
+  ]);
+  t('SHARE · a captured good still shares a teammate escape (FINALE)',
+    capturedThenEsc.rule === 'ESCAPE' && capturedThenEsc.outcome === OUTCOME.FINALE
+    && capturedThenEsc.escapedGood === 1 && capturedThenEsc.fed === 1);
+
+  const execThenEsc = fold([
+    DEAL,
+    { type: 'player.executed', data: { id: 'p3' } },
+    { type: 'player.escaped', data: { id: 'p4' } },
+  ]);
+  t('SHARE-b · an executed good still shares a teammate escape',
+    execThenEsc.rule === 'ESCAPE' && execThenEsc.outcome === OUTCOME.FINALE);
+
+  const capturedThenBlock = fold([
+    DEAL,
+    { type: 'player.taken', data: { id: 'p1', kind: 'assimilated' } },
+    { type: 'player.executed', data: { id: 'p2' } },
+    { type: 'escape.blocked' },
+  ]);
+  t('SHARE-c · captured goods share the saboteur hold when nobody crosses',
+    capturedThenBlock.rule === 'BLOCK' && capturedThenBlock.outcome === OUTCOME.CANCELLED
+    && capturedThenBlock.escapedGood === 0);
 }
 
 // ---------------------------------------------------------------- W7 · log order IS precedence
@@ -140,6 +167,10 @@ const winSrc = readFileSync(new URL('../src/party/win.js', import.meta.url), 'ut
 
   t('W8c · same-tick order is written in exactly one place', TICK_ORDER.join(',') === 'ESCAPE,BLOCK');
   t('W8c2 · win.js contains no cameras-short Production fire', !/fire\('W5'/.test(winSrc));
+  t('HOLD · win.js does not implement KEEP/EXPEL or a guide/runner replacement',
+    !/escape\.expel|player\.expelled|KEEP\/EXPEL/.test(winSrc)
+    && /party-loop-win-fold-2026-09-08/.test(winSrc)
+    && /task-hold-guide-runner-borrow-later/.test(winSrc));
 }
 
 // ---------------------------------------------------------------- W9 · the controls

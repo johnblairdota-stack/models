@@ -1,8 +1,10 @@
 /**
  * 🏁 **THE WIN MACHINE — a reducer folded over the log, so precedence is decided by timestamps.**
  *
- * `docs/design/party-loop.md` Win / fold (locked 2026-09-08) and
- * `docs/slices/task-win-escape-night.md`.
+ * `docs/design/party-loop.md` Win / fold (locked 2026-09-08),
+ * `docs/design/party-loop-win-fold-2026-09-08.md` (same lock, fragment),
+ * and `docs/slices/task-win-escape-night.md`.
+ * Guide/runner hall energy holds (`task-hold-guide-runner-borrow-later.md`).
  *
  * 🚨 **W1–W4 ARE DEAD PRODUCT.** Clearing saboteurs, lighting cameras, feeding the Hunter, and
  * living-evil ≥ living-good do not end the night. The night ends on **escape**:
