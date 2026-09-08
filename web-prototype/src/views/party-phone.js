@@ -33,6 +33,7 @@ import { intelLine } from '../party/intel.js';
 import { STICK_DEADZONE, warmLabel } from '../party/follow.js';
 import { formatRemain, isTalkBeat, LATE_DEBRIEF_MS, remainingMs } from '../party/show.js';
 import { outcomeLine } from '../party/win.js';
+import { removalWord } from '../party/taken.js';
 import { NO_ONE } from '../party/vote.js';
 import { clearsLine } from '../party/scorekeeper.js';
 
@@ -2570,7 +2571,7 @@ export default async function partyPhone({ params }) {
     }
     if (mine.finalClaim) html += `<p class="hint">What you told them: “${esc(mine.finalClaim)}”</p>`;
     html += `<p class="hint">${mine.death
-      ? `You were ${mine.death.by === 'EXECUTED' ? 'executed' : 'taken'}.`
+      ? `You were ${removalWord(mine.death)}.`
       : 'You made it to the end.'}</p>`;
     const won = (c.reveal?.awards || []).filter((a) => a.winner === me?.playerId);
     for (const a of won) {

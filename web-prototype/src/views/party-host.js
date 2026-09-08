@@ -30,6 +30,7 @@ import { NO_ONE, SHOWRUNNER, heldHit, standingTally } from '../party/vote.js';
 import { hitHoldReady } from '../party/phases.js';
 import { clearsLine, executionPlate, lynchBoardRows, tallyBoardCopy } from '../party/scorekeeper.js';
 import { outcomeLine } from '../party/win.js';
+import { removalWord } from '../party/taken.js';
 import { deadIdsFromPublic, describeCastTiebreaks, livingFromPublic, previewCastTiebreaks, shouldArmCastSend } from '../party/ballot.js';
 import { MAX_PAIRS, pairShape } from '../party/link.js';
 import { missionFor } from '../party/mission.js';
@@ -2720,7 +2721,7 @@ function reunionStage({ lobby, names, reveal, at, shown, status, line }) {
     const look = seatLook(lobby, p.id) || DEFAULT_LOOK;
     const face = robotFaceSvg(look.shell, look.accent, { size: 48, treatment: 'chip' });
     const side = p.alignment === 'evil' ? 'Production' : 'The cast';
-    const end = p.death ? `${p.death.by === 'EXECUTED' ? 'executed' : 'taken'}` : 'survived';
+    const end = p.death ? removalWord(p.death) : 'survived';
     return `<div class="roll-row${turned ? ' turned' : ''}${turned && p.alignment === 'evil' ? ' evil' : ''}">
       ${nameplateHtml({
     name: joinedName(names, p.id, `Seat ${(p.seat ?? 0) + 1}`),
@@ -2788,7 +2789,7 @@ function reunionCentre(at, current, names, reveal) {
       <div class="roll-k">Actually</div>
       <div class="roll-v">${esc(current.role)}</div>
       <div class="roll-s">${esc(side)}${current.death
-      ? ` · ${current.death.by === 'EXECUTED' ? 'executed' : 'taken'}` : ' · survived'}</div>
+      ? ` · ${removalWord(current.death)}` : ' · survived'}</div>
     </div>`;
   }
   if (at.beat === 'cut') {
@@ -2861,7 +2862,7 @@ function verdictFacts(v, recap, names, executed) {
   const casualty = executed
     ? `<div class="fact"><div class="k">Casualty</div><div class="v bad">${esc(joinedName(names, executed, 'A player'))} · EXECUTED</div></div>`
     : (recap.taken?.length
-      ? `<div class="fact"><div class="k">Casualty</div><div class="v bad">${esc(recap.taken.map((t) => joinedName(names, t.id, 'The runner')).join(', '))} · TAKEN</div></div>`
+      ? `<div class="fact"><div class="k">Casualty</div><div class="v bad">${esc(recap.taken.map((t) => joinedName(names, t.id, 'The runner')).join(', '))} · ${esc(recap.taken.some((t) => t.kind === 'assimilated') ? 'ASSIMILATED' : 'TAKEN')}</div></div>`
       : `<div class="fact"><div class="k">Casualty</div><div class="v ok">NOBODY</div></div>`);
   return `<div class="recap talk-facts">
       <div class="fact"><div class="k">Cameras</div><div class="v ${hit ? 'ok' : 'bad'}">${esc(lit + need)}</div></div>

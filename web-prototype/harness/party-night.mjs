@@ -778,9 +778,15 @@ t('N13c · a refresh resumes the server show beat, not casting',
     toVerdict === 'verdict' && night.show === 'verdict'
       && last(host, 'show')?.beat === 'verdict'
       && night.game.state.phase === 'VERDICT'
-      && typeof airedVerdict?.status === 'string' && airedVerdict.status.length > 0
+      && airedVerdict?.status === OUTCOME.RENEWED
       && Number.isFinite(airedVerdict?.camerasLit),
     JSON.stringify(airedVerdict));
+  t('N17h0c · executing the last good does NOT end the night — W4 is dead',
+    night.game.outcome() === OUTCOME.RENEWED
+    && night.game.log.all().filter((e) => e.type === 'win.checked').at(-1)?.data?.rule == null,
+    JSON.stringify({ outcome: night.game.outcome() }));
+  night.game.blockEscape();
+  night.game.enterVerdict();
   t('N17h0b control · the aired verdict carries no feed count — that is Reunion-only',
     airedVerdict != null && !('fed' in airedVerdict) && !('rule' in airedVerdict)
       && fanoutViolations(airedVerdict).length === 0,
@@ -795,9 +801,9 @@ t('N13c · a refresh resumes the server show beat, not casting',
    * starts — so the gate walked to Casting because that is all `AFTER_RUN_NEXT` could ever do.
    * `PRIME-TIME-STATE.md` §2: *"Nothing ever ends a session."* It does now, and this night is the
    * proof: three phones ever sat down, `dealRoles` re-dealt for the two who were seated at start
-   * (p1 evil, p2 good), the Vote executed p2, and `foldWin` fires **W4** — the last good player is
-   * gone. So this table's Verdict has nowhere to go but the Reunion, and the assertion follows the
-   * machine rather than the other way round.
+   * (p1 evil, p2 good), the Vote executed p2 — and that does **not** fold (W4 is dead). The
+   * test then records `escape.blocked` so the Verdict has somewhere to go but another Casting,
+   * and the assertion follows the machine rather than the other way round.
    *
    * The DEFAULT edge, RENEWED → Casting, is not lost with it: N17j below drives a clean four-hand
    * table through the same walk and asserts it. Both sides of the branch are gated or neither is.

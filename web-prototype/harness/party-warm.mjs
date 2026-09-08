@@ -3958,8 +3958,8 @@ console.log('\nparty-warm — the lobby-warm night');
       && !/'The season continues\. Casting is next\.'/.test(hostSrc)
       && !/'The season continues\. Casting is next\.'/.test(phoneSrc)
       && outcomeLine(OUTCOME.RENEWED).includes('continues')
-      && outcomeLine(OUTCOME.CANCELLED).includes('Production wins')
-      && outcomeLine(OUTCOME.FINALE).includes('cast wins')
+      && outcomeLine(OUTCOME.CANCELLED).includes('Saboteurs hold the house')
+      && outcomeLine(OUTCOME.FINALE).includes('gets out')
       && outcomeLine(OUTCOME.ABANDONED).includes('Nobody wins')
       && outcomeLine(undefined).includes('deciding'),
     Object.values(OUTCOME).map(outcomeLine).join(' | '));

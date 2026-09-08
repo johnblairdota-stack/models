@@ -344,10 +344,14 @@ const NO_LOCK = { runner: null, guide: null };
     && result.counts.gus * 2 > five.length,
     `Gus ${result.counts.gus} of ${five.length} · thresh ${result.threshold} · ${result.executed}`);
 
-  t('B16d · no new SHOW beat or CUE_KIND; W5 stays gone; TICK_ORDER is W1 W3 W2 W4',
-    TICK_ORDER.join(' ') === 'W1 W3 W2 W4'
+  t('B16d · no new SHOW beat or CUE_KIND; W5 stays gone; TICK_ORDER is ESCAPE BLOCK',
+    TICK_ORDER.join(' ') === 'ESCAPE BLOCK'
     && !TICK_ORDER.includes('W5')
     && !/fire\('W5'/.test(winSrc)
+    && !/fire\('W1'/.test(winSrc)
+    && !/fire\('W2'/.test(winSrc)
+    && !/fire\('W3'/.test(winSrc)
+    && !/fire\('W4'/.test(winSrc)
     && SHOW_BEATS.join(',') === 'lobby,casting,expedition,recap,debrief,reckoning,vote,execution,verdict,reunion'
     && !EPISODE_ORDER.includes('HIT')
     && CUE_KINDS.join(',') === 'intros,run,move,shot,idle,noms,pair,execute,pin',

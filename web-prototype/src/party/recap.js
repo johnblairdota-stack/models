@@ -68,7 +68,7 @@ export function recapFromEvents(events) {
     emptyNail: still?.data?.emptyNail ?? null,
     tool: tool?.data?.shot ?? null,
     failLine: fail?.data?.line ?? null,
-    taken: taken.map((e) => ({ id: e.data?.id, seat: e.data?.seat })),
+    taken: taken.map((e) => ({ id: e.data?.id, seat: e.data?.seat, kind: e.data?.kind ?? null })),
     alarmCount: alarms.length,
     missCount: misses.length,
     runner: pair?.data?.runner ?? ballot?.data?.runner ?? null,

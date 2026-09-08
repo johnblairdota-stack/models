@@ -7,7 +7,7 @@
  * The two properties that no unit gate can see, because both are about the whole shape:
  *
  *   **It terminates.** A social deception game that can run forever is a game that ends when
- *   somebody's lift arrives. Matches still close on W1 / W2 / W3 / W4 / W6; a camera miss at
+ *   somebody's lift arrives. Matches close on ESCAPE / BLOCK / W6; a camera miss at
  *   the cap is RENEWED, not a Production door. R1 runs hundreds of matches across every player
  *   count and every take pattern and requires every one to stop (hang bound `EPISODE_CAP + 8`).
  *
@@ -37,7 +37,7 @@ const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' Â
 {
   const r = createRoom({ count: 8, castSeed: 1, worldSeed: 1, send: () => {}, emit: () => {} });
   r.start();
-  const out = r.playMatch({ hunterRoom: 'cellar' });
+  const out = r.playMatch({ hunterRoom: 'cellar', blocked: true });
   const phases = new Set(r.log.all().filter((e) => e.type.startsWith('phase.')).map((e) => e.type.slice(6)));
   t('R0 arm Â· a match runs every phase and reaches a verdict',
     !!out && phases.has('CASTING') && phases.has('EXPEDITION') && phases.has('VERDICT'),
@@ -52,7 +52,11 @@ const t = (n, c, d = '') => { if (c) { pass++; console.log(`  ok   ${n}${d ? ' Â
     for (let seed = 0; seed < 60; seed++) {
       const r = createRoom({ count, castSeed: seed * 17 + count, worldSeed: seed + 1, send: () => {}, emit: () => {} });
       r.start();
-      const out = r.playMatch((ep) => ({ hunterRoom: ['cellar', 'gallery', 'hall'][ep % 3], takeRunner: (seed + ep) % 3 === 0 }));
+      const out = r.playMatch((ep) => ({
+        hunterRoom: ['cellar', 'gallery', 'hall'][ep % 3],
+        takeRunner: (seed + ep) % 3 === 0,
+        blocked: ep >= EPISODE_CAP,
+      }));
       ran++;
       outcomes[out] = (outcomes[out] || 0) + 1;
       if (!out || out === OUTCOME.RENEWED) bad = `count=${count} seed=${seed} ended on ${out}`;
