@@ -16,6 +16,7 @@ import { GUIDE_MAP_CSS } from './guidemap.js';
 import { INTRO_FRAME_PCT, TV_FRAME_PCT } from './follow.js';
 import { SHOW_CHROME_CSS } from './look.js';
 import { STING_CSS } from './stinger.js';
+import { STICKY_CSS, peelRelease } from './notes.js';
 
 export function playerName(players, id) {
   const p = (players || []).find((x) => x.id === id);
@@ -863,8 +864,86 @@ export function injectNightSkin() {
     }
     ${ROLE_CARD_CSS}
     ${STING_CSS}
+    ${STICKY_CSS}
   `;
   document.head.appendChild(s);
+}
+
+/**
+ * Peel: grab, curl lift, early-release flop-back, momentum slide off, tap-to-peel.
+ * Notes corner restore / tab. Views own when a note is present; this only binds the paper.
+ */
+export function bindYellowStickies(root, { onPeeled, onRestore, onTab } = {}) {
+  if (!root) return;
+  const tab = root.querySelector('[data-notes-tab]');
+  if (tab && !tab.dataset.bound) {
+    tab.dataset.bound = '1';
+    tab.addEventListener('click', (e) => {
+      e.preventDefault();
+      onTab?.();
+    });
+  }
+  for (const btn of root.querySelectorAll('[data-note-restore]')) {
+    if (btn.dataset.bound) continue;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      onRestore?.(String(btn.dataset.noteRestore || ''));
+    });
+  }
+  const note = root.querySelector('[data-sticky]');
+  if (!note || note.dataset.peelBound) return;
+  note.dataset.peelBound = '1';
+  let grab = null;
+  const setVars = (peel, lift) => {
+    note.style.setProperty('--peel', String(peel));
+    note.style.setProperty('--lift', String(lift));
+  };
+  const start = (e) => {
+    if (e.button != null && e.button !== 0) return;
+    note.setPointerCapture?.(e.pointerId);
+    grab = { x: e.clientX, y: e.clientY, t: e.timeStamp, lx: e.clientX, ly: e.clientY, lt: e.timeStamp };
+    note.classList.add('lifting');
+    note.classList.remove('flop', 'slide', 'tap-peel');
+  };
+  const move = (e) => {
+    if (!grab) return;
+    const dx = e.clientX - grab.x;
+    const dy = e.clientY - grab.y;
+    const dist = Math.hypot(dx, dy);
+    setVars(Math.min(1, dist / 90), Math.min(1, dist / 60));
+    grab.lx = e.clientX;
+    grab.ly = e.clientY;
+    grab.lt = e.timeStamp;
+  };
+  const end = (e) => {
+    if (!grab) return;
+    const dx = e.clientX - grab.x;
+    const dy = e.clientY - grab.y;
+    const dt = Math.max(1, e.timeStamp - grab.lt);
+    const vx = (e.clientX - grab.lx) / dt;
+    const vy = (e.clientY - grab.ly) / dt;
+    const kind = peelRelease({ dx, dy, vx, vy });
+    grab = null;
+    note.classList.remove('lifting');
+    setVars(0, 0);
+    if (kind === 'flop') {
+      note.classList.add('flop');
+      return;
+    }
+    note.classList.add(kind === 'peel' ? 'tap-peel' : 'slide');
+    const done = () => {
+      if (!note.isConnected) return;
+      note.remove();
+      onPeeled?.(note.dataset.sticky);
+    };
+    note.addEventListener('animationend', done, { once: true });
+    setTimeout(done, 520);
+  };
+  note.addEventListener('pointerdown', start);
+  note.addEventListener('pointermove', move);
+  note.addEventListener('pointerup', end);
+  note.addEventListener('pointercancel', end);
 }
 
 export function markPartyReady() {

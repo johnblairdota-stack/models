@@ -13,7 +13,7 @@
 import { initAudio, playEviction, playNameLanded } from '../audio/audio.js';
 import { PartyNightClient, defaultWsUrl, makeCode, tokenKey } from '../party/night-client.js';
 import { recapFromEvents, episodeHadRun } from '../party/recap.js';
-import { injectNightSkin, markPartyReady, playerName } from '../party/night-skin.js';
+import { injectNightSkin, markPartyReady, playerName, bindYellowStickies } from '../party/night-skin.js';
 import { qrSvg } from '../party/qr.js';
 import {
   DEFAULT_LOOK, SHOW_LINE, SHOW_TITLE, cleanLook, codeBugHtml, countdownHtml, nameplateHtml,
@@ -38,6 +38,10 @@ import { FAIL_CHROME, JOB, SMASH_CHROME, heldBrief, routeMenuHtml, toolLabel } f
 import { isLightsJob, lightsBoardHtml } from '../party/heat.js';
 import { galleryBoardHtml, isPortraitJob } from '../party/portrait.js';
 import { isStinging, stepSting, stingHtml } from '../party/stinger.js';
+import {
+  NOTE_IDS, takeSticky, restoreSticky, stickyHtml, notesCornerHtml, wrapSticky,
+  createNotesSession, sessionStoragePersist,
+} from '../party/notes.js';
 
 /** TV chrome 3·2·1 after every living ballot (or the 20s backstop), then `{ t: 'episode' }`. */
 const SEND_COUNTDOWN_MS = 3000;
@@ -262,6 +266,9 @@ export default async function partyHost({ params }) {
      * recoverable, and `settleBeatClaim` is the only thing that clears it.
      */
     claim: null,
+    notes: null,
+    stickyShowing: null,
+    notesOpen: false,
   };
 
   /**
@@ -391,7 +398,7 @@ export default async function partyHost({ params }) {
         // showing a bar at zero next to a mansion somebody else already baked.
         ui.warm = m.stage; ui.warmPct = m.pct ?? warmPct(m.stage);
       }
-      if (m.t === 'lobby' && patchLobby(root, client, ui, m)) return;
+      if (m.t === 'lobby' && patchLobby(root, client, ui, m)) { bindNotesUi(); return; }
       /*
        * 👏 A react is a new chip, not a new television. `paint()` rewrites `root.innerHTML`.
        * Detaching the strip and putting it back RESTARTS `react-float` — measured: a mid-rise
@@ -1542,6 +1549,48 @@ export default async function partyHost({ params }) {
     if (made) made.dataset.camSting = String(ui.sting.cam);
   }
 
+  function notesSession() {
+    const persist = sessionStoragePersist(code, 'tv');
+    if (ui.notes && ui.notes.room === code && ui.notes.seat === 'tv') return ui.notes;
+    ui.notes = createNotesSession({
+      room: code, seat: 'tv', load: persist.load, save: persist.save,
+    });
+    return ui.notes;
+  }
+
+  function claimSticky(id) {
+    const taken = takeSticky(notesSession(), id, ui.stickyShowing);
+    if (taken.showing === id) ui.stickyShowing = id;
+    return taken.html;
+  }
+
+  function hostNotesTail(bodySoFar) {
+    let extra = '';
+    if (ui.stickyShowing && !String(bodySoFar || '').includes('data-sticky=')) {
+      extra += stickyHtml(ui.stickyShowing, { loose: true });
+    }
+    extra += notesCornerHtml(notesSession().notesPresented, { open: ui.notesOpen });
+    return extra;
+  }
+
+  function bindNotesUi() {
+    bindYellowStickies(root, {
+      onPeeled() { ui.stickyShowing = null; },
+      onRestore(id) {
+        const r = restoreSticky(notesSession(), id);
+        if (r.show) {
+          ui.stickyShowing = id;
+          ui.notesOpen = false;
+          paint();
+        }
+      },
+      onTab() {
+        ui.notesOpen = !ui.notesOpen;
+        paint();
+      },
+    });
+  }
+
   function paint() {
     const frame = client.frame;
     const phase = frame?.phase || client.lobby?.phase || 'LOBBY';
@@ -1862,7 +1911,7 @@ export default async function partyHost({ params }) {
           ${titlePlateHtml()}
           <div class="night-row">
             ${codeBugHtml({ code: code.toUpperCase(), url: joinPath })}
-            <div class="night-qr" aria-label="QR join">${qrSvg(joinPath, { dim: 200 })}</div>
+            ${wrapSticky(`<div class="night-qr" aria-label="QR join">${qrSvg(joinPath, { dim: 200 })}</div>`, claimSticky(NOTE_IDS.TV_CAST_READY))}
           </div>
           ${seatGrid(client.lobby)}
           ${warmBar()}
@@ -1955,7 +2004,7 @@ export default async function partyHost({ params }) {
       </div>
       ${rundownRailHtml({ beat: show, until: ui.showUntil, holdMs: hold, ribbon })}
       ${onRun || onStage || onRecap || onCards || show === 'lobby' ? '' : `<div class="night-line">${esc(SHOW_LINE)}</div>`}
-      <div class="night-main">${body}</div>`;
+      <div class="night-main">${body}${hostNotesTail(body)}</div>`;
 
     ui.reactKey = '';
     ui.voteKey = '';
@@ -2009,6 +2058,7 @@ export default async function partyHost({ params }) {
     });
     root.querySelector('#to-run')?.addEventListener('click', () => setBeat('expedition'));
     root.querySelector('#to-cast')?.addEventListener('click', () => setBeat('casting'));
+    bindNotesUi();
 
     /*
      * 🔥 **LAST, AND UNCONDITIONAL. THE MANSION IS MOUNTED FROM THE FIRST PAINT.**
