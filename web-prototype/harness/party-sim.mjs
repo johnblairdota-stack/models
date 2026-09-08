@@ -103,7 +103,7 @@ function playMatch({ count, seed, goodPolicy, evilPolicy }) {
   const evilSet = new Set(r.deal.evil);
   const policyOf = (id) => (align[id] === 'evil' ? evilPolicy : goodPolicy);
   const suspicion = {};
-  const stats = { calls: [], arrivals: 0, arrivalsEvilCaused: 0, offCrewEvilEvents: 0, offCrewRounds: 0, episodes: 0, executions: [] };
+  const stats = { calls: [], arrivals: 0, arrivalsEvilCaused: 0, offCrewEvilEvents: 0, offCrewRounds: 0, episodes: 0, executions: [], takes: 0 };
 
   /*
    * 2g1e at the cap is RENEWED — that extra episode is the last vote, a full
@@ -114,7 +114,11 @@ function playMatch({ count, seed, goodPolicy, evilPolicy }) {
   for (let ep = 1; ep <= EPISODE_CAP + 8; ep++) {
     if (r.state.outcome && r.state.outcome !== OUTCOME.RENEWED) break;
     const living = r.state.players.filter((p) => p.alive).map((p) => p.id);
-    if (living.length < 2) break;
+    if (living.length < 2) {
+      r.blockEscape();
+      r.enterVerdict();
+      break;
+    }
 
     const ballots = living.map((id) => castBallot({ policy: policyOf(id), self: id, living, history: r.state.history, seed, ep }));
     // The room will make this exact call with these exact inputs — ballot.js is pure, so
@@ -133,6 +137,7 @@ function playMatch({ count, seed, goodPolicy, evilPolicy }) {
     stats.calls.push(...exp.calls);
     stats.arrivals += exp.arrivals;
     stats.arrivalsEvilCaused += exp.arrivalsEvilCaused;
+    if (exp.taken) stats.takes += 1;
 
     // Suspicion is the only evidence a bot has: who guided when it went wrong.
     if (exp.taken || !exp.unlockedOne) suspicion[pair.guide] = (suspicion[pair.guide] ?? 0) + 1;
@@ -145,8 +150,11 @@ function playMatch({ count, seed, goodPolicy, evilPolicy }) {
     const standing = noms.map((n) => n.target);
     const votes = Object.fromEntries(living.map((id) => [id, vote({ policy: policyOf(id), self: id, standing, suspicion, evilSet, seed, ep })]));
 
-    const cross = !exp.taken && !evilSet.has(pair.runner)
-      && chance(seed, `esc${ep}`) < 0.22;
+    const lastCall = exp.calls[exp.calls.length - 1];
+    const honestLast = !!(lastCall && !lastCall.lied);
+    const sawTheHouse = !!(lastCall && lastCall.hadSignal);
+    const cross = ep >= 3 && !exp.taken && !evilSet.has(pair.runner) && honestLast && sawTheHouse
+      && chance(seed, `esc${ep}`) < 0.72;
     r.playEpisode({
       ballots, takeRunner: exp.taken, nominations: noms, votes, hunterRoom: ROOMS[0],
       escaped: cross ? [pair.runner] : null,
@@ -156,6 +164,10 @@ function playMatch({ count, seed, goodPolicy, evilPolicy }) {
 
     const exec = r.log.all().filter((e) => e.type === 'player.executed');
     for (const e of exec) if (!stats.executions.some((x) => x.id === e.data.id)) stats.executions.push({ id: e.data.id, evil: evilSet.has(e.data.id) });
+  }
+  if (!r.state.outcome || r.state.outcome === OUTCOME.RENEWED) {
+    r.blockEscape();
+    r.enterVerdict();
   }
   return { outcome: r.state.outcome ?? OUTCOME.RENEWED, stats, evilSet };
 }
@@ -193,9 +205,27 @@ const rate = (list) => list.filter(goodWon).length / list.length;
   t('S0c arm · one seed replays byte-identically', JSON.stringify(a) === JSON.stringify(b));
 
   const tuned = rate(runs), rand = rate(scatter);
-  t('S0d arm · the tuned policies play materially differently from random',
-    Math.abs(tuned - rand) > 0.05,
-    `tuned ${(tuned * 100).toFixed(1)}% vs scatter ${(rand * 100).toFixed(1)}% good win rate — without a gap, every band below is noise`);
+  const takeFrac = (list) => {
+    const takes = list.reduce((a, r) => a + (r.stats.takes || 0), 0);
+    const eps = list.reduce((a, r) => a + r.stats.episodes, 0);
+    return eps ? takes / eps : 0;
+  };
+  const evilCause = (list) => {
+    const a = list.reduce((x, r) => x + r.stats.arrivals, 0);
+    const e = list.reduce((x, r) => x + r.stats.arrivalsEvilCaused, 0);
+    return a ? e / a : 0;
+  };
+  const tunedT = takeFrac(runs), randT = takeFrac(scatter);
+  const tunedE = evilCause(runs), randE = evilCause(scatter);
+  /*
+   * ⚠️ THE OLD 5-POINT GAP WAS THE CAMERA RACE. Cameras are spectacle now, so
+   * good-win-rate can land in the same band for tuned and scatter. The policies
+   * still have to play the expedition differently — takes, or evil-caused
+   * arrivals — or every band below is noise.
+   */
+  t('S0d arm · tuned expedition play differs from scatter (take or arrival cause)',
+    Math.abs(tunedT - randT) > 0.03 || Math.abs(tunedE - randE) > 0.04 || Math.abs(tuned - rand) > 0.05,
+    `win ${(tuned * 100).toFixed(1)}% vs ${(rand * 100).toFixed(1)}% · take ${(tunedT * 100).toFixed(1)}% vs ${(randT * 100).toFixed(1)}% · evil-cause ${(tunedE * 100).toFixed(1)}% vs ${(randE * 100).toFixed(1)}%`);
 }
 
 // ---------------------------------------------------------------- S1 · good win rate
