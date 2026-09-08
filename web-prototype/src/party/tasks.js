@@ -137,6 +137,57 @@ export const carriesMetres = (loudness) => loudness * HUNTER_SENSE.hearRange;
  */
 export const soundCanCommit = () => HUNTER_SENSE.soundCeiling >= HUNTER_SENSE.commitAt;
 
+/**
+ * 🗺️ Station capacities for the choosable route menu. Portrait: one pull-a, one pull-b,
+ * remaining cross. Lights: every living robot on a generator. Stubs have none.
+ * Private-heat is not a field here — that slice is later.
+ */
+export const ROUTE_CAPS = Object.freeze({
+  portrait: Object.freeze({ 'pull-a': 1, 'pull-b': 1, cross: Infinity }),
+  lights: Object.freeze({ generator: Infinity }),
+});
+
+export function stationCapacity(jobId, station) {
+  const cap = ROUTE_CAPS[jobId]?.[station];
+  return cap == null ? 0 : cap;
+}
+
+/**
+ * @param {string} jobId
+ * @param {string} station
+ * @param {Record<string,{station?:string}>} claims
+ * @param {string} [playerId]  a re-claim of the same seat does not count against the cap
+ */
+export function canClaimStation(jobId, station, claims = {}, playerId = null) {
+  const cap = stationCapacity(jobId, station);
+  if (!cap) return { ok: false, why: 'no station' };
+  const taken = Object.entries(claims).filter(([id, c]) => (
+    c?.station === station && id !== playerId
+  )).length;
+  if (taken >= cap) return { ok: false, why: 'full' };
+  return { ok: true };
+}
+
+export function applyStationClaim(claims, playerId, station) {
+  const next = { ...(claims || {}) };
+  const prev = next[playerId] || {};
+  next[playerId] = { station, confirmed: false, was: prev.station };
+  return next;
+}
+
+export function confirmStationClaim(claims, playerId) {
+  const row = claims?.[playerId];
+  if (!row?.station) return { ok: false, why: 'no station' };
+  const next = { ...claims, [playerId]: { ...row, confirmed: true } };
+  return { ok: true, claims: next };
+}
+
+/** Host may lock when every living robot has volunteered and confirmed. */
+export function crewReady(living, claims = {}) {
+  return (living || []).every((id) => !!(claims[id]?.station && claims[id]?.confirmed));
+}
+
+
 /** Every task reports failure through the same closed schema. `party-anon` A1 is the enforcer. */
 export function failurePayload(taskId, input) {
   const t = byId(taskId);

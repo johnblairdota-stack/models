@@ -47,7 +47,7 @@ import {
   isReadyBeat, readyNeeded, readyMet, READY_COUNTDOWN_MS,
   isBackwardTalkJump,
 } from '../../src/party/show.js';
-import { reckoningSeconds } from '../../src/party/phases.js';
+import { reckoningSeconds, ROUTE_VOTE_MS } from '../../src/party/phases.js';
 import { standingTally } from '../../src/party/vote.js';
 import { reactCheck } from '../../src/party/react.js';
 import { pairLockMs } from '../../src/game/pair-lock-stage.js';
@@ -532,6 +532,21 @@ function startPairLock(room) {
     fanout(room, lobbySnapshot(room));
   }, pairLockMs());
   room.showClock.unref?.();
+}
+
+function clearRouteClock(room) {
+  if (room.routeClock) clearTimeout(room.routeClock);
+  room.routeClock = null;
+}
+
+function startRouteClock(room) {
+  clearRouteClock(room);
+  room.routeClock = setTimeout(() => {
+    room.routeClock = null;
+    if (room.game.state.route?.step !== 'vote') return;
+    room.game.closeRouteVote(livingSeatedIds(room));
+  }, ROUTE_VOTE_MS);
+  room.routeClock.unref?.();
 }
 
 function startCastingClock(room) {
@@ -1915,7 +1930,37 @@ function handleClient(room, bound, self, msg) {
     room.game.dealRoles(seatedPlayerIds(room));
     fanout(room, lobbySnapshot(room));
   }
+  if (msg.t === 'routeOpen' && isTV) {
+    const r = room.game.openRouteVote(livingSeatedIds(room));
+    if (r?.ok) startRouteClock(room);
+    return;
+  }
+  if (msg.t === 'routeClose' && isTV) {
+    clearRouteClock(room);
+    room.game.closeRouteVote(livingSeatedIds(room));
+    return;
+  }
+  if (msg.t === 'routeVote' && self && !isTV && self.playerId) {
+    const job = typeof msg.job === 'string' ? msg.job : null;
+    const r = room.game.castRouteVote(self.playerId, job, livingSeatedIds(room));
+    if (r?.auto) clearRouteClock(room);
+    return;
+  }
+  if (msg.t === 'station' && self && !isTV && self.playerId) {
+    const station = typeof msg.station === 'string' ? msg.station : null;
+    room.game.claimStation(self.playerId, station, livingSeatedIds(room));
+    return;
+  }
+  if (msg.t === 'stationConfirm' && self && !isTV && self.playerId) {
+    room.game.confirmStation(self.playerId, livingSeatedIds(room));
+    return;
+  }
+  if (msg.t === 'crewLock' && isTV) {
+    room.game.lockCrew(livingSeatedIds(room));
+    return;
+  }
   if (msg.t === 'casting') {
+    clearRouteClock(room);
     enterNextCasting(room);
   }
   if (msg.t === 'episode') {

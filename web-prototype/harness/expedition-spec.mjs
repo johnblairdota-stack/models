@@ -165,6 +165,20 @@ t('ES4b', /dodgeLateral/.test(runnerIntel), 'runner-intel.js still owns the late
 t('ES4c', /SABOTAGE/.test(runnerIntel), 'and the four-misuse SABOTAGE list the bible cites');
 t('ES4d', /objectiveGoal/.test(objectives), 'objectives.js still owns objectiveGoal');
 
+const jobs = src('../src/party/jobs.js');
+const win = src('../src/party/win.js');
+const follow = src('../src/party/follow.js');
+const guidemap = src('../src/party/guidemap.js');
+t('ES6a', /id: 'portrait'/.test(jobs) && /id: 'lights'/.test(jobs)
+  && /switchboard/.test(jobs) && /salvage-bench/.test(jobs) && /carry-the-heart/.test(jobs),
+  'route catalog lives in jobs.js — Portrait, Lights, three stubs');
+t('ES6b', /Held — guide\/runner until replacement/.test(jobs),
+  'held brief is the launch, not a Portrait/Lights rewrite');
+t('ES6c', !/ROUTE_CATALOG|routeVote|selectedJob/.test(follow)
+  && !/ROUTE_CATALOG|routeVote/.test(guidemap)
+  && !/ROUTE_CATALOG|routeVote|selectedJob/.test(win),
+  'follow / guidemap / win were not opened for the menu');
+
 /* =================================================================================================
  * ES5 · 🚨 THE CONTROLS — every needle, planted, is caught by the same predicate
  * ============================================================================================== */

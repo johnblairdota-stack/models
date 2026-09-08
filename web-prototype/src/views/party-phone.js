@@ -28,6 +28,7 @@ import {
   // here to iterate. The words themselves are printed in the SAY line as plain copy, and `jobs.js`
   // stays their one owner for the harness and the recap.
   JOB, realFaceFor, drillShotFor, footstepsCue, wallWord, toolLabel,
+  routePadHtml, stationPadHtml,
 } from '../party/jobs.js';
 import { intelLine } from '../party/intel.js';
 import { STICK_DEADZONE, warmLabel } from '../party/follow.js';
@@ -688,6 +689,15 @@ export default async function partyPhone({ params }) {
     } else if (beat === 'casting' && !pair.runner) {
       if (iAmDead(me, frame?.players, c.events)) {
         paintDeadWatch(me, players);
+        return;
+      }
+      const route = frame?.route;
+      if (route?.step === 'vote') {
+        paintRouteVote(route, me, players, frame?.you);
+        return;
+      }
+      if (route?.step === 'stations' && !route.crewLocked) {
+        paintRouteStations(route, me, players, frame?.you);
         return;
       }
       paintCasting(nominees, me, frame?.airingEpisode || c.lobby?.airingEpisode || frame?.episode || 1);
@@ -1906,6 +1916,46 @@ export default async function partyPhone({ params }) {
         <p class="hint">Your nameplate is face-down. Watch the TV. The living pick the next pair — you do not lock a ballot.</p>
       </div>`;
     root.dataset.castUi = 'dead-watch';
+  }
+
+  function paintRouteVote(route, me, players, you) {
+    stopPad();
+    const pick = you?.routePick || null;
+    const stamp = `route:vote:${(route.available || []).map((j) => `${j.id}:${j.offered ? 1 : 0}`).join(',')}:${pick || ''}`;
+    if (root.dataset.castUi === stamp) return;
+    root.innerHTML = `
+      <div class="phone-top"><span>${esc(state.code.toUpperCase())}</span><span>route · ${esc(playerName(players, me.playerId) || me.name || 'You')}</span></div>
+      ${routePadHtml(route, pick)}
+      ${cardTab()}`;
+    root.dataset.castUi = stamp;
+    delete root.dataset.liveUi;
+    for (const b of root.querySelectorAll('[data-route-pick]')) {
+      b.addEventListener('click', () => state.client?.send({ t: 'routeVote', job: b.dataset.routePick }));
+    }
+    bindCardTab();
+  }
+
+  function paintRouteStations(route, me, players, youIn) {
+    stopPad();
+    const you = {
+      station: youIn?.station || null,
+      stationConfirmed: !!youIn?.stationConfirmed,
+    };
+    const stamp = `route:stations:${route.selected || ''}:${you.station || ''}:${you.stationConfirmed ? 1 : 0}`;
+    if (root.dataset.castUi === stamp) return;
+    root.innerHTML = `
+      <div class="phone-top"><span>${esc(state.code.toUpperCase())}</span><span>crew · ${esc(playerName(players, me.playerId) || me.name || 'You')}</span></div>
+      ${stationPadHtml(route, you)}
+      ${cardTab()}`;
+    root.dataset.castUi = stamp;
+    delete root.dataset.liveUi;
+    for (const b of root.querySelectorAll('[data-station]')) {
+      b.addEventListener('click', () => state.client?.send({ t: 'station', station: b.dataset.station }));
+    }
+    root.querySelector('[data-station-confirm]')?.addEventListener('click', () => {
+      state.client?.send({ t: 'stationConfirm' });
+    });
+    bindCardTab();
   }
 
   function paintCasting(players, me, episode) {

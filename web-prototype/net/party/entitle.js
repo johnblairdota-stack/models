@@ -173,6 +173,37 @@ export const MATRIX = [
   // the CHANNEL, never about the hunter — a jammed frame carries no hunter mark to describe.
   ['flyover.jam',              'guide'],
 
+  /*
+   * ---- choosable route / task menu. Ballots are NOT here.
+   *
+   * `route.tally` is empty until the host closes; `you.routePick` is the private vote.
+   * Stubs never appear on `available` (jobs.js `choosableRoutes`). No KEEP/EXPEL, no heat.
+   */
+  ['route.open',               'all'],
+  ['route.step',               'all'],
+  ['route.available[]',        'all'],   // empty-array leaf (living 0)
+  ['route.available[].id',     'all'],
+  ['route.available[].name',   'all'],
+  ['route.available[].minimum','all'],
+  ['route.available[].stations[]', 'all'],
+  ['route.available[].status', 'all'],
+  ['route.available[].offered','all'],
+  ['route.voted',              'all'],
+  ['route.living',             'all'],
+  ['route.until',              'all'],
+  ['route.selected',           'all'],
+  ['route.tally',              'all'],   // empty object before close
+  ['route.tally.*',            'all'],
+  ['route.roster[]',           'all'],
+  ['route.roster[].id',        'all'],
+  ['route.roster[].station',   'all'],
+  ['route.roster[].confirmed', 'all'],
+  ['route.crewLocked',         'all'],
+  ['route.held',               'all'],
+  ['you.routePick',            'self'],
+  ['you.station',              'self'],
+  ['you.stationConfirmed',     'self'],
+
   // ---- incidents. A count, never a list (party-anon A4).
   ['incident.alarms',          'all'],
   // 'incident.by'                       NO ROW. T5.
