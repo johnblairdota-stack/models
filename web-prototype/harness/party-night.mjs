@@ -102,6 +102,9 @@ function last(box, type) {
       && !/armLightsHeat|tickHeat|HEAT_TRIP/.test(follow)
       && !/armLightsHeat|tickHeat|HEAT_TRIP/.test(guidemap));
 }
+
+{
+  const { modules, size } = qrMatrix('http://localhost:5178/?view=party.phone&room=test');
   const finder = (ox, oy) => modules[oy][ox] === 1 && modules[oy + 6][ox + 6] === 1 && modules[oy + 3][ox + 3] === 1;
   t('N1 · QR encodes a join URL with three finder patterns',
     size >= 21 && finder(0, 0) && finder(size - 7, 0) && finder(0, size - 7),
