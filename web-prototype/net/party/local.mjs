@@ -1959,6 +1959,19 @@ function handleClient(room, bound, self, msg) {
     room.game.lockCrew(livingSeatedIds(room));
     return;
   }
+  /*
+   * 🔥 Lights HOLD / RELEASE. Same verb for every seat — no saboteur control.
+   * Mutates the room; the projected state frame is what phones and the TV see.
+   * Heat never fans.
+   */
+  if (msg.t === 'generate' && self && !isTV && self.playerId) {
+    room.game.setGenerate(self.playerId, !!msg.on);
+    return;
+  }
+  if (msg.t === 'heatCross' && self && !isTV && self.playerId) {
+    room.game.crossGate(self.playerId);
+    return;
+  }
   if (msg.t === 'casting') {
     clearRouteClock(room);
     enterNextCasting(room);

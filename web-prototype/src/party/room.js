@@ -32,7 +32,11 @@ import { cleanLook } from './look.js';
 import { STALE_MAX, intelFor } from './intel.js';
 import { coverageRoomOf } from './mansion.js';
 import { mapFeed } from './mapfeed.js';
-import { missionFor, stampSelectedJob } from './mission.js';
+import { missionFor, stampSelectedJob, lightsArmedFor } from './mission.js';
+import {
+  endGrace, freshSeat, HEAT_STEP, LIGHTS_JOB, leaveGenerator,
+  projectLights, setGenerating, tickBoard, tickSeat, tripLeft,
+} from './heat.js';
 import {
   drillShotFor, FAIL_CHROME, JOB, freshRoute, projectRoute, availableRoutes,
   canOfferRoute, routeById,
@@ -150,6 +154,18 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     /** Locked catalog id for this expedition. Stamped onto the smash/drill spec. */
     selectedJob: null,
     mission: null,
+    /**
+     * 🔥 Private-heat on the Lights job. Seats hold heat / tripUntil / generating.
+     * Only `fullFor` writes `you.heat` / `you.tripLeft` onto that seat's phone.
+     * `lights` is the public board. Live night does not arm this — harness /
+     * `armLightsHeat` does, so guide/runner still launches.
+     */
+    heatArmed: false,
+    heatNow: 0,
+    heatGrace: false,
+    heatStep: HEAT_STEP.IDLE,
+    seats: {},
+    lights: null,
   };
 
   /**
@@ -373,6 +389,22 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
        */
       base.flyover = { hunter: seen, jam: feed.jammed, marks };
     }
+    /*
+     * 🔥 PRIVATE HEAT / PUBLIC LIGHTS. Heat is written only onto THIS socket's `you`.
+     * The TV has no `you`. A peer phone has its own seat, not this one. `lights` is
+     * output / reserve / gate / floodlights — `lightsLeaks` is the closed schema.
+     */
+    if (state.heatArmed && state.lights) {
+      base.lights = { ...state.lights, stations: (state.lights.stations || []).map((s) => ({ ...s })) };
+    }
+    if (!sock.isTV && base.you && state.heatArmed && state.seats[sock.playerId]) {
+      const seat = state.seats[sock.playerId];
+      base.you = {
+        ...base.you,
+        heat: seat.heat,
+        tripLeft: tripLeft(seat, state.heatNow),
+      };
+    }
     // ---- the injected leaks. `harness/party-isolation.mjs` I9 requires each to turn exactly the
     // named set of assertions red; a control that stops failing means the gate is blind.
     // Leaks 1 and 3 are VALUE and ORDER leaks: they pass through the filter untouched, because
@@ -464,10 +496,38 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     return state.players.filter((p) => p.alive).map((p) => p.id);
   }
 
+  function resetHeat() {
+    state.heatArmed = false;
+    state.heatNow = 0;
+    state.heatGrace = false;
+    state.heatStep = HEAT_STEP.IDLE;
+    state.seats = {};
+    state.lights = null;
+  }
+
+  function refreshLights() {
+    if (!state.heatArmed) {
+      state.lights = null;
+      return null;
+    }
+    const ids = Object.keys(state.seats);
+    const board = tickBoard({
+      seats: state.seats,
+      reserve: state.lights?.reserve ?? 0,
+      hunterPressure: state.lights?.hunterPressure ?? 0,
+      nowMs: state.heatNow,
+      dt: 0,
+      livingCount: ids.length,
+    });
+    state.lights = projectLights(board, { step: state.heatStep });
+    return state.lights;
+  }
+
   function resetRoute() {
     state.route = freshRoute();
     state.selectedJob = null;
     state.mission = null;
+    resetHeat();
   }
 
   function stampMission() {
@@ -574,6 +634,105 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     }));
     broadcast();
     return { ok: true, selected: state.route.selected, roster: projectRoute(state.route, living).roster };
+  }
+
+  /**
+   * Harness / Lights path. Does not replace guide/runner — playEpisode still
+   * launches smash/drill. Selected job must be lights or empty (then it becomes lights).
+   */
+  function armLightsHeat({ living: livingOpt = null, nowMs = 0, step = HEAT_STEP.PRACTICE } = {}) {
+    if (state.selectedJob && !lightsArmedFor(state.selectedJob)) {
+      return { ok: false, why: 'not lights' };
+    }
+    if (!state.selectedJob) state.selectedJob = LIGHTS_JOB;
+    const living = (Array.isArray(livingOpt) && livingOpt.length)
+      ? livingOpt.filter((id) => state.players.some((p) => p.id === id && p.alive))
+      : state.players.filter((p) => p.alive).map((p) => p.id);
+    if (!living.length) return { ok: false, why: 'no living' };
+    state.heatArmed = true;
+    state.heatNow = Number(nowMs) || 0;
+    state.heatGrace = false;
+    state.heatStep = step === HEAT_STEP.PLAY ? HEAT_STEP.PLAY : HEAT_STEP.PRACTICE;
+    state.seats = Object.fromEntries(living.map((id) => [id, freshSeat()]));
+    state.lights = null;
+    refreshLights();
+    broadcast();
+    return { ok: true, living: living.slice(), step: state.heatStep };
+  }
+
+  function startLightsPlay() {
+    if (!state.heatArmed) return { ok: false, why: 'not armed' };
+    state.heatStep = HEAT_STEP.PLAY;
+    refreshLights();
+    broadcast();
+    return { ok: true, step: state.heatStep };
+  }
+
+  function setGenerate(playerId, on, nowMs = null) {
+    if (!state.heatArmed) return { ok: false, why: 'not armed' };
+    const seat = state.seats[playerId];
+    if (!seat) return { ok: false, why: 'no seat' };
+    if (nowMs != null) state.heatNow = Number(nowMs) || state.heatNow;
+    state.seats[playerId] = setGenerating(seat, on, state.heatNow);
+    refreshLights();
+    broadcast();
+    return {
+      ok: true,
+      generating: !!state.seats[playerId].generating,
+      output: state.seats[playerId].output,
+    };
+  }
+
+  function tickHeat(nowMs, dt) {
+    if (!state.heatArmed) return { ok: false, why: 'not armed' };
+    const t = Number(nowMs);
+    const step = Number(dt);
+    if (!Number.isFinite(t) || !Number.isFinite(step)) return { ok: false, why: 'bad clock' };
+    state.heatNow = t;
+    const prevReserve = state.lights?.reserve ?? 0;
+    const prevHunt = state.lights?.hunterPressure ?? 0;
+    for (const id of Object.keys(state.seats)) {
+      state.seats[id] = tickSeat(state.seats[id], {
+        dt: step, nowMs: t, grace: state.heatGrace,
+      });
+    }
+    const board = tickBoard({
+      seats: state.seats,
+      reserve: prevReserve,
+      hunterPressure: prevHunt,
+      nowMs: t,
+      dt: step,
+      livingCount: Object.keys(state.seats).length,
+    });
+    state.lights = projectLights(board, { step: state.heatStep });
+    broadcast();
+    return { ok: true, lights: state.lights };
+  }
+
+  function setHeatGrace(on) {
+    if (!state.heatArmed) return { ok: false, why: 'not armed' };
+    const next = !!on;
+    if (state.heatGrace && !next) {
+      for (const id of Object.keys(state.seats)) {
+        state.seats[id] = endGrace(state.seats[id]);
+      }
+    }
+    state.heatGrace = next;
+    refreshLights();
+    broadcast();
+    return { ok: true, grace: state.heatGrace };
+  }
+
+  function crossGate(playerId) {
+    if (!state.heatArmed) return { ok: false, why: 'not armed' };
+    const seat = state.seats[playerId];
+    if (!seat) return { ok: false, why: 'no seat' };
+    const left = leaveGenerator(seat, !!state.lights?.gateOpen);
+    if (!left.ok) return left;
+    state.seats[playerId] = left.seat;
+    refreshLights();
+    broadcast();
+    return { ok: true, crossed: true };
   }
 
   function episodeLiving() {
@@ -1045,6 +1204,12 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     confirmStation,
     lockCrew,
     resetRoute,
+    armLightsHeat,
+    startLightsPlay,
+    setGenerate,
+    tickHeat,
+    setHeatGrace,
+    crossGate,
     /**
      * Draw the cast. Called at night start so every joined phone holds a card before the first
      * ballot; called again by `playEpisode` and then a no-op. Returns true only for the call that
