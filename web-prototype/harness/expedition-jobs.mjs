@@ -13,13 +13,17 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { missionFor, MISSION_PAINTING, MISSION_DRILL, MISSION_TABLE } from '../src/party/mission.js';
+import { missionFor, stampSelectedJob, MISSION_PAINTING, MISSION_DRILL, MISSION_TABLE } from '../src/party/mission.js';
 import {
   FACES, SHOTS, GUIDE_VOICE, RUNNER_VOICE, JOB, FAIL_CHROME, SMASH_CHROME,
   realFaceFor, drillShotFor, footstepsCue, smashDebrief, voiceDebrief, blindDebrief,
   unnamedFail, isVoiceWord, voiceSendsNothing, twinHang, camHang, TWIN, WALL_CAM,
+  ROUTE_CATALOG, ROUTE_STATUS, TIE_ROUTE, HELD_BRIEF,
+  availableRoutes, choosableRoutes, canOfferRoute, projectRoute, freshRoute,
+  routeMenuHtml, routePadHtml, stationPadHtml, heldBrief,
 } from '../src/party/jobs.js';
-import { TASKS, byId, failurePayload } from '../src/party/tasks.js';
+import { TASKS, byId, failurePayload, canClaimStation, applyStationClaim, confirmStationClaim, crewReady, ROUTE_CAPS } from '../src/party/tasks.js';
+import { tallyRouteVotes, canRouteVote } from '../src/party/vote.js';
 import { recapFromEvents } from '../src/party/recap.js';
 import { createRoom } from '../src/party/room.js';
 import { FAILURE_FIELDS } from '../src/party/events.js';
@@ -267,6 +271,172 @@ t('J9 · world report may carry job / emptyNail / heard, never a person',
     !/floorplan|floor plan|hunter path|patrol/i.test(recap)
       && /Scenery, not a map/.test(host)
       && !/pathPortals/.test(host));
+}
+
+/* =================================================================================================
+ * J14+ · ROUTE / TASK MENU — catalog, vote lock, tie → Lights, stations. Guide/runner HOLD.
+ * ============================================================================================== */
+
+{
+  const ids = ROUTE_CATALOG.map((r) => r.id);
+  t('J14 · catalog is data-driven — portrait, lights, and three stubs',
+    ids.join(',') === 'portrait,lights,switchboard,salvage-bench,carry-the-heart'
+      && ROUTE_CATALOG.every((r) => r.name && r.minimum >= 1 && Array.isArray(r.stations)
+        && Object.values(ROUTE_STATUS).includes(r.status))
+      && routeByStatus('portrait') === ROUTE_STATUS.HELD
+      && routeByStatus('lights') === ROUTE_STATUS.HELD
+      && ROUTE_CATALOG.filter((r) => r.status === ROUTE_STATUS.STUB).length === 3);
+
+  function routeByStatus(id) {
+    return ROUTE_CATALOG.find((r) => r.id === id)?.status;
+  }
+}
+
+{
+  const two = availableRoutes(2).map((r) => r.id);
+  const three = availableRoutes(3).map((r) => r.id);
+  const eight = availableRoutes(8).map((r) => r.id);
+  t('J15 · Portrait is not offered below 3 living; Lights is; stubs never offered',
+    !two.includes('portrait') && two.includes('lights')
+      && three.includes('portrait') && three.includes('lights')
+      && eight.includes('portrait') && eight.includes('lights')
+      && !availableRoutes(8).some((r) => r.status === ROUTE_STATUS.STUB)
+      && !canOfferRoute('portrait', 2) && canOfferRoute('portrait', 3)
+      && !canOfferRoute('switchboard', 8)
+      && choosableRoutes(2).find((r) => r.id === 'portrait')?.offered === false);
+}
+
+{
+  const living = ['p1', 'p2', 'p3', 'p4'];
+  const available = availableRoutes(4);
+  const refused = canRouteVote('p1', 'portrait', ['p9'], available);
+  const stub = canRouteVote('p1', 'switchboard', living, available);
+  const ok = canRouteVote('p1', 'portrait', living, available);
+  t('J16 · invalid route for crew / stub is rejected; a living pick is accepted',
+    refused.ok === false && stub.ok === false && ok.ok === true);
+}
+
+{
+  const living = ['a', 'b', 'c', 'd'];
+  const available = availableRoutes(4);
+  const tie = tallyRouteVotes({
+    living,
+    votes: { a: 'portrait', b: 'lights', c: 'portrait', d: 'lights' },
+    available,
+  });
+  const win = tallyRouteVotes({
+    living,
+    votes: { a: 'portrait', b: 'portrait', c: 'portrait', d: 'lights' },
+    available,
+  });
+  const empty = tallyRouteVotes({ living, votes: {}, available });
+  t('J17 · more votes wins; tie and empty box lock Lights / hall',
+    win.selected === 'portrait' && !win.tied
+      && tie.selected === TIE_ROUTE && tie.tied
+      && empty.selected === 'lights'
+      && TIE_ROUTE === 'lights');
+}
+
+{
+  const living = ['a', 'b', 'c'];
+  let claims = {};
+  const first = canClaimStation('portrait', 'pull-a', claims, 'a');
+  claims = applyStationClaim(claims, 'a', 'pull-a');
+  const dup = canClaimStation('portrait', 'pull-a', claims, 'b');
+  const cross = canClaimStation('portrait', 'cross', claims, 'b');
+  claims = applyStationClaim(claims, 'b', 'cross');
+  claims = applyStationClaim(claims, 'c', 'cross');
+  const c1 = confirmStationClaim(claims, 'a');
+  const c2 = confirmStationClaim(c1.claims, 'b');
+  const c3 = confirmStationClaim(c2.claims, 'c');
+  t('J18 · Portrait capacities: one pull-a, one pull-b, remaining cross; confirm before lock',
+    first.ok && !dup.ok && cross.ok
+      && ROUTE_CAPS.portrait['pull-a'] === 1 && ROUTE_CAPS.portrait['pull-b'] === 1
+      && !crewReady(living, c2.claims) && crewReady(living, c3.claims)
+      && !('heat' in (ROUTE_CAPS.lights || {})));
+}
+
+{
+  const living = ['p1', 'p2', 'p3'];
+  const room = createRoom({ count: 3, castSeed: 1, worldSeed: 1, send: () => {} });
+  room.start();
+  const opened = room.openRouteVote(living);
+  const v1 = room.castRouteVote('p1', 'portrait', living);
+  const v2 = room.castRouteVote('p2', 'portrait', living);
+  const v3 = room.castRouteVote('p3', 'lights', living);
+  const pubOpen = projectRoute({ ...freshRoute(), step: 'vote', votes: { p1: 'portrait' } }, living);
+  const locked = room.state.route.selected;
+  const claimed = room.claimStation('p1', 'pull-a', living);
+  room.claimStation('p2', 'pull-b', living);
+  room.claimStation('p3', 'cross', living);
+  room.confirmStation('p1', living);
+  room.confirmStation('p2', living);
+  const early = room.lockCrew(living);
+  room.confirmStation('p3', living);
+  const crew = room.lockCrew(living);
+  const spec = stampSelectedJob(missionFor(1), room.state.selectedJob);
+  t('J19 · room vote stays private until close; lock stamps the job; crew needs every confirm',
+    opened.ok && v1.ok && v2.ok && v3.auto
+      && locked === 'portrait'
+      && pubOpen.selected == null && Object.keys(pubOpen.tally).length === 0
+      && !('votes' in pubOpen)
+      && claimed.ok && !early.ok && crew.ok
+      && spec.selectedJob === 'portrait' && spec.catalogId === 'portrait'
+      && spec.job === JOB.SMASH
+      && missionFor(1) === MISSION_PAINTING
+      && heldBrief('portrait') === HELD_BRIEF);
+}
+
+{
+  const room = createRoom({ count: 8, castSeed: 1, worldSeed: 1, send: () => {} });
+  room.start();
+  room.openRouteVote();
+  const living = room.state.players.filter((p) => p.alive).map((p) => p.id);
+  for (const id of living) room.castRouteVote(id, 'lights', living);
+  const before = room.state.cameras.unlocked;
+  room.playEpisode({ scaffold: false });
+  t('J20 · a locked catalog job still launches guide/runner smash/drill — play is held',
+    room.state.selectedJob === 'lights'
+      && room.state.mission?.selectedJob === 'lights'
+      && room.state.mission?.job === JOB.SMASH
+      && missionFor(1) === MISSION_PAINTING
+      && room.state.cameras.unlocked === before
+      && room.state.pair.runner && room.state.pair.guide);
+}
+
+{
+  const living = ['a', 'b'];
+  const r = projectRoute({
+    step: 'vote',
+    votes: { a: 'portrait', b: 'lights' },
+    claims: {},
+  }, living);
+  const menu = routeMenuHtml(r);
+  const pad = routePadHtml(r, 'lights');
+  const stations = stationPadHtml({ selected: 'portrait' }, { station: 'pull-a' });
+  const chrome = menu + pad + stations;
+  t('J21 · chrome has no KEEP/EXPEL, no heat, no private ballots; pad omits shut Portrait at 2',
+    !/KEEP\/EXPEL|\bEXPEL\b|private-heat|privateHeat/.test(chrome)
+      && !/portrait/.test(pad)
+      && /Lights/.test(pad)
+      && /data-route-menu/.test(menu)
+      && /Held/.test(stations)
+      && !menu.includes('a:portrait') && !menu.includes('votes'));
+}
+
+{
+  const win = src('../src/party/win.js');
+  const follow = src('../src/party/follow.js');
+  const guidemap = src('../src/party/guidemap.js');
+  const jobs = src('../src/party/jobs.js');
+  const host = src('../src/views/party-host.js');
+  t('J22 · win.js / follow.js / guidemap.js untouched; no private-heat or KEEP/EXPEL on this menu',
+    !/selectedJob|ROUTE_CATALOG|routeVote|private-heat/.test(win)
+      && !/ROUTE_CATALOG|routeVote|selectedJob/.test(follow)
+      && !/ROUTE_CATALOG|routeVote/.test(guidemap)
+      && !/privateHeat|private-heat/.test(jobs)
+      && /route-open/.test(host)
+      && /Open route vote/.test(host));
 }
 
 console.log(`\nexpedition-jobs: ${pass} passed, ${fail} failed`);

@@ -13,6 +13,8 @@
  * the still cannot disagree.
  */
 
+import { tallyRouteVotes } from './vote.js';
+
 export const FACES = Object.freeze(['left', 'right']);
 export const SHOTS = Object.freeze(['hall', 'floor']);
 export const GUIDE_VOICE = Object.freeze(['GO', 'HOLD']);
@@ -182,4 +184,237 @@ export function isVoiceWord(word) {
 
 export function voiceSendsNothing() {
   return true;
+}
+
+/* =================================================================================================
+ * 🗺️ **CHOOSABLE ROUTE / TASK MENU** — catalog + availability. Play stays guide/runner.
+ *
+ * `docs/slices/task-route-task-menu.md`. Portrait / Lights are independently selectable; a
+ * choice does not queue the other. Stubs sit in the catalog so a later board is a row, not a
+ * rewrite. Status `held` means the menu + stations work and the expedition still launches the
+ * locked guide/runner path with the job id stamped.
+ * ================================================================================================= */
+
+export const ROUTE_STATUS = Object.freeze({
+  IMPLEMENTED: 'implemented',
+  STUB: 'stub',
+  HELD: 'held',
+});
+
+/** LHL hall / Lights-shaped default. A tie, and an empty box, lock this. */
+export const TIE_ROUTE = 'lights';
+
+export const HELD_BRIEF = 'Held — guide/runner until replacement';
+
+export const ROUTE_CATALOG = Object.freeze([
+  Object.freeze({
+    id: 'portrait',
+    name: 'Behind the Portrait',
+    minimum: 3,
+    stations: Object.freeze(['pull-a', 'pull-b', 'cross']),
+    status: ROUTE_STATUS.HELD,
+  }),
+  Object.freeze({
+    id: 'lights',
+    name: 'Keep the Lights On',
+    minimum: 1,
+    stations: Object.freeze(['generator']),
+    status: ROUTE_STATUS.HELD,
+  }),
+  Object.freeze({
+    id: 'switchboard',
+    name: 'Switchboard',
+    minimum: 1,
+    stations: Object.freeze([]),
+    status: ROUTE_STATUS.STUB,
+  }),
+  Object.freeze({
+    id: 'salvage-bench',
+    name: 'Salvage Bench',
+    minimum: 1,
+    stations: Object.freeze([]),
+    status: ROUTE_STATUS.STUB,
+  }),
+  Object.freeze({
+    id: 'carry-the-heart',
+    name: 'Carry the Heart',
+    minimum: 1,
+    stations: Object.freeze([]),
+    status: ROUTE_STATUS.STUB,
+  }),
+]);
+
+export function routeById(id, catalog = ROUTE_CATALOG) {
+  return catalog.find((r) => r.id === id) || null;
+}
+
+/**
+ * Choosable rows for a living-crew count. Stubs stay in the catalog and never appear here.
+ * `offered` is the living-crew filter — Portrait is present but not offered below 3.
+ */
+export function choosableRoutes(livingCount, catalog = ROUTE_CATALOG) {
+  const n = Math.max(0, livingCount | 0);
+  return catalog
+    .filter((r) => r.status !== ROUTE_STATUS.STUB)
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      minimum: r.minimum,
+      stations: r.stations.slice(),
+      status: r.status,
+      offered: n >= r.minimum,
+    }));
+}
+
+/** Routes a living crew may actually pick. Portrait drops out below its minimum. */
+export function availableRoutes(livingCount, catalog = ROUTE_CATALOG) {
+  return choosableRoutes(livingCount, catalog).filter((r) => r.offered);
+}
+
+export function canOfferRoute(id, livingCount, catalog = ROUTE_CATALOG) {
+  return availableRoutes(livingCount, catalog).some((r) => r.id === id);
+}
+
+export function freshRoute() {
+  return {
+    step: 'idle',
+    votes: {},
+    claims: {},
+    selected: null,
+    until: null,
+    crewLocked: false,
+    openedAt: null,
+  };
+}
+
+function publicRoster(claims, living) {
+  const out = [];
+  for (const id of living || []) {
+    const c = claims?.[id];
+    if (!c?.confirmed || !c.station) continue;
+    out.push({ id, station: c.station, confirmed: true });
+  }
+  return out;
+}
+
+/**
+ * Public projection of the route menu. Ballots stay off this object until close —
+ * `tally` is empty during the vote, and `votes` never leaves the room.
+ */
+export function projectRoute(route, livingIds, catalog = ROUTE_CATALOG) {
+  const living = Array.isArray(livingIds) ? livingIds.slice() : [];
+  const available = choosableRoutes(living.length, catalog);
+  const step = route?.step || 'idle';
+  const closed = step === 'stations' || step === 'locked';
+  let tally = {};
+  let selected = null;
+  if (closed) {
+    const box = tallyRouteVotes({
+      living,
+      votes: route?.votes || {},
+      available: available.filter((r) => r.offered),
+    });
+    tally = box.counts;
+    selected = route?.selected || box.selected || null;
+  }
+  return {
+    open: step === 'vote',
+    step,
+    available,
+    voted: Object.keys(route?.votes || {}).filter((id) => living.includes(id)).length,
+    living: living.length,
+    until: route?.until ?? null,
+    selected,
+    tally,
+    roster: closed ? publicRoster(route?.claims, living) : [],
+    crewLocked: !!route?.crewLocked,
+    held: true,
+  };
+}
+
+export function heldBrief(selectedJob) {
+  if (!selectedJob) return null;
+  const row = routeById(selectedJob);
+  if (!row || row.status === ROUTE_STATUS.STUB) return null;
+  return HELD_BRIEF;
+}
+
+function escRoute(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
+/** TV job cards. No ballots, no roles, no checkpoint ballot. */
+export function routeMenuHtml(route, { names = {} } = {}) {
+  const r = route || {};
+  const available = r.available || [];
+  if (!available.length) return '';
+  const closed = r.step === 'stations' || r.step === 'locked' || !!r.selected;
+  const cards = available.map((job) => {
+    const offered = job.offered !== false;
+    const counts = r.tally || {};
+    const n = closed && offered ? (counts[job.id] | 0) : null;
+    const on = closed && r.selected === job.id;
+    const need = job.minimum > 1 ? ` · need ${job.minimum}` : '';
+    const tally = n == null ? '' : ` · ${n}`;
+    const lock = on ? ' · locked' : '';
+    const shut = offered ? '' : ' · not enough living';
+    return `<article class="route-card${on ? ' on' : ''}${offered ? '' : ' shut'}" data-route="${escRoute(job.id)}">
+      <h3>${escRoute(job.name)}</h3>
+      <p class="route-meta">${escRoute(job.status)}${need}${tally}${lock}${shut}</p>
+      <p class="route-stations">${(job.stations || []).map((s) => escRoute(s)).join(' · ') || 'board only'}</p>
+    </article>`;
+  }).join('');
+  const roster = (r.roster || []).map((row) => {
+    const who = names[row.id] || row.id;
+    return `<li data-crew="${escRoute(row.id)}">${escRoute(who)} · ${escRoute(row.station)}</li>`;
+  }).join('');
+  const brief = closed && r.selected ? `<p class="route-held">${escRoute(HELD_BRIEF)}</p>` : '';
+  const rosterBlock = roster
+    ? `<ol class="route-roster" data-route-roster>${roster}</ol>`
+    : '';
+  return `<section class="route-menu" data-route-menu data-step="${escRoute(r.step || 'idle')}">
+    <p class="route-k">Tonight's route</p>
+    <div class="route-cards">${cards}</div>
+    ${brief}${rosterBlock}
+  </section>`;
+}
+
+/** Phone private pick. Offered routes only. */
+export function routePadHtml(route, pick = null) {
+  const offered = (route?.available || []).filter((j) => j.offered !== false);
+  if (!offered.length) return '';
+  const buttons = offered.map((job) => {
+    const on = pick === job.id ? ' on' : '';
+    return `<button type="button" class="btn wide${on}" data-route-pick="${escRoute(job.id)}">${escRoute(job.name)}</button>`;
+  }).join('');
+  return `<div class="route-pad" data-route-pad>
+    <h1>Pick a route.</h1>
+    <p class="hint">Private until the host closes. The TV has the cards.</p>
+    <div class="pick-list">${buttons}</div>
+  </div>`;
+}
+
+/** Phone station volunteer + confirm. */
+export function stationPadHtml(route, you = {}) {
+  const job = routeById(route?.selected);
+  if (!job) return '';
+  const stations = job.stations || [];
+  const buttons = stations.map((s) => {
+    const on = you.station === s ? ' on' : '';
+    return `<button type="button" class="btn wide${on}" data-station="${escRoute(s)}">${escRoute(s)}</button>`;
+  }).join('');
+  const confirmed = you.stationConfirmed
+    ? `<p class="cast-note">Confirmed · ${escRoute(you.station || '')}</p>`
+    : (you.station
+      ? `<button type="button" class="btn wide" data-station-confirm="1">Confirm ${escRoute(you.station)}</button>`
+      : '');
+  return `<div class="route-stations-pad" data-station-pad>
+    <h1>${escRoute(job.name)}</h1>
+    <p class="hint">Claim your station. The host locks the crew when everyone has confirmed.</p>
+    <div class="pick-list">${buttons}</div>
+    ${confirmed}
+    <p class="route-held">${escRoute(HELD_BRIEF)}</p>
+  </div>`;
 }

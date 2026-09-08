@@ -27,13 +27,18 @@ import { tallyVote, executioner, nominate, reckoningClosed, canLynchVote, assume
 import { accusationFinished, accusationSpan } from '../game/accusation-stage.js';
 import { foldWin, OUTCOME, WIN_TARGETS } from './win.js';
 import { reunion } from './reunion.js';
-import { PHASE, EPISODE_CAP } from './phases.js';
+import { PHASE, EPISODE_CAP, ROUTE_VOTE_MS } from './phases.js';
 import { cleanLook } from './look.js';
 import { STALE_MAX, intelFor } from './intel.js';
 import { coverageRoomOf } from './mansion.js';
 import { mapFeed } from './mapfeed.js';
-import { missionFor } from './mission.js';
-import { drillShotFor, FAIL_CHROME, JOB } from './jobs.js';
+import { missionFor, stampSelectedJob } from './mission.js';
+import {
+  drillShotFor, FAIL_CHROME, JOB, freshRoute, projectRoute, availableRoutes,
+  canOfferRoute, routeById,
+} from './jobs.js';
+import { canRouteVote, tallyRouteVotes } from './vote.js';
+import { canClaimStation, applyStationClaim, confirmStationClaim, crewReady } from './tasks.js';
 import { isObjectivePin } from './objectives.js';
 // 📍 The pin's shape lives with the rest of the follow wire, so the TV, the server and the phone
 // all read one schema. See `follow.js` `PIN_WIRE_KEYS`.
@@ -137,6 +142,14 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     worldStale: null,
     /** Monotonic, so the vague read can be sporadic without a clock or an RNG. */
     worldTick: 0,
+    /**
+     * 🗺️ Route / task menu. Host opens during CASTING. Ballots live here, not on the frame —
+     * `projectRoute` is the public shape. A new Casting resets it. playEpisode does not.
+     */
+    route: freshRoute(),
+    /** Locked catalog id for this expedition. Stamped onto the smash/drill spec. */
+    selectedJob: null,
+    mission: null,
   };
 
   /**
@@ -178,10 +191,17 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       pair: { ...state.pair },
       cameras: { ...state.cameras },
       incident: { ...state.incident },
+      route: projectRoute(state.route, routeLiving()),
     };
     if (!sock.isTV && deal.seats.some((s) => s.id === sock.playerId)) {
       const v = viewFor(deal, sock.playerId);
-      base.you = v.you;
+      const claim = state.route.claims[sock.playerId] || {};
+      base.you = {
+        ...v.you,
+        routePick: state.route.votes[sock.playerId] || null,
+        station: claim.station || null,
+        stationConfirmed: !!claim.confirmed,
+      };
     } else if (!sock.isTV) {
       /*
        * A phone holding a seat the deal does not cover. That is the normal state of chairs 3..8
@@ -437,6 +457,125 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
    * Living ids for the live lynching clock. Transport passes seated phones so empty
    * Robot N chairs are not a vote. Gates omit it and use every alive player.
    */
+  function routeLiving() {
+    if (Array.isArray(state.route.livingIds) && state.route.livingIds.length) {
+      return state.route.livingIds.filter((id) => state.players.some((p) => p.id === id && p.alive));
+    }
+    return state.players.filter((p) => p.alive).map((p) => p.id);
+  }
+
+  function resetRoute() {
+    state.route = freshRoute();
+    state.selectedJob = null;
+    state.mission = null;
+  }
+
+  function stampMission() {
+    const spec = missionFor(state.airingEpisode ?? state.episode);
+    state.mission = stampSelectedJob(spec, state.selectedJob);
+    return state.mission;
+  }
+
+  /**
+   * Host opens the private route vote. Living ids may be the seated phones —
+   * unused Robot N chairs do not vote.
+   */
+  function openRouteVote(livingOpt = null, nowOpt = null) {
+    const living = (Array.isArray(livingOpt) && livingOpt.length)
+      ? livingOpt.filter((id) => state.players.some((p) => p.id === id && p.alive))
+      : state.players.filter((p) => p.alive).map((p) => p.id);
+    const offered = availableRoutes(living.length);
+    if (!offered.length) return { ok: false, why: 'no routes' };
+    const now = Number.isFinite(nowOpt) ? nowOpt : Date.now();
+    state.route = {
+      ...freshRoute(),
+      step: 'vote',
+      livingIds: living.slice(),
+      until: now + ROUTE_VOTE_MS,
+      openedAt: now,
+    };
+    record(makeEvent('route.opened', VIS.PUBLIC, { living: living.length, until: state.route.until }));
+    broadcast();
+    return { ok: true, until: state.route.until, available: offered.map((r) => r.id) };
+  }
+
+  function castRouteVote(playerId, jobId, livingOpt = null) {
+    if (state.route.step !== 'vote') return { ok: false, why: 'not voting' };
+    if (livingOpt && Array.isArray(livingOpt)) state.route.livingIds = livingOpt.slice();
+    const living = routeLiving();
+    const offered = availableRoutes(living.length);
+    const allowed = canRouteVote(playerId, jobId, living, offered);
+    if (!allowed.ok) return allowed;
+    if (!canOfferRoute(jobId, living.length)) return { ok: false, why: 'not available' };
+    state.route.votes[playerId] = jobId;
+    broadcast();
+    const allIn = living.every((id) => state.route.votes[id]);
+    if (allIn) return { ...closeRouteVote(living), auto: true };
+    return { ok: true, pick: jobId };
+  }
+
+  function closeRouteVote(livingOpt = null) {
+    if (state.route.step !== 'vote' && state.route.step !== 'stations') {
+      if (state.route.selected) return { ok: true, selected: state.route.selected, already: true };
+      return { ok: false, why: 'not open' };
+    }
+    if (livingOpt && Array.isArray(livingOpt)) state.route.livingIds = livingOpt.slice();
+    const living = routeLiving();
+    const offered = availableRoutes(living.length);
+    const box = tallyRouteVotes({ living, votes: state.route.votes, available: offered });
+    state.route.selected = box.selected;
+    state.route.step = 'stations';
+    state.route.until = null;
+    state.selectedJob = box.selected;
+    stampMission();
+    record(makeEvent('route.locked', VIS.PUBLIC, { job: box.selected, tally: box.counts, tied: box.tied }));
+    broadcast();
+    return { ok: true, selected: box.selected, tally: box.counts, tied: box.tied };
+  }
+
+  function claimStation(playerId, station, livingOpt = null) {
+    if (state.route.step !== 'stations' || state.route.crewLocked) return { ok: false, why: 'not stations' };
+    if (livingOpt && Array.isArray(livingOpt)) state.route.livingIds = livingOpt.slice();
+    const living = routeLiving();
+    if (!living.includes(playerId)) return { ok: false, why: 'not living' };
+    const jobId = state.route.selected;
+    const job = routeById(jobId);
+    if (!job || !(job.stations || []).includes(station)) return { ok: false, why: 'no station' };
+    const allowed = canClaimStation(jobId, station, state.route.claims, playerId);
+    if (!allowed.ok) return allowed;
+    state.route.claims = applyStationClaim(state.route.claims, playerId, station);
+    broadcast();
+    return { ok: true, station };
+  }
+
+  function confirmStation(playerId, livingOpt = null) {
+    if (state.route.step !== 'stations' || state.route.crewLocked) return { ok: false, why: 'not stations' };
+    if (livingOpt && Array.isArray(livingOpt)) state.route.livingIds = livingOpt.slice();
+    const living = routeLiving();
+    if (!living.includes(playerId)) return { ok: false, why: 'not living' };
+    const next = confirmStationClaim(state.route.claims, playerId);
+    if (!next.ok) return next;
+    state.route.claims = next.claims;
+    broadcast();
+    return { ok: true, ready: crewReady(living, state.route.claims) };
+  }
+
+  function lockCrew(livingOpt = null) {
+    if (state.route.step !== 'stations') return { ok: false, why: 'not stations' };
+    if (livingOpt && Array.isArray(livingOpt)) state.route.livingIds = livingOpt.slice();
+    const living = routeLiving();
+    if (!crewReady(living, state.route.claims)) return { ok: false, why: 'crew not ready' };
+    state.route.step = 'locked';
+    state.route.crewLocked = true;
+    stampMission();
+    record(makeEvent('route.crew', VIS.PUBLIC, {
+      job: state.route.selected,
+      roster: projectRoute(state.route, living).roster,
+    }));
+    broadcast();
+    return { ok: true, selected: state.route.selected, roster: projectRoute(state.route, living).roster };
+  }
+
   function episodeLiving() {
     if (Array.isArray(state.liveLiving) && state.liveLiving.length) {
       return state.liveLiving.filter((id) => state.players.some((p) => p.id === id && p.alive));
@@ -577,6 +716,7 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
      */
     state.airingEpisode = state.episode;
     state.pin = null;                               // 📍 same rule as `beginCasting`. One pair, one pin.
+    stampMission();
     setPhase('CASTING');
     // 🚨 THE PAIR COMES OUT OF A BALLOT, NOT A SEAT INDEX. `ballot.js` resolves every tie
     // deterministically and publicly, so casting never stalls and never waits on a human.
@@ -898,6 +1038,13 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       return state.outcome;
     },
     start() { setPhase('LOBBY'); },
+    openRouteVote,
+    castRouteVote,
+    closeRouteVote,
+    claimStation,
+    confirmStation,
+    lockCrew,
+    resetRoute,
     /**
      * Draw the cast. Called at night start so every joined phone holds a card before the first
      * ballot; called again by `playEpisode` and then a no-op. Returns true only for the call that
@@ -924,6 +1071,7 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       // 📍 A pin belongs to the pair that made it. See `state.pin`'s header — kept alive across a
       // Casting it would send the NEXT runner at a door the LAST guide picked.
       state.pin = null;
+      resetRoute();
       revealPendingTool();
       for (const s of sockets) {
         if (s.isTV) continue;

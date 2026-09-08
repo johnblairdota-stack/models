@@ -389,6 +389,18 @@ export function injectNightSkin() {
     .night.on-cards .ballot { margin-top:18px; }
     .night.on-cards .hint.cards-foot { margin-top:clamp(14px, 2.4vh, 28px); font-size:18px; }
     .night.on-cards .actions { margin-top:18px; }
+    .route-menu { margin:16px 0 8px; }
+    .route-k { font-size:12px; letter-spacing:.28em; text-transform:uppercase; color:#f5a14a;
+      font-weight:800; margin:0 0 10px; }
+    .route-cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:10px; }
+    .route-card { padding:14px 16px; border-radius:10px; border:1px solid rgba(245,161,74,.22);
+      background:#161310; }
+    .route-card.on { border-color:#f5a14a; background:#3a2614; }
+    .route-card.shut { opacity:.45; }
+    .route-card h3 { margin:0 0 6px; font-size:18px; letter-spacing:.04em; }
+    .route-meta, .route-stations { margin:0; color:#8a7d70; font-size:13px; line-height:1.4; }
+    .route-held { color:#e8c36a; font-size:14px; font-weight:700; margin:10px 0 0; }
+    .route-roster { margin:10px 0 0; padding-left:1.2em; color:#f3ece3; font-size:15px; }
     /* 🎬 CASTING IS THE PICTURE, AND THE BALLOTS RIDE ON TOP OF IT RATHER THAN BESIDE IT.
        John: bigger feed, take the right column, drop the counter / the lower third / the
        'ballots land here' line, and run the results as an overlay. The frame taking all four

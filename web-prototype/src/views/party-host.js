@@ -34,7 +34,7 @@ import { removalWord } from '../party/taken.js';
 import { deadIdsFromPublic, describeCastTiebreaks, livingFromPublic, previewCastTiebreaks, shouldArmCastSend } from '../party/ballot.js';
 import { MAX_PAIRS, pairShape } from '../party/link.js';
 import { missionFor } from '../party/mission.js';
-import { FAIL_CHROME, JOB, SMASH_CHROME, toolLabel } from '../party/jobs.js';
+import { FAIL_CHROME, HELD_BRIEF, JOB, SMASH_CHROME, routeMenuHtml, toolLabel } from '../party/jobs.js';
 import { isStinging, stepSting, stingHtml } from '../party/stinger.js';
 
 /** TV chrome 3·2·1 after every living ballot (or the 20s backstop), then `{ t: 'episode' }`. */
@@ -1597,6 +1597,7 @@ export default async function partyHost({ params }) {
         episode: frame?.airingEpisode ?? frame?.episode ?? 1,
         runEnd: ui.runEnd,
         recap,
+        route: frame?.route,
       });
       /*
        * 🗑️ **THE RECAP BUTTON IS GONE, AND IT IS THE AFFORDANCE RATHER THAN THE BEAT THAT WENT.**
@@ -1796,11 +1797,32 @@ export default async function partyHost({ params }) {
         body += castBoard(client.lobby, votes, castWarm(), seatedLivingIds());
         body += castOverlay();
       }
+      const route = frame?.route;
+      const routeLive = route && route.step && route.step !== 'idle';
+      const showRouteBoard = !showingIntros && !onSendoff && route
+        && (routeLive || ui.introsSent)
+        && (route.available || []).length;
+      if (showRouteBoard) {
+        const nameMap = Object.fromEntries((names || []).map((p) => [p.id, p.name]));
+        body += routeMenuHtml(route, { names: nameMap });
+        if (route.step === 'vote') {
+          body += `<p class="hint" data-route-voted>${route.voted | 0} of ${route.living | 0} voted</p>`;
+        }
+      }
       body += `<div class="actions">`;
       if (sendLeft != null) {
         const n = Math.max(1, Math.ceil(sendLeft / 1000));
         body += `<div class="send-go"><div class="send-go-k">they go in</div>
           <div class="send-count" data-send-count>${n}</div></div>`;
+      }
+      if (!showingIntros && !onSendoff && route?.step === 'idle') {
+        body += `<button class="btn" id="route-open">Open route vote</button>`;
+      }
+      if (route?.step === 'vote') {
+        body += `<button class="btn" id="route-close">Close route vote</button>`;
+      }
+      if (route?.step === 'stations' && !route.crewLocked) {
+        body += `<button class="btn" id="crew-lock"${route.roster?.length === route.living ? '' : ' disabled'}>Lock crew</button>`;
       }
       if (hasPair) body += `${onSendoff ? '' : `<button class="btn ghost" id="to-run">Watch the run</button>`}`;
       body += `</div>`;
@@ -1943,6 +1965,9 @@ export default async function partyHost({ params }) {
     };
 
     root.querySelector('#go')?.addEventListener('click', startNight);
+    root.querySelector('#route-open')?.addEventListener('click', () => client.send({ t: 'routeOpen' }));
+    root.querySelector('#route-close')?.addEventListener('click', () => client.send({ t: 'routeClose' }));
+    root.querySelector('#crew-lock')?.addEventListener('click', () => client.send({ t: 'crewLock' }));
     /*
      * The arm lives in `ui` rather than on the element, because `paint()` rebuilds the button on
      * every message — a flag on the DOM node would be wiped by the next fanout, which at a live
@@ -2067,7 +2092,7 @@ function followLine({ events, episode, cameras, runEnd, recap }) {
   return '';
 }
 
-function runStage({ names, lobby, runnerId, guideId, cameras, alarms, followLive, events, episode, runEnd, recap }) {
+function runStage({ names, lobby, runnerId, guideId, cameras, alarms, followLive, events, episode, runEnd, recap, route }) {
   const runner = joinedName(names, runnerId, 'The runner');
   const guide = joinedName(names, guideId, 'The guide');
   const look = seatLook(lobby, runnerId) || DEFAULT_LOOK;
@@ -2087,6 +2112,7 @@ function runStage({ names, lobby, runnerId, guideId, cameras, alarms, followLive
         </div>
       </div>
       <div class="pair-hero">${esc(runner)} walks. ${esc(guide)} talks.</div>
+      ${route?.selected ? `<div class="route-held" data-route-held>${esc(HELD_BRIEF)}</div>` : ''}
       ${line ? `<div class="run-follow-line">${esc(line)}</div>` : ''}
       ${tool}
       <div class="run-facts">Cameras ${cams?.unlocked ?? '—'} / ${cams?.needed ?? '—'} · alarms ${alarms ?? 0}</div>

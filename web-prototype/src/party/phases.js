@@ -112,6 +112,12 @@ export const EPISODE_CAP = 5;
 export const episodeSeconds = (ep, noms = 0) =>
   orderFor(ep).reduce((a, p) => a + (p === PHASE.RECKONING ? reckoningSeconds(noms) : SECONDS[p]), 0);
 
+/**
+ * 🗺️ Route-vote window. Not an EPISODE_ORDER beat — inserting one would reopen the
+ * night clock and `episode-order`. Host opens during CASTING; this is the close backstop.
+ */
+export const ROUTE_VOTE_MS = 30_000;
+
 /** Whole-session budget, premiere + N episodes + Reunion. */
 export function sessionSeconds(episodes, noms = 0) {
   let s = SECONDS[PHASE.PREMIERE] + SECONDS[PHASE.REUNION];

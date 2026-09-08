@@ -226,3 +226,45 @@ export function heldHit(driver, chrome) {
   if (String(d ?? '') !== String(c ?? '')) return null;
   return { hit: !!d, executed: d };
 }
+
+/**
+ * 🗺️ Route / job ballot. Not the lynch — a missing vote abstains, more votes wins,
+ * and a tie locks the Lights / hall default. Invalid ids are ignored.
+ *
+ * @param {{living:string[], votes?:Record<string,string>, available?:Array<{id:string}>, tie?:string}} o
+ */
+export function tallyRouteVotes({ living = [], votes = {}, available = [], tie = 'lights' } = {}) {
+  const ids = (available || []).map((a) => (typeof a === 'string' ? a : a?.id)).filter(Boolean);
+  const counts = Object.fromEntries(ids.map((id) => [id, 0]));
+  let abstained = 0;
+  for (const id of living || []) {
+    const v = votes?.[id];
+    if (v && counts[v] !== undefined) counts[v] += 1;
+    else abstained += 1;
+  }
+  let best = -1;
+  let winners = [];
+  for (const id of ids) {
+    if (counts[id] > best) { best = counts[id]; winners = [id]; }
+    else if (counts[id] === best) winners.push(id);
+  }
+  const fallback = ids.includes(tie) ? tie : (ids[0] || tie);
+  let selected = fallback;
+  if (best > 0 && winners.length === 1) selected = winners[0];
+  else if (best > 0 && winners.length > 1) selected = winners.includes(tie) ? tie : winners[0];
+  return {
+    selected,
+    counts,
+    abstained,
+    tied: best > 0 && winners.length > 1,
+  };
+}
+
+/** May `voter` pick `jobId` on the private route ballot? */
+export function canRouteVote(voter, jobId, living, available) {
+  if (!living?.includes(voter)) return { ok: false, why: 'not living' };
+  const ids = (available || []).map((a) => (typeof a === 'string' ? a : a?.id));
+  if (!jobId || !ids.includes(jobId)) return { ok: false, why: 'not available' };
+  return { ok: true };
+}
+

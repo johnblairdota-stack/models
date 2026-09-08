@@ -76,6 +76,15 @@ export function missionFor(episode) {
  * ⚠️ **NO FOURTH PHASE.** D1 is explicit that `mission.phase` stays `seek` → `return` → `done`.
  * This is copy, chosen from the phase and a room id; nothing here is a state.
  */
+/**
+ * Stamp the locked catalog job onto a smash/drill spec. Identity of `missionFor()`
+ * is unchanged — J0 still compares the premiere object. The stamp is a copy.
+ */
+export function stampSelectedJob(spec, selectedJob) {
+  if (!selectedJob) return spec;
+  return { ...spec, catalogId: selectedJob, selectedJob };
+}
+
 export function seekLine(spec, { here = null, missionRoom = null, phase = 'seek' } = {}) {
   const s = spec ?? MISSION_PAINTING;
   if (phase === 'done') return 'Home. That is the run.';
