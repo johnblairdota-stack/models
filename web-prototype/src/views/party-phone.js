@@ -10,7 +10,7 @@
  */
 import { PartyNightClient, defaultWsUrl, tokenKey, normalizeCodeDisplay, normalizeCodeWire } from '../party/night-client.js';
 import { recapFromEvents } from '../party/recap.js';
-import { injectNightSkin, markPartyReady, playerName } from '../party/night-skin.js';
+import { injectNightSkin, markPartyReady, playerName, bindYellowStickies } from '../party/night-skin.js';
 import { ACCENTS, DEFAULT_LOOK, SHELLS, cleanLook, paintLook, robotFaceSvg } from '../party/look.js';
 import { REACTIONS, REACT_COOLDOWN_MS, REACT_MOOD, cleanReaction } from '../party/react.js';
 import { applyCastLock, applyCastTap, ballotFromCast, CAST_BLOCK_WHY, castPrompt, castRowBlock, castRowMark, freshCast, mergePublicNames, nominationPlayers, padlockSvg } from '../party/cast-ui.js';
@@ -36,6 +36,10 @@ import { outcomeLine } from '../party/win.js';
 import { removalWord } from '../party/taken.js';
 import { NO_ONE, checkpointPadHtml } from '../party/vote.js';
 import { clearsLine } from '../party/scorekeeper.js';
+import {
+  NOTE_IDS, takeSticky, restoreSticky, stickyHtml, notesCornerHtml, wrapSticky,
+  createNotesSession, sessionStoragePersist,
+} from '../party/notes.js';
 
 export default async function partyPhone({ params }) {
   injectNightSkin();
@@ -157,6 +161,11 @@ export default async function partyPhone({ params }) {
     lateNomShown: false,
     /** Visible cast rejection / self-pick line. Not a second rule. */
     castNote: '',
+    /** Yellow-sticky session. Rebuilt if the room or persistent seat token changes. */
+    notes: null,
+    /** The one sticky currently on this sheet, or null. In-memory until peel / unload. */
+    stickyShowing: null,
+    notesOpen: false,
   };
 
   /**
@@ -668,6 +677,7 @@ export default async function partyPhone({ params }) {
       : null;
     if (liveStamp && root.dataset.liveUi === liveStamp && patchLive(frame)) {
       publishPhone(frame, beat, { iAmRunner, iAmGuide, seat: me.seat });
+      bindNotesUi();
       return;
     }
 
@@ -897,7 +907,7 @@ export default async function partyPhone({ params }) {
           ${missionLine(frame, frame?.you?.here ?? null)}
           ${hereLine(frame)}
           ${job === JOB.SMASH ? runnerSmashFaces() : runnerDrillPad(c.worldSeed, frame?.airingEpisode ?? 1)}
-          <div class="stick-wrap${topDown ? ' top' : ''}">
+          ${wrapSticky(`<div class="stick-wrap${topDown ? ' top' : ''}">
             <div class="stick-col">
               <div class="stick" id="stick"><div class="nub" data-nub></div></div>
               <div class="stick-cap">Dodge</div>
@@ -912,7 +922,7 @@ export default async function partyPhone({ params }) {
               <div class="stick stick-look" id="stick-look"><div class="nub" data-nub-look></div></div>
               <div class="stick-cap">Look</div>
             </div>`}
-          </div>
+          </div>`, claimSticky(NOTE_IDS.PHONE_RUNNER_DODGE))}
           ${padFxHtml()}`;
       } else if (iAmGuide) {
         /*
@@ -1039,6 +1049,7 @@ export default async function partyPhone({ params }) {
     // readable by the neighbour for as long as its owner looked away, and gone for the twenty
     // minutes the card is actually being reasoned about. It is a face-down tab now, everywhere.
     body += cardTab();
+    body += phoneNotesTail(body);
 
     delete root.dataset.castUi;
     /* =========================================================================================
@@ -1086,6 +1097,7 @@ export default async function partyPhone({ params }) {
     });
     bindPad();
     bindPinPad(guideScope);
+    bindNotesUi();
     /*
      * ⚠️ `e.target` IS THE SVG, NOT THE BUTTON. The old handler read `dataset.r` straight off the
      * target and worked only because the buttons were plain text — with a face and a label inside
@@ -1521,6 +1533,52 @@ export default async function partyPhone({ params }) {
     };
   }
 
+  function notesSession() {
+    const code = state.code;
+    const token = (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(tokenKey(code, 'phone')))
+      || state.client?.welcome?.token
+      || 'phone';
+    if (state.notes && state.notes.room === code && state.notes.seat === token) return state.notes;
+    const persist = sessionStoragePersist(code, token);
+    state.notes = createNotesSession({
+      room: code, seat: token, load: persist.load, save: persist.save,
+    });
+    return state.notes;
+  }
+
+  function claimSticky(id) {
+    const taken = takeSticky(notesSession(), id, state.stickyShowing);
+    if (taken.showing === id) state.stickyShowing = id;
+    return taken.html;
+  }
+
+  function phoneNotesTail(bodySoFar) {
+    let extra = '';
+    if (state.stickyShowing && !String(bodySoFar || '').includes('data-sticky=')) {
+      extra += stickyHtml(state.stickyShowing, { loose: true });
+    }
+    extra += notesCornerHtml(notesSession().notesPresented, { open: state.notesOpen });
+    return extra;
+  }
+
+  function bindNotesUi() {
+    bindYellowStickies(root, {
+      onPeeled() { state.stickyShowing = null; },
+      onRestore(id) {
+        const r = restoreSticky(notesSession(), id);
+        if (r.show) {
+          state.stickyShowing = id;
+          state.notesOpen = false;
+          paint();
+        }
+      },
+      onTab() {
+        state.notesOpen = !state.notesOpen;
+        paint();
+      },
+    });
+  }
+
   function guidePinPad(scope) {
     /*
      * CAST11 H480: the pad SHELL paints on expedition even before a you-mark
@@ -1529,11 +1587,11 @@ export default async function partyPhone({ params }) {
      * Chips stay empty until scope arrives; bindPinPad still bails on null.
      */
     if (!scope) {
-      return `<div class="pin-pad" data-pin-pad>
+      return wrapSticky(`<div class="pin-pad" data-pin-pad>
       <p class="hint">Pin a door. She walks to it. Then say which one, out loud.</p>
       <div class="pin-row"></div>
       <p class="pin-say" data-pin-say>Waiting for the house…</p>
-    </div>`;
+    </div>`, claimSticky(NOTE_IDS.PHONE_GUIDE_PIN));
     }
     const gates = new Map((scope.gates ?? []).map((g) => [g.dir, g]));
     const chips = COMPASS_4.map((dir) => {
@@ -1565,14 +1623,14 @@ export default async function partyPhone({ params }) {
         <span class="pin-to">${esc(s.label)}</span>
       </button>`;
     }).join('');
-    return `<div class="pin-pad" data-pin-pad>
+    return wrapSticky(`<div class="pin-pad" data-pin-pad>
       <p class="hint">${spots
         ? 'She is in the room. Pin what she should go at, and say it out loud.'
         : 'Pin a door. She walks to it. Then say which one, out loud.'}</p>
       <div class="pin-row">${chips}</div>
       ${spots ? `<div class="pin-row pin-goals" data-goal-row>${spots}</div>` : ''}
       <p class="pin-say" data-pin-say>${esc(scope.say)}</p>
-    </div>`;
+    </div>`, claimSticky(NOTE_IDS.PHONE_GUIDE_PIN));
   }
 
   /**
@@ -1951,13 +2009,16 @@ export default async function partyPhone({ params }) {
   function paintDeadWatch(me, players) {
     stopPad();
     const who = playerName(players, me.playerId) || me.name || 'You';
-    root.innerHTML = `
-      <div class="phone-top"><span>${esc(state.code.toUpperCase())}</span><span>${esc(who)} · out</span></div>
-      <div class="cast-step">
+    const deadBody = `<div class="cast-step">
         <h1>You are out.</h1>
         <p class="hint">Your nameplate is face-down. Watch the TV. The living pick the next pair — you do not lock a ballot.</p>
       </div>`;
+    root.innerHTML = `
+      <div class="phone-top"><span>${esc(state.code.toUpperCase())}</span><span>${esc(who)} · out</span></div>
+      ${deadBody}
+      ${phoneNotesTail(deadBody)}`;
     root.dataset.castUi = 'dead-watch';
+    bindNotesUi();
   }
 
   function paintRouteVote(route, me, players, you) {
@@ -1965,16 +2026,18 @@ export default async function partyPhone({ params }) {
     const pick = you?.routePick || null;
     const stamp = `route:vote:${(route.available || []).map((j) => `${j.id}:${j.offered ? 1 : 0}`).join(',')}:${pick || ''}`;
     if (root.dataset.castUi === stamp) return;
+    const routeBody = `${routePadHtml(route, pick)}${cardTab()}`;
     root.innerHTML = `
       <div class="phone-top"><span>${esc(state.code.toUpperCase())}</span><span>route · ${esc(playerName(players, me.playerId) || me.name || 'You')}</span></div>
-      ${routePadHtml(route, pick)}
-      ${cardTab()}`;
+      ${routeBody}
+      ${phoneNotesTail(routeBody)}`;
     root.dataset.castUi = stamp;
     delete root.dataset.liveUi;
     for (const b of root.querySelectorAll('[data-route-pick]')) {
       b.addEventListener('click', () => state.client?.send({ t: 'routeVote', job: b.dataset.routePick }));
     }
     bindCardTab();
+    bindNotesUi();
   }
 
   function paintMissingJob(me, players) {
@@ -2052,10 +2115,11 @@ export default async function partyPhone({ params }) {
       if (dial) dial.setAttribute('aria-valuenow', String(pct));
       return;
     }
+    const heatBody = `${generatePadHtml(you || {}, board)}${cardTab()}`;
     root.innerHTML = `
       <div class="phone-top"><span>${esc(state.code.toUpperCase())}</span><span>generator · ${esc(playerName(players, me.playerId) || me.name || 'You')}</span></div>
-      ${generatePadHtml(you || {}, board)}
-      ${cardTab()}`;
+      ${heatBody}
+      ${phoneNotesTail(heatBody)}`;
     root.dataset.castUi = stamp;
     delete root.dataset.liveUi;
     const hold = root.querySelector('[data-generate]');
@@ -2080,6 +2144,7 @@ export default async function partyPhone({ params }) {
       state.client?.send({ t: 'heatCross' });
     });
     bindCardTab();
+    bindNotesUi();
   }
 
   function paintRouteStations(route, me, players, youIn) {
@@ -2090,10 +2155,11 @@ export default async function partyPhone({ params }) {
     };
     const stamp = `route:stations:${route.selected || ''}:${you.station || ''}:${you.stationConfirmed ? 1 : 0}`;
     if (root.dataset.castUi === stamp) return;
+    const stationBody = `${stationPadHtml(route, you)}${cardTab()}`;
     root.innerHTML = `
       <div class="phone-top"><span>${esc(state.code.toUpperCase())}</span><span>crew · ${esc(playerName(players, me.playerId) || me.name || 'You')}</span></div>
-      ${stationPadHtml(route, you)}
-      ${cardTab()}`;
+      ${stationBody}
+      ${phoneNotesTail(stationBody)}`;
     root.dataset.castUi = stamp;
     delete root.dataset.liveUi;
     for (const b of root.querySelectorAll('[data-station]')) {
@@ -2103,6 +2169,7 @@ export default async function partyPhone({ params }) {
       state.client?.send({ t: 'stationConfirm' });
     });
     bindCardTab();
+    bindNotesUi();
   }
 
   function paintCasting(players, me, episode) {
@@ -2161,13 +2228,15 @@ export default async function partyPhone({ params }) {
         </div>`;
     }
 
+    const castBody = `<div class="cast-step">${body}</div>${cardTab()}`;
     root.innerHTML = `
       <div class="phone-top"><span>${esc(state.code.toUpperCase())}</span><span>casting · ${esc(playerName(players, me.playerId) || me.name || 'You')}</span></div>
-      <div class="cast-step">${body}</div>
-      ${cardTab()}`;
+      ${castBody}
+      ${phoneNotesTail(castBody)}`;
     root.dataset.castUi = stamp;
     bindCast(players, me, lockCtx);
     bindCardTab();
+    bindNotesUi();
   }
 
   function patchCastSheet(players, me, cast, lockCtx) {
@@ -2593,8 +2662,9 @@ export default async function partyPhone({ params }) {
       return html;
     }
     html += `<p class="hint">First tap stands. No self-nom.</p>
-      <div class="pick-list jackbox buzz">${targets.map((p) =>
-        `<button type="button" data-nom="${esc(p.id)}">${seatChip(c, p.id)}<span>${esc(p.name)}</span></button>`).join('')}</div>`;
+      ${wrapSticky(`<div class="pick-list jackbox buzz">${targets.map((p) =>
+        `<button type="button" data-nom="${esc(p.id)}">${seatChip(c, p.id)}<span>${esc(p.name)}</span></button>`).join('')}</div>`,
+      claimSticky(NOTE_IDS.PHONE_VOTE))}`;
     return html;
   }
 
@@ -2659,10 +2729,10 @@ export default async function partyPhone({ params }) {
         : 'Nobody was named. NO ONE is the only ballot.')
       : `Pick one standing nominee, or NO ONE.${onTrial ? ' You are on trial — you cannot vote for yourself.' : ''}`;
     html += `<p class="hint">${lead}</p>
-      <div class="pick-list jackbox">
+      ${wrapSticky(`<div class="pick-list jackbox">
         ${others.map((n) => `<button type="button" data-lynch="${esc(n.target)}">${seatChip(c, n.target)}<span>${esc(n.name)}</span></button>`).join('')}
         <button type="button" data-lynch="${NO_ONE}"><span>NO ONE</span></button>
-      </div>`;
+      </div>`, claimSticky(NOTE_IDS.PHONE_VOTE))}`;
     return html;
   }
 
