@@ -51,6 +51,22 @@ Guide/runner hall energy and living-room TV+phones stay. Spec rewrite owns how e
 
 Both-partners-running is a later A/B, not the first playable.
 
+## Amendment (locked catalog job = the expedition) — 2026-09-08
+
+**Was (sofa turn shape):** phones vote a **pair**; one **runner** in the halls, one **guide** with private map; they complete a hall task (smash/drill energy); TV follows the runner.
+
+**Now (after route menu + guide/runner follow-on):** A turn's expedition is the **locked catalog job** (`selectedJob` from the route/task menu), not always "pick a guide/runner pair for halls."
+
+- **Pair-lock** may still exist for casting chemistry / who is on the job.
+- **Job play is station/group by job id:**
+  - `portrait` — station controllers (pull-a / pull-b / cross+catch); TV gallery spectacle; no Guide E / Runner D auto-walk as the job model.
+  - `lights` — group generators via existing private-heat; no pin map / auto-walk / runner follow.
+- Legacy smash/drill guide/runner is **not** the default launch when an implemented choosable job is locked.
+
+Guide E / Runner D / TV E / auto-walk / pin paintings only if a **future** job reintroduces hall-pair play — not for Portrait/Lights.
+
+See: `docs/slices/task-guide-runner-follow-on.md`.
+
 ## Keep from the prototype
 
 - `DamageField` + `support.js` collapse. New work is a **picker** that aims the existing sledge at the shallowest cell in a 0.80 m-wide window, y in [0, 1.95], so `channel().open` goes true. Measured: 3 blows. Do not pick for `COLLAPSE.fail`. Do not reuse hunter `_bang` (that is stage HP, not the grid).

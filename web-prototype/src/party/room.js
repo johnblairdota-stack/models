@@ -37,13 +37,19 @@ import { cleanLook } from './look.js';
 import { STALE_MAX, intelFor } from './intel.js';
 import { coverageRoomOf } from './mansion.js';
 import { mapFeed } from './mapfeed.js';
-import { missionFor, stampSelectedJob, lightsArmedFor, jobRoster } from './mission.js';
+import {
+  missionFor, missionForSelected, lightsArmedFor, portraitArmedFor, jobRoster,
+} from './mission.js';
 import {
   endGrace, freshSeat, HEAT_STEP, LIGHTS_JOB, leaveGenerator,
   projectLights, setGenerating, tickBoard, tickSeat, tripLeft,
 } from './heat.js';
 import {
-  drillShotFor, FAIL_CHROME, JOB, freshRoute, projectRoute, availableRoutes,
+  PORTRAIT_JOB, PORTRAIT_STEP, catchPortrait, freshPortraitBoard, freshPortraitSeat,
+  projectPortrait, pulsePull, setCrawling, tickPortrait as tickPortraitSim,
+} from './portrait.js';
+import {
+  drillShotFor, FAIL_CHROME, JOB, ROUTE_STATUS, freshRoute, projectRoute, availableRoutes,
   canOfferRoute, routeById,
 } from './jobs.js';
 import { canRouteVote, tallyRouteVotes } from './vote.js';
@@ -157,14 +163,13 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
      * `projectRoute` is the public shape. A new Casting resets it. playEpisode does not.
      */
     route: freshRoute(),
-    /** Locked catalog id for this expedition. Stamped onto the smash/drill spec. */
+    /** Locked catalog id for this expedition. Dispatch is by this id, not smash/drill. */
     selectedJob: null,
     mission: null,
     /**
      * 🔥 Private-heat on the Lights job. Seats hold heat / tripUntil / generating.
      * Only `fullFor` writes `you.heat` / `you.tripLeft` onto that seat's phone.
-     * `lights` is the public board. Live night does not arm this — harness /
-     * `armLightsHeat` does, so guide/runner still launches.
+     * `lights` is the public board. Armed when `selectedJob === 'lights'`.
      */
     heatArmed: false,
     heatNow: 0,
@@ -172,6 +177,16 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     heatStep: HEAT_STEP.IDLE,
     seats: {},
     lights: null,
+    /**
+     * 🖼️ Portrait station play. Seats hold pulling / crawling / crossed.
+     * Public `portrait` is lift / noise / hunter / catch — no rhythm.
+     */
+    portraitArmed: false,
+    portraitNow: 0,
+    portraitStep: PORTRAIT_STEP.IDLE,
+    portraitSeats: {},
+    portraitBoard: null,
+    portrait: null,
     /**
      * KEEP/EXPEL between jobs. Ballots live here, not on the frame —
      * `projectCheckpoint` is the public shape. Expulsion is next-job only.
@@ -411,12 +426,28 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     if (state.heatArmed && state.lights) {
       base.lights = { ...state.lights, stations: (state.lights.stations || []).map((s) => ({ ...s })) };
     }
+    if (state.portraitArmed && state.portrait) {
+      base.portrait = {
+        ...state.portrait,
+        stations: (state.portrait.stations || []).map((s) => ({ ...s })),
+      };
+    }
     if (!sock.isTV && base.you && state.heatArmed && state.seats[sock.playerId]) {
       const seat = state.seats[sock.playerId];
       base.you = {
         ...base.you,
         heat: seat.heat,
         tripLeft: tripLeft(seat, state.heatNow),
+      };
+    }
+    if (!sock.isTV && base.you && state.portraitArmed && state.portraitSeats[sock.playerId]) {
+      const seat = state.portraitSeats[sock.playerId];
+      base.you = {
+        ...base.you,
+        pulling: !!seat.pulling,
+        crawling: !!seat.crawling,
+        crossed: !!seat.crossed,
+        catchReady: !!(seat.crossed && !state.portrait?.catchLocked),
       };
     }
     // ---- the injected leaks. `harness/party-isolation.mjs` I9 requires each to turn exactly the
@@ -534,6 +565,15 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     state.heatStep = HEAT_STEP.IDLE;
     state.seats = {};
     state.lights = null;
+  }
+
+  function resetPortrait() {
+    state.portraitArmed = false;
+    state.portraitNow = 0;
+    state.portraitStep = PORTRAIT_STEP.IDLE;
+    state.portraitSeats = {};
+    state.portraitBoard = null;
+    state.portrait = null;
   }
 
   function clearSitOut() {
@@ -697,11 +737,21 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     state.selectedJob = null;
     state.mission = null;
     resetHeat();
+    resetPortrait();
+  }
+
+  function menuWasUsed() {
+    const step = state.route?.step;
+    return step === 'vote' || step === 'stations' || step === 'locked' || !!state.route?.selected
+      || !!state.selectedJob;
   }
 
   function stampMission() {
-    const spec = missionFor(state.airingEpisode ?? state.episode);
-    state.mission = stampSelectedJob(spec, state.selectedJob);
+    state.mission = missionForSelected(
+      state.selectedJob,
+      state.airingEpisode ?? state.episode,
+      { menuUsed: menuWasUsed() },
+    );
     return state.mission;
   }
 
@@ -801,19 +851,52 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       job: state.route.selected,
       roster: projectRoute(state.route, living).roster,
     }));
+    const launched = launchSelectedPlay({ living, nowMs: Date.now(), step: HEAT_STEP.PRACTICE });
     broadcast();
-    return { ok: true, selected: state.route.selected, roster: projectRoute(state.route, living).roster };
+    return {
+      ok: true,
+      selected: state.route.selected,
+      roster: projectRoute(state.route, living).roster,
+      play: launched,
+    };
   }
 
   /**
-   * Harness / Lights path. Does not replace guide/runner — playEpisode still
-   * launches smash/drill. Selected job must be lights or empty (then it becomes lights).
+   * After route lock + crew lock (or playEpisode with a locked catalog job):
+   * launch play by selectedJob. Never smash/drill for portrait / lights.
+   * Missing selectedJob after the menu is a fault, not a silent smash.
+   */
+  function launchSelectedPlay({ living: livingOpt = null, nowMs = 0, step = HEAT_STEP.PRACTICE } = {}) {
+    const job = state.selectedJob;
+    if (!job) {
+      if (menuWasUsed()) return { ok: false, why: 'no selectedJob', smash: false };
+      return { ok: true, kind: 'legacy', smash: true };
+    }
+    if (portraitArmedFor(job)) {
+      return armPortraitPlay({
+        living: livingOpt,
+        nowMs,
+        step: step === HEAT_STEP.PLAY ? PORTRAIT_STEP.PLAY : PORTRAIT_STEP.PRACTICE,
+      });
+    }
+    if (lightsArmedFor(job)) {
+      return armLightsHeat({ living: livingOpt, nowMs, step });
+    }
+    const row = routeById(job);
+    if (row?.status === ROUTE_STATUS.STUB) return { ok: false, why: 'stub', smash: false };
+    return { ok: false, why: 'unknown job', smash: false };
+  }
+
+  /**
+   * Lights path. Selected job must be lights. Empty selectedJob still arms for
+   * the harness-only `armLightsHeat` call (J23b); live dispatch uses `launchSelectedPlay`.
    */
   function armLightsHeat({ living: livingOpt = null, nowMs = 0, step = HEAT_STEP.PRACTICE } = {}) {
     if (state.selectedJob && !lightsArmedFor(state.selectedJob)) {
       return { ok: false, why: 'not lights' };
     }
     if (!state.selectedJob) state.selectedJob = LIGHTS_JOB;
+    resetPortrait();
     const living = jobRosterLiving(livingOpt);
     if (!living.length) return { ok: false, why: 'no living' };
     state.heatArmed = true;
@@ -822,9 +905,10 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     state.heatStep = step === HEAT_STEP.PLAY ? HEAT_STEP.PLAY : HEAT_STEP.PRACTICE;
     state.seats = Object.fromEntries(living.map((id) => [id, freshSeat()]));
     state.lights = null;
+    stampMission();
     refreshLights();
     broadcast();
-    return { ok: true, living: living.slice(), step: state.heatStep };
+    return { ok: true, kind: 'lights', living: living.slice(), step: state.heatStep, smash: false };
   }
 
   function startLightsPlay() {
@@ -900,6 +984,107 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     refreshLights();
     broadcast();
     return { ok: true, crossed: true };
+  }
+
+  function stationFor(playerId) {
+    return state.route?.claims?.[playerId]?.station || null;
+  }
+
+  function refreshPortrait() {
+    if (!state.portraitArmed) {
+      state.portrait = null;
+      return null;
+    }
+    state.portrait = projectPortrait(state.portraitBoard || freshPortraitBoard(), {
+      step: state.portraitStep,
+      seats: state.portraitSeats,
+    });
+    return state.portrait;
+  }
+
+  function armPortraitPlay({ living: livingOpt = null, nowMs = 0, step = PORTRAIT_STEP.PRACTICE } = {}) {
+    if (state.selectedJob && !portraitArmedFor(state.selectedJob)) {
+      return { ok: false, why: 'not portrait' };
+    }
+    if (!state.selectedJob) state.selectedJob = PORTRAIT_JOB;
+    resetHeat();
+    const living = jobRosterLiving(livingOpt);
+    if (!living.length) return { ok: false, why: 'no living' };
+    state.portraitArmed = true;
+    state.portraitNow = Number(nowMs) || 0;
+    state.portraitStep = step === PORTRAIT_STEP.PLAY ? PORTRAIT_STEP.PLAY : PORTRAIT_STEP.PRACTICE;
+    state.portraitBoard = freshPortraitBoard();
+    state.portraitSeats = Object.fromEntries(living.map((id) => [id, freshPortraitSeat(stationFor(id))]));
+    stampMission();
+    refreshPortrait();
+    broadcast();
+    return { ok: true, kind: 'portrait', living: living.slice(), step: state.portraitStep, smash: false };
+  }
+
+  function startPortraitPlay() {
+    if (!state.portraitArmed) return { ok: false, why: 'not armed' };
+    state.portraitStep = PORTRAIT_STEP.PLAY;
+    refreshPortrait();
+    broadcast();
+    return { ok: true, step: state.portraitStep };
+  }
+
+  function pulsePortraitPull(playerId, nowMs = null) {
+    if (!state.portraitArmed) return { ok: false, why: 'not armed' };
+    const seat = state.portraitSeats[playerId];
+    if (!seat) return { ok: false, why: 'no seat' };
+    if (nowMs != null) state.portraitNow = Number(nowMs) || state.portraitNow;
+    const hit = pulsePull(state.portraitBoard, seat, { nowMs: state.portraitNow, playerId });
+    if (!hit.ok) return hit;
+    state.portraitBoard = hit.board;
+    state.portraitSeats[playerId] = hit.seat;
+    refreshPortrait();
+    broadcast();
+    return { ok: true, stroke: !!hit.stroke, lift: state.portrait.lift };
+  }
+
+  function setPortraitCrawl(playerId, on) {
+    if (!state.portraitArmed) return { ok: false, why: 'not armed' };
+    const seat = state.portraitSeats[playerId];
+    if (!seat) return { ok: false, why: 'no seat' };
+    const next = setCrawling(seat, on, state.portraitBoard);
+    if (!next.ok) return next;
+    state.portraitSeats[playerId] = next.seat;
+    refreshPortrait();
+    broadcast();
+    return { ok: true, crawling: !!next.seat.crawling, crossed: !!next.seat.crossed };
+  }
+
+  function catchPortraitLock(playerId) {
+    if (!state.portraitArmed) return { ok: false, why: 'not armed' };
+    const seat = state.portraitSeats[playerId];
+    if (!seat) return { ok: false, why: 'no seat' };
+    const hit = catchPortrait(seat, state.portraitBoard);
+    if (!hit.ok) return hit;
+    state.portraitSeats[playerId] = hit.seat;
+    state.portraitBoard = hit.board;
+    refreshPortrait();
+    broadcast();
+    return { ok: true, catchLocked: true, crosses: state.portrait.crosses };
+  }
+
+  function tickPortraitPlay(nowMs, dt) {
+    if (!state.portraitArmed) return { ok: false, why: 'not armed' };
+    const t = Number(nowMs);
+    const step = Number(dt);
+    if (!Number.isFinite(t) || !Number.isFinite(step)) return { ok: false, why: 'bad clock' };
+    state.portraitNow = t;
+    const next = tickPortraitSim({
+      seats: state.portraitSeats,
+      board: state.portraitBoard,
+      nowMs: t,
+      dt: step,
+    });
+    state.portraitSeats = next.seats;
+    state.portraitBoard = next.board;
+    refreshPortrait();
+    broadcast();
+    return { ok: true, portrait: state.portrait };
   }
 
   function episodeLiving() {
@@ -1043,6 +1228,9 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     state.airingEpisode = state.episode;
     state.pin = null;                               // 📍 same rule as `beginCasting`. One pair, one pin.
     stampMission();
+    const skipSmashPlay = !!(state.mission?.missing
+      || portraitArmedFor(state.selectedJob)
+      || lightsArmedFor(state.selectedJob));
     setPhase('CASTING');
     // 🚨 THE PAIR COMES OUT OF A BALLOT, NOT A SEAT INDEX. `ballot.js` resolves every tie
     // deterministically and publicly, so casting never stalls and never waits on a human.
@@ -1072,6 +1260,11 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     broadcast();
 
     setPhase('EXPEDITION');
+    if (skipSmashPlay) {
+      if (state.portraitArmed) startPortraitPlay();
+      else if (state.heatArmed) startLightsPlay();
+      else launchSelectedPlay({ living, nowMs: 0, step: HEAT_STEP.PLAY });
+    }
     /*
      * LIVE NIGHT PASSES scaffold: false. The miss/alarm/camera-lit stubs exist so
      * party-anon gates and party-sim have a failure of each kind and a win path — they are
@@ -1079,8 +1272,10 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
      * CAMERAS 2/1 · ALARMS 2 before anyone swung (playcritique overnight post-#19). The
      * mansion reports real cameras and alarms; inventing them here is a lie on the shared
      * screen. Gates omit the flag and keep the scaffold (default true).
+     *
+     * Portrait / Lights never fall through to this smash/drill scaffold.
      */
-    if (scaffold) {
+    if (scaffold && !skipSmashPlay) {
       // One miss and one alarm, so party-anon A0's arm has a failure of each kind to look at.
       record(makeEvent('task.miss', VIS.PUBLIC, { kind: 'call', room: 'east', phaseTick: state.tick, loudness: 0.62 }));
       record(makeEvent('panel.alarm', VIS.PUBLIC, { kind: 'panel', room: 'east', phaseTick: state.tick, loudness: 1.25 }));
@@ -1387,6 +1582,13 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     tickHeat,
     setHeatGrace,
     crossGate,
+    launchSelectedPlay,
+    armPortraitPlay,
+    startPortraitPlay,
+    pulsePortraitPull,
+    setPortraitCrawl,
+    catchPortraitLock,
+    tickPortraitPlay,
     /**
      * Draw the cast. Called at night start so every joined phone holds a card before the first
      * ballot; called again by `playEpisode` and then a no-op. Returns true only for the call that
@@ -1723,13 +1925,25 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
          * mount. `done` is home. A drill that never mounted never returns.
          */
         if (phase === 'return') {
-          const spec = missionFor(state.airingEpisode ?? state.episode);
-          const job = mission?.job === JOB.DRILL || mission?.job === JOB.SMASH
-            ? mission.job
-            : spec.job;
-          lightCameraFromJob(job);
-          if (job === JOB.DRILL) {
-            state.pendingTool = drillShotFor(state.worldSeed, state.airingEpisode ?? state.episode);
+          /*
+           * Catalog play (Portrait / Lights / missing job after the menu) never
+           * smash-lights a camera — even if a leftover follow report names smash.
+           * `missionFor(episode)` is the hall fallback and must not win here.
+           */
+          const selected = state.selectedJob;
+          const catalog = portraitArmedFor(selected) || lightsArmedFor(selected)
+            || !!state.mission?.missing;
+          if (!catalog) {
+            const spec = missionFor(state.airingEpisode ?? state.episode);
+            const job = mission?.job === JOB.DRILL || mission?.job === JOB.SMASH
+              ? mission.job
+              : spec.job;
+            if (job === JOB.DRILL || job === JOB.SMASH) {
+              lightCameraFromJob(job);
+              if (job === JOB.DRILL) {
+                state.pendingTool = drillShotFor(state.worldSeed, state.airingEpisode ?? state.episode);
+              }
+            }
           }
         }
         if (phase === 'done') {

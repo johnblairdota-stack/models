@@ -108,6 +108,51 @@ function last(box, type) {
 {
   const src = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8');
   const win = src('../src/party/win.js');
+  const follow = src('../src/party/follow.js');
+  const guidemap = src('../src/party/guidemap.js');
+  const host = src('../src/views/party-host.js');
+  const phone = src('../src/views/party-phone.js');
+  const frames = {};
+  const room = createRoom({ count: 3, castSeed: 9, worldSeed: 9, send: (id, f) => { frames[id] = f; } });
+  room.start();
+  const living = room.state.players.filter((p) => p.alive).map((p) => p.id);
+  room.openRouteVote(living);
+  for (const id of living) room.castRouteVote(id, 'portrait', living);
+  room.claimStation(living[0], 'pull-a', living);
+  room.claimStation(living[1], 'pull-b', living);
+  room.claimStation(living[2], 'cross', living);
+  for (const id of living) room.confirmStation(id, living);
+  room.lockCrew(living);
+  const tv = frames.tv;
+  const pad = frames['phone-0'];
+  t('N28 · Portrait lockCrew launches station play, not smash; HELD_BRIEF gone; win closed',
+    room.state.portraitArmed && room.state.mission?.job === 'portrait'
+      && room.state.mission?.job !== 'smash'
+      && tv?.portrait && !tv.lights
+      && pad?.you?.station === 'pull-a'
+      && !JSON.stringify(tv).includes('Held — guide/runner')
+      && /galleryBoardHtml/.test(host) && /paintPortraitStation/.test(phone)
+      && !/HELD_BRIEF/.test(host)
+      && !/armPortraitPlay/.test(win)
+      && !/armPortraitPlay/.test(follow)
+      && !/armPortraitPlay/.test(guidemap));
+
+  const roomL = createRoom({ count: 4, castSeed: 10, worldSeed: 10, send: (id, f) => { frames[id] = f; } });
+  roomL.start();
+  const ids = roomL.state.players.filter((p) => p.alive).map((p) => p.id);
+  roomL.openRouteVote(ids);
+  for (const id of ids) roomL.castRouteVote(id, 'lights', ids);
+  roomL.playEpisode({ scaffold: false });
+  t('N28b · Lights playEpisode arms heat, not pin/auto-walk smash',
+    roomL.state.heatArmed && roomL.state.mission?.job === 'lights'
+      && roomL.state.mission?.job !== 'smash'
+      && !!frames.tv.lights
+      && !roomL.state.portraitArmed);
+}
+
+{
+  const src = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8');
+  const win = src('../src/party/win.js');
   const taken = src('../src/party/taken.js');
   const follow = src('../src/party/follow.js');
   const eight = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];

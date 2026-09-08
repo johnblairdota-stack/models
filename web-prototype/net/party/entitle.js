@@ -244,6 +244,28 @@ export const MATRIX = [
   ['lights.floodlit',          'all'],
   ['lights.hunterPressure',    'all'],
 
+  /*
+   * ---- Behind the Portrait station play. `docs/slices/task-guide-runner-follow-on.md`.
+   *
+   * Public board is lift / noise / hunter / catch / crosses. Individual rhythm
+   * (`lastPull`, crawl progress) is not rowed and must never appear here.
+   * `you.pulling` / `you.crawling` / `you.crossed` / `you.catchReady` are SELF.
+   */
+  ['portrait.step',            'all'],
+  ['portrait.lift',            'all'],
+  ['portrait.noise',           'all'],
+  ['portrait.hunterPressure',  'all'],
+  ['portrait.catchLocked',     'all'],
+  ['portrait.crosses',         'all'],
+  ['portrait.stations[]',      'all'],
+  ['portrait.stations[].id',   'all'],
+  ['portrait.stations[].station', 'all'],
+  ['portrait.stations[].busy', 'all'],
+  ['you.pulling',              'self'],
+  ['you.crawling',             'self'],
+  ['you.crossed',              'self'],
+  ['you.catchReady',           'self'],
+
   // ---- incidents. A count, never a list (party-anon A4).
   ['incident.alarms',          'all'],
   // 'incident.by'                       NO ROW. T5.

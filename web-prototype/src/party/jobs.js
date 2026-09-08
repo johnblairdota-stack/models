@@ -187,12 +187,12 @@ export function voiceSendsNothing() {
 }
 
 /* =================================================================================================
- * 🗺️ **CHOOSABLE ROUTE / TASK MENU** — catalog + availability. Play stays guide/runner.
+ * 🗺️ **CHOOSABLE ROUTE / TASK MENU** — catalog + availability.
  *
- * `docs/slices/task-route-task-menu.md`. Portrait / Lights are independently selectable; a
- * choice does not queue the other. Stubs sit in the catalog so a later board is a row, not a
- * rewrite. Status `held` means the menu + stations work and the expedition still launches the
- * locked guide/runner path with the job id stamped.
+ * `docs/slices/task-guide-runner-follow-on.md`. Portrait / Lights are independently selectable
+ * and `implemented`: lock + crew launches station / heat play, never smash/drill. Stubs sit in
+ * the catalog so a later board is a row, not a rewrite. `ROUTE_STATUS.HELD` remains for a
+ * future row; Portrait / Lights must not use it.
  * ================================================================================================= */
 
 export const ROUTE_STATUS = Object.freeze({
@@ -212,14 +212,14 @@ export const ROUTE_CATALOG = Object.freeze([
     name: 'Behind the Portrait',
     minimum: 3,
     stations: Object.freeze(['pull-a', 'pull-b', 'cross']),
-    status: ROUTE_STATUS.HELD,
+    status: ROUTE_STATUS.IMPLEMENTED,
   }),
   Object.freeze({
     id: 'lights',
     name: 'Keep the Lights On',
     minimum: 1,
     stations: Object.freeze(['generator']),
-    status: ROUTE_STATUS.HELD,
+    status: ROUTE_STATUS.IMPLEMENTED,
   }),
   Object.freeze({
     id: 'switchboard',
@@ -328,14 +328,15 @@ export function projectRoute(route, livingIds, catalog = ROUTE_CATALOG) {
     tally,
     roster: closed ? publicRoster(route?.claims, living) : [],
     crewLocked: !!route?.crewLocked,
-    held: true,
+    held: !!(selected && routeById(selected, catalog)?.status === ROUTE_STATUS.HELD),
   };
 }
 
+/** Only a `held` catalog row still prints the sofa brief. Implemented jobs return null. */
 export function heldBrief(selectedJob) {
   if (!selectedJob) return null;
   const row = routeById(selectedJob);
-  if (!row || row.status === ROUTE_STATUS.STUB) return null;
+  if (!row || row.status !== ROUTE_STATUS.HELD) return null;
   return HELD_BRIEF;
 }
 
@@ -370,7 +371,8 @@ export function routeMenuHtml(route, { names = {} } = {}) {
     const who = names[row.id] || row.id;
     return `<li data-crew="${escRoute(row.id)}">${escRoute(who)} · ${escRoute(row.station)}</li>`;
   }).join('');
-  const brief = closed && r.selected ? `<p class="route-held">${escRoute(HELD_BRIEF)}</p>` : '';
+  const briefText = closed && r.selected ? heldBrief(r.selected) : null;
+  const brief = briefText ? `<p class="route-held">${escRoute(briefText)}</p>` : '';
   const rosterBlock = roster
     ? `<ol class="route-roster" data-route-roster>${roster}</ol>`
     : '';
@@ -415,6 +417,6 @@ export function stationPadHtml(route, you = {}) {
     <p class="hint">Claim your station. The host locks the crew when everyone has confirmed.</p>
     <div class="pick-list">${buttons}</div>
     ${confirmed}
-    <p class="route-held">${escRoute(HELD_BRIEF)}</p>
+    ${heldBrief(job.id) ? `<p class="route-held">${escRoute(HELD_BRIEF)}</p>` : ''}
   </div>`;
 }

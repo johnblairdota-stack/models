@@ -24,13 +24,11 @@ import { clockPin, pinPadLive } from '../game/runner-intel.js';
 import { pickPlanSeed, planRoomLabels, roomLabel } from '../party/mansion.js';
 import { missionFor, seekLine } from '../party/mission.js';
 import {
-  // RUNNER_VOICE / GUIDE_VOICE are no longer imported: with the button rows gone there is nothing
-  // here to iterate. The words themselves are printed in the SAY line as plain copy, and `jobs.js`
-  // stays their one owner for the harness and the recap.
   JOB, realFaceFor, drillShotFor, footstepsCue, wallWord, toolLabel,
   routePadHtml, stationPadHtml,
 } from '../party/jobs.js';
-import { generatePadHtml } from '../party/heat.js';
+import { generatePadHtml, isLightsJob } from '../party/heat.js';
+import { isPortraitJob, portraitPadHtml } from '../party/portrait.js';
 import { intelLine } from '../party/intel.js';
 import { STICK_DEADZONE, warmLabel } from '../party/follow.js';
 import { formatRemain, isTalkBeat, LATE_DEBRIEF_MS, remainingMs } from '../party/show.js';
@@ -550,6 +548,11 @@ export default async function partyPhone({ params }) {
     const pair = frame?.pair || {};
     const iAmRunner = pair.runner && pair.runner === me.playerId;
     const iAmGuide = pair.guide && pair.guide === me.playerId;
+    const selectedJob = frame?.route?.selected || null;
+    const catalogPortrait = isPortraitJob(selectedJob) || !!frame?.portrait;
+    const catalogLights = isLightsJob(selectedJob) || !!(frame?.lights && frame.you && Number.isFinite(frame.you.heat));
+    const catalogPlay = catalogPortrait || catalogLights;
+    const missingJob = !!(frame?.route?.crewLocked && !selectedJob);
 
     // 🚨 THE CARD PUTS ITSELF AWAY WHEN THE SHOW MOVES. Nobody has to remember to. The premiere
     // stage ends with it, so a phone that was still holding its card when the pair locked lands
@@ -659,7 +662,7 @@ export default async function partyPhone({ params }) {
     const guideStamp = iAmGuide && beat === 'expedition'
       ? `:${guideScopeFor(frame)?.hereId ?? '-'}:${state.pin ? `${state.pin.kind}@${state.pin.roomId}` : '-'}`
       : '';
-    const liveStamp = beat === 'expedition' && !state.stage
+    const liveStamp = beat === 'expedition' && !state.stage && !catalogPlay
       ? `${beat}:${iAmRunner ? 'run' : iAmGuide ? 'guide' : 'watch'}:${missionPhase}:${missionFor(frame?.airingEpisode ?? 1).job}`
         + `:${hasCard() ? 'card' : 'nocard'}${camStamp}${guideStamp}`
       : null;
@@ -701,11 +704,18 @@ export default async function partyPhone({ params }) {
         paintRouteStations(route, me, players, frame?.you);
         return;
       }
+      if (missingJob) {
+        paintMissingJob(me, players);
+        return;
+      }
+      if (catalogPortrait) {
+        paintPortraitStation(frame?.you, frame?.portrait, me, players);
+        return;
+      }
       /*
-       * 🔥 Lights heat pad — harness / job path only. Live night still locks a
-       * pair and takes the expedition branch; this sheet never replaces runner/guide.
+       * Lights heat pad. After crew lock / play dispatch this is the job, not runner/guide.
        */
-      if (frame?.lights && frame.you && Number.isFinite(frame.you.heat) && !pair.runner) {
+      if (catalogLights) {
         paintGenerate(frame.you, frame.lights, me, players);
         return;
       }
@@ -786,11 +796,30 @@ export default async function partyPhone({ params }) {
         <p class="hint" data-warm-line>${esc(warmSummary())}</p>
         ${nameField()}
         ${roster(c.lobby)}`;
+    } else if (beat === 'casting' && catalogPlay) {
+      if (catalogPortrait) {
+        paintPortraitStation(frame?.you, frame?.portrait, me, players);
+        return;
+      }
+      paintGenerate(frame.you, frame.lights, me, players);
+      return;
     } else if (beat === 'casting' && (pair.runner || recap.runner)) {
       body += `<h1>Locked.</h1>
         <p class="hint">${esc(playerName(players, pair.runner || recap.runner))} walks · ${esc(playerName(players, pair.guide || recap.guide))} talks.</p>
         <p class="hint">Watch the TV.</p>`;
     } else if (beat === 'expedition') {
+      if (missingJob) {
+        paintMissingJob(me, players);
+        return;
+      }
+      if (catalogPortrait) {
+        paintPortraitStation(frame?.you, frame?.portrait, me, players);
+        return;
+      }
+      if (catalogLights) {
+        paintGenerate(frame.you, frame.lights, me, players);
+        return;
+      }
       if (iAmRunner) {
         /*
          * 🎥 **WHICH CAMERA THE SHOW IS ON, AND WHY THIS SHEET HAS TWO SHAPES.**
@@ -1948,10 +1977,71 @@ export default async function partyPhone({ params }) {
     bindCardTab();
   }
 
+  function paintMissingJob(me, players) {
+    stopPad();
+    root.innerHTML = `
+      <div class="phone-top"><span>${esc(state.code.toUpperCase())}</span><span>route · ${esc(playerName(players, me.playerId) || me.name || 'You')}</span></div>
+      <div class="cast-step">
+        <h1>No job locked.</h1>
+        <p class="hint">The menu closed without a selected job. Not smash. Host must open the route vote again.</p>
+      </div>`;
+    root.dataset.castUi = 'missing-job';
+    delete root.dataset.liveUi;
+  }
+
+  function paintPortraitStation(you, portrait, me, players) {
+    stopPad();
+    const station = you?.station || 'cross';
+    const lift = Math.round(Math.max(0, Math.min(1, Number(portrait?.lift) || 0)) * 100);
+    const stamp = `portrait:${station}:${you?.crossed ? 1 : 0}:${portrait?.catchLocked ? 1 : 0}`;
+    if (root.dataset.castUi === stamp) {
+      const n = root.querySelector('[data-portrait-lift]');
+      if (n) n.textContent = `Lift ${lift}%`;
+      return;
+    }
+    root.innerHTML = `
+      <div class="phone-top"><span>${esc(state.code.toUpperCase())}</span><span>${esc(station)} · ${esc(playerName(players, me.playerId) || me.name || 'You')}</span></div>
+      ${portraitPadHtml(you || {}, portrait || {})}
+      ${cardTab()}`;
+    root.dataset.castUi = stamp;
+    delete root.dataset.liveUi;
+    const pull = root.querySelector('[data-portrait-pull]');
+    if (pull) {
+      pull.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        pull.classList.add('on');
+        state.client?.send({ t: 'portraitPull' });
+      });
+      pull.addEventListener('pointerup', () => pull.classList.remove('on'));
+      pull.addEventListener('pointercancel', () => pull.classList.remove('on'));
+    }
+    const crawl = root.querySelector('[data-portrait-crawl]');
+    if (crawl) {
+      const down = (e) => {
+        e.preventDefault();
+        crawl.classList.add('on');
+        state.client?.send({ t: 'portraitCrawl', on: true });
+      };
+      const up = () => {
+        crawl.classList.remove('on');
+        state.client?.send({ t: 'portraitCrawl', on: false });
+      };
+      crawl.addEventListener('pointerdown', down);
+      crawl.addEventListener('pointerup', up);
+      crawl.addEventListener('pointercancel', up);
+      crawl.addEventListener('pointerleave', (e) => { if (e.buttons) up(); });
+    }
+    root.querySelector('[data-portrait-catch]')?.addEventListener('click', () => {
+      state.client?.send({ t: 'portraitCatch' });
+    });
+    bindCardTab();
+  }
+
   function paintGenerate(you, lights, me, players) {
     stopPad();
+    const board = lights || {};
     const tripped = (you.tripLeft || 0) > 0;
-    const stamp = `heat:${tripped ? 'trip' : 'ok'}:${lights.gateOpen ? 1 : 0}`;
+    const stamp = `heat:${tripped ? 'trip' : 'ok'}:${board.gateOpen ? 1 : 0}`;
     if (root.dataset.castUi === stamp) {
       const n = root.querySelector('[data-heat-n]');
       const bar = root.querySelector('.heat-dial-bar i');
@@ -1964,7 +2054,7 @@ export default async function partyPhone({ params }) {
     }
     root.innerHTML = `
       <div class="phone-top"><span>${esc(state.code.toUpperCase())}</span><span>generator · ${esc(playerName(players, me.playerId) || me.name || 'You')}</span></div>
-      ${generatePadHtml(you, lights)}
+      ${generatePadHtml(you || {}, board)}
       ${cardTab()}`;
     root.dataset.castUi = stamp;
     delete root.dataset.liveUi;

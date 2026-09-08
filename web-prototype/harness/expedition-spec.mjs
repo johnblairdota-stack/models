@@ -172,8 +172,10 @@ const guidemap = src('../src/party/guidemap.js');
 t('ES6a', /id: 'portrait'/.test(jobs) && /id: 'lights'/.test(jobs)
   && /switchboard/.test(jobs) && /salvage-bench/.test(jobs) && /carry-the-heart/.test(jobs),
   'route catalog lives in jobs.js — Portrait, Lights, three stubs');
-t('ES6b', /Held — guide\/runner until replacement/.test(jobs),
-  'held brief is the launch, not a Portrait/Lights rewrite');
+t('ES6b', /Held — guide\/runner until replacement/.test(jobs)
+  && /ROUTE_STATUS\.HELD/.test(jobs)
+  && /status: ROUTE_STATUS\.IMPLEMENTED/.test(jobs),
+  'HELD remains in the enum; Portrait/Lights are implemented, not the held brief launch');
 t('ES6c', !/ROUTE_CATALOG|routeVote|selectedJob/.test(follow)
   && !/ROUTE_CATALOG|routeVote/.test(guidemap)
   && !/ROUTE_CATALOG|routeVote|selectedJob/.test(win),
@@ -184,6 +186,15 @@ t('ES6d', /you\.heat/.test(entitle) && /you\.tripLeft/.test(entitle)
   && !/HEAT_TRIP|armLightsHeat/.test(guidemap)
   && !/HEAT_TRIP|armLightsHeat|you\.heat/.test(win),
   'private-heat is rowed self / public lights; follow / guidemap / win stay closed');
+const portrait = src('../src/party/portrait.js');
+const room = src('../src/party/room.js');
+t('ES6e', /PORTRAIT_JOB/.test(portrait) && /galleryBoardHtml/.test(portrait)
+  && /launchSelectedPlay/.test(room)
+  && /portrait\.lift/.test(entitle) && /you\.crossed/.test(entitle)
+  && !/armPortraitPlay|pulsePortraitPull/.test(win)
+  && !/armPortraitPlay|pulsePortraitPull/.test(follow)
+  && !/armPortraitPlay|pulsePortraitPull/.test(guidemap),
+  'Portrait station play is dispatched; win / follow / guidemap stay closed');
 
 /* =================================================================================================
  * ES5 · 🚨 THE CONTROLS — every needle, planted, is caught by the same predicate

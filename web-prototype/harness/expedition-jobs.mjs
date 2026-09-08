@@ -13,7 +13,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { missionFor, stampSelectedJob, lightsArmedFor, MISSION_PAINTING, MISSION_DRILL, MISSION_TABLE } from '../src/party/mission.js';
+import { missionFor, stampSelectedJob, missionForSelected, lightsArmedFor, portraitArmedFor, MISSION_PAINTING, MISSION_DRILL, MISSION_TABLE, MISSION_PORTRAIT, MISSION_LIGHTS, MISSION_MISSING } from '../src/party/mission.js';
 import {
   FACES, SHOTS, GUIDE_VOICE, RUNNER_VOICE, JOB, FAIL_CHROME, SMASH_CHROME,
   realFaceFor, drillShotFor, footstepsCue, smashDebrief, voiceDebrief, blindDebrief,
@@ -27,6 +27,11 @@ import {
   HEAT_TRIP_MS, HEAT_RISE, generatePadHtml, lightsBoardHtml, lightsLeaks, neededOutput,
   projectLights, setGenerating, tickSeat, tripLeft,
 } from '../src/party/heat.js';
+import {
+  PORTRAIT_JOB, RHYTHM_MS, STROKE_LIFT, CRAWL_NEED, CRAWL_RATE,
+  catchPortrait, freshPortraitBoard, freshPortraitSeat, galleryBoardHtml, portraitLeaks,
+  portraitPadHtml, portraitSuccess, projectPortrait, pulsePull, setCrawling, tickPortrait,
+} from '../src/party/portrait.js';
 import { tallyRouteVotes, canRouteVote } from '../src/party/vote.js';
 import { recapFromEvents } from '../src/party/recap.js';
 import { createRoom } from '../src/party/room.js';
@@ -278,7 +283,7 @@ t('J9 · world report may carry job / emptyNail / heard, never a person',
 }
 
 /* =================================================================================================
- * J14+ · ROUTE / TASK MENU — catalog, vote lock, tie → Lights, stations. Guide/runner HOLD.
+ * J14+ · ROUTE / TASK MENU — catalog, vote lock, tie → Lights, stations. Portrait/Lights implemented.
  * ============================================================================================== */
 
 {
@@ -287,8 +292,8 @@ t('J9 · world report may carry job / emptyNail / heard, never a person',
     ids.join(',') === 'portrait,lights,switchboard,salvage-bench,carry-the-heart'
       && ROUTE_CATALOG.every((r) => r.name && r.minimum >= 1 && Array.isArray(r.stations)
         && Object.values(ROUTE_STATUS).includes(r.status))
-      && routeByStatus('portrait') === ROUTE_STATUS.HELD
-      && routeByStatus('lights') === ROUTE_STATUS.HELD
+      && routeByStatus('portrait') === ROUTE_STATUS.IMPLEMENTED
+      && routeByStatus('lights') === ROUTE_STATUS.IMPLEMENTED
       && ROUTE_CATALOG.filter((r) => r.status === ROUTE_STATUS.STUB).length === 3);
 
   function routeByStatus(id) {
@@ -378,7 +383,7 @@ t('J9 · world report may carry job / emptyNail / heard, never a person',
   const early = room.lockCrew(living);
   room.confirmStation('p3', living);
   const crew = room.lockCrew(living);
-  const spec = stampSelectedJob(missionFor(1), room.state.selectedJob);
+  const spec = missionForSelected(room.state.selectedJob, 1, { menuUsed: true });
   t('J19 · room vote stays private until close; lock stamps the job; crew needs every confirm',
     opened.ok && v1.ok && v2.ok && v3.auto
       && locked === 'portrait'
@@ -386,9 +391,10 @@ t('J9 · world report may carry job / emptyNail / heard, never a person',
       && !('votes' in pubOpen)
       && claimed.ok && !early.ok && crew.ok
       && spec.selectedJob === 'portrait' && spec.catalogId === 'portrait'
-      && spec.job === JOB.SMASH
+      && spec.job === 'portrait' && spec.job !== JOB.SMASH
       && missionFor(1) === MISSION_PAINTING
-      && heldBrief('portrait') === HELD_BRIEF);
+      && heldBrief('portrait') == null
+      && crew.play?.kind === 'portrait' && crew.play?.smash === false);
 }
 
 {
@@ -399,13 +405,16 @@ t('J9 · world report may carry job / emptyNail / heard, never a person',
   for (const id of living) room.castRouteVote(id, 'lights', living);
   const before = room.state.cameras.unlocked;
   room.playEpisode({ scaffold: false });
-  t('J20 · a locked catalog job still launches guide/runner smash/drill — play is held',
+  t('J20 · a locked Lights job launches heat, not smash/drill',
     room.state.selectedJob === 'lights'
       && room.state.mission?.selectedJob === 'lights'
-      && room.state.mission?.job === JOB.SMASH
+      && room.state.mission?.job === 'lights'
+      && room.state.mission?.job !== JOB.SMASH
       && missionFor(1) === MISSION_PAINTING
       && room.state.cameras.unlocked === before
-      && room.state.pair.runner && room.state.pair.guide);
+      && room.state.heatArmed
+      && !!room.state.lights
+      && !room.state.portraitArmed);
 }
 
 {
@@ -424,7 +433,9 @@ t('J9 · world report may carry job / emptyNail / heard, never a person',
       && !/portrait/.test(pad)
       && /Lights/.test(pad)
       && /data-route-menu/.test(menu)
-      && /Held/.test(stations)
+      && !/Held/.test(stations)
+      && heldBrief('portrait') == null
+      && heldBrief('lights') == null
       && !menu.includes('a:portrait') && !menu.includes('votes'));
 }
 
@@ -587,6 +598,158 @@ t('J9 · world report may carry job / emptyNail / heard, never a person',
       && /you\.heat/.test(entitle) && /'self'/.test(entitle)
       && /HOLD TO GENERATE/.test(heat)
       && !/KEEP\/EXPEL|\bEXPEL\b/.test(heat));
+}
+
+/* =================================================================================================
+ * J29+ · JOB-DISPATCHED PLAY — Portrait stations, Lights heat, no smash fallthrough.
+ * ============================================================================================== */
+
+{
+  let board = freshPortraitBoard();
+  const a = freshPortraitSeat('pull-a');
+  const b = freshPortraitSeat('pull-b');
+  const p1 = pulsePull(board, a, { nowMs: 100, playerId: 'a' });
+  const same = pulsePull(p1.board, a, { nowMs: 200, playerId: 'a' });
+  const p2 = pulsePull(freshPortraitBoard(), a, { nowMs: 100, playerId: 'a' });
+  const stroke = pulsePull(p2.board, b, { nowMs: 400, playerId: 'b' });
+  t('J29 · alternating pulls raise the drum; same-side twice slips',
+    p1.ok && !p1.stroke && same.ok && same.board.lift < p1.board.lift + STROKE_LIFT
+      && same.board.hunterPressure > 0
+      && stroke.ok && stroke.stroke && stroke.board.lift === STROKE_LIFT
+      && RHYTHM_MS === 900);
+}
+
+{
+  const frames = {};
+  const room = createRoom({ count: 3, castSeed: 4, worldSeed: 4, send: (id, f) => { frames[id] = f; } });
+  room.start();
+  const living = room.state.players.filter((p) => p.alive).map((p) => p.id);
+  room.openRouteVote(living);
+  for (const id of living) room.castRouteVote(id, 'portrait', living);
+  room.claimStation(living[0], 'pull-a', living);
+  room.claimStation(living[1], 'pull-b', living);
+  room.claimStation(living[2], 'cross', living);
+  for (const id of living) room.confirmStation(id, living);
+  const crew = room.lockCrew(living);
+  room.pulsePortraitPull(living[0], 100);
+  room.pulsePortraitPull(living[1], 400);
+  let now = 400;
+  for (let i = 0; i < 8; i++) {
+    now += 1000;
+    room.pulsePortraitPull(living[i % 2], now);
+    room.pulsePortraitPull(living[(i + 1) % 2], now + 300);
+    if (i === 2) room.setPortraitCrawl(living[2], true);
+    room.tickPortraitPlay(now + 300, 1);
+  }
+  room.setPortraitCrawl(living[2], true);
+  room.tickPortraitPlay(now + 2000, 3);
+  const earlyCatch = room.catchPortraitLock(living[2]);
+  const pub = frames.tv.portrait;
+  const own = frames['phone-2'];
+  const peer = frames['phone-0'];
+  const tvBlob = JSON.stringify(frames.tv);
+  t('J29b · lockCrew launches Portrait stations, not smash; catch+cross is the escape',
+    crew.play?.kind === 'portrait' && crew.play?.smash === false
+      && room.state.portraitArmed && room.state.mission?.job === PORTRAIT_JOB
+      && room.state.mission?.job !== JOB.SMASH
+      && !room.state.heatArmed
+      && pub && portraitLeaks(pub).length === 0
+      && !tvBlob.includes('"lastPull"') && !tvBlob.includes('"crawl"')
+      && own?.you?.crossed === true
+      && peer?.you?.crossed !== true
+      && (earlyCatch.ok === true || room.state.portrait.crosses >= 1)
+      && CRAWL_NEED === 0.55 && CRAWL_RATE === 0.4,
+    JSON.stringify({
+      lift: pub?.lift, crosses: pub?.crosses, catch: pub?.catchLocked,
+      crossed: own?.you?.crossed, early: earlyCatch,
+    }));
+}
+
+{
+  const room = createRoom({ count: 8, castSeed: 5, worldSeed: 5, send: () => {} });
+  room.start();
+  room.openRouteVote();
+  const living = room.state.players.filter((p) => p.alive).map((p) => p.id);
+  for (const id of living) room.castRouteVote(id, 'portrait', living);
+  const before = room.state.cameras.unlocked;
+  room.playEpisode({ scaffold: true });
+  room.setWorld({ mission: { phase: 'return', room: 'gallery', job: JOB.SMASH } });
+  t('J29c · playEpisode with Portrait does not smash-scaffold a camera_lit',
+    room.state.mission?.job === 'portrait'
+      && room.state.portraitArmed
+      && room.state.cameras.unlocked === before
+      && !room.log.all().some((e) => e.type === 'run.camera_lit'));
+}
+
+{
+  const room = createRoom({ count: 3, castSeed: 6, worldSeed: 6, send: () => {} });
+  room.start();
+  const living = room.state.players.filter((p) => p.alive).map((p) => p.id);
+  room.openRouteVote(living);
+  room.closeRouteVote(living);
+  room.state.selectedJob = null;
+  room.state.route.selected = null;
+  const spec = missionForSelected(null, 1, { menuUsed: true });
+  const launched = room.launchSelectedPlay({ living });
+  t('J30 · missing selectedJob after the menu is a fault, never silent smash',
+    spec.missing === true && spec.why === 'no selectedJob' && spec.job !== JOB.SMASH
+      && launched.ok === false && launched.why === 'no selectedJob' && launched.smash === false
+      && MISSION_MISSING.missing === true);
+}
+
+{
+  let board = freshPortraitBoard();
+  board.lift = 0.8;
+  board.crosses = 1;
+  const seat = { ...freshPortraitSeat('cross'), crossed: true };
+  const locked = catchPortrait(seat, board);
+  t('J30b · catch locked + ≥1 cross is Portrait success (LHL shape)',
+    locked.ok && portraitSuccess(locked.board)
+      && !portraitSuccess({ catchLocked: true, crosses: 0 })
+      && !portraitSuccess({ catchLocked: false, crosses: 2 }));
+}
+
+{
+  const pad = portraitPadHtml({ station: 'pull-a' }, { lift: 0.2 });
+  const crawl = portraitPadHtml({ station: 'cross' }, { lift: 0.6 });
+  const catchPad = portraitPadHtml({ station: 'cross', crossed: true }, { lift: 0.7, catchLocked: false });
+  const board = galleryBoardHtml({
+    lift: 0.5, noise: 0.2, hunterPressure: 0.1, catchLocked: false, crosses: 0,
+    stations: [{ id: 'p1', busy: true }],
+  });
+  const phone = src('../src/views/party-phone.js');
+  const host = src('../src/views/party-host.js');
+  t('J31 · phones are station controllers; TV is gallery spectacle; no Guide E / Runner D / HELD',
+    /data-portrait-pull/.test(pad) && /HOLD TO CRAWL/.test(crawl) && /CATCH AND LOCK/.test(catchPad)
+      && /data-gallery-board/.test(board) && /Hunter/.test(board) && !/god-map|floorplan|pin/i.test(board)
+      && /paintPortraitStation/.test(phone) && /t: 'portraitPull'/.test(phone)
+      && /galleryBoardHtml/.test(host)
+      && !/HELD_BRIEF/.test(host)
+      && !/route-held/.test(pad)
+      && portraitLeaks({ lastPull: { station: 'pull-a', at: 1 }, crawl: 0.2 }).length >= 1
+      && portraitLeaks(projectPortrait({ lift: 0.5, lastPull: { station: 'pull-a', at: 1 } })).length === 0);
+}
+
+{
+  const win = src('../src/party/win.js');
+  const follow = src('../src/party/follow.js');
+  const guidemap = src('../src/party/guidemap.js');
+  const phone = src('../src/views/party-phone.js');
+  const host = src('../src/views/party-host.js');
+  const roomSrc = src('../src/party/room.js');
+  t('J32 · negatives: no win.js / sticky / smash dispatch for implemented jobs',
+    !/armPortraitPlay|pulsePortraitPull|galleryBoardHtml|selectedJob/.test(win)
+      && !/armPortraitPlay|pulsePortraitPull/.test(follow)
+      && !/armPortraitPlay|pulsePortraitPull/.test(guidemap)
+      && !/notesPresented/.test(roomSrc)
+      && /launchSelectedPlay/.test(roomSrc)
+      && /skipSmashPlay/.test(roomSrc)
+      && /paintPortraitStation/.test(phone)
+      && /catalogPlay/.test(phone)
+      && !/Held — guide\/runner until replacement/.test(host)
+      && missionForSelected('portrait', 1).job !== JOB.SMASH
+      && missionForSelected('lights', 1).job !== JOB.DRILL
+      && missionForSelected('switchboard', 1, { menuUsed: true }).missing === true);
 }
 
 console.log(`\nexpedition-jobs: ${pass} passed, ${fail} failed`);

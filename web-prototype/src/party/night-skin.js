@@ -425,6 +425,18 @@ export function injectNightSkin() {
     .heat-dial-n { min-width:3em; text-align:right; font-weight:800; }
     .heat-hold.on { background:#f5a14a; color:#1a1208; }
     .heat-trip { color:#f5a14a; font-weight:800; }
+    .gallery-board { margin:16px 0 8px; padding:14px 16px; border-radius:10px;
+      border:1px solid rgba(245,161,74,.22); background:#161310; }
+    .gallery-k { font-size:12px; letter-spacing:.28em; text-transform:uppercase; color:#f5a14a;
+      font-weight:800; margin:0 0 8px; }
+    .gallery-lift { margin:0 0 8px; font-size:22px; font-weight:800; color:#f3ece3; }
+    .gallery-bar { height:14px; border-radius:7px; background:#1c1712;
+      border:1px solid rgba(245,161,74,.25); overflow:hidden; margin:0 0 10px; }
+    .gallery-bar i { display:block; height:100%; width:0; background:#f5a14a; }
+    .gallery-noise, .gallery-hunt, .gallery-catch, .gallery-busy { margin:4px 0 0; color:#d8cbb8; }
+    .portrait-pad { margin-top:8px; }
+    .portrait-lift { font-weight:800; }
+    .portrait-pull.on, .portrait-crawl.on { background:#f5a14a; color:#1a1208; }
     /* 🎬 CASTING IS THE PICTURE, AND THE BALLOTS RIDE ON TOP OF IT RATHER THAN BESIDE IT.
        John: bigger feed, take the right column, drop the counter / the lower third / the
        'ballots land here' line, and run the results as an overlay. The frame taking all four
