@@ -1,4 +1,11 @@
-# Slice: HOLD guide/runner; borrow menu later (2026-09-08 lock note)
+# SUPERSEDED by `task-guide-runner-follow-on.md` (2026-09-08)
+
+> **SUPERSEDED.** The hold lifts in `docs/slices/task-guide-runner-follow-on.md` after the route/task menu shipped (PR 95). Portrait/Lights become `implemented` job-dispatched play; do not treat this hold note as current product lock. Body kept below for history.
+
+---
+
+# Slice: HOLD guide/runner; borrow menu later
+ (2026-09-08 lock note)
 
 Decided plan. **Not the next build.** Spec note so nobody deletes the sofa early.
 
