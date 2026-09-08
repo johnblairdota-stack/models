@@ -178,6 +178,12 @@ t('ES6c', !/ROUTE_CATALOG|routeVote|selectedJob/.test(follow)
   && !/ROUTE_CATALOG|routeVote/.test(guidemap)
   && !/ROUTE_CATALOG|routeVote|selectedJob/.test(win),
   'follow / guidemap / win were not opened for the menu');
+t('ES6d', /you\.heat/.test(entitle) && /you\.tripLeft/.test(entitle)
+  && /lights\.reserve/.test(entitle) && /lights\.floodlit/.test(entitle)
+  && !/HEAT_TRIP|armLightsHeat|you\.heat/.test(follow)
+  && !/HEAT_TRIP|armLightsHeat/.test(guidemap)
+  && !/HEAT_TRIP|armLightsHeat|you\.heat/.test(win),
+  'private-heat is rowed self / public lights; follow / guidemap / win stay closed');
 
 /* =================================================================================================
  * ES5 · 🚨 THE CONTROLS — every needle, planted, is caught by the same predicate

@@ -13,7 +13,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { missionFor, stampSelectedJob, MISSION_PAINTING, MISSION_DRILL, MISSION_TABLE } from '../src/party/mission.js';
+import { missionFor, stampSelectedJob, lightsArmedFor, MISSION_PAINTING, MISSION_DRILL, MISSION_TABLE } from '../src/party/mission.js';
 import {
   FACES, SHOTS, GUIDE_VOICE, RUNNER_VOICE, JOB, FAIL_CHROME, SMASH_CHROME,
   realFaceFor, drillShotFor, footstepsCue, smashDebrief, voiceDebrief, blindDebrief,
@@ -23,6 +23,10 @@ import {
   routeMenuHtml, routePadHtml, stationPadHtml, heldBrief,
 } from '../src/party/jobs.js';
 import { TASKS, byId, failurePayload, canClaimStation, applyStationClaim, confirmStationClaim, crewReady, ROUTE_CAPS } from '../src/party/tasks.js';
+import {
+  HEAT_TRIP_MS, HEAT_RISE, generatePadHtml, lightsBoardHtml, lightsLeaks, neededOutput,
+  projectLights, setGenerating, tickSeat, tripLeft,
+} from '../src/party/heat.js';
 import { tallyRouteVotes, canRouteVote } from '../src/party/vote.js';
 import { recapFromEvents } from '../src/party/recap.js';
 import { createRoom } from '../src/party/room.js';
@@ -430,13 +434,159 @@ t('J9 · world report may carry job / emptyNail / heard, never a person',
   const guidemap = src('../src/party/guidemap.js');
   const jobs = src('../src/party/jobs.js');
   const host = src('../src/views/party-host.js');
-  t('J22 · win.js / follow.js / guidemap.js untouched; no private-heat or KEEP/EXPEL on this menu',
+  t('J22 · win.js / follow.js / guidemap.js untouched; route menu has no KEEP/EXPEL',
     !/selectedJob|ROUTE_CATALOG|routeVote|private-heat/.test(win)
       && !/ROUTE_CATALOG|routeVote|selectedJob/.test(follow)
       && !/ROUTE_CATALOG|routeVote/.test(guidemap)
-      && !/privateHeat|private-heat/.test(jobs)
+      && !/KEEP\/EXPEL|\bEXPEL\b/.test(jobs)
       && /route-open/.test(host)
       && /Open route vote/.test(host));
+}
+
+/* =================================================================================================
+ * J23+ · PRIVATE-HEAT — hold / trip / reserve / privacy. Guide/runner still launches.
+ * ============================================================================================== */
+
+{
+  const held = tickSeat({ heat: 0, generating: true, tripUntil: 0 }, { dt: 1, nowMs: 1000 });
+  const cool = tickSeat({ heat: 0.4, generating: false, tripUntil: 0 }, { dt: 1, nowMs: 2000 });
+  t('J23 · HOLD raises heat and contributes; RELEASE cools and drops output',
+    held.heat > 0 && held.heat === HEAT_RISE && held.output === 1
+      && cool.heat < 0.4 && cool.output === 0);
+}
+
+{
+  const frames = {};
+  const room = createRoom({ count: 4, castSeed: 1, worldSeed: 1, send: (id, f) => { frames[id] = f; } });
+  room.start();
+  const living = room.state.players.filter((p) => p.alive).map((p) => p.id);
+  const armed = room.armLightsHeat({ living, nowMs: 0 });
+  room.setGenerate(living[0], true, 0);
+  room.tickHeat(1000, 1);
+  const own = frames['phone-0'];
+  const peer = frames['phone-1'];
+  const tv = frames.tv;
+  const tvBlob = JSON.stringify(tv);
+  t('J23b · phone has own heat; host/peer snapshots never carry another seat\'s heat',
+    armed.ok && lightsArmedFor('lights')
+      && own?.you?.id === living[0] && own.you.heat > 0 && own.you.tripLeft === 0
+      && peer?.you?.id === living[1] && peer.you.heat === 0
+      && peer.you.heat !== own.you.heat
+      && !tvBlob.includes('"heat"') && !tvBlob.includes('tripLeft')
+      && !('heat' in (tv || {})) && !('you' in (tv || {}))
+      && tv?.lights?.power === 1
+      && lightsLeaks(tv.lights).length === 0
+      && !room.unrowed().some((p) => p.startsWith('you.heat') || p.startsWith('you.tripLeft') || p.startsWith('lights')),
+    JSON.stringify({
+      own: own?.you && { id: own.you.id, heat: own.you.heat },
+      peer: peer?.you && { id: peer.you.id, heat: peer.you.heat },
+      tvPower: tv?.lights?.power,
+    }));
+}
+
+{
+  let seat = { heat: 0, generating: true, tripUntil: 0 };
+  let now = 0;
+  let snapped = null;
+  for (let i = 0; i < 12; i++) {
+    now += 1000;
+    seat = tickSeat(seat, { dt: 1, nowMs: now });
+    if (!snapped && tripLeft(seat, now) > 0) snapped = { left: tripLeft(seat, now), output: seat.output, now };
+  }
+  const forced = setGenerating(seat, true, snapped.now);
+  const still = tickSeat(seat, { dt: 1, nowMs: snapped.now + 1000 });
+  const done = tickSeat(seat, { dt: 4.5, nowMs: snapped.now + HEAT_TRIP_MS });
+  t('J24 · heat >= 1 forces a ~4.5s trip; no output until it ends',
+    snapped && snapped.left === HEAT_TRIP_MS && snapped.output === 0
+      && HEAT_TRIP_MS === 4500
+      && forced.generating === false && forced.output === 0
+      && still.output === 0 && tripLeft(still, snapped.now + 1000) > 0
+      && tripLeft(done, snapped.now + HEAT_TRIP_MS) === 0);
+}
+
+{
+  const frames = {};
+  const room = createRoom({ count: 4, castSeed: 2, worldSeed: 2, send: (id, f) => { frames[id] = f; } });
+  room.start();
+  const living = room.state.players.filter((p) => p.alive).map((p) => p.id);
+  room.armLightsHeat({ living, nowMs: 0 });
+  for (const id of living) room.setGenerate(id, true, 0);
+  room.tickHeat(500, 0.5);
+  const before = frames.tv.lights;
+  room.setGenerate(living[0], false, 500);
+  room.setGenerate(living[1], false, 500);
+  room.tickHeat(1500, 1);
+  const after = frames.tv.lights;
+  t('J25 · simultaneous multi-release drops power below sufficiency; hunter may advance',
+    before.power === 4 && before.needed === neededOutput(4) && before.floodlit
+      && after.power === 2 && after.power < after.needed
+      && after.floodlit === false
+      && after.hunterPressure > before.hunterPressure
+      && after.reserve < before.reserve);
+}
+
+{
+  const frames = {};
+  const room = createRoom({ count: 4, castSeed: 3, worldSeed: 3, send: (id, f) => { frames[id] = f; } });
+  room.start();
+  const living = room.state.players.filter((p) => p.alive).map((p) => p.id);
+  room.armLightsHeat({ living, nowMs: 0 });
+  room.startLightsPlay();
+  const early = room.crossGate(living[0]);
+  let now = 0;
+  for (let i = 0; i < 16; i++) {
+    const cooler = living[i % 4];
+    for (const id of living) room.setGenerate(id, id !== cooler, now);
+    now += 1000;
+    room.tickHeat(now, 1);
+  }
+  const board = frames.tv.lights;
+  const crossed = room.crossGate(living[0]);
+  const stay = room.setGenerate(living[1], true, now);
+  t('J26 · reserve fills, gate opens, a seat may cross; no mandatory sacrifice',
+    early.ok === false && early.why === 'gate shut'
+      && board.gateOpen && board.reserve >= 1 && board.floodlit
+      && crossed.ok && crossed.crossed
+      && stay.ok && stay.generating
+      && frames.tv.lights.gateOpen);
+}
+
+{
+  const pad = generatePadHtml({ heat: 0.4, tripLeft: 0 }, { gateOpen: false });
+  const trip = generatePadHtml({ heat: 1, tripLeft: 4500 }, { gateOpen: false });
+  const board = lightsBoardHtml({
+    stations: [{ id: 'p1', output: 1 }, { id: 'p2', output: 0 }],
+    power: 1, needed: 1, reserve: 0.5, gateOpen: false, floodlit: true, hunterPressure: 0.2,
+  });
+  const phone = src('../src/views/party-phone.js');
+  const host = src('../src/views/party-host.js');
+  t('J27 · phone has private dial + HOLD; TV has output/reserve/gate/floodlit only',
+    /HOLD TO GENERATE/.test(pad) && /data-heat-dial/.test(pad) && !/sabotage/i.test(pad)
+      && /Generator tripped — cooling…/.test(trip)
+      && /data-lights-board/.test(board) && /Reserve/.test(board) && /Floodlights/.test(board)
+      && !/heat/i.test(board)
+      && /generatePadHtml/.test(phone) && /t: 'generate'/.test(phone)
+      && /lightsBoardHtml/.test(host)
+      && lightsLeaks({ heat: 0.9, tripLeft: 12 }).length === 2
+      && lightsLeaks(projectLights({
+        stations: [{ id: 'p1', output: 1, heat: 0.9 }],
+        power: 1, needed: 1, reserve: 0, gateOpen: false, floodlit: true, hunterPressure: 0,
+      })).length === 0);
+}
+
+{
+  const win = src('../src/party/win.js');
+  const follow = src('../src/party/follow.js');
+  const guidemap = src('../src/party/guidemap.js');
+  const heat = src('../src/party/heat.js');
+  const entitle = src('../net/party/entitle.js');
+  t('J28 · negatives: no win.js writes; follow/guidemap unchanged; heat never public',
+    !/armLightsHeat|tickHeat|you\.heat|private-heat/.test(win)
+      && !/armLightsHeat|tickHeat|HEAT_TRIP/.test(follow)
+      && !/armLightsHeat|tickHeat|HEAT_TRIP/.test(guidemap)
+      && /you\.heat/.test(entitle) && /'self'/.test(entitle)
+      && /HOLD TO GENERATE/.test(heat)
+      && !/KEEP\/EXPEL|\bEXPEL\b/.test(heat));
 }
 
 console.log(`\nexpedition-jobs: ${pass} passed, ${fail} failed`);

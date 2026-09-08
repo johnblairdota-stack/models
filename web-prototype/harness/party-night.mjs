@@ -8,6 +8,7 @@
  * This one proves a reviewer can open a host, two phones, see the lobby, and advance.
  */
 
+import { readFileSync } from 'node:fs';
 import { startServer, fanoutViolations, lobbySnapshot, progressShow, expireShowHold, applyNominate, castingBackstop, applyReady, readyCountdownNow, MAX_PHONES, bindConnection, tvHostLive } from '../net/party/local.mjs';
 import { recapFromEvents } from '../src/party/recap.js';
 import { qrMatrix } from '../src/party/qr.js';
@@ -25,6 +26,7 @@ import { CAST_BACKSTOP_MS, livingFromPublic, shouldArmCastSend } from '../src/pa
 import { ACCENTS, SHELLS, cleanLook } from '../src/party/look.js';
 import { applyCastLock, applyCastTap, ballotFromCast, CAST_BLOCK_WHY, castPrompt, castRowBlock, castRowMark, freshCast, mergePublicNames, nominationPlayers, publicName } from '../src/party/cast-ui.js';
 import { createRoom } from '../src/party/room.js';
+import { lightsLeaks } from '../src/party/heat.js';
 import { NO_ONE } from '../src/party/vote.js';
 import { accusationSpan } from '../src/game/accusation-stage.js';
 import { PAIR_LOCK_MS } from '../src/game/pair-lock-stage.js';
@@ -80,7 +82,26 @@ function last(box, type) {
 }
 
 {
-  const { modules, size } = qrMatrix('http://localhost:5178/?view=party.phone&room=test');
+  const src = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8');
+  const win = src('../src/party/win.js');
+  const follow = src('../src/party/follow.js');
+  const guidemap = src('../src/party/guidemap.js');
+  const frames = {};
+  const room = createRoom({ count: 4, castSeed: 8, worldSeed: 8, send: (id, f) => { frames[id] = f; } });
+  room.start();
+  const living = room.state.players.filter((p) => p.alive).map((p) => p.id);
+  room.armLightsHeat({ living, nowMs: 0 });
+  room.setGenerate(living[0], true, 0);
+  room.tickHeat(1000, 1);
+  const tv = frames.tv;
+  const own = frames['phone-0'];
+  t('N26 · private-heat: own phone has heat; TV is output/reserve only; win/follow/guidemap closed',
+    own?.you?.heat > 0 && !('heat' in (tv || {})) && !JSON.stringify(tv).includes('"heat"')
+      && tv?.lights && lightsLeaks(tv.lights).length === 0
+      && !/armLightsHeat|tickHeat|you\.heat/.test(win)
+      && !/armLightsHeat|tickHeat|HEAT_TRIP/.test(follow)
+      && !/armLightsHeat|tickHeat|HEAT_TRIP/.test(guidemap));
+}
   const finder = (ox, oy) => modules[oy][ox] === 1 && modules[oy + 6][ox + 6] === 1 && modules[oy + 3][ox + 3] === 1;
   t('N1 · QR encodes a join URL with three finder patterns',
     size >= 21 && finder(0, 0) && finder(size - 7, 0) && finder(0, size - 7),

@@ -35,6 +35,7 @@ import { deadIdsFromPublic, describeCastTiebreaks, livingFromPublic, previewCast
 import { MAX_PAIRS, pairShape } from '../party/link.js';
 import { missionFor } from '../party/mission.js';
 import { FAIL_CHROME, HELD_BRIEF, JOB, SMASH_CHROME, routeMenuHtml, toolLabel } from '../party/jobs.js';
+import { lightsBoardHtml } from '../party/heat.js';
 import { isStinging, stepSting, stingHtml } from '../party/stinger.js';
 
 /** TV chrome 3·2·1 after every living ballot (or the 20s backstop), then `{ t: 'episode' }`. */
@@ -1598,6 +1599,7 @@ export default async function partyHost({ params }) {
         runEnd: ui.runEnd,
         recap,
         route: frame?.route,
+        lights: frame?.lights,
       });
       /*
        * 🗑️ **THE RECAP BUTTON IS GONE, AND IT IS THE AFFORDANCE RATHER THAN THE BEAT THAT WENT.**
@@ -1809,6 +1811,7 @@ export default async function partyHost({ params }) {
           body += `<p class="hint" data-route-voted>${route.voted | 0} of ${route.living | 0} voted</p>`;
         }
       }
+      if (frame?.lights) body += lightsBoardHtml(frame.lights);
       body += `<div class="actions">`;
       if (sendLeft != null) {
         const n = Math.max(1, Math.ceil(sendLeft / 1000));
@@ -2092,7 +2095,7 @@ function followLine({ events, episode, cameras, runEnd, recap }) {
   return '';
 }
 
-function runStage({ names, lobby, runnerId, guideId, cameras, alarms, followLive, events, episode, runEnd, recap, route }) {
+function runStage({ names, lobby, runnerId, guideId, cameras, alarms, followLive, events, episode, runEnd, recap, route, lights }) {
   const runner = joinedName(names, runnerId, 'The runner');
   const guide = joinedName(names, guideId, 'The guide');
   const look = seatLook(lobby, runnerId) || DEFAULT_LOOK;
@@ -2113,6 +2116,7 @@ function runStage({ names, lobby, runnerId, guideId, cameras, alarms, followLive
       </div>
       <div class="pair-hero">${esc(runner)} walks. ${esc(guide)} talks.</div>
       ${route?.selected ? `<div class="route-held" data-route-held>${esc(HELD_BRIEF)}</div>` : ''}
+      ${lights ? lightsBoardHtml(lights) : ''}
       ${line ? `<div class="run-follow-line">${esc(line)}</div>` : ''}
       ${tool}
       <div class="run-facts">Cameras ${cams?.unlocked ?? '—'} / ${cams?.needed ?? '—'} · alarms ${alarms ?? 0}</div>

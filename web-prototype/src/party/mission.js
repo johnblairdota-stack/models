@@ -11,6 +11,7 @@
  */
 
 import { JOB } from './jobs.js';
+import { HEAT_STEP, LIGHTS_JOB, isLightsJob, projectLights } from './heat.js';
 
 export const MISSION_PAINTING = {
   id: 'gallery-twin',
@@ -84,6 +85,21 @@ export function stampSelectedJob(spec, selectedJob) {
   if (!selectedJob) return spec;
   return { ...spec, catalogId: selectedJob, selectedJob };
 }
+
+/**
+ * Lights heat binds to the catalog job id. Live smash/drill identity is unchanged —
+ * J0 still compares the premiere object. Heat is a second layer behind `lights`.
+ */
+export function lightsArmedFor(selectedJob) {
+  return isLightsJob(selectedJob);
+}
+
+export function freshLightsBind(selectedJob, step = HEAT_STEP.PRACTICE) {
+  if (!isLightsJob(selectedJob)) return null;
+  return { job: LIGHTS_JOB, station: 'generator', step };
+}
+
+export { HEAT_STEP, LIGHTS_JOB, isLightsJob, projectLights };
 
 export function seekLine(spec, { here = null, missionRoom = null, phase = 'seek' } = {}) {
   const s = spec ?? MISSION_PAINTING;

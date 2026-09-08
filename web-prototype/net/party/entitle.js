@@ -177,7 +177,8 @@ export const MATRIX = [
    * ---- choosable route / task menu. Ballots are NOT here.
    *
    * `route.tally` is empty until the host closes; `you.routePick` is the private vote.
-   * Stubs never appear on `available` (jobs.js `choosableRoutes`). No KEEP/EXPEL, no heat.
+   * Stubs never appear on `available` (jobs.js `choosableRoutes`). No KEEP/EXPEL.
+   * Heat is NOT on `route` — it is `you.heat` (self) and `lights.*` (public output).
    */
   ['route.open',               'all'],
   ['route.step',               'all'],
@@ -203,6 +204,27 @@ export const MATRIX = [
   ['you.routePick',            'self'],
   ['you.station',              'self'],
   ['you.stationConfirmed',     'self'],
+
+  /*
+   * ---- private-heat on a Lights / generator job. `docs/slices/task-private-heat.md`.
+   *
+   * `you.heat` / `you.tripLeft` are SELF and only written onto that socket's `you`
+   * in `room.js` `fullFor`. Host / peer / TV public snapshots never include another
+   * player's heat. `lights.*` is the public board: output, reserve, gate, floodlights.
+   * There is no `lights.*.heat` row and there must never be one.
+   */
+  ['you.heat',                 'self'],
+  ['you.tripLeft',             'self'],
+  ['lights.step',              'all'],
+  ['lights.stations[]',        'all'],
+  ['lights.stations[].id',     'all'],
+  ['lights.stations[].output', 'all'],
+  ['lights.power',             'all'],
+  ['lights.needed',            'all'],
+  ['lights.reserve',           'all'],
+  ['lights.gateOpen',          'all'],
+  ['lights.floodlit',          'all'],
+  ['lights.hunterPressure',    'all'],
 
   // ---- incidents. A count, never a list (party-anon A4).
   ['incident.alarms',          'all'],

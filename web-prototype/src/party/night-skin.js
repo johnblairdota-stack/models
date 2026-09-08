@@ -401,6 +401,23 @@ export function injectNightSkin() {
     .route-meta, .route-stations { margin:0; color:#8a7d70; font-size:13px; line-height:1.4; }
     .route-held { color:#e8c36a; font-size:14px; font-weight:700; margin:10px 0 0; }
     .route-roster { margin:10px 0 0; padding-left:1.2em; color:#f3ece3; font-size:15px; }
+    .lights-board { margin:16px 0 8px; padding:14px 16px; border-radius:10px;
+      border:1px solid rgba(245,161,74,.22); background:#161310; }
+    .lights-k { font-size:12px; letter-spacing:.28em; text-transform:uppercase; color:#f5a14a;
+      font-weight:800; margin:0 0 8px; }
+    .lights-power { margin:0 0 8px; font-size:22px; font-weight:800; color:#f3ece3; }
+    .lights-stations { margin:0 0 10px; padding-left:1.2em; color:#d8cbb8; font-size:15px; }
+    .lights-st.on { color:#f5a14a; font-weight:700; }
+    .lights-reserve, .lights-gate, .lights-flood, .lights-hunt { margin:4px 0 0; color:#d8cbb8; }
+    .heat-pad { margin-top:8px; }
+    .heat-dial { display:flex; align-items:center; gap:10px; margin:14px 0; }
+    .heat-dial-k { letter-spacing:.2em; text-transform:uppercase; color:#8a7d70; font-size:12px; }
+    .heat-dial-bar { flex:1; height:14px; border-radius:7px; background:#1c1712;
+      border:1px solid rgba(245,161,74,.25); overflow:hidden; }
+    .heat-dial-bar i { display:block; height:100%; width:0; background:#f5a14a; }
+    .heat-dial-n { min-width:3em; text-align:right; font-weight:800; }
+    .heat-hold.on { background:#f5a14a; color:#1a1208; }
+    .heat-trip { color:#f5a14a; font-weight:800; }
     /* 🎬 CASTING IS THE PICTURE, AND THE BALLOTS RIDE ON TOP OF IT RATHER THAN BESIDE IT.
        John: bigger feed, take the right column, drop the counter / the lower third / the
        'ballots land here' line, and run the results as an overlay. The frame taking all four

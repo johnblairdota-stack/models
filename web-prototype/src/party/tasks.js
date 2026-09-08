@@ -140,7 +140,8 @@ export const soundCanCommit = () => HUNTER_SENSE.soundCeiling >= HUNTER_SENSE.co
 /**
  * 🗺️ Station capacities for the choosable route menu. Portrait: one pull-a, one pull-b,
  * remaining cross. Lights: every living robot on a generator. Stubs have none.
- * Private-heat is not a field here — that slice is later.
+ * Private-heat lives in `heat.js` (tick + trip + reserve). This table is
+ * capacity only — Lights still means every living robot on a generator.
  */
 export const ROUTE_CAPS = Object.freeze({
   portrait: Object.freeze({ 'pull-a': 1, 'pull-b': 1, cross: Infinity }),

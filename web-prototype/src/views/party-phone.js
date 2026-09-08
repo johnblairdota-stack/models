@@ -30,6 +30,7 @@ import {
   JOB, realFaceFor, drillShotFor, footstepsCue, wallWord, toolLabel,
   routePadHtml, stationPadHtml,
 } from '../party/jobs.js';
+import { generatePadHtml } from '../party/heat.js';
 import { intelLine } from '../party/intel.js';
 import { STICK_DEADZONE, warmLabel } from '../party/follow.js';
 import { formatRemain, isTalkBeat, LATE_DEBRIEF_MS, remainingMs } from '../party/show.js';
@@ -698,6 +699,14 @@ export default async function partyPhone({ params }) {
       }
       if (route?.step === 'stations' && !route.crewLocked) {
         paintRouteStations(route, me, players, frame?.you);
+        return;
+      }
+      /*
+       * 🔥 Lights heat pad — harness / job path only. Live night still locks a
+       * pair and takes the expedition branch; this sheet never replaces runner/guide.
+       */
+      if (frame?.lights && frame.you && Number.isFinite(frame.you.heat) && !pair.runner) {
+        paintGenerate(frame.you, frame.lights, me, players);
         return;
       }
       paintCasting(nominees, me, frame?.airingEpisode || c.lobby?.airingEpisode || frame?.episode || 1);
@@ -1932,6 +1941,50 @@ export default async function partyPhone({ params }) {
     for (const b of root.querySelectorAll('[data-route-pick]')) {
       b.addEventListener('click', () => state.client?.send({ t: 'routeVote', job: b.dataset.routePick }));
     }
+    bindCardTab();
+  }
+
+  function paintGenerate(you, lights, me, players) {
+    stopPad();
+    const tripped = (you.tripLeft || 0) > 0;
+    const stamp = `heat:${tripped ? 'trip' : 'ok'}:${lights.gateOpen ? 1 : 0}`;
+    if (root.dataset.castUi === stamp) {
+      const n = root.querySelector('[data-heat-n]');
+      const bar = root.querySelector('.heat-dial-bar i');
+      const pct = Math.round(Math.max(0, Math.min(1, Number(you.heat) || 0)) * 100);
+      if (n) n.textContent = `${pct}%`;
+      if (bar) bar.style.width = `${pct}%`;
+      const dial = root.querySelector('[data-heat-dial]');
+      if (dial) dial.setAttribute('aria-valuenow', String(pct));
+      return;
+    }
+    root.innerHTML = `
+      <div class="phone-top"><span>${esc(state.code.toUpperCase())}</span><span>generator · ${esc(playerName(players, me.playerId) || me.name || 'You')}</span></div>
+      ${generatePadHtml(you, lights)}
+      ${cardTab()}`;
+    root.dataset.castUi = stamp;
+    delete root.dataset.liveUi;
+    const hold = root.querySelector('[data-generate]');
+    if (hold) {
+      const down = (e) => {
+        e.preventDefault();
+        hold.classList.add('on');
+        state.client?.send({ t: 'generate', on: true });
+      };
+      const up = () => {
+        hold.classList.remove('on');
+        state.client?.send({ t: 'generate', on: false });
+      };
+      hold.addEventListener('pointerdown', down);
+      hold.addEventListener('pointerup', up);
+      hold.addEventListener('pointercancel', up);
+      hold.addEventListener('pointerleave', (e) => {
+        if (e.buttons) up();
+      });
+    }
+    root.querySelector('[data-heat-cross]')?.addEventListener('click', () => {
+      state.client?.send({ t: 'heatCross' });
+    });
     bindCardTab();
   }
 

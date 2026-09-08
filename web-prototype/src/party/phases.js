@@ -118,6 +118,13 @@ export const episodeSeconds = (ep, noms = 0) =>
  */
 export const ROUTE_VOTE_MS = 30_000;
 
+/**
+ * Lights heat practice → play. Not an EPISODE_ORDER beat — inserting one would
+ * reopen the night clock. Live night still launches held guide/runner; heat
+ * ticks behind the Lights job / harness path.
+ */
+export { HEAT_STEP, HEAT_TRIP_MS } from './heat.js';
+
 /** Whole-session budget, premiere + N episodes + Reunion. */
 export function sessionSeconds(episodes, noms = 0) {
   let s = SECONDS[PHASE.PREMIERE] + SECONDS[PHASE.REUNION];
