@@ -145,22 +145,23 @@ The Reunion, the recap reel, the Director's Cut, the balance sim and every post-
 
 ## 6. Win conditions
 
-`WIN_TARGETS`: `cameraTarget` = 3 at 4–5 players, 4 at 6–8. `feedTarget` (good players taken by the Hunter) = 2 at 4–5, 3 at 6–8.
+**Locked 2026-09-08** (`docs/design/party-loop.md`, `docs/slices/task-win-escape-night.md`). W1–W4 / cameras-as-score / 2g1e last-vote / W5 cameras-short Production are dead product. Do not restore them.
+
+`WIN_TARGETS` (`cameraTarget` / `feedTarget`) is the Reunion ledger row — spectacle, not a win rule.
 
 | # | Predicate | Checked | Fires |
 |---|---|---|---|
-| W1 | no living evil | after every `death.recorded` | `SEASON FINALE` — good |
-| W2 | `camerasLit == cameraTarget` | on `run.camera_lit`, at the end of EXPEDITION | `SEASON FINALE` — good |
-| W3 | goods taken by Hunter `>= feedTarget` | on `hunter.take`, at the end of EXPEDITION | `CANCELLED` — evil |
-| W4 | living evil `>=` living good | after every `death.recorded` | `CANCELLED` — evil |
-| W5 | `ep == EPISODE_CAP` and cameras short | at `VERDICT` of the final episode | `CANCELLED` — evil |
+| ESCAPE | ≥1 good robot escaped | on `player.escaped` | `SEASON FINALE` — the cast gets out |
+| BLOCK | night closes with no good escape | on `escape.blocked` | `CANCELLED` — saboteurs hold the house |
 | W6 | host `SKIP TO REUNION` | any time | `ABANDONED` — no side, Reunion still runs in full |
 
-**Resolution order is log order.** Predicates are evaluated by a reducer folded over the log, and the first one that goes true ends the match — so a camera lit at `seq 512` beats a take at `seq 513`, and the argument about precedence is decided by timestamps rather than by a table. For events appended in the same tick, the reducer order is W1, W3, W2, W4, W5.
+Clearing every saboteur does **not** end the night. Assimilation / execute does **not** end the night. Allegiances reveal at the ending only.
 
-W1 and W3 cannot collide: only the runner is exposed, so a single take is either a good or an evil player, never both. Every check appends `win.checked` (SEALED) whether or not it fires, which is what makes the balance sim's win-rate reports free.
+**Resolution order is log order.** Predicates are evaluated by a reducer folded over the log, and the first one that goes true ends the match. For events appended in the same tick, the reducer order is ESCAPE, BLOCK (`TICK_ORDER` in `win.js`). Do not leave W1–W4 as aliases that still fire.
 
-`VERDICT` is the only feedback loop during play: `RENEWED` tells good that evil is still alive, and tells them nothing about the person they just destroyed.
+Every check appends `win.checked` (SEALED) whether or not it fires.
+
+`VERDICT` is the mid-night feedback loop: `RENEWED` means another expedition, and tells the room nothing about the person they just destroyed.
 
 ---
 

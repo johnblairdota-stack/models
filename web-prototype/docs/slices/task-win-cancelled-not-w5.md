@@ -1,5 +1,8 @@
 # Slice: FLAG — CAST10 Production win is not W4 and must not be W5
 
+> **SUPERSEDED 2026-09-08** by `task-win-escape-night.md`. Do not implement this
+> slice. Escape / block replace W1–W4; do not restore W5.
+
 Decided plan. If a stated fact is wrong, **say so in the report rather than diverging
 silently.**
 

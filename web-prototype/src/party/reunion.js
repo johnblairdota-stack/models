@@ -43,7 +43,13 @@ export function rollCall(log) {
   for (const e of byType(log, 'player.claim_set')) claims.set(e.data.id, e.data.claim);
   const deaths = new Map();
   for (const e of log) {
-    if (e.type === 'player.taken') deaths.set(e.data.id, { by: 'TAKEN', seq: e.seq });
+    if (e.type === 'player.taken') {
+      deaths.set(e.data.id, {
+        by: e.data.kind === 'assimilated' ? 'ASSIMILATED' : 'TAKEN',
+        seq: e.seq,
+        kind: e.data.kind ?? null,
+      });
+    }
     if (e.type === 'player.executed') deaths.set(e.data.id, { by: 'EXECUTED', seq: e.seq, executioner: e.data.executioner });
   }
   return dealt.map((s) => ({

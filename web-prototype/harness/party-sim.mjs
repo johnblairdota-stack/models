@@ -145,7 +145,13 @@ function playMatch({ count, seed, goodPolicy, evilPolicy }) {
     const standing = noms.map((n) => n.target);
     const votes = Object.fromEntries(living.map((id) => [id, vote({ policy: policyOf(id), self: id, standing, suspicion, evilSet, seed, ep })]));
 
-    r.playEpisode({ ballots, takeRunner: exp.taken, nominations: noms, votes, hunterRoom: ROOMS[0] });
+    const cross = !exp.taken && !evilSet.has(pair.runner)
+      && chance(seed, `esc${ep}`) < 0.22;
+    r.playEpisode({
+      ballots, takeRunner: exp.taken, nominations: noms, votes, hunterRoom: ROOMS[0],
+      escaped: cross ? [pair.runner] : null,
+      blocked: ep >= EPISODE_CAP && !cross,
+    });
     stats.episodes = ep;
 
     const exec = r.log.all().filter((e) => e.type === 'player.executed');
@@ -206,17 +212,16 @@ const rate = (list) => list.filter(goodWon).length / list.length;
   }
   /**
    * ⚠️ THE 45-55% BAND IS A PLAYTEST TARGET AND THIS ASSERTS THE STRUCTURAL ONE INSTEAD, FOR A
-   * STATED REASON. Good has two win paths: light the cameras, or execute all of Production. Bots
-   * cannot deduce, so in bot play the vote contributes almost nothing and this measures **the
-   * camera race alone**. Asserting the full-game band here would be asserting that half the game
-   * exists when it does not.
+   * STATED REASON. Good wins by escaping; saboteurs win when the night closes with no good
+   * crossing. Cameras are spectacle. Bots cannot deduce, so this measures the escape race
+   * against hunter takes, not a camera tally.
    *
    * What it can prove is that no count is DEGENERATE — that neither side wins nearly always,
    * which is what a structural break looks like. The 8% good win rate the missing
    * `run.camera_lit` event produced would fail this; 59% does not.
    */
   const degenerate = rows.filter((r) => r.win < 0.25 || r.win > 0.75);
-  t('S1 · no player count is degenerate in the camera race', degenerate.length === 0,
+  t('S1 · no player count is degenerate in the escape race', degenerate.length === 0,
     degenerate.length ? `${degenerate.map((r) => `${r.c}p ${(r.win * 100).toFixed(1)}%`).join(', ')}`
       : rows.map((r) => `${r.c}p ${(r.win * 100).toFixed(0)}%`).join(' '));
   const offTarget = rows.filter((r) => r.win < 0.45 || r.win > 0.55);

@@ -2,8 +2,9 @@
  * 🩸 **TAKEN — the terminal state the survival mode deliberately does not have.**
  *
  * Showstopper **S2** (`docs/design/rrr-build-brief.md` §1). The whole party loop rests on a
- * runner being taken by the Hunter and removed from the game — `party-loop.md`: *"If the hunter
- * takes the runner: they are out for the rest of the game."*
+ * runner being taken by the Hunter and removed from the game — `party-loop.md` (locked
+ * 2026-09-08): *"If the hunter assimilates the runner: they are consumed into the hunter
+ * (embedded face), out for the rest of the night."*
  *
  * ---------------------------------------------------------------------------------------------
  * 🚨 IT IS NOT MERELY ABSENT. IT IS STRUCTURALLY UNREACHABLE, AND THAT IS WORSE.
@@ -43,15 +44,16 @@ export const PLATE = { UNDECLARED: 'undeclared', DRAFTING: 'drafting', PUBLISHED
  * What contact with the Hunter means.
  *
  * @param {{mode:string, occupiedSockets:number}} ctx
- * @returns {{outcome:'limb'|'taken'|'none', reason:string}}
+ * @returns {{outcome:'limb'|'taken'|'assimilated'|'none', reason:string}}
  *
  * 🚨 IN PARTY MODE THE LIMB COUNT IS NOT CONSULTED. That is the entire fix: the survival rule
  * is a function of what is left to take, and the party rule is a function of nothing at all.
- * Contact ends you. `party-taken` T3 asserts a four-limbs-gone player is still takeable, which
- * is the exact case `hunter-ai.js` L1109 returns early on.
+ * Contact is hunter assimilation — a fear removal, not a season-ending find-evil lynch.
+ * `party-taken` T3 asserts a four-limbs-gone player is still takeable, which is the exact
+ * case `hunter-ai.js` L1109 returns early on.
  */
 export function resolveContact({ mode, occupiedSockets }) {
-  if (mode === MODE.PARTY) return { outcome: 'taken', reason: 'party mode: contact is terminal' };
+  if (mode === MODE.PARTY) return { outcome: 'assimilated', reason: 'party mode: hunter assimilation is terminal' };
   if (occupiedSockets > 0) return { outcome: 'limb', reason: 'survival mode: a limb, not the episode' };
   return { outcome: 'none', reason: 'survival mode: nothing left to take (hunter-ai.js L1109)' };
 }
@@ -74,6 +76,34 @@ export function applyTake(player) {
       { type: 'player.sealed', vis: 'SEALED', data: { id: player.id } },
     ],
   };
+}
+
+/**
+ * Hunter assimilation — the fear removal beat (`task-assimilation-removal.md`).
+ *
+ * Consumed into the hunter (embedded face). Permanent that night. Out of phone play;
+ * speaks IRL only. Chrome must not flash Production / plant / evil. Does not end the
+ * escape. Vote HITs stay on `applyTake` + wreckPose — do not use this for an execute.
+ */
+export function applyAssimilate(player) {
+  return {
+    player: { ...player, alive: false, taken: true, assimilated: true, plate: PLATE.FACE_DOWN },
+    events: [
+      { type: 'player.taken', vis: 'PUBLIC', data: { id: player.id, seat: player.seat, kind: 'assimilated' } },
+      { type: 'player.sealed', vis: 'SEALED', data: { id: player.id } },
+    ],
+  };
+}
+
+/**
+ * Public removal word. Allegiance stays off — ASSIMILATED is a visible cause, not a side.
+ * Execute HITs stay "executed"; hunter fear is "assimilated".
+ */
+export function removalWord(death) {
+  if (!death) return 'survived';
+  if (death.by === 'EXECUTED') return 'executed';
+  if (death.by === 'ASSIMILATED' || death.kind === 'assimilated') return 'assimilated';
+  return 'taken';
 }
 
 /**

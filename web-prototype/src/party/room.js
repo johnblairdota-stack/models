@@ -21,13 +21,13 @@ import { project } from '../../net/party/entitle.js';
 import { makeEvent, VIS } from './events.js';
 import { createLog, visibleTo } from './log.js';
 import { hunterVisibleToGuide, ROOMS } from './coverage.js';
-import { applyTake, resolveContact, MODE, PLATE } from './taken.js';
+import { applyTake, applyAssimilate, resolveContact, MODE, PLATE } from './taken.js';
 import { tallyCasting } from './ballot.js';
 import { tallyVote, executioner, nominate, reckoningClosed, canLynchVote, assumedLynchVotes, nominatorLockedChoice, acceptLynchVotes, NO_ONE } from './vote.js';
 import { accusationFinished, accusationSpan } from '../game/accusation-stage.js';
 import { foldWin, OUTCOME, WIN_TARGETS } from './win.js';
 import { reunion } from './reunion.js';
-import { PHASE } from './phases.js';
+import { PHASE, EPISODE_CAP } from './phases.js';
 import { cleanLook } from './look.js';
 import { STALE_MAX, intelFor } from './intel.js';
 import { coverageRoomOf } from './mansion.js';
@@ -155,7 +155,7 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
    * on `applyTake`'s return, which `party-taken` asserts, and off the row that gets projected.
    */
   const landTake = (victim, player) => {
-    const { taken, ...row } = player;
+    const { taken, assimilated, ...row } = player;
     Object.assign(victim, row);
   };
 
@@ -560,7 +560,7 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
   }
 
   /** Play one scripted episode. Deterministic — the gates need two runs to agree exactly. */
-  function playEpisode({ takeRunner = false, hunterRoom = null, ballots = null, votes = null, nominations = null, living: livingOpt = null, scaffold = true } = {}) {
+  function playEpisode({ takeRunner = false, hunterRoom = null, ballots = null, votes = null, nominations = null, living: livingOpt = null, scaffold = true, escaped = null, blocked = false } = {}) {
     const takeRunnerThisEpisode = takeRunner;
     if (hunterRoom) state.hunterRoom = hunterRoom;
     const allLiving = state.players.filter((p) => p.alive).map((p) => p.id);
@@ -635,8 +635,8 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     if (takeRunnerThisEpisode) {
       const victim = state.players.find((p) => p.id === state.pair.runner);
       const r = resolveContact({ mode: MODE.PARTY, occupiedSockets: 0 });
-      if (r.outcome === 'taken') {
-        const { player, events } = applyTake(victim);
+      if (r.outcome === 'assimilated' || r.outcome === 'taken') {
+        const { player, events } = applyAssimilate(victim);
         landTake(victim, player);
         takenThisEpisode.push(victim.id);
         for (const e of events) record(makeEvent(e.type, e.vis, e.data));
@@ -748,6 +748,21 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       setPhase('VERDICT');
     }
 
+    /*
+     * Escape / block ride BEFORE the fold, escaped first so same-tick TICK_ORDER
+     * (ESCAPE then BLOCK) matches log order when a caller hands both.
+     */
+    const escapeIds = Array.isArray(escaped) ? escaped : (escaped ? [escaped] : []);
+    for (const id of escapeIds) {
+      const p = state.players.find((x) => x.id === id);
+      if (p) record(makeEvent('player.escaped', VIS.PUBLIC, { id: p.id, seat: p.seat }));
+    }
+    if (blocked) {
+      record(makeEvent('escape.blocked', VIS.PUBLIC, {
+        episode: state.airingEpisode ?? state.episode,
+      }));
+    }
+
     // ---- the win machine, folded over the log we just wrote
     foldVerdict();
 
@@ -768,8 +783,9 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
    * correct. Growing a second copy of the win rule in `net/party/local.mjs` is the same mistake
    * one layer down — the two would drift, and each would have a gate saying it was right.
    *
-   * Cap is not a Production door. H278's "a RENEWED at the cap is a CANCELLED"
-   * is overruled — do not coerce it here. Trust the fold.
+   * Cap is not a Production door and not a saboteur door. H278's "a RENEWED at
+   * the cap is a CANCELLED" is overruled — do not coerce it here. Trust the fold.
+   * Escape / block events end the night; cameras and living-evil counts do not.
    * ============================================================================================= */
   function foldVerdict() {
     const align = Object.fromEntries(deal.seats.map((s) => [s.id, s.alignment]));
@@ -794,7 +810,7 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     /*
      * Trust the fold. A belt that coerced RENEWED → CANCELLED at the cap stole
      * CAST7's last vote. Cap miss is RENEWED; do not restore a cameras-short
-     * Production rewrite here.
+     * Production rewrite, and do not fire W1–W4. Escape / block only.
      */
     state.outcome = w.outcome;
     /*
@@ -809,10 +825,9 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
       status: state.outcome, camerasLit: w.camerasLit, alarms: state.incident.alarms,
     }));
     /*
-     * 📷 **THE TARGET TRAVELS WITH THE COUNT.** `foldWin` decides W2 against
-     * `WIN_TARGETS[n].cameraTarget`. Chrome `needed` is `COMPOSITION[n].cameras`.
-     * At eight those used to be 4 and 3; 30 Aug locked them both at 4.
-     * The plate still reports THIS fold's `need`, never a second table.
+     * 📷 **CAMERAS ARE SPECTACLE.** `WIN_TARGETS[n].cameraTarget` is the Reunion
+     * ledger row, not a win rule. The plate still reports THIS fold's `need` so
+     * the two screens cannot drift; lighting them does not end the night.
      */
     return {
       outcome: state.outcome, rule: w.rule,
@@ -849,14 +864,36 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     replayFor: (sock) => log.replayFor({ playerId: sock.playerId, alignment: sock.alignment, isTV: sock.isTV }),
     playEpisode,
     /**
+     * A good crossing. Public, no alignment on the event. Fold fires ESCAPE only
+     * when `alignmentOf` says good — an evil escape is a crossing that does not win.
+     */
+    escapePlayer(id) {
+      const p = state.players.find((x) => x.id === id);
+      if (!p) return null;
+      record(makeEvent('player.escaped', VIS.PUBLIC, { id: p.id, seat: p.seat }));
+      return p.id;
+    },
+    /**
+     * Night closes with no good crossing. Does not name a side on the event;
+     * `foldWin` turns it into saboteurs-hold when no good has escaped.
+     */
+    blockEscape() {
+      record(makeEvent('escape.blocked', VIS.PUBLIC, {
+        episode: state.airingEpisode ?? state.episode,
+      }));
+      return true;
+    },
+    /**
      * Run episodes until a win predicate fires. foldWin owns the stop.
-     * A camera miss at the cap is RENEWED — play on, full order, not a hang
-     * and not a vote-only beat. Breaking on EPISODE_CAP here Reunion-from-cap'd
-     * a night the fold said continue.
+     * Escape / block end the night. A camera miss at the cap is RENEWED —
+     * play on, not a hang and not a Production door. The +8 guard is a hang
+     * detector for a caller that never emits escape or block.
      */
     playMatch(opts = {}) {
+      let guard = 0;
       while (!state.outcome || state.outcome === OUTCOME.RENEWED) {
         playEpisode(typeof opts === 'function' ? opts(state.episode) : opts);
+        if (++guard > EPISODE_CAP + 8) break;
       }
       return state.outcome;
     },
@@ -1061,7 +1098,7 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
      *
      * ⚠️ **AN ALREADY-DECIDED SEASON IS NOT OVERWRITTEN, AND THAT IS NOT A BUG.** If a rule fired
      * earlier in the log it is earlier in the log, and the fold keeps it: the host pressing SKIP
-     * after the cameras came up does not take the win away from the cast. What the skip
+     * after an escape does not take the win away from the cast. What the skip
      * guarantees is that the night ENDS, not that nobody won it.
      *
      * ABANDONED is public: `rrr-social-round.md` gives no side the win, so there is nothing to

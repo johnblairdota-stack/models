@@ -1,5 +1,8 @@
 # Slice: nights do not end because cameras missed — delete W5
 
+> **SUPERSEDED 2026-09-08** by `task-win-escape-night.md`. Do not implement this
+> slice. Escape / block replace W1–W4; do not restore W5.
+
 Decided plan. The numbers are the numbers to use. If a stated fact is wrong, **say so in the report rather than diverging silently.**
 
 Base: main at aed49a5, docs on PR 73 (docs/cast8-locks). Spec, not the night. Do not merge. Do not start Max. Still Grok. Game is mid-build and must not ship 3v1-still-W5.
