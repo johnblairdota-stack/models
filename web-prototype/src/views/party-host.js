@@ -24,7 +24,7 @@ import { mergePublicNames, publicName } from '../party/cast-ui.js';
 import { cueViolations, nextPerspective, warmLabel, warmPct, warmUrl } from '../party/follow.js';
 import {
   formatRemain, holdMsFor, isTalkBeat, nextShowBeat, remainingMs, reunionBeatAt,
-  rollCallRevealed, rundownRibbon,
+  rollCallRevealed, rundownRibbon, routeVoteHoldsSend,
 } from '../party/show.js';
 import { NO_ONE, SHOWRUNNER, heldHit, standingTally, checkpointHostHtml } from '../party/vote.js';
 import { hitHoldReady } from '../party/phases.js';
@@ -34,7 +34,7 @@ import { removalWord } from '../party/taken.js';
 import { deadIdsFromPublic, describeCastTiebreaks, livingFromPublic, previewCastTiebreaks, shouldArmCastSend } from '../party/ballot.js';
 import { MAX_PAIRS, pairShape } from '../party/link.js';
 import { missionFor } from '../party/mission.js';
-import { FAIL_CHROME, JOB, SMASH_CHROME, heldBrief, routeMenuHtml, toolLabel } from '../party/jobs.js';
+import { FAIL_CHROME, JOB, SMASH_CHROME, castingWaitsForRoute, heldBrief, routeMenuHtml, routePickPlateHtml, toolLabel } from '../party/jobs.js';
 import { isLightsJob, lightsBoardHtml } from '../party/heat.js';
 import { galleryBoardHtml, isPortraitJob } from '../party/portrait.js';
 import { isStinging, stepSting, stingHtml } from '../party/stinger.js';
@@ -214,6 +214,8 @@ export default async function partyHost({ params }) {
     sendUntil: 0,
     /** Epoch ms of the first ballot this casting window. Backstop is 20s from here. */
     firstBallotAt: 0,
+    /** Backup `t:'routeOpen'` once per casting window if the server has not auto-opened. */
+    routeOpenSent: false,
     /** The mansion's own progress, straight off the slot. `''` until the iframe says anything. */
     warm: '',
     warmPct: 0,
@@ -1376,19 +1378,32 @@ export default async function partyHost({ params }) {
       ui.sendArmed = false;
       ui.sendUntil = 0;
       ui.firstBallotAt = 0;
+      ui.routeOpenSent = false;
       return;
     }
     if (ui.introsSent && !ui.introsDone) return;
     if (!ui.introsSent && ui.warm !== 'ready') return;
     if (!canLock) return;
+    const route = client.frame?.route;
+    if (castingWaitsForRoute(route, seatedLivingIds().length)) return;
     if (ui.sendArmed) return;
     ui.sendArmed = true;
     ui.sendUntil = Date.now() + SEND_COUNTDOWN_MS;
   }
 
+  /** Visible backup if auto-open has not landed. Not the primary door. */
+  function maybeBackupRouteOpen(canLock, route) {
+    if (!canLock || ui.routeOpenSent || ui.sendoff || ui.locked) return;
+    if (routeVoteHoldsSend(route) || route?.selected) return;
+    if (!(route?.available || []).some((j) => j.offered !== false)) return;
+    ui.routeOpenSent = true;
+    client.send({ t: 'routeOpen' });
+  }
+
   function noteFirstBallot(votes, show) {
     if (show !== 'casting' || !(votes || []).length) {
       ui.firstBallotAt = 0;
+      ui.routeOpenSent = false;
       return;
     }
     if (!ui.firstBallotAt) ui.firstBallotAt = Date.now();
@@ -1410,6 +1425,7 @@ export default async function partyHost({ params }) {
       })
       && !client.frame?.pair?.runner;
     if (!canLock) return;
+    maybeBackupRouteOpen(true, client.frame?.route);
     armSendCountdown(true, 'casting');
     if (ui.sendArmed) paint();
   }
@@ -1615,6 +1631,7 @@ export default async function partyHost({ params }) {
       })
       && !pair.runner;
     const hasPair = !!pair.runner;
+    maybeBackupRouteOpen(canLock, frame?.route);
     armSendCountdown(canLock, show);
     const sendLeft = sendCountdownLeft();
     const onSendoff = show === 'casting' && ui.introsDone && sendLeft == null && (ui.sendoff || hasPair);
@@ -1870,8 +1887,14 @@ export default async function partyHost({ params }) {
       }
       const route = frame?.route;
       const routeLive = route && route.step && route.step !== 'idle';
+      const routesOffered = (route?.available || []).some((j) => j.offered !== false);
+      const showRoutePlate = !showingIntros && !onSendoff && !hasPair && routesOffered
+        && (canLock || routeVoteHoldsSend(route));
+      if (showRoutePlate) {
+        body += routePickPlateHtml(route);
+      }
       const showRouteBoard = !showingIntros && !onSendoff && route
-        && (routeLive || ui.introsSent)
+        && (routeLive || ui.introsSent || showRoutePlate)
         && (route.available || []).length;
       if (showRouteBoard) {
         const nameMap = Object.fromEntries((names || []).map((p) => [p.id, p.name]));

@@ -20,7 +20,8 @@ import {
   unnamedFail, isVoiceWord, voiceSendsNothing, twinHang, camHang, TWIN, WALL_CAM,
   ROUTE_CATALOG, ROUTE_STATUS, TIE_ROUTE, HELD_BRIEF,
   availableRoutes, choosableRoutes, canOfferRoute, projectRoute, freshRoute,
-  routeMenuHtml, routePadHtml, stationPadHtml, heldBrief,
+  routeMenuHtml, routePadHtml, routePickPlateHtml, stationPadHtml, heldBrief,
+  castingWaitsForRoute,
 } from '../src/party/jobs.js';
 import { TASKS, byId, failurePayload, canClaimStation, applyStationClaim, confirmStationClaim, crewReady, ROUTE_CAPS } from '../src/party/tasks.js';
 import {
@@ -451,7 +452,10 @@ t('J9 · world report may carry job / emptyNail / heard, never a person',
       && !/ROUTE_CATALOG|routeVote/.test(guidemap)
       && !/KEEP\/EXPEL|\bEXPEL\b/.test(jobs)
       && /route-open/.test(host)
-      && /Open route vote/.test(host));
+      && /Open route vote/.test(host)
+      && /routePickPlateHtml/.test(host)
+      && /data-route-pick-plate/.test(jobs)
+      && /Pick a route/.test(jobs));
 }
 
 /* =================================================================================================
@@ -750,6 +754,56 @@ t('J9 · world report may carry job / emptyNail / heard, never a person',
       && missionForSelected('portrait', 1).job !== JOB.SMASH
       && missionForSelected('lights', 1).job !== JOB.DRILL
       && missionForSelected('switchboard', 1, { menuUsed: true }).missing === true);
+}
+
+/* =================================================================================================
+ * J33+ · ROUTE-MENU AUTO-OPEN — f2th: host-gated open + silent smash blocked Lights.
+ * ============================================================================================== */
+
+{
+  const living = ['p1', 'p2', 'p3'];
+  const room = createRoom({ count: 3, castSeed: 12, worldSeed: 12, send: () => {} });
+  room.start();
+  const opened = room.maybeOpenRouteAfterCast(living);
+  t('J33 · auto-open after casting when routes exist — no prior host openRouteVote',
+    opened.ok === true && opened.already !== true
+      && room.state.route.step === 'vote'
+      && availableRoutes(living.length).length >= 1
+      && castingWaitsForRoute(room.state.route, living.length) === true
+      && !room.state.selectedJob,
+    JSON.stringify({ opened, step: room.state.route.step }));
+}
+
+{
+  const living = ['p1', 'p2', 'p3'];
+  const room = createRoom({ count: 3, castSeed: 13, worldSeed: 13, send: () => {} });
+  room.start();
+  const launched = room.launchSelectedPlay({ living });
+  t('J34 · launchSelectedPlay never smashes when routes exist without selectedJob',
+    launched.ok === false && launched.why === 'no selectedJob' && launched.smash === false
+      && room.state.route.step === 'vote'
+      && !room.state.selectedJob
+      && availableRoutes(living.length).length >= 1,
+    JSON.stringify(launched));
+}
+
+{
+  const plate = routePickPlateHtml({ step: 'vote', until: Date.now() + 12_000 });
+  const local = src('../net/party/local.mjs');
+  const roomSrc = src('../src/party/room.js');
+  const host = src('../src/views/party-host.js');
+  t('J35 · Lights reachable on 3 living; live ballot path auto-opens; plate is obvious',
+    availableRoutes(3).some((r) => r.id === 'lights')
+      && canOfferRoute('lights', 3)
+      && /Pick a route/.test(plate) && /data-route-pick-plate/.test(plate)
+      && /tryAutoOpenRouteVote/.test(local)
+      && /maybeOpenRouteAfterCast/.test(local)
+      && /maybeOpenRouteAfterCast/.test(roomSrc)
+      && /availableRoutes\(living\.length\)\.length > 0/.test(roomSrc)
+      && !/if \(menuWasUsed\(\)\) return \{ ok: false, why: 'no selectedJob'/.test(roomSrc)
+      && /castingWaitsForRoute/.test(host)
+      && /maybeBackupRouteOpen/.test(host)
+      && /routeVoteHoldsSend/.test(src('../src/party/show.js')));
 }
 
 console.log(`\nexpedition-jobs: ${pass} passed, ${fail} failed`);

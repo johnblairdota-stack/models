@@ -134,7 +134,8 @@ export const KEEP_EXPEL_BALLOT_MS = 5_000;
 
 /**
  * 🗺️ Route-vote window. Not an EPISODE_ORDER beat — inserting one would reopen the
- * night clock and `episode-order`. Host opens during CASTING; this is the close backstop.
+ * night clock and `episode-order`. Auto-opens when casting resolves and a choosable
+ * route exists; host may close early or re-open for recovery. This is the close backstop.
  */
 export const ROUTE_VOTE_MS = 30_000;
 

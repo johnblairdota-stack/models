@@ -127,6 +127,18 @@ export function readyMet(readyCount, living) {
 export const READY_COUNTDOWN_MS = 3000;
 
 /**
+ * 🗺️ **ROUTE-VOTE WINDOW — BETWEEN CASTING COMPLETE AND SEND-IN.**
+ *
+ * Not a SHOW beat. Adding one would reopen `episode-order`, SB2, and the night clock.
+ * Auto-open is the primary path (`task-route-menu-auto-open`); the host may close
+ * early or re-open for recovery. `ROUTE_VOTE_MS` in phases.js is the close backstop.
+ */
+export function routeVoteHoldsSend(route) {
+  const step = String(route?.step || '');
+  return step === 'vote' || step === 'stations';
+}
+
+/**
  * ⚠️ INVERTED HEAT6. Empty Reckoning used to re-arm this many times (3), which is
  * the loop John watched: the 3rd countdown reset, then two names locked. One clock.
  * Zero standing skips the vote. This is 0 so a future "give them another 45s" has

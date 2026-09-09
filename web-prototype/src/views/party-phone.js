@@ -814,6 +814,19 @@ export default async function partyPhone({ params }) {
       paintGenerate(frame.you, frame.lights, me, players);
       return;
     } else if (beat === 'casting' && (pair.runner || recap.runner)) {
+      const routeAfterPair = frame?.route;
+      if (routeAfterPair?.step === 'vote') {
+        paintRouteVote(routeAfterPair, me, players, frame?.you);
+        return;
+      }
+      if (routeAfterPair?.step === 'stations' && !routeAfterPair.crewLocked) {
+        paintRouteStations(routeAfterPair, me, players, frame?.you);
+        return;
+      }
+      if (missingJob) {
+        paintMissingJob(me, players);
+        return;
+      }
       body += `<h1>Locked.</h1>
         <p class="hint">${esc(playerName(players, pair.runner || recap.runner))} walks · ${esc(playerName(players, pair.guide || recap.guide))} talks.</p>
         <p class="hint">Watch the TV.</p>`;
@@ -2046,7 +2059,7 @@ export default async function partyPhone({ params }) {
       <div class="phone-top"><span>${esc(state.code.toUpperCase())}</span><span>route · ${esc(playerName(players, me.playerId) || me.name || 'You')}</span></div>
       <div class="cast-step">
         <h1>No job locked.</h1>
-        <p class="hint">The menu closed without a selected job. Not smash. Host must open the route vote again.</p>
+        <p class="hint">The menu closed without a selected job. Not smash. The vote will open again.</p>
       </div>`;
     root.dataset.castUi = 'missing-job';
     delete root.dataset.liveUi;

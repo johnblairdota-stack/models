@@ -35,7 +35,7 @@ import { rollCall } from '../src/party/reunion.js';
 import { EVIL } from '../src/party/cast.js';
 
 /*
- * ⚠️ PORT CLUSTER 5222–5225 (PORT, +1, +2, +3). Was 5198–5201: PORT+1 hit 5199, where The Desk
+ * ⚠️ PORT CLUSTER 5222–5226 (PORT, +1, +2, +3, +4). Was 5198–5201: PORT+1 hit 5199, where The Desk
  * (`desk/server.mjs`, its own worktree) lives on John's machine. A gate that binds a live
  * product's port fails EADDRINUSE locally while CI stays green — found 2026-09-02 when the
  * whole chain died at N6d. The night board (`npm run night:board`) holds 5205 for the same
@@ -148,6 +148,28 @@ function last(box, type) {
       && roomL.state.mission?.job !== 'smash'
       && !!frames.tv.lights
       && !roomL.state.portraitArmed);
+}
+
+{
+  const src = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8');
+  const roomSrc = src('../src/party/room.js');
+  const local = src('../net/party/local.mjs');
+  const host = src('../src/views/party-host.js');
+  const living = ['p1', 'p2', 'p3'];
+  const room = createRoom({ count: 3, castSeed: 15, worldSeed: 15, send: () => {} });
+  room.start();
+  const opened = room.maybeOpenRouteAfterCast(living);
+  const smash = createRoom({ count: 3, castSeed: 16, worldSeed: 16, send: () => {} });
+  smash.start();
+  const launched = smash.launchSelectedPlay({ living });
+  t('N29 · auto-open after casting when routes exist; no silent smash; Lights on 3',
+    opened.ok && room.state.route.step === 'vote'
+      && launched.ok === false && launched.smash === false && launched.why === 'no selectedJob'
+      && smash.state.route.step === 'vote'
+      && /tryAutoOpenRouteVote/.test(local)
+      && /maybeOpenRouteAfterCast/.test(roomSrc)
+      && /castingWaitsForRoute/.test(host)
+      && /routePickPlateHtml/.test(host));
 }
 
 {
@@ -1627,6 +1649,64 @@ t('N14 · host can pace the room onto the recap beat',
 
   for (const p of ph) p.close();
   rtv.close();
+}
+
+{
+  /*
+   * f2th · lean 3-phone sit-down. Casting resolves, route vote auto-opens,
+   * no host `t:'routeOpen'`, Lights + heat without silent smash.
+   */
+  const PORTL = PORT + 4;
+  const srvL = startServer({ port: PORTL, count: 8, castSeed: 17, worldSeed: 17, code: 'rt' });
+  await sleep(80);
+  const baseL = `ws://localhost:${PORTL}/?room=rt`;
+  const tvL = await open(`${baseL}&host=1`);
+  const phonesL = [];
+  for (let i = 0; i < 3; i++) phonesL.push(await open(baseL));
+  await sleep(80);
+  tvL.send({ t: 'start' });
+  tvL.send({ t: 'casting' });
+  await sleep(80);
+  const ids = phonesL.map((p) => p.welcome.playerId);
+  phonesL[0].send({ t: 'ballot', runner: ids[1], guide: ids[2] });
+  phonesL[1].send({ t: 'ballot', runner: ids[0], guide: ids[2] });
+  phonesL[2].send({ t: 'ballot', runner: ids[0], guide: ids[1] });
+  await sleep(140);
+  const roomLive = srvL.rooms.get('rt');
+  t('N29b · live 3-phone: route vote auto-opens after casting — no host routeOpen',
+    ids.every(Boolean)
+      && roomLive.game.state.route.step === 'vote'
+      && !roomLive.game.state.selectedJob
+      && !roomLive.game.state.pair?.runner,
+    JSON.stringify({
+      step: roomLive.game.state.route.step,
+      job: roomLive.game.state.selectedJob,
+      pair: roomLive.game.state.pair,
+    }));
+  for (const p of phonesL) p.send({ t: 'routeVote', job: 'lights' });
+  await sleep(80);
+  t('N29c · 3 living lock Lights without host archaeology',
+    roomLive.game.state.selectedJob === 'lights'
+      && roomLive.game.state.route.step === 'stations',
+    JSON.stringify({ job: roomLive.game.state.selectedJob, step: roomLive.game.state.route.step }));
+  for (const p of phonesL) p.send({ t: 'station', station: 'generator' });
+  await sleep(40);
+  for (const p of phonesL) p.send({ t: 'stationConfirm' });
+  await sleep(40);
+  tvL.send({ t: 'crewLock' });
+  await sleep(80);
+  t('N29d · Lights heat is reachable on 3 living after auto-open + crew lock',
+    roomLive.game.state.heatArmed === true
+      && roomLive.game.state.mission?.job === 'lights'
+      && roomLive.game.state.mission?.job !== 'smash'
+      && roomLive.game.state.route.crewLocked === true,
+    JSON.stringify({
+      heat: roomLive.game.state.heatArmed,
+      job: roomLive.game.state.mission?.job,
+      locked: roomLive.game.state.route.crewLocked,
+    }));
+  for (const c of [tvL, ...phonesL]) c.close();
+  srvL.close();
 }
 
 for (const c of [host, a, b, back]) c.close();
