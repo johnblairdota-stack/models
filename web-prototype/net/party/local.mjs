@@ -48,6 +48,8 @@ import {
   isBackwardTalkJump,
 } from '../../src/party/show.js';
 import { reckoningSeconds, ROUTE_VOTE_MS, KEEP_EXPEL_NOMINATE_MS } from '../../src/party/phases.js';
+import { availableRoutes } from '../../src/party/jobs.js';
+import { shouldArmCastSend } from '../../src/party/ballot.js';
 import { standingTally } from '../../src/party/vote.js';
 import { reactCheck } from '../../src/party/react.js';
 import { pairLockMs } from '../../src/game/pair-lock-stage.js';
@@ -550,6 +552,26 @@ function startRouteClock(room) {
   room.routeClock.unref?.();
 }
 
+/**
+ * Auto-open the Portrait/Lights vote when live casting has resolved and a
+ * choosable route exists. Opening is not a host-secret `t:'routeOpen'`.
+ */
+function tryAutoOpenRouteVote(room) {
+  if (!room || room.show !== 'casting' || room.pairLocking) return null;
+  const living = livingSeatedIds(room);
+  if (!availableRoutes(living.length).length) return null;
+  const votes = validCastBallots(room);
+  if (!shouldArmCastSend({
+    livingIds: living,
+    votes,
+    firstBallotAt: room.castFirstBallotAt || 0,
+    now: Date.now(),
+  })) return null;
+  const opened = room.game.maybeOpenRouteAfterCast(living);
+  if (opened?.ok && !opened.already) startRouteClock(room);
+  return opened;
+}
+
 function clearJobClock(room) {
   if (room.jobClock) clearInterval(room.jobClock);
   room.jobClock = null;
@@ -593,6 +615,20 @@ export function castingBackstop(room) {
   if (!votes.length) {
     startCastingClock(room);
     return 'casting';
+  }
+  const living = livingSeatedIds(room);
+  const st = room.game.state;
+  /*
+   * The net must not hang, and must not silent-smash. Lock the tally
+   * (tie→Lights) if the menu never closed, then send them in. A live TV's
+   * 3·2·1 still waits on crew lock; this clock is the escape hatch.
+   */
+  if (availableRoutes(living.length).length > 0 && !st.selectedJob) {
+    if (st.route?.step === 'idle') room.game.maybeOpenRouteAfterCast(living);
+    if (st.route?.step === 'vote') {
+      clearRouteClock(room);
+      room.game.closeRouteVote(living);
+    }
   }
   runEpisodeFromBallots(room, votes);
   return room.show;
@@ -1028,6 +1064,7 @@ function enterNextCasting(room) {
   clearShowClock(room);
   clearJobClock(room);
   room.ballots.clear();
+  room.castFirstBallotAt = 0;
   room.game.beginCasting();
   room.showUntil = null;
   room.reckoningStartedAt = null;
@@ -1813,7 +1850,9 @@ function handleClient(room, bound, self, msg) {
     const guide = seated.has(msg.guide) ? msg.guide : null;
     if (runner && guide && runner !== guide) {
       room.ballots.set(self.playerId, { voter: self.playerId, runner, guide });
+      if (!room.castFirstBallotAt) room.castFirstBallotAt = Date.now();
       fanout(room, { t: 'ballots', votes: [...room.ballots.values()] });
+      tryAutoOpenRouteVote(room);
     }
     return;
   }
@@ -2004,6 +2043,7 @@ function handleClient(room, bound, self, msg) {
     fanout(room, lobbySnapshot(room));
   }
   if (msg.t === 'routeOpen' && isTV) {
+    if (room.game.state.route?.step === 'vote') return;
     const r = room.game.openRouteVote(livingSeatedIds(room));
     if (r?.ok) startRouteClock(room);
     return;

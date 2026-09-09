@@ -275,6 +275,17 @@ export function canOfferRoute(id, livingCount, catalog = ROUTE_CATALOG) {
   return availableRoutes(livingCount, catalog).some((r) => r.id === id);
 }
 
+/**
+ * CASTING waits here before pair send-in when the menu has a choosable route.
+ * Idle still waits — that is the auto-open window, not a smash door.
+ * Crew-locked + selectedJob is the only way out.
+ */
+export function castingWaitsForRoute(route, livingCount, catalog = ROUTE_CATALOG) {
+  if (availableRoutes(livingCount, catalog).length === 0) return false;
+  if (route?.selected && (route.crewLocked || route.step === 'locked')) return false;
+  return true;
+}
+
 export function freshRoute() {
   return {
     step: 'idle',
@@ -346,6 +357,20 @@ function escRoute(s) {
   ));
 }
 
+/** Obvious TV backup plate. Primary path is auto-open, not a buried host verb. */
+export function routePickPlateHtml(route, { now = Date.now() } = {}) {
+  const until = Number(route?.until);
+  const left = Number.isFinite(until) ? Math.max(0, until - now) : null;
+  const secs = left != null ? Math.max(1, Math.ceil(left / 1000)) : null;
+  const clock = secs != null
+    ? `<p class="route-pick-clock" data-route-pick-clock>${secs}</p>`
+    : `<p class="hint">Phones pick Portrait or Lights.</p>`;
+  return `<section class="route-pick-plate" data-route-pick-plate>
+    <h1>Pick a route</h1>
+    ${clock}
+  </section>`;
+}
+
 /** TV job cards. No ballots, no roles, no checkpoint ballot. */
 export function routeMenuHtml(route, { names = {} } = {}) {
   const r = route || {};
@@ -393,7 +418,7 @@ export function routePadHtml(route, pick = null) {
   }).join('');
   return `<div class="route-pad" data-route-pad>
     <h1>Pick a route.</h1>
-    <p class="hint">Private until the host closes. The TV has the cards.</p>
+    <p class="hint">Private until the vote closes. The TV has the cards.</p>
     <div class="pick-list">${buttons}</div>
   </div>`;
 }

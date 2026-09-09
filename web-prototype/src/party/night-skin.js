@@ -390,6 +390,12 @@ export function injectNightSkin() {
     .night.on-cards .ballot { margin-top:18px; }
     .night.on-cards .hint.cards-foot { margin-top:clamp(14px, 2.4vh, 28px); font-size:18px; }
     .night.on-cards .actions { margin-top:18px; }
+    .route-pick-plate { margin:18px 0 12px; padding:22px 24px; border-radius:14px;
+      border:2px solid #f5a14a; background:#2a1a0e; text-align:center; }
+    .route-pick-plate h1 { margin:0 0 8px; font-size:clamp(36px, 5vw, 64px); letter-spacing:.04em;
+      color:#f3ece3; }
+    .route-pick-clock { margin:0; font-size:clamp(48px, 7vw, 88px); font-weight:800;
+      color:#f5a14a; line-height:1; }
     .route-menu { margin:16px 0 8px; }
     .route-k { font-size:12px; letter-spacing:.28em; text-transform:uppercase; color:#f5a14a;
       font-weight:800; margin:0 0 10px; }

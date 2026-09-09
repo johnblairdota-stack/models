@@ -159,7 +159,8 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     /** Monotonic, so the vague read can be sporadic without a clock or an RNG. */
     worldTick: 0,
     /**
-     * 🗺️ Route / task menu. Host opens during CASTING. Ballots live here, not on the frame —
+     * 🗺️ Route / task menu. Auto-opens when casting resolves if a choosable route exists.
+     * Host may close early or re-open. Ballots live here, not on the frame —
      * `projectRoute` is the public shape. A new Casting resets it. playEpisode does not.
      */
     route: freshRoute(),
@@ -756,6 +757,25 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
   }
 
   /**
+   * Auto-open when casting has resolved and a choosable route exists.
+   * Already-open vote is a no-op. Missing selectedJob after close re-opens.
+   * Opening is not a host-secret verb.
+   */
+  function maybeOpenRouteAfterCast(livingOpt = null, nowOpt = null) {
+    const living = (Array.isArray(livingOpt) && livingOpt.length)
+      ? livingOpt.filter((id) => state.players.some((p) => p.id === id && p.alive))
+      : state.players.filter((p) => p.alive).map((p) => p.id);
+    if (state.selectedJob && (state.route?.crewLocked || state.route?.step === 'locked')) {
+      return { ok: false, why: 'already selected' };
+    }
+    if (state.route?.step === 'vote') {
+      return { ok: true, already: true, until: state.route.until };
+    }
+    if (availableRoutes(living.length).length === 0) return { ok: false, why: 'no routes' };
+    return openRouteVote(living, nowOpt);
+  }
+
+  /**
    * Host opens the private route vote. Living ids may be the seated phones —
    * unused Robot N chairs do not vote.
    */
@@ -864,12 +884,17 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
   /**
    * After route lock + crew lock (or playEpisode with a locked catalog job):
    * launch play by selectedJob. Never smash/drill for portrait / lights.
-   * Missing selectedJob after the menu is a fault, not a silent smash.
+   * If choosable routes exist and no selectedJob, open/re-open the vote —
+   * never `{ smash: true }` from a menu that was never used.
    */
   function launchSelectedPlay({ living: livingOpt = null, nowMs = 0, step = HEAT_STEP.PRACTICE } = {}) {
     const job = state.selectedJob;
     if (!job) {
-      if (menuWasUsed()) return { ok: false, why: 'no selectedJob', smash: false };
+      const living = jobRosterLiving(livingOpt);
+      if (availableRoutes(living.length).length > 0) {
+        maybeOpenRouteAfterCast(living);
+        return { ok: false, why: 'no selectedJob', smash: false };
+      }
       return { ok: true, kind: 'legacy', smash: true };
     }
     if (portraitArmedFor(job)) {
@@ -1563,6 +1588,7 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     },
     start() { setPhase('LOBBY'); },
     openRouteVote,
+    maybeOpenRouteAfterCast,
     castRouteVote,
     closeRouteVote,
     claimStation,
