@@ -23,7 +23,7 @@ import {
   routeMenuHtml, routePadHtml, routePickPlateHtml, stationPadHtml, heldBrief,
   castingWaitsForRoute,
 } from '../src/party/jobs.js';
-import { TASKS, byId, failurePayload, canClaimStation, applyStationClaim, confirmStationClaim, crewReady, ROUTE_CAPS } from '../src/party/tasks.js';
+import { TASKS, byId, failurePayload, canClaimStation, applyStationClaim, confirmStationClaim, crewReady, ROUTE_CAPS, PORTRAIT_FILL_ORDER, emptyRequiredStations, mixReady, autoFillStations, stationNeedHtml } from '../src/party/tasks.js';
 import {
   HEAT_TRIP_MS, HEAT_RISE, generatePadHtml, lightsBoardHtml, lightsLeaks, neededOutput,
   projectLights, setGenerating, tickSeat, tripLeft,
@@ -804,6 +804,113 @@ t('J9 · world report may carry job / emptyNail / heard, never a person',
       && /castingWaitsForRoute/.test(host)
       && /maybeBackupRouteOpen/.test(host)
       && /routeVoteHoldsSend/.test(src('../src/party/show.js')));
+}
+
+/* =================================================================================================
+ * J36+ · PORTRAIT STATION MIX — ubxr: 3 living all-cross locked Lift at 0%.
+ * Capacities stay 1 / 1 / ∞. Required occupancy at volunteer / crewLock.
+ * ============================================================================================== */
+
+{
+  const living = ['a', 'b', 'c'];
+  const allCross = {
+    a: { station: 'cross', confirmed: true },
+    b: { station: 'cross', confirmed: true },
+    c: { station: 'cross', confirmed: true },
+  };
+  const mixed = {
+    a: { station: 'pull-a', confirmed: true },
+    b: { station: 'pull-b', confirmed: true },
+    c: { station: 'cross', confirmed: true },
+  };
+  const filled = autoFillStations('portrait', {}, living);
+  t('J36 · mix helpers: all-cross empty required; auto-fill is pull-a then pull-b then cross',
+    !mixReady('portrait', allCross, living)
+      && emptyRequiredStations('portrait', allCross, living).join(',') === 'pull-a,pull-b'
+      && mixReady('portrait', mixed, living)
+      && emptyRequiredStations('portrait', mixed, living).length === 0
+      && emptyRequiredStations('lights', {}, living).length === 0
+      && filled.a?.station === 'pull-a' && filled.b?.station === 'pull-b' && filled.c?.station === 'cross'
+      && filled.a?.confirmed && filled.b?.confirmed && filled.c?.confirmed
+      && PORTRAIT_FILL_ORDER.join(',') === 'pull-a,pull-b,cross'
+      && ROUTE_CAPS.portrait['pull-a'] === 1 && ROUTE_CAPS.portrait['pull-b'] === 1
+      && ROUTE_CAPS.portrait.cross === Infinity);
+}
+
+{
+  const living = ['p1', 'p2', 'p3'];
+  const room = createRoom({ count: 3, castSeed: 21, worldSeed: 21, send: () => {} });
+  room.start();
+  room.openRouteVote(living);
+  for (const id of living) room.castRouteVote(id, 'portrait', living);
+  for (const id of living) {
+    room.claimStation(id, 'cross', living);
+    room.confirmStation(id, living);
+  }
+  const refused = room.lockCrew(living);
+  const stations = Object.values(room.state.route.claims).map((c) => c.station);
+  t('J36b · 3 living cannot crewLock all-cross — pull-a / pull-b stay empty',
+    refused.ok === false && refused.why === 'mix required'
+      && room.state.route.crewLocked !== true
+      && stations.every((s) => s === 'cross')
+      && !mixReady('portrait', room.state.route.claims, living),
+    JSON.stringify(refused));
+}
+
+{
+  const living = ['p1', 'p2', 'p3'];
+  const room = createRoom({ count: 3, castSeed: 22, worldSeed: 22, send: () => {} });
+  room.start();
+  room.openRouteVote(living);
+  for (const id of living) room.castRouteVote(id, 'portrait', living);
+  const crew = room.lockCrew(living);
+  const roster = crew.roster || [];
+  const kinds = new Set(roster.map((r) => r.station));
+  t('J36c · timeout fill locks ≥1 pull-a + ≥1 pull-b + ≥1 cross on lean 3',
+    crew.ok === true
+      && kinds.has('pull-a') && kinds.has('pull-b') && kinds.has('cross')
+      && roster.length === 3
+      && room.state.route.crewLocked === true
+      && crew.play?.kind === 'portrait',
+    JSON.stringify({ roster, why: crew.why }));
+}
+
+{
+  const living = ['p1', 'p2', 'p3'];
+  const room = createRoom({ count: 3, castSeed: 23, worldSeed: 23, send: () => {} });
+  room.start();
+  room.openRouteVote(living);
+  for (const id of living) room.castRouteVote(id, 'portrait', living);
+  room.lockCrew(living);
+  const pullA = living.find((id) => room.state.route.claims[id]?.station === 'pull-a');
+  const pullB = living.find((id) => room.state.route.claims[id]?.station === 'pull-b');
+  const crosser = living.find((id) => room.state.route.claims[id]?.station === 'cross');
+  room.pulsePortraitPull(pullA, 100);
+  const stroke = room.pulsePortraitPull(pullB, 400);
+  t('J36d · lift can rise when mix pulls alternate; cross seat is present for crawl',
+    pullA && pullB && crosser && pullA !== pullB
+      && stroke.ok && stroke.stroke
+      && stroke.lift === STROKE_LIFT
+      && stroke.lift > 0
+      && room.state.portraitSeats[crosser]?.station === 'cross',
+    JSON.stringify({ pullA, pullB, crosser, lift: stroke.lift, stroke: stroke.stroke }));
+}
+
+{
+  const need = stationNeedHtml(['pull-a', 'pull-b']);
+  const quiet = stationNeedHtml([]);
+  const phone = src('../src/views/party-phone.js');
+  const tasks = src('../src/party/tasks.js');
+  const roomSrc = src('../src/party/room.js');
+  const win = src('../src/party/win.js');
+  t('J36e · phone chrome highlights empty required; caps unchanged; win.js closed',
+    /data-station-need/.test(need) && /pull-a/.test(need) && /pull-b/.test(need)
+      && quiet === ''
+      && /emptyRequiredStations/.test(phone) && /data-need/.test(phone) && /stationNeedHtml/.test(phone)
+      && /mixReady/.test(roomSrc) && /autoFillStations/.test(roomSrc)
+      && /'pull-a': 1, 'pull-b': 1, cross: Infinity/.test(tasks)
+      && !/autoFillStations|mixReady|emptyRequiredStations/.test(win)
+      && ROUTE_CAPS.portrait['pull-a'] === 1 && ROUTE_CAPS.portrait['pull-b'] === 1);
 }
 
 console.log(`\nexpedition-jobs: ${pass} passed, ${fail} failed`);

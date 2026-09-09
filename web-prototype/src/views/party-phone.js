@@ -27,6 +27,7 @@ import {
   JOB, realFaceFor, drillShotFor, footstepsCue, wallWord, toolLabel,
   routePadHtml, stationPadHtml,
 } from '../party/jobs.js';
+import { emptyRequiredStations, stationNeedHtml } from '../party/tasks.js';
 import { generatePadHtml, isLightsJob } from '../party/heat.js';
 import { isPortraitJob, portraitPadHtml } from '../party/portrait.js';
 import { intelLine } from '../party/intel.js';
@@ -2166,9 +2167,17 @@ export default async function partyPhone({ params }) {
       station: youIn?.station || null,
       stationConfirmed: !!youIn?.stationConfirmed,
     };
-    const stamp = `route:stations:${route.selected || ''}:${you.station || ''}:${you.stationConfirmed ? 1 : 0}`;
+    const livingIds = (players || []).filter((p) => p.alive !== false && !p.expelled).map((p) => p.id);
+    const claims = {};
+    for (const row of route.roster || []) {
+      if (row?.id && row.station) claims[row.id] = { station: row.station };
+    }
+    if (me?.playerId && you.station) claims[me.playerId] = { station: you.station };
+    const need = emptyRequiredStations(route.selected, claims, livingIds);
+    const occ = (route.roster || []).map((r) => `${r.id}:${r.station}`).sort().join(',');
+    const stamp = `route:stations:${route.selected || ''}:${you.station || ''}:${you.stationConfirmed ? 1 : 0}:${occ}:${need.join(',')}`;
     if (root.dataset.castUi === stamp) return;
-    const stationBody = `${stationPadHtml(route, you)}${cardTab()}`;
+    const stationBody = `${stationPadHtml(route, you)}${stationNeedHtml(need)}${cardTab()}`;
     root.innerHTML = `
       <div class="phone-top"><span>${esc(state.code.toUpperCase())}</span><span>crew · ${esc(playerName(players, me.playerId) || me.name || 'You')}</span></div>
       ${stationBody}
@@ -2176,6 +2185,10 @@ export default async function partyPhone({ params }) {
     root.dataset.castUi = stamp;
     delete root.dataset.liveUi;
     for (const b of root.querySelectorAll('[data-station]')) {
+      if (need.includes(b.dataset.station)) {
+        b.setAttribute('data-need', '1');
+        b.classList.add('need');
+      }
       b.addEventListener('click', () => state.client?.send({ t: 'station', station: b.dataset.station }));
     }
     root.querySelector('[data-station-confirm]')?.addEventListener('click', () => {
