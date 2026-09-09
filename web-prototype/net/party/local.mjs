@@ -48,7 +48,7 @@ import {
   isBackwardTalkJump,
 } from '../../src/party/show.js';
 import { reckoningSeconds, ROUTE_VOTE_MS, KEEP_EXPEL_NOMINATE_MS } from '../../src/party/phases.js';
-import { availableRoutes, castingWaitsForRoute } from '../../src/party/jobs.js';
+import { availableRoutes } from '../../src/party/jobs.js';
 import { shouldArmCastSend } from '../../src/party/ballot.js';
 import { standingTally } from '../../src/party/vote.js';
 import { reactCheck } from '../../src/party/react.js';
@@ -618,29 +618,20 @@ export function castingBackstop(room) {
   }
   const living = livingSeatedIds(room);
   const st = room.game.state;
-  const routes = availableRoutes(living.length);
-  if (routes.length > 0 && !st.selectedJob) {
-    if (st.route?.step === 'idle') {
-      const opened = room.game.maybeOpenRouteAfterCast(living);
-      if (opened?.ok && !opened.already) startRouteClock(room);
-    }
-    /*
-     * Dead TV: lock the tally (tie→Lights) and send them in. A live host stays
-     * on stations / crew lock. Never silent smash when the menu exists.
-     */
-    if (st.route?.step === 'vote' && !tvHostLive(room)) {
+  /*
+   * The net must not hang, and must not silent-smash. Lock the tally
+   * (tie→Lights) if the menu never closed, then send them in. A live TV's
+   * 3·2·1 still waits on crew lock; this clock is the escape hatch.
+   */
+  if (availableRoutes(living.length).length > 0 && !st.selectedJob) {
+    if (st.route?.step === 'idle') room.game.maybeOpenRouteAfterCast(living);
+    if (st.route?.step === 'vote') {
       clearRouteClock(room);
       room.game.closeRouteVote(living);
     }
   }
-  const jobReady = !!st.selectedJob;
-  const mayLaunch = jobReady && (st.route?.crewLocked || !tvHostLive(room));
-  if (mayLaunch || !routes.length) {
-    runEpisodeFromBallots(room, votes);
-    return room.show;
-  }
-  startCastingClock(room);
-  return 'casting';
+  runEpisodeFromBallots(room, votes);
+  return room.show;
 }
 
 /**
