@@ -1487,6 +1487,10 @@ t('N14 · host can pace the room onto the recap beat',
   t('N20c · with the TV gone but ballots in, the net resolves casting into the expedition',
     net.show === 'expedition' && net.game.state.pair.runner != null && net.game.state.pair.guide != null,
     JSON.stringify({ show: net.show, pair: net.game.state.pair }));
+  t('N20c2 · dead-TV net locks Lights (tie default), never silent smash',
+    net.game.state.selectedJob === 'lights'
+      && net.game.state.mission?.job === 'lights'
+      && net.game.state.mission?.job !== 'smash');
   t('N20d · the phones were told, so they are not left on a casting sheet',
     last(p1, 'show')?.beat === 'expedition' && last(p2, 'show')?.beat === 'expedition');
   t('N20e · and the net is a no-op once the beat has moved on',

@@ -618,17 +618,29 @@ export function castingBackstop(room) {
   }
   const living = livingSeatedIds(room);
   const st = room.game.state;
-  if (castingWaitsForRoute(st.route, living.length) || !st.selectedJob) {
-    const opened = room.game.maybeOpenRouteAfterCast(living);
-    if (opened?.ok && !opened.already) startRouteClock(room);
-    if (castingWaitsForRoute(st.route, living.length)
-      && !(st.selectedJob && st.route?.crewLocked)) {
-      startCastingClock(room);
-      return 'casting';
+  const routes = availableRoutes(living.length);
+  if (routes.length > 0 && !st.selectedJob) {
+    if (st.route?.step === 'idle') {
+      const opened = room.game.maybeOpenRouteAfterCast(living);
+      if (opened?.ok && !opened.already) startRouteClock(room);
+    }
+    /*
+     * Dead TV: lock the tally (tie→Lights) and send them in. A live host stays
+     * on stations / crew lock. Never silent smash when the menu exists.
+     */
+    if (st.route?.step === 'vote' && !tvHostLive(room)) {
+      clearRouteClock(room);
+      room.game.closeRouteVote(living);
     }
   }
-  runEpisodeFromBallots(room, votes);
-  return room.show;
+  const jobReady = !!st.selectedJob;
+  const mayLaunch = jobReady && (st.route?.crewLocked || !tvHostLive(room));
+  if (mayLaunch || !routes.length) {
+    runEpisodeFromBallots(room, votes);
+    return room.show;
+  }
+  startCastingClock(room);
+  return 'casting';
 }
 
 /**
