@@ -6,6 +6,9 @@
  * catch locks the panel. Phones are station controllers. The TV is lift / noise / hunter —
  * never a god-map, never Guide E / Runner D / auto-walk / pin.
  *
+ * Station mix is locked in `tasks.js` (`mixReady`): living ≥ 3 cannot play all-cross.
+ * Lift consumes alternating pull-a ↔ pull-b; crawl/catch consume the cross seat.
+ *
  * Escape contribution: catch locked AND at least one successful cross (LHL shape).
  * Sabotage is the same controls used at the wrong moment (double-pull, crawl too early).
  *

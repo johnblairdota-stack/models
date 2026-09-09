@@ -53,7 +53,7 @@ import {
   canOfferRoute, routeById,
 } from './jobs.js';
 import { canRouteVote, tallyRouteVotes } from './vote.js';
-import { canClaimStation, applyStationClaim, confirmStationClaim, crewReady } from './tasks.js';
+import { canClaimStation, applyStationClaim, confirmStationClaim, crewReady, autoFillStations, mixReady } from './tasks.js';
 import { isObjectivePin } from './objectives.js';
 // 📍 The pin's shape lives with the rest of the follow wire, so the TV, the server and the phone
 // all read one schema. See `follow.js` `PIN_WIRE_KEYS`.
@@ -863,7 +863,11 @@ export function createRoom({ count, castSeed, worldSeed, send, emit = null, leak
     if (state.route.step !== 'stations') return { ok: false, why: 'not stations' };
     if (livingOpt && Array.isArray(livingOpt)) state.route.livingIds = livingOpt.slice();
     const living = routeLiving();
-    if (!crewReady(living, state.route.claims)) return { ok: false, why: 'crew not ready' };
+    const jobId = state.route.selected;
+    const filled = autoFillStations(jobId, state.route.claims, living);
+    if (!crewReady(living, filled)) return { ok: false, why: 'crew not ready' };
+    if (!mixReady(jobId, filled, living)) return { ok: false, why: 'mix required' };
+    state.route.claims = filled;
     state.route.step = 'locked';
     state.route.crewLocked = true;
     stampMission();

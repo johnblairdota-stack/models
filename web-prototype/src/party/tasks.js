@@ -142,11 +142,16 @@ export const soundCanCommit = () => HUNTER_SENSE.soundCeiling >= HUNTER_SENSE.co
  * remaining cross. Lights: every living robot on a generator. Stubs have none.
  * Private-heat lives in `heat.js` (tick + trip + reserve). This table is
  * capacity only — Lights still means every living robot on a generator.
+ * Portrait required occupancy (pull-a + pull-b + cross when living ≥ 3) is
+ * `emptyRequiredStations` / `mixReady` — do not change these cap numbers.
  */
 export const ROUTE_CAPS = Object.freeze({
   portrait: Object.freeze({ 'pull-a': 1, 'pull-b': 1, cross: Infinity }),
   lights: Object.freeze({ generator: Infinity }),
 });
+
+/** Fill empty Portrait required seats in this order. Capacities stay 1 / 1 / ∞. */
+export const PORTRAIT_FILL_ORDER = Object.freeze(['pull-a', 'pull-b', 'cross']);
 
 export function stationCapacity(jobId, station) {
   const cap = ROUTE_CAPS[jobId]?.[station];
@@ -186,6 +191,61 @@ export function confirmStationClaim(claims, playerId) {
 /** Host may lock when every living robot has volunteered and confirmed. */
 export function crewReady(living, claims = {}) {
   return (living || []).every((id) => !!(claims[id]?.station && claims[id]?.confirmed));
+}
+
+/**
+ * Portrait mix: living ≥ 3 must occupy pull-a, pull-b, and cross.
+ * Empty list is the chrome highlight and the lock refusal. Other jobs: none.
+ */
+export function emptyRequiredStations(jobId, claims = {}, living = []) {
+  if (jobId !== 'portrait') return [];
+  const ids = (living || []).filter(Boolean);
+  if (ids.length < 3) return [];
+  const occ = new Set();
+  for (const id of ids) {
+    const s = claims[id]?.station;
+    if (s) occ.add(s);
+  }
+  return PORTRAIT_FILL_ORDER.filter((station) => !occ.has(station));
+}
+
+export function mixReady(jobId, claims = {}, living = []) {
+  return emptyRequiredStations(jobId, claims, living).length === 0;
+}
+
+/**
+ * Timeout / lock fill: unclaimed living, stable seat order, into empty
+ * pull-a then pull-b then cross. Does not reassign a claimed seat.
+ */
+export function autoFillStations(jobId, claims = {}, living = []) {
+  let next = { ...(claims || {}) };
+  if (jobId !== 'portrait') return next;
+  const ids = (living || []).filter(Boolean);
+  const unclaimed = ids.filter((id) => !next[id]?.station);
+  for (const station of PORTRAIT_FILL_ORDER) {
+    while (unclaimed.length) {
+      const id = unclaimed[0];
+      if (!canClaimStation(jobId, station, next, id).ok) break;
+      next = applyStationClaim(next, id, station);
+      const confirmed = confirmStationClaim(next, id);
+      if (confirmed.ok) next = confirmed.claims;
+      unclaimed.shift();
+    }
+  }
+  return next;
+}
+
+/** Phone chrome: why lock is refused while a required station is empty. */
+export function stationNeedHtml(empty = []) {
+  const list = [];
+  for (const s of empty || []) {
+    if (s && !list.includes(s)) list.push(s);
+  }
+  if (!list.length) return '';
+  const labels = list.map((s) => String(s).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  )));
+  return `<p class="hint station-need" data-station-need>Need ${labels.join(' · ')} before lock.</p>`;
 }
 
 

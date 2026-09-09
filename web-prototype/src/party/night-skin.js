@@ -408,6 +408,9 @@ export function injectNightSkin() {
     .route-meta, .route-stations { margin:0; color:#8a7d70; font-size:13px; line-height:1.4; }
     .route-held { color:#e8c36a; font-size:14px; font-weight:700; margin:10px 0 0; }
     .route-roster { margin:10px 0 0; padding-left:1.2em; color:#f3ece3; font-size:15px; }
+    /* Empty required Portrait stations — why crewLock refuses all-cross. */
+    [data-station-pad] [data-need="1"], .btn.need { box-shadow:inset 0 0 0 3px #e8c36a; background:#c48a2a; }
+    .station-need { color:#e8c36a; font-weight:800; }
     .keep-expel { margin:12px 0 8px; padding:14px 16px; border-radius:10px;
       border:1px solid rgba(245,161,74,.22); background:#161310; }
     .keep-k { font-size:12px; letter-spacing:.28em; text-transform:uppercase; color:#f5a14a;
